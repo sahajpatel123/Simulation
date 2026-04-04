@@ -88,12 +88,12 @@ export default function LandingPage() {
           src="/nature-bg.jpeg"
           alt=""
           className="w-full h-full object-cover object-center"
-          style={{ opacity: 0.18 }}
+          style={{ opacity: 0.22, objectPosition: 'center 30%' }}
         />
         <div
           className="absolute inset-0"
           style={{
-            background: 'linear-gradient(to bottom, rgba(6,6,14,0.3) 0%, rgba(6,6,14,0.2) 40%, rgba(6,6,14,0.75) 80%, rgba(6,6,14,1) 100%)',
+            background: 'linear-gradient(to bottom, rgba(6,6,14,0.55) 0%, rgba(6,6,14,0.35) 35%, rgba(6,6,14,0.8) 78%, rgba(6,6,14,1) 100%)',
           }}
         />
       </div>
