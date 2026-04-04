@@ -18,7 +18,7 @@ export default function LandingPage() {
   const heroY = useTransform(scrollYProgress, [0, 1], [0, 80])
 
   return (
-    <div className="min-h-screen bg-[#080810] overflow-x-hidden noise">
+    <div className="relative min-h-screen bg-[#080810] overflow-x-hidden noise">
 
       {/* ━━━ NAVBAR ━━━ */}
       <motion.nav
