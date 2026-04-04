@@ -1,220 +1,12 @@
 'use client'
 
 import { motion, useScroll, useTransform } from 'framer-motion'
-import { useEffect, useState } from 'react'
+import { useRef } from 'react'
 import { ArrowRight, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 
-function NetworkGraph() {
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => setMounted(true), [])
-
-  const nodes = [
-    { id: 0, x: 260, y: 160, label: 'Your Idea', primary: true, r: 28 },
-    { id: 1, x: 120, y: 80, label: 'Market', primary: false, r: 18 },
-    { id: 2, x: 400, y: 90, label: 'Pricing', primary: false, r: 18 },
-    { id: 3, x: 80, y: 230, label: 'Customers', primary: false, r: 20 },
-    { id: 4, x: 430, y: 230, label: 'Revenue', primary: false, r: 20 },
-    { id: 5, x: 180, y: 310, label: 'Risk', primary: false, r: 16 },
-    { id: 6, x: 340, y: 320, label: 'Growth', primary: false, r: 16 },
-    { id: 7, x: 260, y: 390, label: 'Launch', primary: false, r: 22 },
-    { id: 8, x: 60, y: 140, label: '', primary: false, r: 8 },
-    { id: 9, x: 460, y: 160, label: '', primary: false, r: 8 },
-    { id: 10, x: 140, y: 380, label: '', primary: false, r: 10 },
-    { id: 11, x: 390, y: 370, label: '', primary: false, r: 10 },
-  ]
-
-  const edges = [
-    [0, 1], [0, 2], [0, 3], [0, 4],
-    [1, 8], [2, 9], [3, 5], [4, 6],
-    [5, 7], [6, 7], [3, 10], [4, 11],
-    [1, 3], [2, 4], [5, 6], [10, 7], [11, 7],
-  ]
-
-  if (!mounted) return null
-
-  return (
-    <svg
-      viewBox="0 0 520 460"
-      className="h-full w-full"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <defs>
-        <radialGradient id="nodeGrad" cx="50%" cy="30%" r="70%">
-          <stop offset="0%" stopColor="#818cf8" stopOpacity="1" />
-          <stop offset="100%" stopColor="#4f46e5" stopOpacity="1" />
-        </radialGradient>
-        <radialGradient id="nodeGradSecondary" cx="50%" cy="30%" r="70%">
-          <stop offset="0%" stopColor="#334155" stopOpacity="1" />
-          <stop offset="100%" stopColor="#1e293b" stopOpacity="1" />
-        </radialGradient>
-        <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#6366f1" stopOpacity="0.3" />
-          <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
-        </radialGradient>
-        <filter id="glow">
-          <feGaussianBlur stdDeviation="3" result="blur" />
-          <feComposite in="SourceGraphic" in2="blur" operator="over" />
-        </filter>
-        <filter id="glowStrong">
-          <feGaussianBlur stdDeviation="6" result="blur" />
-          <feComposite in="SourceGraphic" in2="blur" operator="over" />
-        </filter>
-        <linearGradient id="edgeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#6366f1" stopOpacity="0" />
-          <stop offset="50%" stopColor="#6366f1" stopOpacity="0.5" />
-          <stop offset="100%" stopColor="#06b6d4" stopOpacity="0" />
-        </linearGradient>
-        <marker id="dot" markerWidth="4" markerHeight="4" refX="2" refY="2">
-          <circle cx="2" cy="2" r="1.5" fill="#818cf8" opacity="0.8" />
-        </marker>
-      </defs>
-
-      {nodes[0] && (
-        <circle
-          cx={nodes[0].x}
-          cy={nodes[0].y}
-          r="120"
-          fill="url(#coreGlow)"
-          opacity="0.9"
-        />
-      )}
-
-      {edges.map(([a, b], i) => {
-        const na = nodes[a]
-        const nb = nodes[b]
-
-        return (
-          <g key={i}>
-            <line
-              x1={na.x}
-              y1={na.y}
-              x2={nb.x}
-              y2={nb.y}
-              stroke="rgba(99,102,241,0.12)"
-              strokeWidth="1"
-            />
-            <motion.line
-              x1={na.x}
-              y1={na.y}
-              x2={nb.x}
-              y2={nb.y}
-              stroke="url(#edgeGrad)"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              initial={{ pathLength: 0, opacity: 0 }}
-              animate={{ pathLength: [0, 1, 0], opacity: [0, 0.8, 0] }}
-              transition={{
-                duration: 2.5 + (i % 4) * 0.4,
-                repeat: Infinity,
-                delay: i * 0.3,
-                ease: 'easeInOut',
-              }}
-            />
-          </g>
-        )
-      })}
-
-      {nodes.map((node, i) => (
-        <g key={node.id}>
-          <motion.circle
-            cx={node.x}
-            cy={node.y}
-            r={node.r + 12}
-            fill={node.primary ? '#6366f1' : 'transparent'}
-            opacity={node.primary ? 0.15 : 0}
-            animate={
-              node.primary
-                ? { r: [node.r + 10, node.r + 18, node.r + 10], opacity: [0.1, 0.25, 0.1] }
-                : {}
-            }
-            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-          />
-
-          <motion.circle
-            cx={node.x}
-            cy={node.y}
-            r={node.r}
-            fill={node.primary ? 'url(#nodeGrad)' : 'url(#nodeGradSecondary)'}
-            stroke={node.primary ? 'rgba(129,140,248,0.6)' : 'rgba(99,102,241,0.2)'}
-            strokeWidth={node.primary ? 1.5 : 1}
-            filter={node.primary ? 'url(#glowStrong)' : undefined}
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.1 + i * 0.06, type: 'spring', stiffness: 200 }}
-          />
-
-          {node.primary && (
-            <motion.circle
-              cx={node.x}
-              cy={node.y}
-              r={node.r}
-              fill="none"
-              stroke="rgba(129,140,248,0.4)"
-              strokeWidth="1"
-              animate={{ r: [node.r, node.r + 22], opacity: [0.4, 0] }}
-              transition={{ duration: 2.2, repeat: Infinity, ease: 'easeOut' }}
-            />
-          )}
-
-          {!node.label && (
-            <motion.circle
-              cx={node.x}
-              cy={node.y}
-              r={3}
-              fill="#6366f1"
-              animate={{ opacity: [0.4, 1, 0.4] }}
-              transition={{ duration: 2, repeat: Infinity, delay: i * 0.2 }}
-            />
-          )}
-
-          {node.label && (
-            <motion.text
-              x={node.x}
-              y={node.y + 1}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fontSize={node.primary ? 9 : 8}
-              fontWeight={node.primary ? '700' : '500'}
-              fill={node.primary ? '#e0e7ff' : '#94a3b8'}
-              fontFamily="var(--font-body)"
-              letterSpacing="0.02em"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.6 + i * 0.05 }}
-            >
-              {node.label}
-            </motion.text>
-          )}
-        </g>
-      ))}
-
-      {[...Array(6)].map((_, i) => (
-        <motion.circle
-          key={`p${i}`}
-          r="2"
-          fill="#818cf8"
-          opacity="0.6"
-          initial={{ x: 80 + i * 60, y: 450 }}
-          animate={{
-            x: [80 + i * 60, 100 + i * 55, 80 + i * 60],
-            y: [450, 20, 450],
-            opacity: [0, 0.7, 0],
-          }}
-          transition={{
-            duration: 5 + i * 0.8,
-            repeat: Infinity,
-            delay: i * 0.9,
-            ease: 'easeInOut',
-          }}
-        />
-      ))}
-    </svg>
-  )
-}
-
 export default function LandingPage() {
+  const heroRef = useRef<HTMLElement>(null)
   const { scrollY } = useScroll()
   const heroY = useTransform(scrollY, [0, 600], [0, 60])
   const heroOpacity = useTransform(scrollY, [0, 480], [1, 0])
@@ -291,121 +83,121 @@ export default function LandingPage() {
         </div>
       </motion.nav>
 
-      <section className="relative flex min-h-screen items-center pt-20">
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        <img
+          src="/nature-bg.jpeg"
+          alt=""
+          className="w-full h-full object-cover object-center"
+          style={{ opacity: 0.055 }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            background: 'linear-gradient(to bottom, rgba(6,6,14,0.65) 0%, rgba(6,6,14,0.5) 30%, rgba(6,6,14,0.88) 75%, rgba(6,6,14,1) 100%)',
+          }}
+        />
+      </div>
+
+      <section ref={heroRef} className="relative z-10 flex min-h-screen items-center justify-center pt-20">
         <motion.div
           style={{ y: heroY, opacity: heroOpacity }}
-          className="mx-auto grid w-full max-w-7xl items-center gap-16 px-8 lg:grid-cols-2"
+          className="mx-auto w-full max-w-4xl px-8 text-center"
         >
-          <div>
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="mb-8 inline-flex items-center gap-2"
-            >
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-              <span className="text-xs font-medium uppercase tracking-widest text-slate-500">Now in early access</span>
-            </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="mb-8 inline-flex items-center gap-2"
+          >
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+            <span className="text-xs font-medium uppercase tracking-widest text-slate-500">Now in early access</span>
+          </motion.div>
 
-            <motion.h1
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.1 }}
-              className="mb-6 font-display text-5xl leading-[1.04] tracking-tight lg:text-6xl xl:text-7xl font-800"
+          <motion.h1
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.1 }}
+            className="mb-6 font-display text-5xl leading-[1.04] tracking-tight lg:text-6xl xl:text-7xl font-800"
+          >
+            <span style={{ color: '#f1f5f9' }}>Know if your</span>
+            <br />
+            <span
+              style={{
+                background: 'linear-gradient(135deg, #818cf8 0%, #38bdf8 60%, #34d399 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+              }}
             >
-              <span style={{ color: '#f1f5f9' }}>Know if your</span>
-              <br />
-              <span
-                style={{
-                  background: 'linear-gradient(135deg, #818cf8 0%, #38bdf8 60%, #34d399 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                }}
-              >
-                startup will work.
-              </span>
-              <br />
-              <span style={{ color: '#94a3b8' }}>Before you build it.</span>
-            </motion.h1>
+              startup will work.
+            </span>
+            <br />
+            <span style={{ color: '#94a3b8' }}>Before you build it.</span>
+          </motion.h1>
 
-            <motion.p
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.22 }}
-              className="mb-10 max-w-xl text-lg leading-relaxed text-slate-400"
-              style={{ fontWeight: 300 }}
-            >
-              Describe your product, idea, or launch plan. TheCee stress-tests it
-              against thousands of real-world scenarios and tells you exactly
-              what will work, what will fail, and how to improve your odds.
-            </motion.p>
-
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.35 }}
-              className="mb-14 flex flex-col items-start gap-4 sm:flex-row sm:items-center"
-            >
-              <Link
-                href="/signup"
-                className="group flex items-center gap-2 rounded-xl px-6 py-3.5 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5"
-                style={{
-                  background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
-                  boxShadow: '0 0 30px rgba(99,102,241,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
-                }}
-              >
-                Validate your idea free
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-              </Link>
-              <a
-                href="#how"
-                className="flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-slate-300"
-              >
-                See how it works <ChevronRight className="h-4 w-4" />
-              </a>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-              className="flex items-center gap-3"
-            >
-              <div className="flex -space-x-2">
-                {['#6366f1', '#06b6d4', '#10b981', '#f59e0b'].map((color, i) => (
-                  <div
-                    key={i}
-                    className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-[#06060e] text-xs font-700"
-                    style={{ background: color }}
-                  >
-                    {['S', 'M', 'R', 'A'][i]}
-                  </div>
-                ))}
-              </div>
-              <p className="text-xs text-slate-600">
-                Trusted by <span className="text-slate-400">240+ founders</span> before their launch
-              </p>
-            </motion.div>
-          </div>
+          <motion.p
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.22 }}
+            className="mx-auto mb-10 max-w-2xl text-lg leading-relaxed text-slate-400"
+            style={{ fontWeight: 300 }}
+          >
+            Describe your product, idea, or launch plan. TheCee stress-tests it
+            against thousands of real-world scenarios and tells you exactly
+            what will work, what will fail, and how to improve your odds.
+          </motion.p>
 
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 1, delay: 0.2 }}
-            className="relative mx-auto aspect-square w-full max-w-lg lg:mx-0"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.35 }}
+            className="mb-14 flex flex-col items-center justify-center gap-4 sm:flex-row"
           >
-            <div
-              className="absolute inset-0 rounded-full pointer-events-none"
-              style={{ background: 'radial-gradient(ellipse at center, rgba(99,102,241,0.08) 0%, transparent 70%)' }}
-            />
-            <NetworkGraph />
+            <Link
+              href="/signup"
+              className="group flex items-center gap-2 rounded-xl px-6 py-3.5 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5"
+              style={{
+                background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                boxShadow: '0 0 30px rgba(99,102,241,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
+              }}
+            >
+              Validate your idea free
+              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            </Link>
+            <a
+              href="#how"
+              className="flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-slate-300"
+            >
+              See how it works <ChevronRight className="h-4 w-4" />
+            </a>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="flex items-center justify-center gap-3"
+          >
+            <div className="flex -space-x-2">
+              {['#6366f1', '#06b6d4', '#10b981', '#f59e0b'].map((c, i) => (
+                <div
+                  key={i}
+                  className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-[#06060e] text-xs font-700"
+                  style={{ background: c }}
+                >
+                  {['S', 'M', 'R', 'A'][i]}
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-slate-600">
+              Trusted by <span className="text-slate-400">240+ founders</span> before their launch
+            </p>
           </motion.div>
         </motion.div>
       </section>
 
       <div
-        className="relative overflow-hidden border-y border-white/[0.04] py-5"
+        className="relative z-10 overflow-hidden border-y border-white/[0.04] py-5"
         style={{ background: 'rgba(255,255,255,0.01)' }}
       >
         <div className="flex whitespace-nowrap animate-marquee">
@@ -422,7 +214,7 @@ export default function LandingPage() {
         </div>
       </div>
 
-      <section id="how" className="relative mx-auto max-w-6xl px-8 py-36">
+      <section id="how" className="relative z-10 mx-auto max-w-6xl bg-[#06060e] px-8 py-36">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -482,7 +274,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-8 py-24">
+      <section className="relative z-10 mx-auto max-w-6xl bg-[#06060e] px-8 py-24">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -535,7 +327,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="border-y border-white/[0.04] px-8 py-20">
+      <section className="relative z-10 border-y border-white/[0.04] bg-[#06060e] px-8 py-20">
         <motion.div
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
@@ -567,7 +359,7 @@ export default function LandingPage() {
         </motion.div>
       </section>
 
-      <section className="relative px-8 py-44 text-center">
+      <section className="relative z-10 bg-[#06060e] px-8 py-44 text-center">
         <div
           className="pointer-events-none absolute top-1/2 left-1/2 h-[300px] w-[600px] -translate-x-1/2 -translate-y-1/2"
           style={{ background: 'radial-gradient(ellipse at center, rgba(99,102,241,0.07) 0%, transparent 70%)' }}
@@ -610,7 +402,7 @@ export default function LandingPage() {
         </motion.div>
       </section>
 
-      <footer className="border-t border-white/[0.04] px-8 py-8">
+      <footer className="relative z-10 border-t border-white/[0.04] bg-[#06060e] px-8 py-8">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 md:flex-row">
           <div className="flex items-center gap-2">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
