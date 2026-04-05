@@ -1,19 +1,11 @@
 'use client'
 
-import { useRef, useEffect, useState } from 'react'
-import {
-  motion,
-  useScroll,
-  useTransform,
-  useSpring,
-  AnimatePresence,
-} from 'framer-motion'
+import { useRef, useState, useEffect } from 'react'
+import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
-import { ArrowRight, ArrowUpRight } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Minus } from 'lucide-react'
 
 /* ─── CONSTANTS ─────────────────────────────────── */
-const NAV_LINKS = ['How it works', 'Use cases', 'Pricing']
-
 const WORDS = ['startup', 'product', 'idea', 'launch', 'decision']
 
 const STEPS = [
@@ -21,76 +13,88 @@ const STEPS = [
     n: '01',
     title: 'Describe your idea',
     body: 'Write your product or business concept in plain language. No forms, no templates. Just your idea as you see it.',
+    kicker: 'Input',
   },
   {
     n: '02',
     title: 'We stress-test it',
-    body: 'TheCee runs your idea through thousands of real-world scenarios — different customers, market conditions, risks you have not considered.',
+    body: 'TheCee runs your idea through thousands of real-world scenarios — different customers, market conditions, and risks you have not considered.',
+    kicker: 'Process',
   },
   {
     n: '03',
     title: 'You get clarity',
-    body: 'See what will work, what will fail, and the precise changes that shift the odds in your favour — before you spend a rupee.',
+    body: 'See what will work, what will fail, and the precise changes that shift the odds in your favour — before you spend a single rupee.',
+    kicker: 'Output',
   },
 ]
 
 const WHO = [
-  { label: 'First-time founders', sub: 'Validate before you build' },
-  { label: 'Product managers', sub: 'Data over opinion' },
-  { label: 'D2C brands', sub: 'Test before you manufacture' },
-  { label: 'Side project builders', sub: 'Know before you commit' },
+  {
+    title: 'First-time founders',
+    body: 'Launching your first product with limited runway. Know which risks are real before you spend anything.',
+    tag: 'Validate before you build',
+  },
+  {
+    title: 'Product managers',
+    body: 'Justify your next feature or launch with scenario data instead of opinions in a meeting room.',
+    tag: 'Data over opinion',
+  },
+  {
+    title: 'D2C and physical products',
+    body: 'Test pricing, channels, and customer response before committing to inventory or manufacturing.',
+    tag: 'Test before you manufacture',
+  },
+  {
+    title: 'Side project builders',
+    body: 'Find out if your weekend idea is worth your evenings before you invest months into it.',
+    tag: 'Know before you commit',
+  },
 ]
 
 const STATS = [
-  { value: '10,000+', label: 'Scenarios per test' },
-  { value: '< 2 min', label: 'Time to first insight' },
+  { value: '10,000+', label: 'Scenarios per simulation run' },
+  { value: '< 2 min', label: 'Time to first clear insight' },
   { value: '3×', label: 'Cross-validated by default' },
-  { value: '240+', label: 'Founders validated' },
+  { value: '240+', label: 'Founders validated so far' },
+]
+
+const MARQUEE_ITEMS = [
+  'Idea Validation', 'Launch Readiness', 'Product-Market Fit',
+  'Customer Behaviour', 'Risk Discovery', 'Revenue Forecasting',
+  'Growth Scenarios', 'Startup Stress Testing', 'Pricing Confidence',
+  'Decision Intelligence',
 ]
 
 /* ─── WORD ROTATOR ───────────────────────────────── */
 function WordRotator() {
   const [index, setIndex] = useState(0)
   useEffect(() => {
-    const t = setInterval(() => setIndex(i => (i + 1) % WORDS.length), 2200)
+    const t = setInterval(() => setIndex(i => (i + 1) % WORDS.length), 2400)
     return () => clearInterval(t)
   }, [])
   return (
     <span
       className="relative inline-block overflow-hidden"
-      style={{ minWidth: '220px', display: 'inline-flex', justifyContent: 'center' }}
+      style={{ minWidth: '260px', verticalAlign: 'bottom' }}
     >
       <AnimatePresence mode="wait">
         <motion.span
           key={WORDS[index]}
-          initial={{ y: 50, opacity: 0, filter: 'blur(8px)' }}
-          animate={{ y: 0, opacity: 1, filter: 'blur(0px)' }}
-          exit={{ y: -50, opacity: 0, filter: 'blur(8px)' }}
-          transition={{ duration: 0.55, ease: [0.76, 0, 0.24, 1] }}
+          initial={{ y: 48, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -48, opacity: 0 }}
+          transition={{ duration: 0.5, ease: [0.76, 0, 0.24, 1] }}
           style={{
-            background: 'linear-gradient(135deg, #7B6EF6 0%, #a78bfa 50%, #38bdf8 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
             display: 'inline-block',
+            color: 'var(--red)',
+            fontStyle: 'italic',
           }}
         >
           {WORDS[index]}
         </motion.span>
       </AnimatePresence>
     </span>
-  )
-}
-
-/* ─── CINEMATIC LINE ─────────────────────────────── */
-function CinematicRule() {
-  return (
-    <div
-      className="relative w-full h-px overflow-hidden"
-      style={{ background: 'rgba(255,255,255,0.05)' }}
-    >
-      <div className="beam" />
-    </div>
   )
 }
 
@@ -106,10 +110,10 @@ function Reveal({
 }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 40 }}
+      initial={{ opacity: 0, y: 32 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-80px' }}
-      transition={{ duration: 0.9, delay, ease: [0.25, 0.46, 0.45, 0.94] }}
+      viewport={{ once: true, margin: '-60px' }}
+      transition={{ duration: 0.8, delay, ease: [0.25, 0.46, 0.45, 0.94] }}
       className={className}
     >
       {children}
@@ -117,649 +121,766 @@ function Reveal({
   )
 }
 
+/* ─── SECTION KICKER ─────────────────────────────── */
+function SectionKicker({ label }: { label: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '32px' }}>
+      <div style={{ height: '2px', width: '20px', background: 'var(--red)', flexShrink: 0 }} />
+      <span style={{
+        fontSize: '9px',
+        color: 'var(--red)',
+        letterSpacing: '0.22em',
+        textTransform: 'uppercase',
+        fontWeight: 500,
+      }}>
+        {label}
+      </span>
+    </div>
+  )
+}
+
 /* ─── MAIN PAGE ──────────────────────────────────── */
 export default function LandingPage() {
-  const containerRef = useRef<HTMLDivElement>(null)
   const heroRef = useRef<HTMLDivElement>(null)
-
   const { scrollYProgress } = useScroll({
     target: heroRef,
     offset: ['start start', 'end start'],
   })
-
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.7], [1, 0])
-  const heroScale = useTransform(scrollYProgress, [0, 1], [1, 0.94])
-  const heroY = useTransform(scrollYProgress, [0, 1], [0, 50])
-  const smoothY = useSpring(heroY, { stiffness: 80, damping: 20 })
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.6], [1, 0])
+  const heroY = useTransform(scrollYProgress, [0, 1], [0, 40])
 
   return (
-    <div ref={containerRef} className="relative" style={{ background: 'var(--bg)' }}>
+    <div style={{ background: 'var(--paper)', minHeight: '100vh' }}>
 
-      {/* ━━━ NAVBAR ━━━ */}
-      <motion.nav
+      {/* ━━━ HEADER / NAVBAR ━━━ */}
+      <motion.header
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 1, delay: 0.2 }}
-        className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-6"
-        style={{ background: 'transparent' }}
+        transition={{ duration: 0.6 }}
+        style={{
+          borderBottom: '3px solid var(--ink)',
+          position: 'sticky',
+          top: 0,
+          zIndex: 50,
+          background: 'var(--paper)',
+        }}
       >
-        <div className="flex items-center gap-3">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <circle cx="10" cy="10" r="3" fill="#7B6EF6" />
-            <circle cx="10" cy="10" r="7" stroke="#7B6EF6" strokeWidth="0.75" opacity="0.35" />
-            <circle cx="10" cy="10" r="10" stroke="#7B6EF6" strokeWidth="0.5" opacity="0.12" />
-          </svg>
-          <span className="font-display font-700 tracking-tight" style={{ fontSize: '15px', color: '#f0f0f5' }}>
-            TheCee
-          </span>
+        {/* Top strip */}
+        <div style={{
+          borderBottom: '0.5px solid var(--border-color)',
+          padding: '6px 48px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}>
+          <p style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+            Simulation Intelligence Platform
+          </p>
+          <p style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.12em' }}>
+            Est. 2026 — Early Access
+          </p>
+          <p style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.12em' }}>
+            thecee.app
+          </p>
         </div>
 
-        <div className="hidden md:flex items-center gap-10">
-          {NAV_LINKS.map(link => (
-            <a
-              key={link}
-              href="#"
-              className="transition-colors duration-300"
+        {/* Main nav row */}
+        <div style={{
+          padding: '16px 48px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
+          {/* Left nav links */}
+          <div style={{ display: 'flex', gap: '32px', alignItems: 'center' }}>
+            {['How it works', 'Use cases', 'Pricing'].map(item => (
+              <a
+                key={item}
+                href="#"
+                style={{
+                  fontSize: '11px',
+                  color: 'var(--ink-secondary)',
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  textDecoration: 'none',
+                  transition: 'color 0.2s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.color = 'var(--ink)')}
+                onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-secondary)')}
+              >
+                {item}
+              </a>
+            ))}
+          </div>
+
+          {/* Masthead */}
+          <div style={{ textAlign: 'center' }}>
+            <div
+              className="font-serif"
+              style={{
+                fontSize: '36px',
+                fontWeight: 900,
+                color: 'var(--ink)',
+                letterSpacing: '-0.04em',
+                lineHeight: 1,
+                fontStyle: 'italic',
+              }}
+            >
+              TheCee
+            </div>
+          </div>
+
+          {/* Right auth links */}
+          <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+            <Link
+              href="/login"
               style={{
                 fontSize: '11px',
-                letterSpacing: '0.12em',
+                color: 'var(--ink-secondary)',
+                letterSpacing: '0.08em',
                 textTransform: 'uppercase',
-                color: 'var(--text-secondary)',
-                fontWeight: 400,
+                textDecoration: 'none',
+                transition: 'color 0.2s',
               }}
-              onMouseEnter={e => (e.currentTarget.style.color = '#f0f0f5')}
-              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+              onMouseEnter={e => (e.currentTarget.style.color = 'var(--ink)')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-secondary)')}
             >
-              {link}
-            </a>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-6">
-          <Link
-            href="/login"
-            className="transition-colors duration-300"
-            style={{
-              fontSize: '11px',
-              letterSpacing: '0.1em',
-              textTransform: 'uppercase',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/signup"
-            className="relative flex items-center gap-2 px-5 py-2.5 overflow-hidden"
-            style={{
-              fontSize: '11px',
-              fontWeight: 500,
-              letterSpacing: '0.1em',
-              textTransform: 'uppercase',
-              border: '1px solid rgba(123,110,246,0.5)',
-              color: '#f0f0f5',
-              background: 'rgba(123,110,246,0.08)',
-            }}
-          >
-            Get started <ArrowRight className="w-3 h-3" />
-          </Link>
-        </div>
-      </motion.nav>
-
-      {/* ━━━ HERO ━━━ */}
-      <section
-        ref={heroRef}
-        className="relative h-screen flex flex-col items-center justify-center overflow-hidden"
-        style={{ background: 'var(--bg)' }}
-      >
-        {/* Pure CSS radial spotlight behind headline */}
-        <div
-          className="absolute inset-0 z-0 pointer-events-none"
-          style={{
-            background: 'radial-gradient(ellipse 80% 60% at 50% 40%, rgba(123,110,246,0.12) 0%, transparent 70%)',
-          }}
-        />
-
-        {/* Subtle grid pattern */}
-        <svg
-          className="absolute inset-0 w-full h-full pointer-events-none"
-          style={{ opacity: 0.04 }}
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <defs>
-            <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
-              <path d="M 60 0 L 0 0 0 60" fill="none" stroke="white" strokeWidth="0.5" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#grid)" />
-        </svg>
-
-        {/* Large depth blur circle */}
-        <div
-          className="absolute pointer-events-none"
-          style={{
-            width: '600px',
-            height: '600px',
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(123,110,246,0.08) 0%, transparent 70%)',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-          }}
-        />
-
-        {/* Hero content — Fix 8: tighter max-width, px-16 */}
-        <motion.div
-          style={{ opacity: heroOpacity, y: smoothY, scale: heroScale }}
-          className="relative z-10 text-center px-16 max-w-4xl mx-auto w-full"
-        >
-          {/* Pre-label */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.4 }}
-            className="flex items-center justify-center gap-3 mb-10"
-          >
-            <div style={{ width: '40px', height: '1px', background: 'rgba(123,110,246,0.6)' }} />
-            <span
-              style={{
-                fontSize: '10px',
-                letterSpacing: '0.25em',
-                textTransform: 'uppercase',
-                color: '#7B6EF6',
-                fontWeight: 400,
-              }}
-            >
-              Simulation intelligence
-            </span>
-            <div style={{ width: '40px', height: '1px', background: 'rgba(123,110,246,0.6)' }} />
-          </motion.div>
-
-          {/* Main headline */}
-          <motion.h1
-            initial={{ opacity: 0, y: 32 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1, delay: 0.55, ease: [0.25, 0.46, 0.45, 0.94] }}
-            className="cinematic-text mb-6"
-            style={{ fontSize: 'clamp(40px, 6vw, 80px)', color: 'var(--text-primary)' }}
-          >
-            Will your{' '}
-            <WordRotator />
-            <br />
-            <span style={{ color: 'rgba(240,240,245,0.45)' }}>actually work?</span>
-          </motion.h1>
-
-          {/* Subheadline */}
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.8 }}
-            style={{
-              fontSize: '16px',
-              color: 'var(--text-secondary)',
-              lineHeight: 1.8,
-              maxWidth: '520px',
-              margin: '0 auto 48px',
-              fontWeight: 300,
-            }}
-          >
-            TheCee stress-tests your idea against thousands of real scenarios before
-            you commit — giving you clarity no amount of planning can.
-          </motion.p>
-
-          {/* CTAs */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 1 }}
-            className="flex flex-col sm:flex-row items-center justify-center gap-4"
-          >
+              Sign in
+            </Link>
             <Link
               href="/signup"
-              className="group relative flex items-center gap-3 px-8 py-4 overflow-hidden"
               style={{
-                background: '#7B6EF6',
-                color: '#fff',
-                fontSize: '13px',
+                fontSize: '11px',
+                color: 'var(--paper)',
+                background: 'var(--ink)',
+                padding: '8px 18px',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                textDecoration: 'none',
                 fontWeight: 500,
-                letterSpacing: '0.06em',
-                textTransform: 'uppercase',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                transition: 'background 0.2s',
               }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--red)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'var(--ink)')}
             >
-              <span className="relative z-10 flex items-center gap-2">
-                Validate your idea
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" />
-              </span>
-              <motion.div
-                className="absolute inset-0"
-                style={{ background: 'rgba(255,255,255,0.1)' }}
-                initial={{ x: '-100%' }}
-                whileHover={{ x: '100%' }}
-                transition={{ duration: 0.4 }}
-              />
+              Get started <ArrowRight size={11} />
             </Link>
-
-            <a
-              href="#how"
-              className="flex items-center gap-2 px-6 py-4 transition-colors duration-300"
-              style={{
-                fontSize: '12px',
-                color: 'var(--text-secondary)',
-                letterSpacing: '0.1em',
-                textTransform: 'uppercase',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.color = '#f0f0f5')}
-              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
-            >
-              Watch how it works
-            </a>
-          </motion.div>
-        </motion.div>
-
-        {/* Scroll indicator */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.6, duration: 1 }}
-          className="absolute bottom-10 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2"
-        >
-          <div
-            style={{
-              fontSize: '9px',
-              letterSpacing: '0.2em',
-              textTransform: 'uppercase',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            Scroll
           </div>
-          <motion.div
-            animate={{ y: [0, 8, 0] }}
-            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-            style={{
-              width: '1px',
-              height: '40px',
-              background: 'linear-gradient(to bottom, rgba(123,110,246,0.8), transparent)',
-            }}
-          />
+        </div>
+      </motion.header>
+
+      {/* ━━━ HERO ━━━ */}
+      <section ref={heroRef} style={{ borderBottom: '0.5px solid var(--border-color)', overflow: 'hidden' }}>
+        <motion.div style={{ opacity: heroOpacity, y: heroY }}>
+
+          {/* Issue line */}
+          <div style={{
+            padding: '10px 48px',
+            borderBottom: '0.5px solid var(--border-color)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            background: 'var(--paper-dark)',
+          }}>
+            <span style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+              Vol. 01 — Issue 01
+            </span>
+            <span style={{ fontSize: '10px', color: 'var(--red)', letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 500 }}>
+              ◆ Now in early access
+            </span>
+            <span style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.12em' }}>
+              April 2026
+            </span>
+          </div>
+
+          {/* Three-column hero grid */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 2.2fr 1fr',
+            minHeight: '75vh',
+          }}>
+
+            {/* Left column — features list */}
+            <div style={{
+              borderRight: '0.5px solid var(--border-color)',
+              padding: '40px 32px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+            }}>
+              <div>
+                <div style={{
+                  fontSize: '9px',
+                  letterSpacing: '0.2em',
+                  textTransform: 'uppercase',
+                  color: 'var(--ink-secondary)',
+                  marginBottom: '16px',
+                }}>
+                  Features
+                </div>
+                {['Idea validation', 'Risk discovery', 'Revenue forecasting', 'Launch readiness', 'Pricing confidence'].map(item => (
+                  <div
+                    key={item}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '9px 0',
+                      borderBottom: '0.5px solid var(--border-color)',
+                      fontSize: '11px',
+                      color: 'var(--ink-secondary)',
+                    }}
+                  >
+                    <Minus size={8} color="var(--red)" />
+                    {item}
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <div style={{ width: '24px', height: '2px', background: 'var(--red)', marginBottom: '10px' }} />
+                <p style={{ fontSize: '11px', color: 'var(--ink-secondary)', lineHeight: 1.7 }}>
+                  TheCee simulates reality before you commit to it.
+                </p>
+              </div>
+            </div>
+
+            {/* Centre column — main story */}
+            <div style={{
+              borderRight: '0.5px solid var(--border-color)',
+              padding: '48px 56px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+            }}>
+              <div>
+                <SectionKicker label="Cover story" />
+
+                <motion.h1
+                  initial={{ opacity: 0, y: 24 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.9, delay: 0.2 }}
+                  className="font-serif"
+                  style={{
+                    fontSize: 'clamp(44px, 5.5vw, 80px)',
+                    fontWeight: 900,
+                    lineHeight: 1.02,
+                    letterSpacing: '-0.02em',
+                    color: 'var(--ink)',
+                    marginBottom: '28px',
+                  }}
+                >
+                  Will your{' '}
+                  <WordRotator />
+                  <br />
+                  <span style={{ color: 'var(--ink-tertiary)', fontStyle: 'italic' }}>actually work?</span>
+                </motion.h1>
+
+                <div style={{ height: '0.5px', background: 'var(--border-color)', marginBottom: '28px' }} />
+
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.7, delay: 0.5 }}
+                  style={{
+                    fontSize: '16px',
+                    color: 'var(--ink-secondary)',
+                    lineHeight: 1.8,
+                    maxWidth: '480px',
+                    marginBottom: '36px',
+                    fontWeight: 300,
+                  }}
+                >
+                  TheCee stress-tests your idea against thousands of real-world
+                  scenarios before you commit — giving you clarity that no amount
+                  of planning, advice, or gut feeling ever can.
+                </motion.p>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.7 }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}
+                >
+                  <Link
+                    href="/signup"
+                    style={{
+                      background: 'var(--ink)',
+                      color: 'var(--paper)',
+                      padding: '12px 28px',
+                      fontSize: '11px',
+                      letterSpacing: '0.1em',
+                      textTransform: 'uppercase',
+                      fontWeight: 500,
+                      textDecoration: 'none',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      transition: 'background 0.2s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--red)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'var(--ink)')}
+                  >
+                    Validate your idea <ArrowRight size={12} />
+                  </Link>
+                  <a
+                    href="#how"
+                    style={{
+                      fontSize: '11px',
+                      color: 'var(--ink-secondary)',
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      textDecoration: 'none',
+                      borderBottom: '0.5px solid var(--border-color)',
+                      paddingBottom: '2px',
+                      transition: 'color 0.2s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--ink)')}
+                    onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-secondary)')}
+                  >
+                    Read how it works →
+                  </a>
+                </motion.div>
+              </div>
+
+              {/* Pull quote */}
+              <div style={{
+                borderTop: '0.5px solid var(--border-color)',
+                paddingTop: '28px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '32px',
+              }}>
+                <div style={{ flex: 1 }}>
+                  <p
+                    className="font-serif"
+                    style={{
+                      fontSize: '15px',
+                      fontStyle: 'italic',
+                      fontWeight: 700,
+                      color: 'var(--ink)',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    &ldquo;Know before you build. Not after you have spent six months on something that will not work.&rdquo;
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '24px', flexShrink: 0 }}>
+                  {[{ v: '240+', l: 'Founders' }, { v: '10K+', l: 'Scenarios' }].map(({ v, l }) => (
+                    <div key={l} style={{ textAlign: 'center' }}>
+                      <div className="font-serif" style={{ fontSize: '26px', fontWeight: 900, color: 'var(--ink)', lineHeight: 1 }}>{v}</div>
+                      <div style={{ fontSize: '9px', color: 'var(--ink-tertiary)', letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: '4px' }}>{l}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Right column — who + CTA box */}
+            <div style={{
+              padding: '40px 32px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+            }}>
+              <div>
+                <div style={{ fontSize: '9px', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--ink-secondary)', marginBottom: '16px' }}>
+                  Who it&apos;s for
+                </div>
+                {['First-time founders', 'Product managers', 'D2C brands', 'Side project builders'].map(item => (
+                  <div
+                    key={item}
+                    style={{
+                      padding: '10px 0',
+                      borderBottom: '0.5px solid var(--border-color)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      fontSize: '12px',
+                      color: 'var(--ink)',
+                      cursor: 'pointer',
+                      transition: 'color 0.2s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--red)')}
+                    onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink)')}
+                  >
+                    {item} <ArrowUpRight size={11} />
+                  </div>
+                ))}
+              </div>
+
+              {/* Bordered CTA box */}
+              <div style={{
+                border: '1.5px solid var(--ink)',
+                padding: '20px',
+                background: 'var(--paper-dark)',
+              }}>
+                <div style={{ fontSize: '9px', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--red)', marginBottom: '10px', fontWeight: 500 }}>
+                  Free to start
+                </div>
+                <p
+                  className="font-serif"
+                  style={{ fontSize: '15px', fontWeight: 800, color: 'var(--ink)', lineHeight: 1.3, marginBottom: '14px', fontStyle: 'italic' }}
+                >
+                  Run your first simulation at no cost.
+                </p>
+                <Link
+                  href="/signup"
+                  style={{
+                    display: 'block',
+                    textAlign: 'center',
+                    background: 'var(--red)',
+                    color: '#fff',
+                    padding: '8px',
+                    fontSize: '10px',
+                    letterSpacing: '0.1em',
+                    textTransform: 'uppercase',
+                    fontWeight: 500,
+                    textDecoration: 'none',
+                    transition: 'opacity 0.2s',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
+                  onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+                >
+                  Start now →
+                </Link>
+              </div>
+            </div>
+
+          </div>
         </motion.div>
       </section>
 
-      {/* ━━━ BELOW HERO — SOLID DARK ━━━ */}
-      <div style={{ background: 'var(--bg)', position: 'relative', zIndex: 10 }}>
+      {/* ━━━ MARQUEE ━━━ */}
+      <div style={{
+        overflow: 'hidden',
+        background: 'var(--ink)',
+        padding: '10px 0',
+        borderBottom: '0.5px solid rgba(242,236,224,0.08)',
+      }}>
+        <div className="animate-marquee" style={{ display: 'flex', whiteSpace: 'nowrap' }}>
+          {[...Array(2)].map((_, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center' }}>
+              {MARQUEE_ITEMS.map((item, j) => (
+                <span key={`${i}-${j}`} style={{ display: 'flex', alignItems: 'center', gap: '24px', padding: '0 24px' }}>
+                  <span style={{ fontSize: '10px', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(242,236,224,0.5)' }}>
+                    {item}
+                  </span>
+                  <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: 'var(--red)', display: 'inline-block', flexShrink: 0 }} />
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
 
-        {/* ━━━ MARQUEE — Fix 2 ━━━ */}
-        <div
-          className="relative overflow-hidden py-6"
-          style={{
-            borderTop: '1px solid var(--border-color)',
-            borderBottom: '1px solid var(--border-color)',
-          }}
-        >
-          <div className="flex animate-marquee whitespace-nowrap">
-            {[...Array(2)].map((_, i) => (
-              <div key={i} className="flex items-center">
-                {[
-                  'Idea Validation',
-                  'Launch Readiness',
-                  'Product-Market Fit',
-                  'Customer Behaviour',
-                  'Risk Discovery',
-                  'Revenue Forecasting',
-                  'Growth Scenarios',
-                  'Startup Stress Testing',
-                  'Pricing Confidence',
-                  'Decision Intelligence',
-                ].map((item, j) => (
-                  <span key={`${i}-${j}`} className="flex items-center gap-8 px-8">
-                    <span
+      {/* ━━━ HOW IT WORKS ━━━ */}
+      <section id="how" style={{ borderBottom: '0.5px solid var(--border-color)' }}>
+        <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '80px 48px' }}>
+
+          <Reveal>
+            <SectionKicker label="Process" />
+            <h2
+              className="font-serif"
+              style={{
+                fontSize: 'clamp(36px, 4vw, 60px)',
+                fontWeight: 900,
+                fontStyle: 'italic',
+                color: 'var(--ink)',
+                lineHeight: 1.05,
+                letterSpacing: '-0.02em',
+                marginBottom: '64px',
+              }}
+            >
+              Three steps to certainty.
+            </h2>
+          </Reveal>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)' }}>
+            {STEPS.map(({ n, title, body, kicker }, i) => (
+              <Reveal key={n} delay={i * 0.1}>
+                <div style={{
+                  paddingTop: '40px',
+                  paddingBottom: '40px',
+                  paddingLeft: i > 0 ? '40px' : '0',
+                  paddingRight: i < 2 ? '40px' : '0',
+                  borderRight: i < 2 ? '0.5px solid var(--border-color)' : 'none',
+                  minHeight: '260px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                }}>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+                      <span style={{ fontSize: '9px', color: 'var(--red)', letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 500 }}>
+                        {kicker}
+                      </span>
+                      <span className="font-serif" style={{ fontSize: '48px', fontWeight: 900, color: 'var(--paper-dark)', lineHeight: 1, letterSpacing: '-0.03em' }}>
+                        {n}
+                      </span>
+                    </div>
+                    <div style={{ height: '2px', background: 'var(--ink)', width: '24px', marginBottom: '20px' }} />
+                    <h3
+                      className="font-serif"
                       style={{
-                        fontSize: '10px',
-                        letterSpacing: '0.2em',
-                        textTransform: 'uppercase',
-                        color: 'var(--text-secondary)',
+                        fontSize: '22px',
+                        fontWeight: 800,
+                        color: 'var(--ink)',
+                        lineHeight: 1.2,
+                        letterSpacing: '-0.01em',
+                        marginBottom: '12px',
+                        fontStyle: 'italic',
                       }}
                     >
-                      {item}
-                    </span>
-                    <span
-                      style={{
-                        width: '3px',
-                        height: '3px',
-                        borderRadius: '50%',
-                        background: 'rgba(123,110,246,0.4)',
-                        display: 'inline-block',
-                        flexShrink: 0,
-                      }}
-                    />
-                  </span>
-                ))}
-              </div>
+                      {title}
+                    </h3>
+                    <p style={{ fontSize: '13px', color: 'var(--ink-secondary)', lineHeight: 1.8 }}>{body}</p>
+                  </div>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+
+        </div>
+      </section>
+
+      {/* ━━━ WHO IT'S FOR ━━━ */}
+      <section style={{ borderBottom: '0.5px solid var(--border-color)', background: 'var(--paper-dark)' }}>
+        <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '80px 48px' }}>
+
+          <Reveal>
+            <SectionKicker label="Who it's for" />
+            <h2
+              className="font-serif"
+              style={{
+                fontSize: 'clamp(32px, 3.5vw, 52px)',
+                fontWeight: 900,
+                fontStyle: 'italic',
+                color: 'var(--ink)',
+                lineHeight: 1.05,
+                letterSpacing: '-0.02em',
+                marginBottom: '64px',
+                maxWidth: '640px',
+              }}
+            >
+              Built for people who cannot afford to guess.
+            </h2>
+          </Reveal>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)' }}>
+            {WHO.map(({ title, body, tag }, i) => (
+              <Reveal key={title} delay={i * 0.08}>
+                <div
+                  style={{
+                    padding: '36px',
+                    borderTop: '0.5px solid var(--border-color)',
+                    borderRight: i % 2 === 0 ? '0.5px solid var(--border-color)' : 'none',
+                    background: 'var(--paper-dark)',
+                    transition: 'background 0.3s',
+                    cursor: 'default',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--paper)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'var(--paper-dark)')}
+                >
+                  <div style={{
+                    display: 'inline-block',
+                    fontSize: '9px',
+                    color: 'var(--red)',
+                    letterSpacing: '0.18em',
+                    textTransform: 'uppercase',
+                    fontWeight: 500,
+                    borderLeft: '2px solid var(--red)',
+                    paddingLeft: '8px',
+                    marginBottom: '20px',
+                  }}>
+                    {tag}
+                  </div>
+                  <h3
+                    className="font-serif"
+                    style={{
+                      fontSize: '22px',
+                      fontWeight: 800,
+                      color: 'var(--ink)',
+                      lineHeight: 1.2,
+                      fontStyle: 'italic',
+                      marginBottom: '12px',
+                    }}
+                  >
+                    {title}
+                  </h3>
+                  <p style={{ fontSize: '13px', color: 'var(--ink-secondary)', lineHeight: 1.8 }}>{body}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+
+        </div>
+      </section>
+
+      {/* ━━━ STATS ━━━ */}
+      <section style={{ borderBottom: '0.5px solid var(--border-color)' }}>
+        <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '64px 48px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)' }}>
+            {STATS.map(({ value, label }, i) => (
+              <Reveal key={label} delay={i * 0.07}>
+                <div style={{
+                  padding: '32px 40px',
+                  borderRight: i < 3 ? '0.5px solid var(--border-color)' : 'none',
+                  textAlign: 'center',
+                }}>
+                  <div
+                    className="font-serif"
+                    style={{
+                      fontSize: 'clamp(28px, 3vw, 44px)',
+                      fontWeight: 900,
+                      color: 'var(--ink)',
+                      lineHeight: 1,
+                      letterSpacing: '-0.02em',
+                      marginBottom: '8px',
+                    }}
+                  >
+                    {value}
+                  </div>
+                  <div style={{
+                    fontSize: '10px',
+                    color: 'var(--ink-tertiary)',
+                    letterSpacing: '0.12em',
+                    textTransform: 'uppercase',
+                    lineHeight: 1.5,
+                  }}>
+                    {label}
+                  </div>
+                </div>
+              </Reveal>
             ))}
           </div>
         </div>
+      </section>
 
-        {/* ━━━ HOW IT WORKS — Fix 3 ━━━ */}
-        <section id="how" className="relative py-40">
-          <div className="max-w-6xl mx-auto px-16 md:px-24">
-            <div className="grid lg:grid-cols-[1fr_2fr] gap-24 items-start">
-
-              <Reveal>
-                <div className="lg:sticky pr-8" style={{ top: '120px' }}>
-                  <p
-                    style={{
-                      fontSize: '10px',
-                      letterSpacing: '0.25em',
-                      textTransform: 'uppercase',
-                      color: '#7B6EF6',
-                      marginBottom: '20px',
-                    }}
-                  >
-                    Process
-                  </p>
-                  <h2
-                    className="cinematic-text"
-                    style={{
-                      fontSize: 'clamp(36px, 4vw, 56px)',
-                      lineHeight: 1.05,
-                      color: 'var(--text-primary)',
-                      marginBottom: '24px',
-                    }}
-                  >
-                    Three steps<br />to certainty.
-                  </h2>
-                  <p
-                    style={{
-                      fontSize: '14px',
-                      color: 'var(--text-secondary)',
-                      lineHeight: 1.8,
-                      maxWidth: '260px',
-                    }}
-                  >
-                    From raw idea to clear answer. No guesswork. No planning fallacy.
-                  </p>
-                </div>
-              </Reveal>
-
-              <div>
-                {STEPS.map(({ n, title, body }, i) => (
-                  <Reveal key={n} delay={i * 0.12}>
-                    <div
-                      className="group relative cursor-default"
-                      style={{
-                        borderBottom: '1px solid var(--border-color)',
-                        paddingTop: '48px',
-                        paddingBottom: '48px',
-                      }}
-                    >
-                      <div className="flex items-start gap-10">
-                        <span
-                          className="font-display"
-                          style={{
-                            fontSize: '11px',
-                            color: 'rgba(123,110,246,0.5)',
-                            letterSpacing: '0.1em',
-                            marginTop: '4px',
-                            minWidth: '24px',
-                            flexShrink: 0,
-                          }}
-                        >
-                          {n}
-                        </span>
-                        <div className="flex-1">
-                          <h3
-                            className="font-display"
-                            style={{
-                              fontSize: '22px',
-                              fontWeight: 700,
-                              color: 'var(--text-primary)',
-                              marginBottom: '12px',
-                              letterSpacing: '-0.01em',
-                            }}
-                          >
-                            {title}
-                          </h3>
-                          <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-                            {body}
-                          </p>
-                        </div>
-                        <ArrowUpRight
-                          className="w-5 h-5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                          style={{ color: '#7B6EF6', marginTop: '4px', flexShrink: 0 }}
-                        />
-                      </div>
-                      <motion.div
-                        className="absolute bottom-0 left-0 h-px"
-                        style={{ background: '#7B6EF6', width: 0 }}
-                        whileHover={{ width: '100%' }}
-                        transition={{ duration: 0.4 }}
-                      />
-                    </div>
-                  </Reveal>
-                ))}
-              </div>
-
-            </div>
-          </div>
-        </section>
-
-        <CinematicRule />
-
-        {/* ━━━ WHO IT'S FOR — Fix 4 ━━━ */}
-        <section className="py-40">
-          <div className="max-w-6xl mx-auto px-16 md:px-24">
-
-            <Reveal className="mb-24">
-              <p
-                style={{
-                  fontSize: '10px',
-                  letterSpacing: '0.25em',
-                  textTransform: 'uppercase',
-                  color: '#7B6EF6',
-                  marginBottom: '20px',
-                }}
-              >
-                Who it&apos;s for
-              </p>
-              <h2
-                className="cinematic-text"
-                style={{ fontSize: 'clamp(36px, 4vw, 56px)', lineHeight: 1.05, color: 'var(--text-primary)' }}
-              >
-                Built for people who<br />cannot afford to guess.
-              </h2>
-            </Reveal>
-
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-px" style={{ background: 'var(--border-color)' }}>
-              {WHO.map(({ label, sub }, i) => (
-                <Reveal key={label} delay={i * 0.08}>
-                  <div
-                    className="card-cinematic group p-10 cursor-default flex flex-col justify-between"
-                    style={{
-                      minHeight: '240px',
-                      background: 'var(--surface)',
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: '10px',
-                        letterSpacing: '0.2em',
-                        textTransform: 'uppercase',
-                        color: '#7B6EF6',
-                        fontWeight: 500,
-                        marginBottom: '48px',
-                      }}
-                    >
-                      {sub}
-                    </div>
-                    <h3
-                      className="font-display"
-                      style={{
-                        fontSize: '22px',
-                        fontWeight: 700,
-                        color: 'var(--text-primary)',
-                        lineHeight: 1.2,
-                        letterSpacing: '-0.01em',
-                      }}
-                    >
-                      {label}
-                    </h3>
-                  </div>
-                </Reveal>
-              ))}
-            </div>
-
-          </div>
-        </section>
-
-        <CinematicRule />
-
-        {/* ━━━ STATS — Fix 5 ━━━ */}
-        <section className="py-32">
-          <div className="max-w-6xl mx-auto px-16 md:px-24">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-px" style={{ background: 'var(--border-color)' }}>
-              {STATS.map(({ value, label }, i) => (
-                <Reveal key={label} delay={i * 0.06}>
-                  <div
-                    className="card-cinematic p-14 text-center"
-                    style={{
-                      background: 'var(--surface)',
-                      minHeight: '160px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <div
-                      className="font-display mb-3"
-                      style={{
-                        fontSize: 'clamp(32px, 4vw, 52px)',
-                        fontWeight: 800,
-                        letterSpacing: '-0.02em',
-                        background: 'linear-gradient(135deg, #f0f0f5 0%, rgba(240,240,245,0.5) 100%)',
-                        WebkitBackgroundClip: 'text',
-                        WebkitTextFillColor: 'transparent',
-                        backgroundClip: 'text',
-                      }}
-                    >
-                      {value}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: '11px',
-                        letterSpacing: '0.15em',
-                        textTransform: 'uppercase',
-                        color: 'var(--text-secondary)',
-                      }}
-                    >
-                      {label}
-                    </div>
-                  </div>
-                </Reveal>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <CinematicRule />
-
-        {/* ━━━ FINAL CTA — Fix 6 ━━━ */}
-        <section className="relative py-52 text-center overflow-hidden px-16 md:px-24">
-          <div
-            className="spotlight"
-            style={{
-              width: '600px',
-              height: '300px',
-              background: '#7B6EF6',
-              opacity: 0.06,
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%,-50%)',
-            }}
-          />
-
+      {/* ━━━ FINAL CTA ━━━ */}
+      <section style={{ background: 'var(--ink)', borderBottom: '3px solid var(--ink)' }}>
+        <div style={{
+          maxWidth: '1200px',
+          margin: '0 auto',
+          padding: '100px 48px',
+          display: 'grid',
+          gridTemplateColumns: '1.5fr 1fr',
+          gap: '80px',
+          alignItems: 'center',
+        }}>
           <Reveal>
-            <p
+            <div style={{ height: '2px', width: '24px', background: 'var(--red)', marginBottom: '24px' }} />
+            <h2
+              className="font-serif"
               style={{
-                fontSize: '10px',
-                letterSpacing: '0.25em',
-                textTransform: 'uppercase',
-                color: '#7B6EF6',
-                marginBottom: '32px',
+                fontSize: 'clamp(36px, 4vw, 64px)',
+                fontWeight: 900,
+                fontStyle: 'italic',
+                color: 'var(--paper)',
+                lineHeight: 1.05,
+                letterSpacing: '-0.02em',
+                marginBottom: '24px',
               }}
             >
-              Start now
-            </p>
-            <h2
-              className="cinematic-text mb-6"
-              style={{ fontSize: 'clamp(44px, 6vw, 88px)', color: 'var(--text-primary)', lineHeight: 1.0 }}
-            >
               Your next decision<br />
-              <span style={{ color: 'rgba(240,240,245,0.25)' }}>deserves certainty.</span>
+              <span style={{ color: 'rgba(242,236,224,0.3)' }}>deserves certainty.</span>
             </h2>
-            <p
-              style={{ fontSize: '15px', color: 'var(--text-secondary)', marginBottom: '48px', fontWeight: 300 }}
-            >
-              Stop planning. Start simulating.
+            <p style={{ fontSize: '14px', color: 'rgba(242,236,224,0.5)', lineHeight: 1.8, marginBottom: '36px', maxWidth: '380px' }}>
+              Stop planning. Stop guessing. Start simulating — and know before you build.
             </p>
             <Link
               href="/signup"
-              className="group inline-flex items-center gap-3 px-10 py-5"
               style={{
-                background: '#7B6EF6',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '10px',
+                background: 'var(--red)',
                 color: '#fff',
-                fontSize: '13px',
-                fontWeight: 500,
-                letterSpacing: '0.08em',
+                padding: '14px 32px',
+                fontSize: '11px',
+                letterSpacing: '0.1em',
                 textTransform: 'uppercase',
+                fontWeight: 500,
+                textDecoration: 'none',
+                transition: 'opacity 0.2s',
               }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
+              onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
             >
-              Validate your idea free
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" />
+              Validate your idea free <ArrowRight size={13} />
             </Link>
           </Reveal>
-        </section>
 
-        {/* ━━━ FOOTER ━━━ */}
-        <footer
-          className="px-16 md:px-24 py-10"
-          style={{ borderTop: '1px solid var(--border-color)' }}
-        >
-          <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2.5">
-              <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-                <circle cx="10" cy="10" r="3" fill="#7B6EF6" />
-                <circle cx="10" cy="10" r="7" stroke="#7B6EF6" strokeWidth="0.75" opacity="0.35" />
-              </svg>
-              <span className="font-display font-700" style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                TheCee
-              </span>
+          <Reveal delay={0.15}>
+            <div style={{ borderLeft: '0.5px solid rgba(242,236,224,0.1)', paddingLeft: '60px' }}>
+              <div style={{ height: '2px', width: '20px', background: 'var(--red)', marginBottom: '16px' }} />
+              <p
+                className="font-serif"
+                style={{
+                  fontSize: '20px',
+                  fontStyle: 'italic',
+                  fontWeight: 700,
+                  color: 'var(--paper)',
+                  lineHeight: 1.5,
+                  marginBottom: '20px',
+                  opacity: 0.9,
+                }}
+              >
+                &ldquo;Every decision made without simulation is a decision made blind.&rdquo;
+              </p>
+              <p style={{ fontSize: '10px', color: 'rgba(242,236,224,0.4)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+                — TheCee, 2026
+              </p>
             </div>
-            <p style={{ fontSize: '11px', color: 'rgba(90,90,114,0.6)', letterSpacing: '0.05em' }}>
-              © 2026 TheCee. Simulate before you build.
-            </p>
-            <div className="flex items-center gap-8">
-              {['Privacy', 'Terms', 'Contact'].map(item => (
-                <a
-                  key={item}
-                  href="#"
-                  style={{
-                    fontSize: '11px',
-                    color: 'var(--text-secondary)',
-                    letterSpacing: '0.1em',
-                    textTransform: 'uppercase',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.color = '#f0f0f5')}
-                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
-                >
-                  {item}
-                </a>
-              ))}
-            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ━━━ FOOTER ━━━ */}
+      <footer style={{ background: 'var(--ink)', borderTop: '0.5px solid rgba(242,236,224,0.08)' }}>
+        <div style={{
+          maxWidth: '1200px',
+          margin: '0 auto',
+          padding: '24px 48px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}>
+          <span
+            className="font-serif"
+            style={{ fontSize: '18px', fontWeight: 900, fontStyle: 'italic', color: 'var(--paper)', opacity: 0.4, letterSpacing: '-0.02em' }}
+          >
+            TheCee
+          </span>
+          <p style={{ fontSize: '10px', color: 'rgba(242,236,224,0.25)', letterSpacing: '0.1em' }}>
+            © 2026 TheCee. Simulate before you build.
+          </p>
+          <div style={{ display: 'flex', gap: '24px' }}>
+            {['Privacy', 'Terms', 'Contact'].map(item => (
+              <a
+                key={item}
+                href="#"
+                style={{
+                  fontSize: '10px',
+                  color: 'rgba(242,236,224,0.3)',
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                  textDecoration: 'none',
+                  transition: 'color 0.2s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.color = 'rgba(242,236,224,0.7)')}
+                onMouseLeave={e => (e.currentTarget.style.color = 'rgba(242,236,224,0.3)')}
+              >
+                {item}
+              </a>
+            ))}
           </div>
-        </footer>
+        </div>
+      </footer>
 
-      </div>
     </div>
   )
 }
