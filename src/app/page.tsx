@@ -58,14 +58,14 @@ function WordRotator() {
   return (
     <span
       className="relative inline-block overflow-hidden"
-      style={{ minWidth: '260px', display: 'inline-flex', justifyContent: 'center' }}
+      style={{ minWidth: '220px', display: 'inline-flex', justifyContent: 'center' }}
     >
       <AnimatePresence mode="wait">
         <motion.span
           key={WORDS[index]}
-          initial={{ y: 60, opacity: 0, filter: 'blur(8px)' }}
+          initial={{ y: 50, opacity: 0, filter: 'blur(8px)' }}
           animate={{ y: 0, opacity: 1, filter: 'blur(0px)' }}
-          exit={{ y: -60, opacity: 0, filter: 'blur(8px)' }}
+          exit={{ y: -50, opacity: 0, filter: 'blur(8px)' }}
           transition={{ duration: 0.55, ease: [0.76, 0, 0.24, 1] }}
           style={{
             background: 'linear-gradient(135deg, #7B6EF6 0%, #a78bfa 50%, #38bdf8 100%)',
@@ -131,7 +131,6 @@ export default function LandingPage() {
   const heroScale = useTransform(scrollYProgress, [0, 1], [1, 0.94])
   const heroY = useTransform(scrollYProgress, [0, 1], [0, 50])
   const smoothY = useSpring(heroY, { stiffness: 80, damping: 20 })
-  const imgScale = useTransform(scrollYProgress, [0, 1], [1.05, 1.0])
 
   return (
     <div ref={containerRef} className="relative" style={{ background: 'var(--bg)' }}>
@@ -211,50 +210,48 @@ export default function LandingPage() {
       <section
         ref={heroRef}
         className="relative h-screen flex flex-col items-center justify-center overflow-hidden"
+        style={{ background: 'var(--bg)' }}
       >
-        {/* Background image with parallax */}
-        <motion.div style={{ scale: imgScale }} className="absolute inset-0 z-0">
-          <img
-            src="/nature-bg.jpeg"
-            alt=""
-            className="w-full h-full object-cover object-center"
-            style={{ opacity: 0.28 }}
-          />
-          {/* Cinematic letterbox gradient */}
-          <div
-            className="absolute inset-0"
-            style={{
-              background: `
-                linear-gradient(to bottom,
-                  rgba(5,5,7,0.85) 0%,
-                  rgba(5,5,7,0.2) 25%,
-                  rgba(5,5,7,0.15) 50%,
-                  rgba(5,5,7,0.5) 75%,
-                  rgba(5,5,7,1) 100%
-                )
-              `,
-            }}
-          />
-          {/* Side vignette */}
-          <div
-            className="absolute inset-0"
-            style={{
-              background:
-                'radial-gradient(ellipse at center, transparent 40%, rgba(5,5,7,0.8) 100%)',
-            }}
-          />
-        </motion.div>
-
-        {/* Accent spotlight */}
+        {/* Pure CSS radial spotlight behind headline */}
         <div
-          className="spotlight w-96 h-96 opacity-10"
-          style={{ background: '#7B6EF6', top: '20%', left: '50%', transform: 'translate(-50%,-50%)' }}
+          className="absolute inset-0 z-0 pointer-events-none"
+          style={{
+            background: 'radial-gradient(ellipse 80% 60% at 50% 40%, rgba(123,110,246,0.12) 0%, transparent 70%)',
+          }}
+        />
+
+        {/* Subtle grid pattern */}
+        <svg
+          className="absolute inset-0 w-full h-full pointer-events-none"
+          style={{ opacity: 0.04 }}
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <defs>
+            <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
+              <path d="M 60 0 L 0 0 0 60" fill="none" stroke="white" strokeWidth="0.5" />
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#grid)" />
+        </svg>
+
+        {/* Large depth blur circle */}
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            width: '600px',
+            height: '600px',
+            borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(123,110,246,0.08) 0%, transparent 70%)',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+          }}
         />
 
         {/* Hero content */}
         <motion.div
           style={{ opacity: heroOpacity, y: smoothY, scale: heroScale }}
-          className="relative z-10 text-center px-6 max-w-5xl mx-auto"
+          className="relative z-10 text-center px-8 max-w-5xl mx-auto w-full"
         >
           {/* Pre-label */}
           <motion.div
@@ -278,18 +275,18 @@ export default function LandingPage() {
             <div style={{ width: '40px', height: '1px', background: 'rgba(123,110,246,0.6)' }} />
           </motion.div>
 
-          {/* Main headline */}
+          {/* Main headline — fixed font size */}
           <motion.h1
             initial={{ opacity: 0, y: 32 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 1, delay: 0.55, ease: [0.25, 0.46, 0.45, 0.94] }}
             className="cinematic-text mb-6"
-            style={{ fontSize: 'clamp(52px, 8vw, 108px)', color: 'var(--text-primary)' }}
+            style={{ fontSize: 'clamp(40px, 6vw, 80px)', color: 'var(--text-primary)' }}
           >
             Will your{' '}
             <WordRotator />
             <br />
-            <span style={{ color: 'rgba(240,240,245,0.35)' }}>actually work?</span>
+            <span style={{ color: 'rgba(240,240,245,0.45)' }}>actually work?</span>
           </motion.h1>
 
           {/* Subheadline */}
@@ -393,11 +390,13 @@ export default function LandingPage() {
 
         {/* ━━━ MARQUEE ━━━ */}
         <div
-          className="relative overflow-hidden py-5"
-          style={{ borderTop: '1px solid var(--border-color)', borderBottom: '1px solid var(--border-color)' }}
+          className="relative overflow-hidden"
+          style={{
+            borderTop: '1px solid var(--border-color)',
+            borderBottom: '1px solid var(--border-color)',
+          }}
         >
-          <CinematicRule />
-          <div className="flex animate-marquee whitespace-nowrap py-4">
+          <div className="flex animate-marquee whitespace-nowrap py-5">
             {[...Array(2)].map((_, i) => (
               <div key={i} className="flex items-center">
                 {[
@@ -430,6 +429,7 @@ export default function LandingPage() {
                         borderRadius: '50%',
                         background: 'rgba(123,110,246,0.4)',
                         display: 'inline-block',
+                        flexShrink: 0,
                       }}
                     />
                   </span>
@@ -440,11 +440,11 @@ export default function LandingPage() {
         </div>
 
         {/* ━━━ HOW IT WORKS ━━━ */}
-        <section id="how" className="relative px-8 py-40 max-w-7xl mx-auto">
-          <div className="grid lg:grid-cols-[1fr_2fr] gap-24 items-start">
+        <section id="how" className="relative px-8 py-32 max-w-7xl mx-auto">
+          <div className="grid lg:grid-cols-[1fr_2fr] gap-16 items-start">
 
             <Reveal>
-              <div className="lg:sticky" style={{ top: '120px' }}>
+              <div className="lg:sticky pl-0" style={{ top: '120px' }}>
                 <p
                   style={{
                     fontSize: '10px',
@@ -480,12 +480,16 @@ export default function LandingPage() {
               </div>
             </Reveal>
 
-            <div className="space-y-0">
+            <div>
               {STEPS.map(({ n, title, body }, i) => (
                 <Reveal key={n} delay={i * 0.12}>
                   <div
-                    className="group relative py-12 cursor-default"
-                    style={{ borderBottom: '1px solid var(--border-color)' }}
+                    className="group relative cursor-default"
+                    style={{
+                      borderBottom: '1px solid var(--border-color)',
+                      paddingTop: '48px',
+                      paddingBottom: '48px',
+                    }}
                   >
                     <div className="flex items-start gap-10">
                       <span
@@ -496,6 +500,7 @@ export default function LandingPage() {
                           letterSpacing: '0.1em',
                           marginTop: '4px',
                           minWidth: '24px',
+                          flexShrink: 0,
                         }}
                       >
                         {n}
@@ -538,7 +543,7 @@ export default function LandingPage() {
         <CinematicRule />
 
         {/* ━━━ WHO IT'S FOR ━━━ */}
-        <section className="px-8 py-40 max-w-7xl mx-auto">
+        <section className="px-8 py-32 max-w-7xl mx-auto">
           <Reveal className="mb-20">
             <p
               style={{
@@ -563,27 +568,45 @@ export default function LandingPage() {
             {WHO.map(({ label, sub }, i) => (
               <Reveal key={label} delay={i * 0.08}>
                 <div
-                  className="card-cinematic group p-10 cursor-default"
-                  style={{ minHeight: '200px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
+                  className="group cursor-default"
+                  style={{
+                    background: 'var(--surface)',
+                    minHeight: '220px',
+                    padding: '40px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    transition: 'border-color 0.4s ease, background 0.4s ease',
+                  }}
+                  onMouseEnter={e => {
+                    (e.currentTarget as HTMLDivElement).style.background = 'rgba(123,110,246,0.04)'
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLDivElement).style.background = 'var(--surface)'
+                  }}
                 >
                   <div
                     style={{
                       fontSize: '11px',
                       letterSpacing: '0.15em',
                       textTransform: 'uppercase',
-                      color: 'rgba(123,110,246,0.6)',
+                      color: 'rgba(123,110,246,0.7)',
+                      fontWeight: 500,
                     }}
                   >
                     {sub}
                   </div>
-                  <div>
-                    <h3
-                      className="font-display"
-                      style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}
-                    >
-                      {label}
-                    </h3>
-                  </div>
+                  <h3
+                    className="font-display"
+                    style={{
+                      fontSize: '20px',
+                      fontWeight: 700,
+                      color: '#f0f0f5',
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {label}
+                  </h3>
                 </div>
               </Reveal>
             ))}
@@ -597,14 +620,17 @@ export default function LandingPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-px" style={{ background: 'var(--border-color)' }}>
             {STATS.map(({ value, label }, i) => (
               <Reveal key={label} delay={i * 0.06}>
-                <div className="card-cinematic p-12 text-center">
+                <div
+                  className="card-cinematic p-12 text-center"
+                  style={{ minHeight: '160px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}
+                >
                   <div
                     className="font-display mb-3"
                     style={{
                       fontSize: 'clamp(32px, 4vw, 52px)',
                       fontWeight: 800,
                       letterSpacing: '-0.02em',
-                      background: 'linear-gradient(135deg, #f0f0f5 0%, rgba(240,240,245,0.4) 100%)',
+                      background: 'linear-gradient(135deg, #f0f0f5 0%, rgba(240,240,245,0.5) 100%)',
                       WebkitBackgroundClip: 'text',
                       WebkitTextFillColor: 'transparent',
                       backgroundClip: 'text',
@@ -633,8 +659,16 @@ export default function LandingPage() {
         {/* ━━━ FINAL CTA ━━━ */}
         <section className="relative px-8 py-52 text-center overflow-hidden">
           <div
-            className="spotlight w-[600px] h-[300px] opacity-[0.06]"
-            style={{ background: '#7B6EF6', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }}
+            className="spotlight"
+            style={{
+              width: '600px',
+              height: '300px',
+              background: '#7B6EF6',
+              opacity: 0.06,
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%,-50%)',
+            }}
           />
 
           <Reveal>
