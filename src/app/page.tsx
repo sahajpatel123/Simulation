@@ -248,10 +248,10 @@ export default function LandingPage() {
           }}
         />
 
-        {/* Hero content */}
+        {/* Hero content — Fix 8: tighter max-width, px-16 */}
         <motion.div
           style={{ opacity: heroOpacity, y: smoothY, scale: heroScale }}
-          className="relative z-10 text-center px-8 max-w-5xl mx-auto w-full"
+          className="relative z-10 text-center px-16 max-w-4xl mx-auto w-full"
         >
           {/* Pre-label */}
           <motion.div
@@ -275,7 +275,7 @@ export default function LandingPage() {
             <div style={{ width: '40px', height: '1px', background: 'rgba(123,110,246,0.6)' }} />
           </motion.div>
 
-          {/* Main headline — fixed font size */}
+          {/* Main headline */}
           <motion.h1
             initial={{ opacity: 0, y: 32 }}
             animate={{ opacity: 1, y: 0 }}
@@ -388,15 +388,15 @@ export default function LandingPage() {
       {/* ━━━ BELOW HERO — SOLID DARK ━━━ */}
       <div style={{ background: 'var(--bg)', position: 'relative', zIndex: 10 }}>
 
-        {/* ━━━ MARQUEE ━━━ */}
+        {/* ━━━ MARQUEE — Fix 2 ━━━ */}
         <div
-          className="relative overflow-hidden"
+          className="relative overflow-hidden py-6"
           style={{
             borderTop: '1px solid var(--border-color)',
             borderBottom: '1px solid var(--border-color)',
           }}
         >
-          <div className="flex animate-marquee whitespace-nowrap py-5">
+          <div className="flex animate-marquee whitespace-nowrap">
             {[...Array(2)].map((_, i) => (
               <div key={i} className="flex items-center">
                 {[
@@ -439,100 +439,221 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* ━━━ HOW IT WORKS ━━━ */}
-        <section id="how" className="relative px-8 py-32 max-w-7xl mx-auto">
-          <div className="grid lg:grid-cols-[1fr_2fr] gap-16 items-start">
+        {/* ━━━ HOW IT WORKS — Fix 3 ━━━ */}
+        <section id="how" className="relative py-40">
+          <div className="max-w-6xl mx-auto px-16 md:px-24">
+            <div className="grid lg:grid-cols-[1fr_2fr] gap-24 items-start">
 
-            <Reveal>
-              <div className="lg:sticky pl-0" style={{ top: '120px' }}>
-                <p
-                  style={{
-                    fontSize: '10px',
-                    letterSpacing: '0.25em',
-                    textTransform: 'uppercase',
-                    color: '#7B6EF6',
-                    marginBottom: '20px',
-                  }}
-                >
-                  Process
-                </p>
-                <h2
-                  className="cinematic-text"
-                  style={{
-                    fontSize: 'clamp(36px, 4vw, 56px)',
-                    lineHeight: 1.05,
-                    color: 'var(--text-primary)',
-                    marginBottom: '24px',
-                  }}
-                >
-                  Three steps<br />to certainty.
-                </h2>
-                <p
-                  style={{
-                    fontSize: '14px',
-                    color: 'var(--text-secondary)',
-                    lineHeight: 1.8,
-                    maxWidth: '260px',
-                  }}
-                >
-                  From raw idea to clear answer. No guesswork. No planning fallacy.
-                </p>
-              </div>
-            </Reveal>
-
-            <div>
-              {STEPS.map(({ n, title, body }, i) => (
-                <Reveal key={n} delay={i * 0.12}>
-                  <div
-                    className="group relative cursor-default"
+              <Reveal>
+                <div className="lg:sticky pr-8" style={{ top: '120px' }}>
+                  <p
                     style={{
-                      borderBottom: '1px solid var(--border-color)',
-                      paddingTop: '48px',
-                      paddingBottom: '48px',
+                      fontSize: '10px',
+                      letterSpacing: '0.25em',
+                      textTransform: 'uppercase',
+                      color: '#7B6EF6',
+                      marginBottom: '20px',
                     }}
                   >
-                    <div className="flex items-start gap-10">
-                      <span
-                        className="font-display"
-                        style={{
-                          fontSize: '11px',
-                          color: 'rgba(123,110,246,0.5)',
-                          letterSpacing: '0.1em',
-                          marginTop: '4px',
-                          minWidth: '24px',
-                          flexShrink: 0,
-                        }}
-                      >
-                        {n}
-                      </span>
-                      <div className="flex-1">
-                        <h3
+                    Process
+                  </p>
+                  <h2
+                    className="cinematic-text"
+                    style={{
+                      fontSize: 'clamp(36px, 4vw, 56px)',
+                      lineHeight: 1.05,
+                      color: 'var(--text-primary)',
+                      marginBottom: '24px',
+                    }}
+                  >
+                    Three steps<br />to certainty.
+                  </h2>
+                  <p
+                    style={{
+                      fontSize: '14px',
+                      color: 'var(--text-secondary)',
+                      lineHeight: 1.8,
+                      maxWidth: '260px',
+                    }}
+                  >
+                    From raw idea to clear answer. No guesswork. No planning fallacy.
+                  </p>
+                </div>
+              </Reveal>
+
+              <div>
+                {STEPS.map(({ n, title, body }, i) => (
+                  <Reveal key={n} delay={i * 0.12}>
+                    <div
+                      className="group relative cursor-default"
+                      style={{
+                        borderBottom: '1px solid var(--border-color)',
+                        paddingTop: '48px',
+                        paddingBottom: '48px',
+                      }}
+                    >
+                      <div className="flex items-start gap-10">
+                        <span
                           className="font-display"
                           style={{
-                            fontSize: '22px',
-                            fontWeight: 700,
-                            color: 'var(--text-primary)',
-                            marginBottom: '12px',
-                            letterSpacing: '-0.01em',
+                            fontSize: '11px',
+                            color: 'rgba(123,110,246,0.5)',
+                            letterSpacing: '0.1em',
+                            marginTop: '4px',
+                            minWidth: '24px',
+                            flexShrink: 0,
                           }}
                         >
-                          {title}
-                        </h3>
-                        <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-                          {body}
-                        </p>
+                          {n}
+                        </span>
+                        <div className="flex-1">
+                          <h3
+                            className="font-display"
+                            style={{
+                              fontSize: '22px',
+                              fontWeight: 700,
+                              color: 'var(--text-primary)',
+                              marginBottom: '12px',
+                              letterSpacing: '-0.01em',
+                            }}
+                          >
+                            {title}
+                          </h3>
+                          <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+                            {body}
+                          </p>
+                        </div>
+                        <ArrowUpRight
+                          className="w-5 h-5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                          style={{ color: '#7B6EF6', marginTop: '4px', flexShrink: 0 }}
+                        />
                       </div>
-                      <ArrowUpRight
-                        className="w-5 h-5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                        style={{ color: '#7B6EF6', marginTop: '4px', flexShrink: 0 }}
+                      <motion.div
+                        className="absolute bottom-0 left-0 h-px"
+                        style={{ background: '#7B6EF6', width: 0 }}
+                        whileHover={{ width: '100%' }}
+                        transition={{ duration: 0.4 }}
                       />
                     </div>
-                    <motion.div
-                      className="absolute bottom-0 left-0 h-px"
-                      style={{ background: '#7B6EF6', width: 0 }}
-                      whileHover={{ width: '100%' }}
-                      transition={{ duration: 0.4 }}
-                    />
+                  </Reveal>
+                ))}
+              </div>
+
+            </div>
+          </div>
+        </section>
+
+        <CinematicRule />
+
+        {/* ━━━ WHO IT'S FOR — Fix 4 ━━━ */}
+        <section className="py-40">
+          <div className="max-w-6xl mx-auto px-16 md:px-24">
+
+            <Reveal className="mb-24">
+              <p
+                style={{
+                  fontSize: '10px',
+                  letterSpacing: '0.25em',
+                  textTransform: 'uppercase',
+                  color: '#7B6EF6',
+                  marginBottom: '20px',
+                }}
+              >
+                Who it&apos;s for
+              </p>
+              <h2
+                className="cinematic-text"
+                style={{ fontSize: 'clamp(36px, 4vw, 56px)', lineHeight: 1.05, color: 'var(--text-primary)' }}
+              >
+                Built for people who<br />cannot afford to guess.
+              </h2>
+            </Reveal>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-px" style={{ background: 'var(--border-color)' }}>
+              {WHO.map(({ label, sub }, i) => (
+                <Reveal key={label} delay={i * 0.08}>
+                  <div
+                    className="card-cinematic group p-10 cursor-default flex flex-col justify-between"
+                    style={{
+                      minHeight: '240px',
+                      background: 'var(--surface)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: '10px',
+                        letterSpacing: '0.2em',
+                        textTransform: 'uppercase',
+                        color: '#7B6EF6',
+                        fontWeight: 500,
+                        marginBottom: '48px',
+                      }}
+                    >
+                      {sub}
+                    </div>
+                    <h3
+                      className="font-display"
+                      style={{
+                        fontSize: '22px',
+                        fontWeight: 700,
+                        color: 'var(--text-primary)',
+                        lineHeight: 1.2,
+                        letterSpacing: '-0.01em',
+                      }}
+                    >
+                      {label}
+                    </h3>
+                  </div>
+                </Reveal>
+              ))}
+            </div>
+
+          </div>
+        </section>
+
+        <CinematicRule />
+
+        {/* ━━━ STATS — Fix 5 ━━━ */}
+        <section className="py-32">
+          <div className="max-w-6xl mx-auto px-16 md:px-24">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-px" style={{ background: 'var(--border-color)' }}>
+              {STATS.map(({ value, label }, i) => (
+                <Reveal key={label} delay={i * 0.06}>
+                  <div
+                    className="card-cinematic p-14 text-center"
+                    style={{
+                      background: 'var(--surface)',
+                      minHeight: '160px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <div
+                      className="font-display mb-3"
+                      style={{
+                        fontSize: 'clamp(32px, 4vw, 52px)',
+                        fontWeight: 800,
+                        letterSpacing: '-0.02em',
+                        background: 'linear-gradient(135deg, #f0f0f5 0%, rgba(240,240,245,0.5) 100%)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
+                        backgroundClip: 'text',
+                      }}
+                    >
+                      {value}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: '11px',
+                        letterSpacing: '0.15em',
+                        textTransform: 'uppercase',
+                        color: 'var(--text-secondary)',
+                      }}
+                    >
+                      {label}
+                    </div>
                   </div>
                 </Reveal>
               ))}
@@ -542,122 +663,8 @@ export default function LandingPage() {
 
         <CinematicRule />
 
-        {/* ━━━ WHO IT'S FOR ━━━ */}
-        <section className="px-8 py-32 max-w-7xl mx-auto">
-          <Reveal className="mb-20">
-            <p
-              style={{
-                fontSize: '10px',
-                letterSpacing: '0.25em',
-                textTransform: 'uppercase',
-                color: '#7B6EF6',
-                marginBottom: '20px',
-              }}
-            >
-              Who it&apos;s for
-            </p>
-            <h2
-              className="cinematic-text"
-              style={{ fontSize: 'clamp(36px, 4vw, 56px)', lineHeight: 1.05, color: 'var(--text-primary)' }}
-            >
-              Built for people who<br />cannot afford to guess.
-            </h2>
-          </Reveal>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-px" style={{ background: 'var(--border-color)' }}>
-            {WHO.map(({ label, sub }, i) => (
-              <Reveal key={label} delay={i * 0.08}>
-                <div
-                  className="group cursor-default"
-                  style={{
-                    background: 'var(--surface)',
-                    minHeight: '220px',
-                    padding: '40px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    transition: 'border-color 0.4s ease, background 0.4s ease',
-                  }}
-                  onMouseEnter={e => {
-                    (e.currentTarget as HTMLDivElement).style.background = 'rgba(123,110,246,0.04)'
-                  }}
-                  onMouseLeave={e => {
-                    (e.currentTarget as HTMLDivElement).style.background = 'var(--surface)'
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: '11px',
-                      letterSpacing: '0.15em',
-                      textTransform: 'uppercase',
-                      color: 'rgba(123,110,246,0.7)',
-                      fontWeight: 500,
-                    }}
-                  >
-                    {sub}
-                  </div>
-                  <h3
-                    className="font-display"
-                    style={{
-                      fontSize: '20px',
-                      fontWeight: 700,
-                      color: '#f0f0f5',
-                      lineHeight: 1.2,
-                    }}
-                  >
-                    {label}
-                  </h3>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </section>
-
-        <CinematicRule />
-
-        {/* ━━━ STATS ━━━ */}
-        <section className="px-8 py-32 max-w-7xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-px" style={{ background: 'var(--border-color)' }}>
-            {STATS.map(({ value, label }, i) => (
-              <Reveal key={label} delay={i * 0.06}>
-                <div
-                  className="card-cinematic p-12 text-center"
-                  style={{ minHeight: '160px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  <div
-                    className="font-display mb-3"
-                    style={{
-                      fontSize: 'clamp(32px, 4vw, 52px)',
-                      fontWeight: 800,
-                      letterSpacing: '-0.02em',
-                      background: 'linear-gradient(135deg, #f0f0f5 0%, rgba(240,240,245,0.5) 100%)',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                      backgroundClip: 'text',
-                    }}
-                  >
-                    {value}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: '11px',
-                      letterSpacing: '0.15em',
-                      textTransform: 'uppercase',
-                      color: 'var(--text-secondary)',
-                    }}
-                  >
-                    {label}
-                  </div>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </section>
-
-        <CinematicRule />
-
-        {/* ━━━ FINAL CTA ━━━ */}
-        <section className="relative px-8 py-52 text-center overflow-hidden">
+        {/* ━━━ FINAL CTA — Fix 6 ━━━ */}
+        <section className="relative py-52 text-center overflow-hidden px-16 md:px-24">
           <div
             className="spotlight"
             style={{
@@ -714,8 +721,11 @@ export default function LandingPage() {
         </section>
 
         {/* ━━━ FOOTER ━━━ */}
-        <footer className="px-8 py-10" style={{ borderTop: '1px solid var(--border-color)' }}>
-          <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+        <footer
+          className="px-16 md:px-24 py-10"
+          style={{ borderTop: '1px solid var(--border-color)' }}
+        >
+          <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2.5">
               <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
                 <circle cx="10" cy="10" r="3" fill="#7B6EF6" />
