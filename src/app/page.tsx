@@ -1,424 +1,721 @@
 'use client'
 
-import { motion, useScroll, useTransform } from 'framer-motion'
-import { useRef } from 'react'
-import { ArrowRight, ChevronRight } from 'lucide-react'
+import { useRef, useEffect, useState } from 'react'
+import {
+  motion,
+  useScroll,
+  useTransform,
+  useSpring,
+  AnimatePresence,
+} from 'framer-motion'
 import Link from 'next/link'
+import { ArrowRight, ArrowUpRight } from 'lucide-react'
 
+/* ─── CONSTANTS ─────────────────────────────────── */
+const NAV_LINKS = ['How it works', 'Use cases', 'Pricing']
+
+const WORDS = ['startup', 'product', 'idea', 'launch', 'decision']
+
+const STEPS = [
+  {
+    n: '01',
+    title: 'Describe your idea',
+    body: 'Write your product or business concept in plain language. No forms, no templates. Just your idea as you see it.',
+  },
+  {
+    n: '02',
+    title: 'We stress-test it',
+    body: 'TheCee runs your idea through thousands of real-world scenarios — different customers, market conditions, risks you have not considered.',
+  },
+  {
+    n: '03',
+    title: 'You get clarity',
+    body: 'See what will work, what will fail, and the precise changes that shift the odds in your favour — before you spend a rupee.',
+  },
+]
+
+const WHO = [
+  { label: 'First-time founders', sub: 'Validate before you build' },
+  { label: 'Product managers', sub: 'Data over opinion' },
+  { label: 'D2C brands', sub: 'Test before you manufacture' },
+  { label: 'Side project builders', sub: 'Know before you commit' },
+]
+
+const STATS = [
+  { value: '10,000+', label: 'Scenarios per test' },
+  { value: '< 2 min', label: 'Time to first insight' },
+  { value: '3×', label: 'Cross-validated by default' },
+  { value: '240+', label: 'Founders validated' },
+]
+
+/* ─── WORD ROTATOR ───────────────────────────────── */
+function WordRotator() {
+  const [index, setIndex] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setIndex(i => (i + 1) % WORDS.length), 2200)
+    return () => clearInterval(t)
+  }, [])
+  return (
+    <span
+      className="relative inline-block overflow-hidden"
+      style={{ minWidth: '260px', display: 'inline-flex', justifyContent: 'center' }}
+    >
+      <AnimatePresence mode="wait">
+        <motion.span
+          key={WORDS[index]}
+          initial={{ y: 60, opacity: 0, filter: 'blur(8px)' }}
+          animate={{ y: 0, opacity: 1, filter: 'blur(0px)' }}
+          exit={{ y: -60, opacity: 0, filter: 'blur(8px)' }}
+          transition={{ duration: 0.55, ease: [0.76, 0, 0.24, 1] }}
+          style={{
+            background: 'linear-gradient(135deg, #7B6EF6 0%, #a78bfa 50%, #38bdf8 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            display: 'inline-block',
+          }}
+        >
+          {WORDS[index]}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  )
+}
+
+/* ─── CINEMATIC LINE ─────────────────────────────── */
+function CinematicRule() {
+  return (
+    <div
+      className="relative w-full h-px overflow-hidden"
+      style={{ background: 'rgba(255,255,255,0.05)' }}
+    >
+      <div className="beam" />
+    </div>
+  )
+}
+
+/* ─── SECTION REVEAL ─────────────────────────────── */
+function Reveal({
+  children,
+  delay = 0,
+  className = '',
+}: {
+  children: React.ReactNode
+  delay?: number
+  className?: string
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 40 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-80px' }}
+      transition={{ duration: 0.9, delay, ease: [0.25, 0.46, 0.45, 0.94] }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+/* ─── MAIN PAGE ──────────────────────────────────── */
 export default function LandingPage() {
-  const heroRef = useRef<HTMLElement>(null)
-  const { scrollY } = useScroll()
-  const heroY = useTransform(scrollY, [0, 600], [0, 60])
-  const heroOpacity = useTransform(scrollY, [0, 480], [1, 0])
+  const containerRef = useRef<HTMLDivElement>(null)
+  const heroRef = useRef<HTMLDivElement>(null)
 
-  const marqueeItems = [
-    'Idea Validation',
-    'Launch Readiness',
-    'Product-Market Fit',
-    'Customer Behavior',
-    'Risk Discovery',
-    'Revenue Forecasting',
-    'Growth Scenarios',
-    'Startup Stress Testing',
-    'Decision Intelligence',
-    'Market Readiness',
-    'Competitor Scenarios',
-    'Pricing Confidence',
-  ]
+  const { scrollYProgress } = useScroll({
+    target: heroRef,
+    offset: ['start start', 'end start'],
+  })
+
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.7], [1, 0])
+  const heroScale = useTransform(scrollYProgress, [0, 1], [1, 0.94])
+  const heroY = useTransform(scrollYProgress, [0, 1], [0, 50])
+  const smoothY = useSpring(heroY, { stiffness: 80, damping: 20 })
+  const imgScale = useTransform(scrollYProgress, [0, 1], [1.05, 1.0])
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-[#06060e] text-white">
-      <div
-        className="fixed inset-0 pointer-events-none"
-        style={{
-          backgroundImage: `linear-gradient(rgba(99,102,241,0.03) 1px, transparent 1px),
-                            linear-gradient(90deg, rgba(99,102,241,0.03) 1px, transparent 1px)`,
-          backgroundSize: '60px 60px',
-        }}
-      />
+    <div ref={containerRef} className="relative" style={{ background: 'var(--bg)' }}>
 
+      {/* ━━━ NAVBAR ━━━ */}
       <motion.nav
-        initial={{ opacity: 0, y: -16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-        className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-5"
-        style={{
-          backdropFilter: 'blur(20px)',
-          background: 'rgba(6,6,14,0.7)',
-          borderBottom: '1px solid rgba(255,255,255,0.04)',
-        }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 1, delay: 0.2 }}
+        className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-6"
+        style={{ background: 'transparent' }}
       >
-        <div className="flex items-center gap-2.5">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="4" fill="#6366f1" />
-            <circle cx="12" cy="12" r="8" stroke="#6366f1" strokeWidth="1" opacity="0.3" />
-            <circle cx="12" cy="12" r="11" stroke="#6366f1" strokeWidth="0.5" opacity="0.15" />
+        <div className="flex items-center gap-3">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <circle cx="10" cy="10" r="3" fill="#7B6EF6" />
+            <circle cx="10" cy="10" r="7" stroke="#7B6EF6" strokeWidth="0.75" opacity="0.35" />
+            <circle cx="10" cy="10" r="10" stroke="#7B6EF6" strokeWidth="0.5" opacity="0.12" />
           </svg>
-          <span className="font-display text-lg tracking-tight text-white font-700">TheCee</span>
+          <span className="font-display font-700 tracking-tight" style={{ fontSize: '15px', color: '#f0f0f5' }}>
+            TheCee
+          </span>
         </div>
 
-        <div className="hidden items-center gap-10 md:flex">
-          {['How it works', 'Use cases', 'Pricing'].map((item) => (
+        <div className="hidden md:flex items-center gap-10">
+          {NAV_LINKS.map(link => (
             <a
-              key={item}
+              key={link}
               href="#"
-              className="text-sm tracking-wide text-slate-500 transition-colors duration-200 hover:text-white"
+              className="transition-colors duration-300"
+              style={{
+                fontSize: '11px',
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                color: 'var(--text-secondary)',
+                fontWeight: 400,
+              }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#f0f0f5')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
             >
-              {item}
+              {link}
             </a>
           ))}
         </div>
 
-        <div className="flex items-center gap-4">
-          <Link href="/login" className="text-sm text-slate-500 transition-colors hover:text-white">
+        <div className="flex items-center gap-6">
+          <Link
+            href="/login"
+            className="transition-colors duration-300"
+            style={{
+              fontSize: '11px',
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              color: 'var(--text-secondary)',
+            }}
+          >
             Sign in
           </Link>
           <Link
             href="/signup"
-            className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium text-white transition-all duration-200"
-            style={{ background: 'rgba(99,102,241,0.9)', boxShadow: '0 0 20px rgba(99,102,241,0.25)' }}
+            className="relative flex items-center gap-2 px-5 py-2.5 overflow-hidden"
+            style={{
+              fontSize: '11px',
+              fontWeight: 500,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              border: '1px solid rgba(123,110,246,0.5)',
+              color: '#f0f0f5',
+              background: 'rgba(123,110,246,0.08)',
+            }}
           >
-            Get started <ArrowRight className="h-3.5 w-3.5" />
+            Get started <ArrowRight className="w-3 h-3" />
           </Link>
         </div>
       </motion.nav>
 
-      <div className="fixed inset-0 z-0 pointer-events-none">
-        <img
-          src="/nature-bg.jpeg"
-          alt=""
-          className="w-full h-full object-cover object-center"
-          style={{ opacity: 0.22, objectPosition: 'center 30%' }}
-        />
+      {/* ━━━ HERO ━━━ */}
+      <section
+        ref={heroRef}
+        className="relative h-screen flex flex-col items-center justify-center overflow-hidden"
+      >
+        {/* Background image with parallax */}
+        <motion.div style={{ scale: imgScale }} className="absolute inset-0 z-0">
+          <img
+            src="/nature-bg.jpeg"
+            alt=""
+            className="w-full h-full object-cover object-center"
+            style={{ opacity: 0.28 }}
+          />
+          {/* Cinematic letterbox gradient */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background: `
+                linear-gradient(to bottom,
+                  rgba(5,5,7,0.85) 0%,
+                  rgba(5,5,7,0.2) 25%,
+                  rgba(5,5,7,0.15) 50%,
+                  rgba(5,5,7,0.5) 75%,
+                  rgba(5,5,7,1) 100%
+                )
+              `,
+            }}
+          />
+          {/* Side vignette */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                'radial-gradient(ellipse at center, transparent 40%, rgba(5,5,7,0.8) 100%)',
+            }}
+          />
+        </motion.div>
+
+        {/* Accent spotlight */}
         <div
-          className="absolute inset-0"
-          style={{
-            background: 'linear-gradient(to bottom, rgba(6,6,14,0.55) 0%, rgba(6,6,14,0.35) 35%, rgba(6,6,14,0.8) 78%, rgba(6,6,14,1) 100%)',
-          }}
+          className="spotlight w-96 h-96 opacity-10"
+          style={{ background: '#7B6EF6', top: '20%', left: '50%', transform: 'translate(-50%,-50%)' }}
         />
-      </div>
 
-      <section ref={heroRef} className="relative z-10 flex min-h-screen items-center justify-center pt-20">
+        {/* Hero content */}
         <motion.div
-          style={{ y: heroY, opacity: heroOpacity }}
-          className="mx-auto w-full max-w-4xl px-8 text-center"
+          style={{ opacity: heroOpacity, y: smoothY, scale: heroScale }}
+          className="relative z-10 text-center px-6 max-w-5xl mx-auto"
         >
+          {/* Pre-label */}
           <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="mb-8 inline-flex items-center gap-2"
-          >
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-            <span className="text-xs font-medium uppercase tracking-widest text-slate-500">Now in early access</span>
-          </motion.div>
-
-          <motion.h1
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.1 }}
-            className="mb-6 font-display text-5xl leading-[1.04] tracking-tight lg:text-6xl xl:text-7xl font-800"
-          >
-            <span style={{ color: '#f1f5f9' }}>Know if your</span>
-            <br />
-            <span
-              style={{
-                background: 'linear-gradient(135deg, #818cf8 0%, #38bdf8 60%, #34d399 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-              }}
-            >
-              startup will work.
-            </span>
-            <br />
-            <span style={{ color: '#94a3b8' }}>Before you build it.</span>
-          </motion.h1>
-
-          <motion.p
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.22 }}
-            className="mx-auto mb-10 max-w-2xl text-lg leading-relaxed text-slate-400"
-            style={{ fontWeight: 300 }}
+            transition={{ duration: 0.8, delay: 0.4 }}
+            className="flex items-center justify-center gap-3 mb-10"
           >
-            Describe your product, idea, or launch plan. TheCee stress-tests it
-            against thousands of real-world scenarios and tells you exactly
-            what will work, what will fail, and how to improve your odds.
+            <div style={{ width: '40px', height: '1px', background: 'rgba(123,110,246,0.6)' }} />
+            <span
+              style={{
+                fontSize: '10px',
+                letterSpacing: '0.25em',
+                textTransform: 'uppercase',
+                color: '#7B6EF6',
+                fontWeight: 400,
+              }}
+            >
+              Simulation intelligence
+            </span>
+            <div style={{ width: '40px', height: '1px', background: 'rgba(123,110,246,0.6)' }} />
+          </motion.div>
+
+          {/* Main headline */}
+          <motion.h1
+            initial={{ opacity: 0, y: 32 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 1, delay: 0.55, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="cinematic-text mb-6"
+            style={{ fontSize: 'clamp(52px, 8vw, 108px)', color: 'var(--text-primary)' }}
+          >
+            Will your{' '}
+            <WordRotator />
+            <br />
+            <span style={{ color: 'rgba(240,240,245,0.35)' }}>actually work?</span>
+          </motion.h1>
+
+          {/* Subheadline */}
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.8 }}
+            style={{
+              fontSize: '16px',
+              color: 'var(--text-secondary)',
+              lineHeight: 1.8,
+              maxWidth: '520px',
+              margin: '0 auto 48px',
+              fontWeight: 300,
+            }}
+          >
+            TheCee stress-tests your idea against thousands of real scenarios before
+            you commit — giving you clarity no amount of planning can.
           </motion.p>
 
+          {/* CTAs */}
           <motion.div
-            initial={{ opacity: 0, y: 12 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.35 }}
-            className="mb-14 flex flex-col items-center justify-center gap-4 sm:flex-row"
+            transition={{ duration: 0.7, delay: 1 }}
+            className="flex flex-col sm:flex-row items-center justify-center gap-4"
           >
             <Link
               href="/signup"
-              className="group flex items-center gap-2 rounded-xl px-6 py-3.5 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5"
+              className="group relative flex items-center gap-3 px-8 py-4 overflow-hidden"
               style={{
-                background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
-                boxShadow: '0 0 30px rgba(99,102,241,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
+                background: '#7B6EF6',
+                color: '#fff',
+                fontSize: '13px',
+                fontWeight: 500,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
               }}
             >
-              Validate your idea free
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+              <span className="relative z-10 flex items-center gap-2">
+                Validate your idea
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" />
+              </span>
+              <motion.div
+                className="absolute inset-0"
+                style={{ background: 'rgba(255,255,255,0.1)' }}
+                initial={{ x: '-100%' }}
+                whileHover={{ x: '100%' }}
+                transition={{ duration: 0.4 }}
+              />
             </Link>
+
             <a
               href="#how"
-              className="flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-slate-300"
+              className="flex items-center gap-2 px-6 py-4 transition-colors duration-300"
+              style={{
+                fontSize: '12px',
+                color: 'var(--text-secondary)',
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#f0f0f5')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
             >
-              See how it works <ChevronRight className="h-4 w-4" />
+              Watch how it works
             </a>
           </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            className="flex items-center justify-center gap-3"
-          >
-            <div className="flex -space-x-2">
-              {['#6366f1', '#06b6d4', '#10b981', '#f59e0b'].map((c, i) => (
-                <div
-                  key={i}
-                  className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-[#06060e] text-xs font-700"
-                  style={{ background: c }}
-                >
-                  {['S', 'M', 'R', 'A'][i]}
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-slate-600">
-              Trusted by <span className="text-slate-400">240+ founders</span> before their launch
-            </p>
-          </motion.div>
-        </motion.div>
-      </section>
-
-      <div
-        className="relative z-10 overflow-hidden border-y border-white/[0.04] py-5"
-        style={{ background: 'rgba(255,255,255,0.01)' }}
-      >
-        <div className="flex whitespace-nowrap animate-marquee">
-          {[...Array(2)].map((_, i) => (
-            <div key={i} className="flex items-center gap-0">
-              {marqueeItems.map((item, j) => (
-                <span key={`${i}-${j}`} className="flex items-center gap-6 px-6">
-                  <span className="text-[11px] uppercase tracking-[0.15em] text-slate-600 font-500">{item}</span>
-                  <span className="h-1 w-1 rounded-full bg-slate-700" />
-                </span>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <section id="how" className="relative z-10 mx-auto max-w-6xl bg-[#06060e] px-8 py-36">
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-80px' }}
-          transition={{ duration: 0.6 }}
-          className="mb-20"
-        >
-          <p className="mb-4 text-xs uppercase tracking-widest text-slate-600">How it works</p>
-          <h2 className="max-w-xl font-display text-4xl leading-tight text-slate-100 md:text-5xl font-700">
-            From idea to answer
-            <br />
-            in three steps.
-          </h2>
         </motion.div>
 
-        <div className="grid gap-px overflow-hidden rounded-2xl bg-white/[0.04] md:grid-cols-3">
-          {[
-            {
-              num: '01',
-              title: 'Describe your idea',
-              body: 'Write your product idea, business model, or launch plan in plain English. No technical knowledge needed.',
-            },
-            {
-              num: '02',
-              title: 'We test it for you',
-              body: 'TheCee runs your idea through thousands of real-world scenarios - different customers, market conditions, and competitive landscapes.',
-            },
-            {
-              num: '03',
-              title: 'Get clear answers',
-              body: 'See what is likely to succeed, what risks to avoid, and the exact changes that will improve your chances.',
-            },
-          ].map(({ num, title, body }, i) => (
-            <motion.div
-              key={num}
-              initial={{ opacity: 0, y: 24 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: '-60px' }}
-              transition={{ duration: 0.5, delay: i * 0.1 }}
-              className="bg-[#06060e] p-10 transition-colors duration-300 hover:bg-[#0a0a18]"
-            >
-              <div
-                className="mb-8 font-display text-5xl leading-none font-800"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(99,102,241,0.4) 0%, rgba(99,102,241,0.05) 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                }}
-              >
-                {num}
-              </div>
-              <h3 className="mb-3 font-display text-lg text-white font-600">{title}</h3>
-              <p className="text-sm leading-relaxed text-slate-500" style={{ fontWeight: 300 }}>{body}</p>
-            </motion.div>
-          ))}
-        </div>
-      </section>
-
-      <section className="relative z-10 mx-auto max-w-6xl bg-[#06060e] px-8 py-24">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="mb-16"
-        >
-          <p className="mb-4 text-xs uppercase tracking-widest text-slate-600">Who it&apos;s for</p>
-          <h2 className="max-w-lg font-display text-4xl leading-tight text-slate-100 font-700">
-            Built for people who cannot afford to guess.
-          </h2>
-        </motion.div>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          {[
-            {
-              title: 'First-time founders',
-              body: 'Launching your first product with limited runway. Know which risks are real before you spend a single rupee.',
-              highlight: 'Validate before you build',
-            },
-            {
-              title: 'Product managers',
-              body: 'Justify your next feature or launch decision with scenario data instead of opinions in a room.',
-              highlight: 'Data over opinion',
-            },
-            {
-              title: 'D2C and physical products',
-              body: 'Test pricing, channels, and customer response before you commit to inventory or manufacturing.',
-              highlight: 'Test before you manufacture',
-            },
-            {
-              title: 'Side project builders',
-              body: 'Find out if your weekend idea is worth your evenings before you invest months into it.',
-              highlight: 'Know before you commit',
-            },
-          ].map(({ title, body, highlight }, i) => (
-            <motion.div
-              key={title}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: i * 0.08 }}
-              className="group cursor-pointer rounded-2xl border border-white/[0.05] bg-white/[0.01] p-8 transition-all duration-300 hover:border-indigo-500/20 hover:bg-indigo-500/[0.02]"
-            >
-              <div className="mb-4 text-xs font-medium tracking-wide text-indigo-400">{highlight}</div>
-              <h3 className="mb-2 font-display text-lg text-white font-600">{title}</h3>
-              <p className="text-sm leading-relaxed text-slate-500" style={{ fontWeight: 300 }}>{body}</p>
-            </motion.div>
-          ))}
-        </div>
-      </section>
-
-      <section className="relative z-10 border-y border-white/[0.04] bg-[#06060e] px-8 py-20">
+        {/* Scroll indicator */}
         <motion.div
           initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.8 }}
-          className="mx-auto grid max-w-4xl grid-cols-2 gap-12 md:grid-cols-4"
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.6, duration: 1 }}
+          className="absolute bottom-10 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2"
         >
-          {[
-            { value: '10,000+', label: 'Scenarios per test' },
-            { value: '< 2 min', label: 'Time to first insight' },
-            { value: '240+', label: 'Founders validated' },
-            { value: '3 runs', label: 'Cross-validated by default' },
-          ].map(({ value, label }) => (
-            <div key={label} className="text-center">
-              <div
-                className="mb-1.5 font-display text-3xl font-800"
-                style={{
-                  background: 'linear-gradient(135deg, #c7d2fe, #818cf8)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                }}
-              >
-                {value}
-              </div>
-              <div className="text-xs tracking-wide text-slate-600">{label}</div>
-            </div>
-          ))}
-        </motion.div>
-      </section>
-
-      <section className="relative z-10 bg-[#06060e] px-8 py-44 text-center">
-        <div
-          className="pointer-events-none absolute top-1/2 left-1/2 h-[300px] w-[600px] -translate-x-1/2 -translate-y-1/2"
-          style={{ background: 'radial-gradient(ellipse at center, rgba(99,102,241,0.07) 0%, transparent 70%)' }}
-        />
-        <motion.div
-          initial={{ opacity: 0, y: 32 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.7 }}
-          className="relative mx-auto max-w-2xl"
-        >
-          <h2 className="mb-6 font-display text-5xl leading-tight text-slate-100 md:text-6xl font-800">
-            Your next big decision
-            <br />
-            <span
-              style={{
-                background: 'linear-gradient(135deg, #818cf8, #38bdf8)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-              }}
-            >
-              deserves certainty.
-            </span>
-          </h2>
-          <p className="mb-10 text-lg text-slate-500" style={{ fontWeight: 300 }}>
-            Stop guessing. Start simulating.
-          </p>
-          <Link
-            href="/signup"
-            className="group inline-flex items-center gap-2 rounded-xl px-8 py-4 text-base font-medium text-white transition-all duration-200 hover:-translate-y-0.5"
+          <div
             style={{
-              background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
-              boxShadow: '0 0 40px rgba(99,102,241,0.25), inset 0 1px 0 rgba(255,255,255,0.1)',
+              fontSize: '9px',
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase',
+              color: 'var(--text-secondary)',
             }}
           >
-            Validate your idea - it&apos;s free
-            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-          </Link>
+            Scroll
+          </div>
+          <motion.div
+            animate={{ y: [0, 8, 0] }}
+            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+            style={{
+              width: '1px',
+              height: '40px',
+              background: 'linear-gradient(to bottom, rgba(123,110,246,0.8), transparent)',
+            }}
+          />
         </motion.div>
       </section>
 
-      <footer className="relative z-10 border-t border-white/[0.04] bg-[#06060e] px-8 py-8">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 md:flex-row">
-          <div className="flex items-center gap-2">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="4" fill="#6366f1" />
-              <circle cx="12" cy="12" r="8" stroke="#6366f1" strokeWidth="1" opacity="0.3" />
-            </svg>
-            <span className="font-display text-sm text-slate-400 font-600">TheCee</span>
-          </div>
-          <p className="text-xs text-slate-700">© 2026 TheCee. Simulate before you build.</p>
-          <div className="flex items-center gap-6">
-            {['Privacy', 'Terms', 'Contact'].map((item) => (
-              <a key={item} href="#" className="text-xs text-slate-700 transition-colors hover:text-slate-500">{item}</a>
+      {/* ━━━ BELOW HERO — SOLID DARK ━━━ */}
+      <div style={{ background: 'var(--bg)', position: 'relative', zIndex: 10 }}>
+
+        {/* ━━━ MARQUEE ━━━ */}
+        <div
+          className="relative overflow-hidden py-5"
+          style={{ borderTop: '1px solid var(--border-color)', borderBottom: '1px solid var(--border-color)' }}
+        >
+          <CinematicRule />
+          <div className="flex animate-marquee whitespace-nowrap py-4">
+            {[...Array(2)].map((_, i) => (
+              <div key={i} className="flex items-center">
+                {[
+                  'Idea Validation',
+                  'Launch Readiness',
+                  'Product-Market Fit',
+                  'Customer Behaviour',
+                  'Risk Discovery',
+                  'Revenue Forecasting',
+                  'Growth Scenarios',
+                  'Startup Stress Testing',
+                  'Pricing Confidence',
+                  'Decision Intelligence',
+                ].map((item, j) => (
+                  <span key={`${i}-${j}`} className="flex items-center gap-8 px-8">
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        letterSpacing: '0.2em',
+                        textTransform: 'uppercase',
+                        color: 'var(--text-secondary)',
+                      }}
+                    >
+                      {item}
+                    </span>
+                    <span
+                      style={{
+                        width: '3px',
+                        height: '3px',
+                        borderRadius: '50%',
+                        background: 'rgba(123,110,246,0.4)',
+                        display: 'inline-block',
+                      }}
+                    />
+                  </span>
+                ))}
+              </div>
             ))}
           </div>
         </div>
-      </footer>
+
+        {/* ━━━ HOW IT WORKS ━━━ */}
+        <section id="how" className="relative px-8 py-40 max-w-7xl mx-auto">
+          <div className="grid lg:grid-cols-[1fr_2fr] gap-24 items-start">
+
+            <Reveal>
+              <div className="lg:sticky" style={{ top: '120px' }}>
+                <p
+                  style={{
+                    fontSize: '10px',
+                    letterSpacing: '0.25em',
+                    textTransform: 'uppercase',
+                    color: '#7B6EF6',
+                    marginBottom: '20px',
+                  }}
+                >
+                  Process
+                </p>
+                <h2
+                  className="cinematic-text"
+                  style={{
+                    fontSize: 'clamp(36px, 4vw, 56px)',
+                    lineHeight: 1.05,
+                    color: 'var(--text-primary)',
+                    marginBottom: '24px',
+                  }}
+                >
+                  Three steps<br />to certainty.
+                </h2>
+                <p
+                  style={{
+                    fontSize: '14px',
+                    color: 'var(--text-secondary)',
+                    lineHeight: 1.8,
+                    maxWidth: '260px',
+                  }}
+                >
+                  From raw idea to clear answer. No guesswork. No planning fallacy.
+                </p>
+              </div>
+            </Reveal>
+
+            <div className="space-y-0">
+              {STEPS.map(({ n, title, body }, i) => (
+                <Reveal key={n} delay={i * 0.12}>
+                  <div
+                    className="group relative py-12 cursor-default"
+                    style={{ borderBottom: '1px solid var(--border-color)' }}
+                  >
+                    <div className="flex items-start gap-10">
+                      <span
+                        className="font-display"
+                        style={{
+                          fontSize: '11px',
+                          color: 'rgba(123,110,246,0.5)',
+                          letterSpacing: '0.1em',
+                          marginTop: '4px',
+                          minWidth: '24px',
+                        }}
+                      >
+                        {n}
+                      </span>
+                      <div className="flex-1">
+                        <h3
+                          className="font-display"
+                          style={{
+                            fontSize: '22px',
+                            fontWeight: 700,
+                            color: 'var(--text-primary)',
+                            marginBottom: '12px',
+                            letterSpacing: '-0.01em',
+                          }}
+                        >
+                          {title}
+                        </h3>
+                        <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+                          {body}
+                        </p>
+                      </div>
+                      <ArrowUpRight
+                        className="w-5 h-5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                        style={{ color: '#7B6EF6', marginTop: '4px', flexShrink: 0 }}
+                      />
+                    </div>
+                    <motion.div
+                      className="absolute bottom-0 left-0 h-px"
+                      style={{ background: '#7B6EF6', width: 0 }}
+                      whileHover={{ width: '100%' }}
+                      transition={{ duration: 0.4 }}
+                    />
+                  </div>
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <CinematicRule />
+
+        {/* ━━━ WHO IT'S FOR ━━━ */}
+        <section className="px-8 py-40 max-w-7xl mx-auto">
+          <Reveal className="mb-20">
+            <p
+              style={{
+                fontSize: '10px',
+                letterSpacing: '0.25em',
+                textTransform: 'uppercase',
+                color: '#7B6EF6',
+                marginBottom: '20px',
+              }}
+            >
+              Who it&apos;s for
+            </p>
+            <h2
+              className="cinematic-text"
+              style={{ fontSize: 'clamp(36px, 4vw, 56px)', lineHeight: 1.05, color: 'var(--text-primary)' }}
+            >
+              Built for people who<br />cannot afford to guess.
+            </h2>
+          </Reveal>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-px" style={{ background: 'var(--border-color)' }}>
+            {WHO.map(({ label, sub }, i) => (
+              <Reveal key={label} delay={i * 0.08}>
+                <div
+                  className="card-cinematic group p-10 cursor-default"
+                  style={{ minHeight: '200px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
+                >
+                  <div
+                    style={{
+                      fontSize: '11px',
+                      letterSpacing: '0.15em',
+                      textTransform: 'uppercase',
+                      color: 'rgba(123,110,246,0.6)',
+                    }}
+                  >
+                    {sub}
+                  </div>
+                  <div>
+                    <h3
+                      className="font-display"
+                      style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}
+                    >
+                      {label}
+                    </h3>
+                  </div>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </section>
+
+        <CinematicRule />
+
+        {/* ━━━ STATS ━━━ */}
+        <section className="px-8 py-32 max-w-7xl mx-auto">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-px" style={{ background: 'var(--border-color)' }}>
+            {STATS.map(({ value, label }, i) => (
+              <Reveal key={label} delay={i * 0.06}>
+                <div className="card-cinematic p-12 text-center">
+                  <div
+                    className="font-display mb-3"
+                    style={{
+                      fontSize: 'clamp(32px, 4vw, 52px)',
+                      fontWeight: 800,
+                      letterSpacing: '-0.02em',
+                      background: 'linear-gradient(135deg, #f0f0f5 0%, rgba(240,240,245,0.4) 100%)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text',
+                    }}
+                  >
+                    {value}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '11px',
+                      letterSpacing: '0.15em',
+                      textTransform: 'uppercase',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
+                    {label}
+                  </div>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </section>
+
+        <CinematicRule />
+
+        {/* ━━━ FINAL CTA ━━━ */}
+        <section className="relative px-8 py-52 text-center overflow-hidden">
+          <div
+            className="spotlight w-[600px] h-[300px] opacity-[0.06]"
+            style={{ background: '#7B6EF6', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }}
+          />
+
+          <Reveal>
+            <p
+              style={{
+                fontSize: '10px',
+                letterSpacing: '0.25em',
+                textTransform: 'uppercase',
+                color: '#7B6EF6',
+                marginBottom: '32px',
+              }}
+            >
+              Start now
+            </p>
+            <h2
+              className="cinematic-text mb-6"
+              style={{ fontSize: 'clamp(44px, 6vw, 88px)', color: 'var(--text-primary)', lineHeight: 1.0 }}
+            >
+              Your next decision<br />
+              <span style={{ color: 'rgba(240,240,245,0.25)' }}>deserves certainty.</span>
+            </h2>
+            <p
+              style={{ fontSize: '15px', color: 'var(--text-secondary)', marginBottom: '48px', fontWeight: 300 }}
+            >
+              Stop planning. Start simulating.
+            </p>
+            <Link
+              href="/signup"
+              className="group inline-flex items-center gap-3 px-10 py-5"
+              style={{
+                background: '#7B6EF6',
+                color: '#fff',
+                fontSize: '13px',
+                fontWeight: 500,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}
+            >
+              Validate your idea free
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" />
+            </Link>
+          </Reveal>
+        </section>
+
+        {/* ━━━ FOOTER ━━━ */}
+        <footer className="px-8 py-10" style={{ borderTop: '1px solid var(--border-color)' }}>
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2.5">
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                <circle cx="10" cy="10" r="3" fill="#7B6EF6" />
+                <circle cx="10" cy="10" r="7" stroke="#7B6EF6" strokeWidth="0.75" opacity="0.35" />
+              </svg>
+              <span className="font-display font-700" style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                TheCee
+              </span>
+            </div>
+            <p style={{ fontSize: '11px', color: 'rgba(90,90,114,0.6)', letterSpacing: '0.05em' }}>
+              © 2026 TheCee. Simulate before you build.
+            </p>
+            <div className="flex items-center gap-8">
+              {['Privacy', 'Terms', 'Contact'].map(item => (
+                <a
+                  key={item}
+                  href="#"
+                  style={{
+                    fontSize: '11px',
+                    color: 'var(--text-secondary)',
+                    letterSpacing: '0.1em',
+                    textTransform: 'uppercase',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.color = '#f0f0f5')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+                >
+                  {item}
+                </a>
+              ))}
+            </div>
+          </div>
+        </footer>
+
+      </div>
     </div>
   )
 }
