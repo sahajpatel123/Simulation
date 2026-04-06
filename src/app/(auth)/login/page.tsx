@@ -72,11 +72,11 @@ function Field({
       <label
         style={{
           display: 'block',
-          fontSize: '9px',
-          color: 'rgba(26,23,20,0.4)',
-          letterSpacing: '0.18em',
+          fontSize: '11px',
+          color: 'rgba(26,23,20,0.42)',
+          letterSpacing: '0.16em',
           textTransform: 'uppercase',
-          marginBottom: '6px',
+          marginBottom: '8px',
           fontFamily: 'DM Sans, sans-serif',
         }}
       >
@@ -91,8 +91,8 @@ function Field({
           border: 'none',
           borderBottom: error ? '1px solid #c0392b' : '0.5px solid rgba(26,23,20,0.2)',
           background: 'transparent',
-          padding: '9px 0',
-          fontSize: '13px',
+          padding: '11px 0',
+          fontSize: '15px',
           color: '#1a1714',
           outline: 'none',
           fontFamily: 'DM Sans, sans-serif',
@@ -110,7 +110,7 @@ function Field({
         <motion.p
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
-          style={{ fontSize: '9px', color: '#c0392b', marginTop: '4px', fontFamily: 'DM Sans, sans-serif' }}
+          style={{ fontSize: '11px', color: '#c0392b', marginTop: '6px', fontFamily: 'DM Sans, sans-serif' }}
         >
           {error}
         </motion.p>
@@ -431,7 +431,7 @@ function AuthPage() {
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          padding: isLogin ? '52px 64px' : '48px 64px',
+          padding: isLogin ? '56px 72px' : '52px 72px',
           position: 'relative',
           overflow: 'hidden',
         }}
@@ -464,15 +464,15 @@ function AuthPage() {
           )}
         </AnimatePresence>
 
-        <div style={{ position: 'relative', zIndex: 2, maxWidth: isLogin ? '360px' : '100%' }}>
+        <div style={{ position: 'relative', zIndex: 2, maxWidth: isLogin ? '400px' : '100%' }}>
           {/* Kicker */}
-          <motion.div layout style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-            <div style={{ width: '20px', height: '1.5px', background: '#c0392b' }} />
+          <motion.div layout style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '22px' }}>
+            <div style={{ width: '24px', height: '2px', background: '#c0392b' }} />
             <span
               style={{
-                fontSize: '9px',
+                fontSize: '11px',
                 color: '#c0392b',
-                letterSpacing: '0.22em',
+                letterSpacing: '0.2em',
                 textTransform: 'uppercase',
                 fontWeight: 600,
               }}
@@ -487,7 +487,7 @@ function AuthPage() {
             style={{
               display: 'flex',
               borderBottom: '1.5px solid rgba(26,23,20,0.1)',
-              marginBottom: '32px',
+              marginBottom: '34px',
             }}
           >
             {(['login', 'signup'] as const).map(m => (
@@ -500,8 +500,8 @@ function AuthPage() {
                   border: 'none',
                   borderBottom: mode === m ? '2px solid #c0392b' : '2px solid transparent',
                   marginBottom: '-2px',
-                  padding: '6px 18px',
-                  fontSize: '9px',
+                  padding: '8px 20px',
+                  fontSize: '11px',
                   fontWeight: 700,
                   letterSpacing: '0.1em',
                   textTransform: 'uppercase',
@@ -527,7 +527,7 @@ function AuthPage() {
                 transition={{ ...SPRING }}
                 onSubmit={loginForm.handleSubmit(onLogin)}
               >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
                   <Field
                     label="Email address"
                     type="email"
@@ -550,11 +550,11 @@ function AuthPage() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.18 }}
-                  style={{ marginTop: '8px', marginBottom: '28px' }}
+                  style={{ marginTop: '10px', marginBottom: '30px' }}
                 >
                   <span
                     style={{
-                      fontSize: '9px',
+                      fontSize: '11px',
                       color: '#c0392b',
                       letterSpacing: '0.08em',
                       borderBottom: '0.5px solid rgba(192,57,43,0.35)',
@@ -567,7 +567,7 @@ function AuthPage() {
                 </motion.div>
 
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SPRING, delay: 0.22 }}>
-                  <div style={{ width: '20px', height: '2px', background: '#c0392b', marginBottom: '20px' }} />
+                  <div style={{ width: '24px', height: '2px', background: '#c0392b', marginBottom: '22px' }} />
                   <button
                     type="submit"
                     disabled={loginForm.formState.isSubmitting}
@@ -576,8 +576,8 @@ function AuthPage() {
                       background: '#1a1714',
                       color: '#f2ece0',
                       border: 'none',
-                      padding: '14px',
-                      fontSize: '9px',
+                      padding: '16px',
+                      fontSize: '11px',
                       fontWeight: 700,
                       letterSpacing: '0.14em',
                       textTransform: 'uppercase',
@@ -599,19 +599,19 @@ function AuthPage() {
                   >
                     {loginForm.formState.isSubmitting ? (
                       <>
-                        <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Signing in...
+                        <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Signing in...
                       </>
                     ) : (
                       <>
-                        Sign in <ArrowRight size={13} />
+                        Sign in <ArrowRight size={15} />
                       </>
                     )}
                   </button>
                   <p
                     style={{
-                      fontSize: '10px',
-                      color: 'rgba(26,23,20,0.35)',
-                      marginTop: '16px',
+                      fontSize: '12px',
+                      color: 'rgba(26,23,20,0.38)',
+                      marginTop: '18px',
                       textAlign: 'center',
                       fontFamily: 'DM Sans, sans-serif',
                     }}
@@ -625,7 +625,7 @@ function AuthPage() {
                         border: 'none',
                         borderBottom: '0.5px solid rgba(192,57,43,0.4)',
                         color: '#c0392b',
-                        fontSize: '10px',
+                        fontSize: '12px',
                         cursor: 'pointer',
                         padding: '0 0 1px',
                         fontFamily: 'DM Sans, sans-serif',
@@ -654,14 +654,14 @@ function AuthPage() {
                   exit={{ opacity: 0 }}
                   transition={{ ...SPRING, delay: 0.08 }}
                   style={{
-                    fontSize: 'clamp(28px, 3vw, 44px)',
+                    fontSize: 'clamp(32px, 3.4vw, 50px)',
                     fontWeight: 900,
                     color: '#1a1714',
                     fontFamily: 'Playfair Display, Georgia, serif',
                     fontStyle: 'italic',
                     lineHeight: 1.0,
                     letterSpacing: '-0.04em',
-                    marginBottom: '32px',
+                    marginBottom: '34px',
                   }}
                 >
                   Join the founders
@@ -729,10 +729,10 @@ function AuthPage() {
                   <div>
                     <p
                       style={{
-                        fontSize: '9px',
-                        color: 'rgba(26,23,20,0.3)',
-                        lineHeight: 1.7,
-                        maxWidth: '260px',
+                        fontSize: '11px',
+                        color: 'rgba(26,23,20,0.34)',
+                        lineHeight: 1.75,
+                        maxWidth: '280px',
                         fontFamily: 'DM Sans, sans-serif',
                       }}
                     >
@@ -746,8 +746,8 @@ function AuthPage() {
                       style={{
                         background: 'none',
                         border: 'none',
-                        fontSize: '9px',
-                        color: 'rgba(26,23,20,0.32)',
+                        fontSize: '11px',
+                        color: 'rgba(26,23,20,0.34)',
                         marginTop: '8px',
                         cursor: 'pointer',
                         padding: 0,
@@ -765,8 +765,8 @@ function AuthPage() {
                       background: '#c0392b',
                       color: '#fff',
                       border: 'none',
-                      padding: '14px 36px',
-                      fontSize: '9px',
+                      padding: '16px 38px',
+                      fontSize: '11px',
                       fontWeight: 700,
                       letterSpacing: '0.14em',
                       textTransform: 'uppercase',
@@ -788,11 +788,11 @@ function AuthPage() {
                   >
                     {signupForm.formState.isSubmitting ? (
                       <>
-                        <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Creating...
+                        <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Creating...
                       </>
                     ) : (
                       <>
-                        Create account <ArrowRight size={13} />
+                        Create account <ArrowRight size={15} />
                       </>
                     )}
                   </button>
@@ -809,7 +809,7 @@ function AuthPage() {
           to { transform: rotate(360deg); }
         }
         * { box-sizing: border-box; }
-        input::placeholder { color: rgba(26,23,20,0.22); }
+        input::placeholder { color: rgba(26,23,20,0.28); }
       `}</style>
     </div>
   )
