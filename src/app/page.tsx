@@ -148,6 +148,7 @@ export default function LandingPage() {
   })
   const heroOpacity = useTransform(scrollYProgress, [0, 0.6], [1, 0])
   const heroY = useTransform(scrollYProgress, [0, 1], [0, 40])
+  const [menuOpen, setMenuOpen] = useState(false)
 
   return (
     <div style={{ background: 'var(--paper)', minHeight: '100vh' }}>
@@ -157,79 +158,85 @@ export default function LandingPage() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.6 }}
-        style={{
-          borderBottom: '3px solid var(--ink)',
-          position: 'sticky',
-          top: 0,
-          zIndex: 50,
-          background: 'var(--paper)',
-        }}
+        style={{ borderBottom: '3px solid var(--ink)', position: 'sticky', top: 0, zIndex: 50, background: 'var(--paper)' }}
       >
+        {/* Top strip */}
+        <div style={{
+          borderBottom: '0.5px solid var(--border)',
+          padding: '6px 48px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}>
+          <p style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+            Simulation Intelligence Platform
+          </p>
+          <p style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.12em' }}>
+            Est. 2026 — Early Access
+          </p>
+          <p style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.12em' }}>
+            thecee.app
+          </p>
+        </div>
+
         {/* Main nav row */}
         <div style={{
           padding: '16px 48px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          position: 'relative',
         }}>
-          {/* Left nav links */}
-          <div style={{ display: 'flex', gap: '32px', alignItems: 'center' }}>
-            {['How it works', 'Use cases', 'Pricing'].map(item => (
-              <a
-                key={item}
-                href="#"
-                style={{
-                  fontSize: '11px',
-                  color: 'var(--ink-secondary)',
-                  letterSpacing: '0.08em',
-                  textTransform: 'uppercase',
-                  textDecoration: 'none',
-                  transition: 'color 0.2s',
-                }}
-                onMouseEnter={e => (e.currentTarget.style.color = 'var(--ink)')}
-                onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-secondary)')}
-              >
-                {item}
-              </a>
+          {/* Hamburger button */}
+          <button
+            type="button"
+            onClick={() => setMenuOpen(true)}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '4px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '5px',
+              width: '28px',
+            }}
+            aria-label="Open menu"
+          >
+            {[0, 1, 2].map(i => (
+              <div key={i} style={{
+                width: i === 2 ? '16px' : '24px',
+                height: '1.5px',
+                background: 'var(--ink)',
+                transition: 'width 0.3s ease',
+              }} />
             ))}
-          </div>
+          </button>
 
-          {/* Masthead */}
-          <div style={{ textAlign: 'center' }}>
-            <div
-              className="font-serif"
-              style={{
-                fontSize: '36px',
-                fontWeight: 900,
-                color: 'var(--ink)',
-                letterSpacing: '-0.04em',
-                lineHeight: 1,
-                fontStyle: 'italic',
-              }}
-            >
+          {/* Masthead — centred */}
+          <div style={{ textAlign: 'center', position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
+            <div className="font-serif" style={{
+              fontSize: '36px',
+              fontWeight: 900,
+              color: 'var(--ink)',
+              letterSpacing: '-0.04em',
+              lineHeight: 1,
+              fontStyle: 'italic',
+            }}>
               TheCee
             </div>
           </div>
 
-          {/* Right auth links */}
+          {/* Right side */}
           <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-            <Link
-              href="/login"
-              style={{
-                fontSize: '11px',
-                color: 'var(--ink-secondary)',
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                textDecoration: 'none',
-                transition: 'color 0.2s',
-              }}
+            <Link href="/login"
+              style={{ fontSize: '11px', color: 'var(--ink-secondary)', letterSpacing: '0.08em', textTransform: 'uppercase', textDecoration: 'none' }}
               onMouseEnter={e => (e.currentTarget.style.color = 'var(--ink)')}
               onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-secondary)')}
             >
               Sign in
             </Link>
-            <Link
-              href="/signup"
+            <Link href="/signup"
               style={{
                 fontSize: '11px',
                 color: 'var(--paper)',
@@ -239,19 +246,187 @@ export default function LandingPage() {
                 textTransform: 'uppercase',
                 textDecoration: 'none',
                 fontWeight: 500,
-                display: 'inline-flex',
+                display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
-                transition: 'background 0.2s',
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--red)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'var(--ink)')}
             >
               Get started <ArrowRight size={11} />
             </Link>
           </div>
         </div>
       </motion.header>
+
+      <AnimatePresence>
+        {menuOpen && (
+          <motion.div
+            key="menu-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            onClick={() => setMenuOpen(false)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(26,23,20,0.4)',
+              zIndex: 90,
+              backdropFilter: 'blur(2px)',
+            }}
+          />
+        )}
+        {menuOpen && (
+          <motion.div
+            key="menu-drawer"
+            initial={{ x: '-100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '-100%' }}
+            transition={{ duration: 0.45, ease: [0.25, 0.46, 0.45, 0.94] }}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              bottom: 0,
+              width: '360px',
+              background: 'var(--ink)',
+              zIndex: 100,
+              display: 'flex',
+              flexDirection: 'column',
+              padding: '0',
+              overflowY: 'auto',
+            }}
+          >
+              {/* Drawer header */}
+              <div style={{
+                padding: '24px 36px',
+                borderBottom: '0.5px solid rgba(242,236,224,0.08)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}>
+                <span className="font-serif" style={{
+                  fontSize: '22px',
+                  fontWeight: 900,
+                  fontStyle: 'italic',
+                  color: 'var(--paper)',
+                  letterSpacing: '-0.03em',
+                }}>
+                  TheCee
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen(false)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '6px',
+                    color: 'rgba(242,236,224,0.4)',
+                    fontSize: '20px',
+                    lineHeight: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                  aria-label="Close menu"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Nav links */}
+              <nav style={{ padding: '16px 0', flex: 1 }}>
+                {[
+                  { label: 'How it works', href: '#how' },
+                  { label: 'Use cases', href: '#who' },
+                  { label: 'Pricing', href: '#pricing' },
+                  { label: 'Sign in', href: '/login' },
+                ].map(({ label, href }, i) => (
+                  <motion.a
+                    key={label}
+                    href={href}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.1 + i * 0.07, duration: 0.35 }}
+                    onClick={() => setMenuOpen(false)}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '18px 36px',
+                      borderBottom: '0.5px solid rgba(242,236,224,0.06)',
+                      textDecoration: 'none',
+                      color: 'rgba(242,236,224,0.7)',
+                      fontSize: '13px',
+                      letterSpacing: '0.06em',
+                      textTransform: 'uppercase',
+                      fontWeight: 400,
+                      transition: 'color 0.2s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--paper)')}
+                    onMouseLeave={e => (e.currentTarget.style.color = 'rgba(242,236,224,0.7)')}
+                  >
+                    {label}
+                    <ArrowRight size={12} style={{ opacity: 0.3 }} />
+                  </motion.a>
+                ))}
+              </nav>
+
+              {/* Drawer CTA */}
+              <div style={{ padding: '28px 36px', borderTop: '0.5px solid rgba(242,236,224,0.08)' }}>
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4, duration: 0.35 }}
+                >
+                  <div style={{
+                    width: '20px',
+                    height: '2px',
+                    background: 'var(--red)',
+                    marginBottom: '14px',
+                  }} />
+                  <p className="font-serif" style={{
+                    fontSize: '16px',
+                    fontStyle: 'italic',
+                    fontWeight: 700,
+                    color: 'var(--paper)',
+                    lineHeight: 1.4,
+                    marginBottom: '16px',
+                    opacity: 0.8,
+                  }}>
+                    Run your first simulation free.
+                  </p>
+                  <Link
+                    href="/signup"
+                    onClick={() => setMenuOpen(false)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      background: 'var(--red)',
+                      color: '#fff',
+                      padding: '12px 20px',
+                      fontSize: '11px',
+                      letterSpacing: '0.1em',
+                      textTransform: 'uppercase',
+                      fontWeight: 500,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    Get started <ArrowRight size={12} />
+                  </Link>
+                </motion.div>
+              </div>
+
+              {/* Footer strip */}
+              <div style={{ padding: '16px 36px', borderTop: '0.5px solid rgba(242,236,224,0.06)' }}>
+                <p style={{ fontSize: '10px', color: 'rgba(242,236,224,0.2)', letterSpacing: '0.1em' }}>
+                  © 2026 TheCee. Simulate before you build.
+                </p>
+              </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ━━━ HERO ━━━ */}
       <section ref={heroRef} style={{ borderBottom: '0.5px solid var(--border-color)', overflow: 'hidden' }}>
@@ -629,7 +804,7 @@ export default function LandingPage() {
       </section>
 
       {/* ━━━ WHO IT'S FOR ━━━ */}
-      <section style={{ borderBottom: '0.5px solid var(--border-color)', background: 'var(--paper-dark)' }}>
+      <section id="who" style={{ borderBottom: '0.5px solid var(--border-color)', background: 'var(--paper-dark)' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '80px 48px' }}>
 
           <Reveal>
@@ -742,7 +917,7 @@ export default function LandingPage() {
       </section>
 
       {/* ━━━ FINAL CTA ━━━ */}
-      <section style={{ background: 'var(--ink)', borderBottom: '3px solid var(--ink)' }}>
+      <section id="pricing" style={{ background: 'var(--ink)', borderBottom: '3px solid var(--ink)' }}>
         <div style={{
           maxWidth: '1200px',
           margin: '0 auto',
