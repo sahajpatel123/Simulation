@@ -160,21 +160,21 @@ export default function LandingPage() {
         transition={{ duration: 0.6 }}
         style={{ borderBottom: '3px solid var(--ink)', position: 'sticky', top: 0, zIndex: 50, background: 'var(--paper)' }}
       >
-        {/* Top strip */}
+        {/* Top strip — centre column is truly centred (equal 1fr side columns) */}
         <div style={{
           borderBottom: '0.5px solid var(--border)',
           padding: '6px 48px',
-          display: 'flex',
-          justifyContent: 'space-between',
+          display: 'grid',
+          gridTemplateColumns: '1fr auto 1fr',
           alignItems: 'center',
         }}>
-          <p style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+          <p style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.15em', textTransform: 'uppercase', justifySelf: 'start' }}>
             Simulation Intelligence Platform
           </p>
-          <p style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.12em' }}>
+          <p style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.12em', textAlign: 'center', justifySelf: 'center' }}>
             Est. 2026 — Early Access
           </p>
-          <p style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.12em' }}>
+          <p style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.12em', justifySelf: 'end' }}>
             thecee.app
           </p>
         </div>
