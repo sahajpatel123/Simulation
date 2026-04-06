@@ -3,7 +3,7 @@
 import { useRef, useState, useEffect } from 'react'
 import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
-import { ArrowRight, ArrowUpRight, Minus } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, ChevronDown, Minus } from 'lucide-react'
 
 /* ─── CONSTANTS ─────────────────────────────────── */
 const WORDS = ['startup', 'product', 'idea', 'launch', 'decision']
@@ -149,13 +149,27 @@ export default function LandingPage() {
   const heroOpacity = useTransform(scrollYProgress, [0, 0.6], [1, 0])
   const heroY = useTransform(scrollYProgress, [0, 1], [0, 40])
   const [menuOpen, setMenuOpen] = useState(false)
+  const [isAuthed, setIsAuthed] = useState(false)
+  const [userEmail, setUserEmail] = useState('')
+  const [profileOpen, setProfileOpen] = useState(false)
 
   useEffect(() => {
-    const came = sessionStorage.getItem('from-signup')
-    if (came) {
-      sessionStorage.removeItem('from-signup')
+    const auth = sessionStorage.getItem('thecee-auth')
+    const email = sessionStorage.getItem('thecee-user-email') ?? ''
+    if (auth === '1') {
+      setIsAuthed(true)
+      setUserEmail(email)
     }
   }, [])
+
+  const signOut = () => {
+    sessionStorage.removeItem('thecee-auth')
+    sessionStorage.removeItem('thecee-user-email')
+    setIsAuthed(false)
+    setUserEmail('')
+    setProfileOpen(false)
+    setMenuOpen(false)
+  }
 
   return (
     <div style={{ background: 'var(--paper)', minHeight: '100vh', position: 'relative' }}>
@@ -234,32 +248,36 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Right side */}
-          <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-            <Link href="/login"
-              style={{ fontSize: '11px', color: 'var(--ink-secondary)', letterSpacing: '0.08em', textTransform: 'uppercase', textDecoration: 'none' }}
-              onMouseEnter={e => (e.currentTarget.style.color = 'var(--ink)')}
-              onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-secondary)')}
-            >
-              Sign in
-            </Link>
-            <Link href="/signup"
-              style={{
-                fontSize: '11px',
-                color: 'var(--paper)',
-                background: 'var(--ink)',
-                padding: '8px 18px',
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                textDecoration: 'none',
-                fontWeight: 500,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
-            >
-              Get started <ArrowRight size={11} />
-            </Link>
+          {/* Right side — auth CTAs hidden when signed in (session hint) */}
+          <div style={{ display: 'flex', gap: '20px', alignItems: 'center', minWidth: '140px', justifyContent: 'flex-end' }}>
+            {!isAuthed && (
+              <>
+                <Link href="/login"
+                  style={{ fontSize: '11px', color: 'var(--ink-secondary)', letterSpacing: '0.08em', textTransform: 'uppercase', textDecoration: 'none' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--ink)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-secondary)')}
+                >
+                  Sign in
+                </Link>
+                <Link href="/signup"
+                  style={{
+                    fontSize: '11px',
+                    color: 'var(--paper)',
+                    background: 'var(--ink)',
+                    padding: '8px 18px',
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    textDecoration: 'none',
+                    fontWeight: 500,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  Get started <ArrowRight size={11} />
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </motion.header>
@@ -346,7 +364,6 @@ export default function LandingPage() {
                   { label: 'How it works', href: '#how' },
                   { label: 'Use cases', href: '#who' },
                   { label: 'Pricing', href: '#pricing' },
-                  { label: 'Sign in', href: '/login' },
                 ].map(({ label, href }, i) => (
                   <motion.a
                     key={label}
@@ -376,54 +393,163 @@ export default function LandingPage() {
                     <ArrowRight size={12} style={{ opacity: 0.3 }} />
                   </motion.a>
                 ))}
-              </nav>
 
-              {/* Drawer CTA */}
-              <div style={{ padding: '28px 36px', borderTop: '0.5px solid rgba(242,236,224,0.08)' }}>
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.4, duration: 0.35 }}
-                >
-                  <div style={{
-                    width: '20px',
-                    height: '2px',
-                    background: 'var(--red)',
-                    marginBottom: '14px',
-                  }} />
-                  <p className="font-serif" style={{
-                    fontSize: '16px',
-                    fontStyle: 'italic',
-                    fontWeight: 700,
-                    color: 'var(--paper)',
-                    lineHeight: 1.4,
-                    marginBottom: '16px',
-                    opacity: 0.8,
-                  }}>
-                    Run your first simulation free.
-                  </p>
-                  <Link
-                    href="/signup"
+                {isAuthed ? (
+                  <>
+                    <motion.button
+                      type="button"
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.1 + 3 * 0.07, duration: 0.35 }}
+                      onClick={() => setProfileOpen(o => !o)}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        width: '100%',
+                        padding: '18px 36px',
+                        borderBottom: '0.5px solid rgba(242,236,224,0.06)',
+                        background: 'none',
+                        cursor: 'pointer',
+                        color: 'rgba(242,236,224,0.7)',
+                        fontSize: '13px',
+                        letterSpacing: '0.06em',
+                        textTransform: 'uppercase',
+                        fontWeight: 400,
+                        fontFamily: 'inherit',
+                        textAlign: 'left',
+                        transition: 'color 0.2s',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.color = 'var(--paper)')}
+                      onMouseLeave={e => (e.currentTarget.style.color = 'rgba(242,236,224,0.7)')}
+                    >
+                      Profile
+                      <ChevronDown
+                        size={12}
+                        style={{
+                          opacity: 0.35,
+                          transform: profileOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                          transition: 'transform 0.2s ease',
+                        }}
+                      />
+                    </motion.button>
+                    <AnimatePresence>
+                      {profileOpen && (
+                        <motion.div
+                          key="profile-panel"
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.25 }}
+                          style={{ overflow: 'hidden', borderBottom: '0.5px solid rgba(242,236,224,0.06)' }}
+                        >
+                          <div style={{ padding: '16px 36px 20px', background: 'rgba(242,236,224,0.04)' }}>
+                            <p style={{ fontSize: '9px', letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(242,236,224,0.35)', marginBottom: '8px' }}>
+                              Signed in as
+                            </p>
+                            <p style={{ fontSize: '13px', color: 'var(--paper)', marginBottom: '16px', wordBreak: 'break-all' }}>
+                              {userEmail || '—'}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={signOut}
+                              style={{
+                                fontSize: '11px',
+                                letterSpacing: '0.1em',
+                                textTransform: 'uppercase',
+                                color: 'rgba(242,236,224,0.55)',
+                                background: 'transparent',
+                                border: '0.5px solid rgba(242,236,224,0.2)',
+                                padding: '8px 14px',
+                                cursor: 'pointer',
+                                fontFamily: 'inherit',
+                              }}
+                            >
+                              Sign out
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </>
+                ) : (
+                  <motion.a
+                    href="/login"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.1 + 3 * 0.07, duration: 0.35 }}
                     onClick={() => setMenuOpen(false)}
                     style={{
                       display: 'flex',
+                      justifyContent: 'space-between',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '8px',
-                      background: 'var(--red)',
-                      color: '#fff',
-                      padding: '12px 20px',
-                      fontSize: '11px',
-                      letterSpacing: '0.1em',
-                      textTransform: 'uppercase',
-                      fontWeight: 500,
+                      padding: '18px 36px',
+                      borderBottom: '0.5px solid rgba(242,236,224,0.06)',
                       textDecoration: 'none',
+                      color: 'rgba(242,236,224,0.7)',
+                      fontSize: '13px',
+                      letterSpacing: '0.06em',
+                      textTransform: 'uppercase',
+                      fontWeight: 400,
+                      transition: 'color 0.2s',
                     }}
+                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--paper)')}
+                    onMouseLeave={e => (e.currentTarget.style.color = 'rgba(242,236,224,0.7)')}
                   >
-                    Get started <ArrowRight size={12} />
-                  </Link>
-                </motion.div>
-              </div>
+                    Sign in
+                    <ArrowRight size={12} style={{ opacity: 0.3 }} />
+                  </motion.a>
+                )}
+              </nav>
+
+              {/* Drawer CTA — hidden when already signed in */}
+              {!isAuthed && (
+                <div style={{ padding: '28px 36px', borderTop: '0.5px solid rgba(242,236,224,0.08)' }}>
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4, duration: 0.35 }}
+                  >
+                    <div style={{
+                      width: '20px',
+                      height: '2px',
+                      background: 'var(--red)',
+                      marginBottom: '14px',
+                    }} />
+                    <p className="font-serif" style={{
+                      fontSize: '16px',
+                      fontStyle: 'italic',
+                      fontWeight: 700,
+                      color: 'var(--paper)',
+                      lineHeight: 1.4,
+                      marginBottom: '16px',
+                      opacity: 0.8,
+                    }}>
+                      Run your first simulation free.
+                    </p>
+                    <Link
+                      href="/signup"
+                      onClick={() => setMenuOpen(false)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        background: 'var(--red)',
+                        color: '#fff',
+                        padding: '12px 20px',
+                        fontSize: '11px',
+                        letterSpacing: '0.1em',
+                        textTransform: 'uppercase',
+                        fontWeight: 500,
+                        textDecoration: 'none',
+                      }}
+                    >
+                      Get started <ArrowRight size={12} />
+                    </Link>
+                  </motion.div>
+                </div>
+              )}
 
               {/* Footer strip */}
               <div style={{ padding: '16px 36px', borderTop: '0.5px solid rgba(242,236,224,0.06)' }}>
@@ -439,22 +565,22 @@ export default function LandingPage() {
       <section ref={heroRef} style={{ borderBottom: '0.5px solid var(--border-color)', overflow: 'hidden' }}>
         <motion.div style={{ opacity: heroOpacity, y: heroY }}>
 
-          {/* Issue line */}
+          {/* Issue line — grid keeps centre label truly centred */}
           <div style={{
             padding: '10px 48px',
             borderBottom: '0.5px solid var(--border-color)',
-            display: 'flex',
-            justifyContent: 'space-between',
+            display: 'grid',
+            gridTemplateColumns: '1fr auto 1fr',
             alignItems: 'center',
             background: 'var(--paper-dark)',
           }}>
-            <span style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+            <span style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.15em', textTransform: 'uppercase', justifySelf: 'start' }}>
               Vol. 01 — Issue 01
             </span>
-            <span style={{ fontSize: '10px', color: 'var(--red)', letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 500 }}>
+            <span style={{ fontSize: '10px', color: 'var(--red)', letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 500, justifySelf: 'center', textAlign: 'center' }}>
               ◆ Now in early access
             </span>
-            <span style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.12em' }}>
+            <span style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.12em', justifySelf: 'end' }}>
               April 2026
             </span>
           </div>
