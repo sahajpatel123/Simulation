@@ -39,11 +39,20 @@ const SPRING = {
   mass: 1.1,
 }
 
-const SPRING_SLOW = {
+const SPRING_COLLAPSE = {
   type: 'spring' as const,
-  stiffness: 180,
-  damping: 28,
-  mass: 1.2,
+  stiffness: 160,
+  damping: 32,
+  mass: 1.1,
+  delay: 0.18,
+}
+
+const SPRING_EXPAND = {
+  type: 'spring' as const,
+  stiffness: 200,
+  damping: 30,
+  mass: 1.0,
+  delay: 0,
 }
 
 /* ─── FIELD COMPONENT ───────────────────────────── */
@@ -156,8 +165,6 @@ function AuthPage() {
     >
       {/* ━━━ DARK EDITORIAL PANEL ━━━ */}
       <motion.div
-        layout
-        transition={SPRING_SLOW}
         style={{
           background: '#1a1714',
           position: 'relative',
@@ -165,8 +172,11 @@ function AuthPage() {
           display: 'flex',
           flexDirection: 'column',
           flexShrink: 0,
-          width: isLogin ? '58%' : '64px',
         }}
+        animate={{
+          width: isLogin ? '58vw' : '64px',
+        }}
+        transition={isLogin ? SPRING_EXPAND : SPRING_COLLAPSE}
       >
         {/* Ghost watermark letter */}
         <motion.div
@@ -190,8 +200,7 @@ function AuthPage() {
         </motion.div>
 
         {/* Red accent line top */}
-        <motion.div
-          layout
+        <div
           style={{
             height: '3px',
             background: '#c0392b',
@@ -207,7 +216,7 @@ function AuthPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.35, delay: 0.15 }}
+              transition={{ duration: 0.2, delay: 0 }}
               style={{
                 flex: 1,
                 display: 'flex',
@@ -369,7 +378,7 @@ function AuthPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.3, delay: 0.2 }}
+              transition={{ duration: 0.25, delay: 0.48 }}
               style={{
                 flex: 1,
                 display: 'flex',
@@ -423,18 +432,19 @@ function AuthPage() {
 
       {/* ━━━ PAPER FORM PANEL ━━━ */}
       <motion.div
-        layout
-        transition={SPRING_SLOW}
         style={{
           flex: 1,
           background: '#f2ece0',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          padding: isLogin ? '56px 72px' : '52px 72px',
           position: 'relative',
           overflow: 'hidden',
         }}
+        animate={{
+          padding: isLogin ? '56px 72px' : '52px 72px',
+        }}
+        transition={isLogin ? SPRING_EXPAND : SPRING_COLLAPSE}
       >
         {/* Ghost watermark — signup only */}
         <AnimatePresence>
@@ -464,9 +474,9 @@ function AuthPage() {
           )}
         </AnimatePresence>
 
-        <div style={{ position: 'relative', zIndex: 2, maxWidth: isLogin ? '400px' : '100%' }}>
+        <div style={{ position: 'relative', zIndex: 2, width: '100%' }}>
           {/* Kicker */}
-          <motion.div layout style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '22px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '22px' }}>
             <div style={{ width: '24px', height: '2px', background: '#c0392b' }} />
             <span
               style={{
@@ -479,11 +489,10 @@ function AuthPage() {
             >
               {isLogin ? 'Sign in to TheCee' : 'Create your account'}
             </span>
-          </motion.div>
+          </div>
 
           {/* Toggle tabs */}
-          <motion.div
-            layout
+          <div
             style={{
               display: 'flex',
               borderBottom: '1.5px solid rgba(26,23,20,0.1)',
@@ -514,7 +523,7 @@ function AuthPage() {
                 {m === 'login' ? 'Sign in' : 'Create account'}
               </button>
             ))}
-          </motion.div>
+          </div>
 
           {/* ── LOGIN / SIGNUP FORMS ── */}
           <AnimatePresence mode="wait">
