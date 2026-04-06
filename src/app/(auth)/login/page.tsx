@@ -673,7 +673,7 @@ function AuthPage() {
                     marginBottom: '34px',
                   }}
                 >
-                  Join the founders
+                  For creators, builders, and makers
                   <br />
                   who <span style={{ color: 'rgba(26,23,20,0.2)' }}>simulate first.</span>
                 </motion.h2>
