@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState, useEffect } from 'react'
+import { Suspense, useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -138,6 +138,11 @@ function AuthPage() {
     if (searchParams.get('mode') === 'signup') setMode('signup')
   }, [searchParams])
 
+  const [filling, setFilling] = useState(false)
+  const [fillOrigin, setFillOrigin] = useState({ x: 0, y: 0 })
+  const [fillRadius, setFillRadius] = useState(0)
+  const signupBtnRef = useRef<HTMLButtonElement>(null)
+
   const loginForm = useForm<LoginData>({ resolver: zodResolver(loginSchema) })
   const signupForm = useForm<SignupData>({ resolver: zodResolver(signupSchema) })
 
@@ -147,8 +152,32 @@ function AuthPage() {
   }
 
   const onSignup = async (_data: SignupData) => {
-    await new Promise(r => setTimeout(r, 1600))
-    router.push('/dashboard')
+    await new Promise(r => setTimeout(r, 1000))
+
+    if (signupBtnRef.current) {
+      const rect = signupBtnRef.current.getBoundingClientRect()
+      const originX = rect.left + rect.width / 2
+      const originY = rect.top + rect.height / 2
+
+      const distToTopLeft = Math.sqrt(originX ** 2 + originY ** 2)
+      const distToTopRight = Math.sqrt((window.innerWidth - originX) ** 2 + originY ** 2)
+      const distToBottomLeft = Math.sqrt(originX ** 2 + (window.innerHeight - originY) ** 2)
+      const distToBottomRight = Math.sqrt(
+        (window.innerWidth - originX) ** 2 + (window.innerHeight - originY) ** 2
+      )
+      const maxRadius = Math.max(distToTopLeft, distToTopRight, distToBottomLeft, distToBottomRight)
+
+      setFillOrigin({ x: originX, y: originY })
+      setFillRadius(maxRadius)
+      setFilling(true)
+
+      await new Promise(r => setTimeout(r, 700))
+      sessionStorage.setItem('from-signup', 'true')
+      router.push('/dashboard')
+    } else {
+      sessionStorage.setItem('from-signup', 'true')
+      router.push('/dashboard')
+    }
   }
 
   const isLogin = mode === 'login'
@@ -768,6 +797,7 @@ function AuthPage() {
                     </button>
                   </div>
                   <button
+                    ref={signupBtnRef}
                     type="submit"
                     disabled={signupForm.formState.isSubmitting}
                     style={{
@@ -811,6 +841,31 @@ function AuthPage() {
           </AnimatePresence>
         </div>
       </motion.div>
+
+      {/* Screen fill overlay */}
+      <AnimatePresence>
+        {filling && (
+          <motion.div
+            initial={{ scale: 0, x: '-50%', y: '-50%' }}
+            animate={{ scale: 1, x: '-50%', y: '-50%' }}
+            transition={{
+              duration: 0.65,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+            style={{
+              position: 'fixed',
+              top: fillOrigin.y,
+              left: fillOrigin.x,
+              width: fillRadius * 2,
+              height: fillRadius * 2,
+              borderRadius: '50%',
+              background: '#c0392b',
+              zIndex: 9999,
+              pointerEvents: 'none',
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       <style>{`
         @keyframes spin {

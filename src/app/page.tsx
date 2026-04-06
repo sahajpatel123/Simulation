@@ -150,6 +150,13 @@ export default function LandingPage() {
   const heroY = useTransform(scrollYProgress, [0, 1], [0, 40])
   const [menuOpen, setMenuOpen] = useState(false)
 
+  useEffect(() => {
+    const came = sessionStorage.getItem('from-signup')
+    if (came) {
+      sessionStorage.removeItem('from-signup')
+    }
+  }, [])
+
   return (
     <div style={{ background: 'var(--paper)', minHeight: '100vh', position: 'relative' }}>
 

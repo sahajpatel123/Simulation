@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getAllProjects } from '@/lib/mock-data'
 import { SimulationStatus } from '@/types'
@@ -20,7 +20,16 @@ export default function DashboardPage() {
   const [showModal, setShowModal] = useState(false)
   const [idea, setIdea] = useState('')
   const [creating, setCreating] = useState(false)
+  const [entryCover, setEntryCover] = useState(false)
   const projects = getAllProjects()
+
+  useEffect(() => {
+    const came = sessionStorage.getItem('from-signup')
+    if (came) {
+      sessionStorage.removeItem('from-signup')
+      setEntryCover(true)
+    }
+  }, [])
 
   const handleCreate = async () => {
     if (!idea.trim()) return
@@ -33,6 +42,24 @@ export default function DashboardPage() {
 
   return (
     <div className="p-8">
+      <AnimatePresence>
+        {entryCover && (
+          <motion.div
+            key="entry-cover"
+            initial={{ opacity: 1 }}
+            animate={{ opacity: 0 }}
+            transition={{ duration: 0.4, delay: 0.1 }}
+            onAnimationComplete={() => setEntryCover(false)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: '#c0392b',
+              zIndex: 9999,
+              pointerEvents: 'none',
+            }}
+          />
+        )}
+      </AnimatePresence>
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
         className="flex items-center justify-between mb-8">
