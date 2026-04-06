@@ -165,25 +165,6 @@ export default function LandingPage() {
           background: 'var(--paper)',
         }}
       >
-        {/* Top strip */}
-        <div style={{
-          borderBottom: '0.5px solid var(--border-color)',
-          padding: '6px 48px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-        }}>
-          <p style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-            Simulation Intelligence Platform
-          </p>
-          <p style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.12em' }}>
-            Est. 2026 — Early Access
-          </p>
-          <p style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.12em' }}>
-            thecee.app
-          </p>
-        </div>
-
         {/* Main nav row */}
         <div style={{
           padding: '16px 48px',
