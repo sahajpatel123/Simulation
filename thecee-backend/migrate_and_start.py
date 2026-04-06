@@ -1,63 +1,47 @@
 from sqlalchemy import text
 
 from app.core.database import engine
-
-MIGRATIONS = [
-    """
-    CREATE EXTENSION IF NOT EXISTS vector;
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        name VARCHAR(255),
-        hashed_password VARCHAR(255) NOT NULL,
-        tier VARCHAR(50) DEFAULT 'free',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS projects (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        name VARCHAR(500) NOT NULL,
-        description_raw TEXT,
-        assumptions_extracted JSONB DEFAULT '[]',
-        status VARCHAR(50) DEFAULT 'draft',
-        prototype_html TEXT,
-        funnel_graph JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS simulations (
-        id SERIAL PRIMARY KEY,
-        project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
-        status VARCHAR(50) DEFAULT 'queued',
-        consumer_volume INTEGER DEFAULT 10000,
-        results JSONB,
-        confidence_score FLOAT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        completed_at TIMESTAMP
-    );
-    """,
-]
+from app.models import (
+    Base,
+    User,
+    Project,
+    Assumption,
+    Environment,
+    Simulation,
+    ConsumerAgent,
+    Decision,
+    OutcomeTracker,
+)
 
 
 def run_migrations():
     print("━━━ Running TheCee migrations ━━━")
+
     with engine.connect() as conn:
-        for i, migration in enumerate(MIGRATIONS):
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+        conn.commit()
+        print("✅ pgvector extension ready")
+
+    Base.metadata.create_all(bind=engine)
+    print("✅ All tables created or verified")
+
+    with engine.connect() as conn:
+        for table, column, col_type in [
+            ("users", "tier", "VARCHAR(50) DEFAULT 'free'"),
+            ("projects", "prototype_html", "TEXT"),
+            ("projects", "funnel_graph_json", "TEXT"),
+            ("simulations", "results_json", "TEXT"),
+            ("simulations", "confidence_score", "FLOAT"),
+        ]:
             try:
-                conn.execute(text(migration))
+                conn.execute(
+                    text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type};")
+                )
                 conn.commit()
-                print(f"✅ Migration {i + 1}/{len(MIGRATIONS)} complete")
-            except Exception as e:
-                print(f"⚠️  Migration {i + 1} skipped or errored: {e}")
+            except Exception:
                 conn.rollback()
-    print("━━━ All migrations done ━━━")
+
+    print("━━━ All migrations complete ━━━")
 
 
 if __name__ == "__main__":
