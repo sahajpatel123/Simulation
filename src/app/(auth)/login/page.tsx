@@ -213,7 +213,7 @@ function AuthPage() {
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
-                padding: '36px 52px',
+                padding: '40px 56px',
                 position: 'relative',
                 zIndex: 2,
               }}
@@ -224,7 +224,7 @@ function AuthPage() {
                   <Link
                     href="/"
                     style={{
-                      fontSize: '20px',
+                      fontSize: '24px',
                       fontWeight: 900,
                       color: '#f2ece0',
                       fontFamily: 'Playfair Display, Georgia, serif',
@@ -237,9 +237,9 @@ function AuthPage() {
                   </Link>
                   <span
                     style={{
-                      fontSize: '9px',
-                      color: 'rgba(242,236,224,0.2)',
-                      letterSpacing: '0.2em',
+                      fontSize: '11px',
+                      color: 'rgba(242,236,224,0.22)',
+                      letterSpacing: '0.18em',
                       textTransform: 'uppercase',
                     }}
                   >
@@ -257,12 +257,12 @@ function AuthPage() {
                 />
                 <div
                   style={{
-                    fontSize: '10px',
+                    fontSize: '12px',
                     color: '#c0392b',
-                    letterSpacing: '0.22em',
+                    letterSpacing: '0.2em',
                     textTransform: 'uppercase',
                     fontWeight: 600,
-                    marginBottom: '20px',
+                    marginBottom: '22px',
                   }}
                 >
                   Welcome back
@@ -273,7 +273,7 @@ function AuthPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ ...SPRING, delay: 0.1 }}
                   style={{
-                    fontSize: 'clamp(44px, 4.5vw, 72px)',
+                    fontSize: 'clamp(52px, 5.2vw, 84px)',
                     fontWeight: 900,
                     color: '#f2ece0',
                     fontFamily: 'Playfair Display, Georgia, serif',
@@ -294,10 +294,10 @@ function AuthPage() {
                   animate={{ opacity: 1 }}
                   transition={{ duration: 0.6, delay: 0.3 }}
                   style={{
-                    fontSize: '13px',
-                    color: 'rgba(242,236,224,0.35)',
-                    lineHeight: 1.85,
-                    maxWidth: '360px',
+                    fontSize: '15px',
+                    color: 'rgba(242,236,224,0.38)',
+                    lineHeight: 1.88,
+                    maxWidth: '400px',
                     fontWeight: 300,
                   }}
                 >
@@ -315,7 +315,7 @@ function AuthPage() {
                   gridTemplateColumns: 'repeat(3, 1fr)',
                   gap: '0',
                   borderTop: '0.5px solid rgba(242,236,224,0.08)',
-                  paddingTop: '28px',
+                  paddingTop: '32px',
                 }}
               >
                 {[
@@ -333,7 +333,7 @@ function AuthPage() {
                   >
                     <div
                       style={{
-                        fontSize: '26px',
+                        fontSize: '30px',
                         fontWeight: 900,
                         color: '#f2ece0',
                         fontFamily: 'Playfair Display, Georgia, serif',
@@ -345,11 +345,11 @@ function AuthPage() {
                     </div>
                     <div
                       style={{
-                        fontSize: '8px',
-                        color: 'rgba(242,236,224,0.28)',
-                        letterSpacing: '0.14em',
+                        fontSize: '10px',
+                        color: 'rgba(242,236,224,0.32)',
+                        letterSpacing: '0.12em',
                         textTransform: 'uppercase',
-                        marginTop: '4px',
+                        marginTop: '6px',
                       }}
                     >
                       {l}
