@@ -27,3 +27,57 @@ Return ONLY valid JSON, no explanation, no markdown, no backticks:
 Founder's idea:
 {description}
 """
+
+PROTOTYPE_GENERATION_PROMPT = """
+You are a world-class product designer and conversion rate optimization expert.
+
+Given a startup idea, generate TWO things simultaneously in a single response:
+
+1. A complete standalone HTML prototype that looks like a real funded startup product.
+2. A realistic customer journey funnel graph with probability weights.
+
+Return ONLY valid JSON, no markdown, no backticks, no explanation:
+
+{
+  "html_content": "complete standalone HTML as a single string",
+  "funnel_graph": {
+    "nodes": [
+      {
+        "id": "arrive",
+        "label": "Landing Page",
+        "stage": "ARRIVE",
+        "expected_time_seconds": 8
+      }
+    ],
+    "edges": [
+      {
+        "from_node": "arrive",
+        "to_node": "browse",
+        "probability": 0.72,
+        "label": "Scrolls page"
+      }
+    ]
+  }
+}
+
+HTML rules:
+- Include <script src="https://cdn.tailwindcss.com"></script> in head
+- Include <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script> for interactivity
+- Build at minimum: hero, product/feature section, pricing section, one CTA flow
+- Use realistic product names, copy, and pricing based on the idea
+- Dark or light theme that fits the product category
+- Buttons should have hover states via Tailwind
+- Must be fully self-contained — no external image dependencies
+- Use SVG placeholders for any images
+- Minimum 200 lines of HTML
+
+Funnel graph rules:
+- Stages must only be from: ARRIVE, BROWSE, CONSIDER, DECIDE, PURCHASE, ABANDON
+- Every funnel must include at least one ABANDON node
+- Probabilities on edges leaving the same node must be realistic (they represent the fraction of users taking that path)
+- Include 6 to 10 nodes minimum
+- Edge labels should describe the user action taken
+
+Idea:
+{description}
+"""

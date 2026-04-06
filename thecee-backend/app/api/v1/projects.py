@@ -1,4 +1,5 @@
 import json
+import re
 
 from anthropic import Anthropic
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -6,9 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import get_current_user, get_db
-from app.core.prompts import ASSUMPTION_EXTRACTION_PROMPT
+from app.core.prompts import ASSUMPTION_EXTRACTION_PROMPT, PROTOTYPE_GENERATION_PROMPT
 from app.models.assumption import Assumption
 from app.models.project import Project
+from app.models.prototype import Prototype
 from app.models.user import User
 from app.schemas.assumption import (
     AssumptionExtractRequest,
@@ -16,6 +18,7 @@ from app.schemas.assumption import (
     AssumptionOut,
 )
 from app.schemas.project import ProjectCreate, ProjectListResponse, ProjectOut
+from app.schemas.prototype import FunnelEdge, FunnelGraph, FunnelNode, PrototypeOut
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -190,6 +193,160 @@ def extract_assumptions(
         assumptions=[AssumptionOut.model_validate(a) for a in saved],
         total=len(saved),
         hidden_count=hidden_count,
+    )
+
+
+@router.post("/{project_id}/generate-prototype", response_model=PrototypeOut)
+def generate_prototype(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if not project.description or len(project.description.strip()) < 20:
+        raise HTTPException(
+            status_code=422,
+            detail="Project description is too short to generate a prototype",
+        )
+
+    try:
+        response = claude.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=8000,
+            system=(
+                "You are a world-class product designer and conversion rate expert. "
+                "You ALWAYS return valid JSON only. No markdown. No backticks. No explanation. "
+                "Your HTML prototypes look like real funded startup products."
+            ),
+            messages=[
+                {
+                    "role": "user",
+                    "content": PROTOTYPE_GENERATION_PROMPT.format(
+                        description=project.description
+                    ),
+                }
+            ],
+        )
+
+        raw = response.content[0].text.strip()
+
+        if raw.startswith("```"):
+            lines = raw.split("\n")
+            raw = "\n".join(
+                line for line in lines if not line.strip().startswith("```")
+            )
+
+        json_match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if not json_match:
+            raise ValueError("No JSON object found in Claude response")
+
+        parsed = json.loads(json_match.group(0))
+
+        html_content = parsed.get("html_content", "")
+        funnel_data = parsed.get("funnel_graph", {})
+
+        if not html_content or len(html_content) < 100:
+            raise ValueError("Generated HTML is too short or empty")
+
+        if not funnel_data.get("nodes") or not funnel_data.get("edges"):
+            raise ValueError("Funnel graph is missing nodes or edges")
+
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=500,
+            detail="Claude returned malformed JSON — please retry",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Prototype generation failed: {str(e)}",
+        )
+
+    existing = (
+        db.query(Prototype).filter(Prototype.project_id == project_id).first()
+    )
+
+    if existing:
+        existing.html_content = html_content
+        existing.funnel_graph_json = json.dumps(funnel_data)
+        prototype = existing
+    else:
+        prototype = Prototype(
+            project_id=project_id,
+            html_content=html_content,
+            funnel_graph_json=json.dumps(funnel_data),
+        )
+        db.add(prototype)
+
+    project.status = "PROTOTYPE_GENERATED"
+    project.prototype_html = html_content
+    project.funnel_graph_json = json.dumps(funnel_data)
+
+    db.commit()
+    db.refresh(prototype)
+
+    try:
+        funnel_graph = FunnelGraph(
+            nodes=[FunnelNode(**n) for n in funnel_data.get("nodes", [])],
+            edges=[FunnelEdge(**e) for e in funnel_data.get("edges", [])],
+        )
+    except Exception:
+        funnel_graph = None
+
+    return PrototypeOut(
+        id=prototype.id,
+        project_id=project_id,
+        html_content=html_content,
+        funnel_graph=funnel_graph,
+    )
+
+
+@router.get("/{project_id}/prototype", response_model=PrototypeOut)
+def get_prototype(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    prototype = (
+        db.query(Prototype).filter(Prototype.project_id == project_id).first()
+    )
+    if not prototype:
+        raise HTTPException(
+            status_code=404,
+            detail="No prototype generated yet — call POST /generate-prototype first",
+        )
+
+    funnel_graph = None
+    if prototype.funnel_graph_json:
+        try:
+            funnel_data = json.loads(prototype.funnel_graph_json)
+            funnel_graph = FunnelGraph(
+                nodes=[FunnelNode(**n) for n in funnel_data.get("nodes", [])],
+                edges=[FunnelEdge(**e) for e in funnel_data.get("edges", [])],
+            )
+        except Exception:
+            funnel_graph = None
+
+    return PrototypeOut(
+        id=prototype.id,
+        project_id=project_id,
+        html_content=prototype.html_content,
+        funnel_graph=funnel_graph,
     )
 
 

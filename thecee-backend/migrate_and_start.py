@@ -32,6 +32,8 @@ def run_migrations():
             ("projects", "funnel_graph_json", "TEXT"),
             ("simulations", "results_json", "TEXT"),
             ("simulations", "confidence_score", "FLOAT"),
+            ("prototypes", "html_content", "TEXT"),
+            ("prototypes", "funnel_graph_json", "TEXT"),
         ]:
             try:
                 conn.execute(
