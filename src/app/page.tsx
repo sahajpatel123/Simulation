@@ -151,7 +151,7 @@ export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
-    <div style={{ background: 'var(--paper)', minHeight: '100vh' }}>
+    <div style={{ background: 'var(--paper)', minHeight: '100vh', position: 'relative' }}>
 
       {/* ━━━ HEADER / NAVBAR ━━━ */}
       <motion.header
