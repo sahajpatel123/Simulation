@@ -415,19 +415,19 @@ export default function FeatureShowcase() {
           maxWidth: 1280,
           margin: '0 auto',
           display: 'grid',
-          gridTemplateColumns: '260px 1fr',
-          minHeight: 580,
-          gap: '0 80px',
-          alignItems: 'center',
-          padding: '0 48px',
+          gridTemplateColumns: '280px 1fr',
+          minHeight: 640,
+          gap: '0 64px',
+          padding: '64px 48px',
         }}
       >
         <div
           style={{
-            padding: '56px 0 40px 0',
+            padding: '0',
             display: 'flex',
             flexDirection: 'column',
             position: 'relative',
+            height: '100%',
           }}
         >
           <div
@@ -438,6 +438,7 @@ export default function FeatureShowcase() {
               color: ink(0.25),
               fontFamily: 'system-ui,sans-serif',
               marginBottom: 44,
+              marginTop: 8,
             }}
           >
             What TheCee does
@@ -516,15 +517,15 @@ export default function FeatureShowcase() {
         </div>
 
         <div
-          id="shell"
           style={{
             display: 'flex',
             flexDirection: 'column',
             background: '#EDE8DF',
-            border: '0.5px solid rgba(26,23,20,.1)',
+            border: '0.5px solid rgba(26,23,20,.12)',
             borderRadius: 8,
             overflow: 'hidden',
-            margin: '48px 0',
+            height: '100%',
+            minHeight: 520,
           }}
         >
           <div
