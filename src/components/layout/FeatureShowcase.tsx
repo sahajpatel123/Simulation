@@ -417,15 +417,17 @@ export default function FeatureShowcase() {
           display: 'grid',
           gridTemplateColumns: '260px 1fr',
           minHeight: 580,
+          gap: '0 80px',
+          alignItems: 'center',
+          padding: '0 48px',
         }}
       >
         <div
           style={{
-            padding: '56px 0 40px 52px',
+            padding: '56px 0 40px 0',
             display: 'flex',
             flexDirection: 'column',
             position: 'relative',
-            borderRight: '0.5px solid rgba(26,23,20,.08)',
           }}
         >
           <div
@@ -508,12 +510,23 @@ export default function FeatureShowcase() {
               </div>
             </div>
           ))}
-          <div style={{ position: 'absolute', bottom: 0, left: 52, right: 0, height: 1, background: ink(0.05) }}>
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 1, background: ink(0.05) }}>
             <div ref={progressRef} style={{ height: '100%', background: red, width: '0%' }} />
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', background: '#EDE8DF' }}>
+        <div
+          id="shell"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            background: '#EDE8DF',
+            border: '0.5px solid rgba(26,23,20,.1)',
+            borderRadius: 8,
+            overflow: 'hidden',
+            margin: '48px 0',
+          }}
+        >
           <div
             style={{
               height: 38,
