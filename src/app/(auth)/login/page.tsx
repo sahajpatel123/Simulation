@@ -146,13 +146,25 @@ function AuthPage() {
   const loginForm = useForm<LoginData>({ resolver: zodResolver(loginSchema) })
   const signupForm = useForm<SignupData>({ resolver: zodResolver(signupSchema) })
 
-  const onLogin = async (_data: LoginData) => {
+  const onLogin = async (data: LoginData) => {
     await new Promise(r => setTimeout(r, 1400))
-    router.push('/dashboard')
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('thecee-auth', '1')
+      sessionStorage.setItem('thecee-user-email', data.email)
+    }
+    router.push('/')
   }
 
-  const onSignup = async (_data: SignupData) => {
+  const onSignup = async (data: SignupData) => {
     await new Promise(r => setTimeout(r, 1000))
+
+    const goHome = () => {
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('thecee-auth', '1')
+        sessionStorage.setItem('thecee-user-email', data.email)
+      }
+      router.push('/')
+    }
 
     if (signupBtnRef.current) {
       const rect = signupBtnRef.current.getBoundingClientRect()
@@ -172,11 +184,9 @@ function AuthPage() {
       setFilling(true)
 
       await new Promise(r => setTimeout(r, 700))
-      sessionStorage.setItem('from-signup', 'true')
-      router.push('/dashboard')
+      goHome()
     } else {
-      sessionStorage.setItem('from-signup', 'true')
-      router.push('/dashboard')
+      goHome()
     }
   }
 

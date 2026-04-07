@@ -4,6 +4,7 @@ import { useRef, useState, useEffect } from 'react'
 import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { ArrowRight, ArrowUpRight, ChevronDown, Minus } from 'lucide-react'
+import SimulationTimeline from '@/components/layout/SimulationTimeline'
 
 /* ─── CONSTANTS ─────────────────────────────────── */
 const WORDS = ['startup', 'product', 'idea', 'launch', 'decision']
@@ -57,13 +58,6 @@ const STATS = [
   { value: '< 2 min', label: 'Time to first clear insight' },
   { value: '3×', label: 'Cross-validated by default' },
   { value: '240+', label: 'Founders validated so far' },
-]
-
-const MARQUEE_ITEMS = [
-  'Idea Validation', 'Launch Readiness', 'Product-Market Fit',
-  'Customer Behaviour', 'Risk Discovery', 'Revenue Forecasting',
-  'Growth Scenarios', 'Startup Stress Testing', 'Pricing Confidence',
-  'Decision Intelligence',
 ]
 
 /* ─── WORD ROTATOR ───────────────────────────────── */
@@ -843,28 +837,7 @@ export default function LandingPage() {
         </motion.div>
       </section>
 
-      {/* ━━━ MARQUEE ━━━ */}
-      <div style={{
-        overflow: 'hidden',
-        background: 'var(--ink)',
-        padding: '10px 0',
-        borderBottom: '0.5px solid rgba(242,236,224,0.08)',
-      }}>
-        <div className="animate-marquee" style={{ display: 'flex', whiteSpace: 'nowrap' }}>
-          {[...Array(2)].map((_, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center' }}>
-              {MARQUEE_ITEMS.map((item, j) => (
-                <span key={`${i}-${j}`} style={{ display: 'flex', alignItems: 'center', gap: '24px', padding: '0 24px' }}>
-                  <span style={{ fontSize: '10px', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(242,236,224,0.5)' }}>
-                    {item}
-                  </span>
-                  <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: 'var(--red)', display: 'inline-block', flexShrink: 0 }} />
-                </span>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
+      <SimulationTimeline />
 
       {/* ━━━ HOW IT WORKS ━━━ */}
       <section id="how" style={{ borderBottom: '0.5px solid var(--border-color)' }}>
