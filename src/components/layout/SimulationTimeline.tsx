@@ -249,12 +249,15 @@ export default function SimulationTimeline() {
     let lines: Line[] = []
     let runAge = 0
 
-    let sCnt = 0, convT = 17.4, riskT = 44, confT = 61
-    let curConv = 17.4, curRisk = 44, curConf = 61
+    let sCnt = 0
+    let convT = parseFloat((8 + Math.random() * 22).toFixed(1))
+    let riskT = Math.floor(25 + Math.random() * 55)
+    let confT = Math.floor(30 + Math.random() * 58)
+    let curConv = convT, curRisk = riskT, curConf = confT
     const rollingStatsId = window.setInterval(() => {
-      convT = 9 + Math.random() * 22
-      riskT = 18 + Math.random() * 58
-      confT = 32 + Math.random() * 58
+      convT = parseFloat((5 + Math.random() * 28).toFixed(1))
+      riskT = Math.floor(18 + Math.random() * 72)
+      confT = Math.floor(25 + Math.random() * 68)
     }, 3200)
 
     function startRun() {
@@ -336,16 +339,19 @@ export default function SimulationTimeline() {
       ctx.clearRect(0, 0, W, H)
       /* paper background */
       ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H)
-      time += 0.016; runAge++; sCnt += 11; statTimer++
+      time += 0.016
+      runAge++
+      sCnt = Math.min(9999, sCnt + Math.floor(7 + Math.random() * 6))
+      statTimer++
       curConv += (convT - curConv) * 0.012
       curRisk += (riskT - curRisk) * 0.013
       curConf += (confT - curConf) * 0.011
       if (statTimer % 30 === 0) {
         setStats({
           scenarios: sCnt,
-          conv:      Math.round(curConv * 10) / 10,
-          risk:      Math.round(curRisk),
-          conf:      Math.round(curConf),
+          conv: Math.min(99.9, Math.round(Math.min(99.9, curConv) * 10) / 10),
+          risk: Math.min(99, Math.round(curRisk)),
+          conf: Math.min(99, Math.round(curConf)),
         })
       }
 
