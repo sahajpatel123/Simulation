@@ -4,6 +4,7 @@ import { useRef, useState, useEffect } from 'react'
 import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { ArrowRight, ArrowUpRight, ChevronDown, Minus } from 'lucide-react'
+import FeatureShowcase from '@/components/layout/FeatureShowcase'
 import SimulationTimeline from '@/components/layout/SimulationTimeline'
 
 /* ─── CONSTANTS ─────────────────────────────────── */
@@ -888,6 +889,8 @@ export default function LandingPage() {
 
         </div>
       </section>
+
+      <FeatureShowcase />
 
       {/* ━━━ WHO IT'S FOR ━━━ */}
       <section id="who" style={{ borderBottom: '0.5px solid var(--border-color)', background: 'var(--paper-dark)' }}>
