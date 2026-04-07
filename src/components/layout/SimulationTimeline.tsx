@@ -63,6 +63,8 @@ export default function SimulationTimeline() {
     const particles: Particle[] = []
     const ghosts: { pts: Pt[]; op: number; col: string }[] = []
 
+    type SubSeg = { b0: Pt; b1: Pt; b2: Pt }
+
     class Line {
       col:  string
       lw:   number
@@ -78,7 +80,9 @@ export default function SimulationTimeline() {
       pauseLen: number
       dead     = false
       finished = false
-      b0: Pt; b1: Pt; b2: Pt
+      /* 1–3 quadratic beziers chained per node gap — zigzag organic motion */
+      subSegs: SubSeg[] = []
+      subIdx = 0
 
       constructor() {
         /* ~15% red (failing), ~15% gold (winning), rest ink */
@@ -97,15 +101,12 @@ export default function SimulationTimeline() {
           /* ink lines — varying darkness */
           const a = Math.floor(Math.random() * 30)
           this.col = `${26 + a},${23 + a},${20 + a}`
-          this.lw  = 0.6 + Math.random() * 0.7
+          this.lw  = 0.4 + Math.random() * 1.2
           this.op  = 0.35 + Math.random() * 0.45
         }
-        this.spd      = 0.018 + Math.random() * 0.012
-        this.diePr    = this.red ? 0.45 + Math.random() * 0.3 : 0.08 + Math.random() * 0.22
-        this.pauseLen = 22 + Math.floor(Math.random() * 24)
-        this.b0 = { x: NX[0], y: CY }
-        this.b1 = { x: 0, y: 0 }
-        this.b2 = { x: NX[1], y: CY }
+        this.spd      = 0.012 + Math.random() * 0.022
+        this.diePr    = this.red ? 0.5 + Math.random() * 0.35 : 0.05 + Math.random() * 0.35
+        this.pauseLen = 12 + Math.floor(Math.random() * 40)
         this.allPts = [{ x: NX[0], y: CY }]
         this.buildSeg()
       }
@@ -113,19 +114,37 @@ export default function SimulationTimeline() {
       buildSeg() {
         const fromX = NX[this.seg]
         const toX   = NX[this.seg + 1]
-        const ctrlX = fromX + (toX - fromX) * (0.3 + Math.random() * 0.4)
-        const swing = (Math.random() > 0.5 ? 1 : -1) * (FH * 0.12 + Math.random() * FH * 0.35)
-        const ctrlY = CY + swing
-        this.b0 = { x: fromX, y: CY }
-        this.b1 = { x: ctrlX, y: Math.max(FY + 5, Math.min(FY + FH - 5, ctrlY)) }
-        this.b2 = { x: toX, y: CY }
+        const subCount = 1 + Math.floor(Math.random() * 3)
+        const waypoints: Pt[] = []
+        waypoints.push({ x: fromX, y: CY })
+        for (let k = 1; k < subCount; k++) {
+          const tx = fromX + (toX - fromX) * (k / subCount)
+          const ty = FY + 6 + Math.random() * (FH - 12)
+          waypoints.push({ x: tx, y: ty })
+        }
+        waypoints.push({ x: toX, y: CY })
+
+        this.subSegs = []
+        for (let i = 0; i < subCount; i++) {
+          const p0 = waypoints[i]
+          const p2 = waypoints[i + 1]
+          const swing = (Math.random() > 0.5 ? 1 : -1) * (FH * 0.1 + Math.random() * FH * 0.45)
+          const ctrlX = p0.x + (p2.x - p0.x) * (0.25 + Math.random() * 0.5)
+          const ctrlY = Math.max(FY + 5, Math.min(FY + FH - 5, CY + swing))
+          this.subSegs.push({
+            b0: { x: p0.x, y: p0.y },
+            b1: { x: ctrlX, y: ctrlY },
+            b2: { x: p2.x, y: p2.y },
+          })
+        }
+        this.subIdx = 0
       }
 
-      bez(t: number): Pt {
-        const mt = 1 - t
+      bezSeg(s: SubSeg, tt: number): Pt {
+        const mt = 1 - tt
         return {
-          x: mt * mt * this.b0.x + 2 * mt * t * this.b1.x + t * t * this.b2.x,
-          y: mt * mt * this.b0.y + 2 * mt * t * this.b1.y + t * t * this.b2.y,
+          x: mt * mt * s.b0.x + 2 * mt * tt * s.b1.x + tt * tt * s.b2.x,
+          y: mt * mt * s.b0.y + 2 * mt * tt * s.b1.y + tt * tt * s.b2.y,
         }
       }
 
@@ -147,12 +166,21 @@ export default function SimulationTimeline() {
           }
           return
         }
+        const cur = this.subSegs[this.subIdx]
+        if (!cur) return
         this.t = Math.min(1, this.t + this.spd)
-        const pos = this.bez(this.t)
+        const pos = this.bezSeg(cur, this.t)
         this.allPts.push(pos)
         if (this.t >= 1) {
-          this.allPts[this.allPts.length - 1] = { x: NX[this.seg + 1], y: CY }
-          this.paused = true; this.pauseAge = 0
+          this.allPts[this.allPts.length - 1] = { x: cur.b2.x, y: cur.b2.y }
+          if (this.subIdx < this.subSegs.length - 1) {
+            this.subIdx++
+            this.t = 0
+          } else {
+            this.allPts[this.allPts.length - 1] = { x: NX[this.seg + 1], y: CY }
+            this.paused = true
+            this.pauseAge = 0
+          }
         }
       }
 
@@ -236,7 +264,8 @@ export default function SimulationTimeline() {
         }
       })
       while (ghosts.length > 200) ghosts.shift()
-      lines = Array.from({ length: 5 + Math.floor(Math.random() * 4) }, () => new Line())
+      const count = 1 + Math.floor(Math.random() * 5)
+      lines = Array.from({ length: count }, () => new Line())
       runAge = 0
     }
     startRun()
