@@ -28,22 +28,6 @@ export default function SimulationTimeline() {
     const NC = NODES.length
     const NX = NODES.map((_, i) => PAD + (i / (NC - 1)) * (W - PAD * 2))
 
-    function catmullRom(pts: {x:number,y:number}[], t: number) {
-      if (pts.length < 2) return pts[0] || { x: 0, y: 0 }
-      const n = pts.length - 1
-      const seg = Math.min(Math.floor(t * n), n - 1)
-      const lt = t * n - seg
-      const p0 = pts[Math.max(0, seg - 1)]
-      const p1 = pts[seg]
-      const p2 = pts[Math.min(n, seg + 1)]
-      const p3 = pts[Math.min(n, seg + 2)]
-      const t2 = lt * lt, t3 = t2 * lt
-      return {
-        x: .5 * ((-p0.x + 3*p1.x - 3*p2.x + p3.x)*t3 + (2*p0.x - 5*p1.x + 4*p2.x - p3.x)*t2 + (-p0.x + p2.x)*lt + 2*p1.x),
-        y: .5 * ((-p0.y + 3*p1.y - 3*p2.y + p3.y)*t3 + (2*p0.y - 5*p1.y + 4*p2.y - p3.y)*t2 + (-p0.y + p2.y)*lt + 2*p1.y),
-      }
-    }
-
     interface Pt { x: number; y: number }
 
     class Particle {
@@ -88,10 +72,31 @@ export default function SimulationTimeline() {
 
     class Branch {
       depth: number; isGold: boolean; op: number; col: string; lw: number
-      waypts: Pt[]; progress = 0; speed: number
-      drawnPts: Pt[] = []; children: Branch[] = []
-      done = false; dead = false; deathPts: Pt | null = null
-      diePr: number; lastPt: Pt; forked = false
+      dead = false; drawnPts: Pt[] = []; children: Branch[] = []
+
+      hasGoldWinner(): boolean {
+        if (this.isGold && !this.dead && this.currentNode >= NC - 1) return true
+        return this.children.some(c => c.hasGoldWinner())
+      }
+
+      isFullyComplete(): boolean {
+        if (!this.segDone && !this.dead) return false
+        return this.children.every(c => c.isFullyComplete())
+      }
+
+      collectAll(arr: Branch[]) { arr.push(this); this.children.forEach(c => c.collectAll(arr)) }
+
+      /* segment state */
+      currentNode: number
+      segProgress = 0
+      segSpeed: number
+      pauseTimer = 0
+      pauseDuration: number
+      pausing = false
+      segDone = false
+      waypts: Pt[]
+      segStart: Pt
+      diePr: number
 
       constructor(startX: number, startY: number, parentOp: number, depth: number, isGold?: boolean) {
         this.depth = depth
@@ -99,53 +104,79 @@ export default function SimulationTimeline() {
         this.op = (parentOp || 0.85) * (0.55 + Math.random() * .35)
         this.col = this.isGold ? '210,170,70' : depth === 0 ? '215,205,190' : depth === 1 ? '160,130,100' : '110,90,75'
         this.lw = depth === 0 ? 1.1 : depth === 1 ? .65 : .35
-        this.diePr = .38 + depth * .14
-        this.lastPt = { x: startX, y: startY }
-        this.speed = 0.004 + Math.random() * .004
-
-        /* ── FULL WIDTH WAYPOINTS — all nodes, organic random Y ── */
-        this.waypts = [{ x: startX, y: startY }]
-        for (let ni = 0; ni < NC; ni++) {
-          const nx2 = NX[ni]
-          if (nx2 <= startX) continue
-          const deviation = (Math.random() - .5) * FH * .85 * (1 - ni / (NC * 1.5))
-          const wy = Math.max(FY + 8, Math.min(FY + FH - 8, CY + deviation))
-          if (ni > 0) {
-            this.waypts.push({
-              x: nx2 - (NX[ni] - (NX[ni-1] || NX[ni])) * .4 + (Math.random() - .5) * 28,
-              y: Math.max(FY + 8, Math.min(FY + FH - 8, CY + (Math.random() - .5) * FH * .6)),
-            })
-          }
-          this.waypts.push({ x: nx2, y: wy })
-        }
-        /* force final waypoint to last node */
-        this.waypts[this.waypts.length - 1] = { x: NX[NC-1], y: CY + (Math.random() - .5) * 14 }
+        this.diePr = .32 + depth * .12
+        this.segSpeed = 0.018 + Math.random() * .012
+        this.pauseDuration = 18 + Math.floor(Math.random() * 22)
+        this.currentNode = 1
+        this.segStart = { x: startX, y: startY }
+        this.waypts = this.buildSegWaypts(startX, startY, 1)
+        this.drawnPts = [{ x: startX, y: startY }]
       }
 
-      update(t: number) {
-        if (this.dead || this.done) return
-        this.progress = Math.min(1, this.progress + this.speed)
-        const pos = catmullRom(this.waypts, this.progress)
-        this.drawnPts.push({ x: pos.x, y: pos.y })
-        if (this.drawnPts.length > 150) this.drawnPts.shift()
-        this.lastPt = pos
-        /* random death mid-path at each node region */
-        const nearNode = NX.findIndex(nx => Math.abs(pos.x - nx) < 6)
-        if (nearNode > 0 && nearNode < NC - 1 && !this.forked && Math.random() < this.diePr * .018) {
-          this.dead = true
-          this.deathPts = { x: pos.x, y: pos.y }
-          const pcol = this.isGold ? this.col : '192,57,43'
-          for (let i = 0; i < (this.depth === 0 ? 12 : 6); i++) particles.push(new Particle(pos.x, pos.y, pcol))
+      buildSegWaypts(fromX: number, fromY: number, toNodeIdx: number): Pt[] {
+        const toX = NX[toNodeIdx]
+        const deviation = (Math.random() - .5) * FH * .9
+        const midX = fromX + (toX - fromX) * (.35 + Math.random() * .3)
+        const midY = Math.max(FY + 8, Math.min(FY + FH - 8, CY + deviation))
+        const endY = Math.max(FY + 8, Math.min(FY + FH - 8, CY + (Math.random() - .5) * FH * .5))
+        return [
+          { x: fromX, y: fromY },
+          { x: midX, y: midY },
+          { x: toX, y: endY },
+        ]
+      }
+
+      getSegPos(t: number): Pt {
+        const [p0, p1, p2] = this.waypts
+        const mt = 1 - t
+        return {
+          x: mt * mt * p0.x + 2 * mt * t * p1.x + t * t * p2.x,
+          y: mt * mt * p0.y + 2 * mt * t * p1.y + t * t * p2.y,
         }
-        if (this.progress >= 1) {
-          this.done = true
-          if (!this.dead && !this.isGold && Math.random() < .5) {
-            this.dead = true
-            this.deathPts = { x: pos.x, y: pos.y }
-            for (let i = 0; i < 8; i++) particles.push(new Particle(pos.x, pos.y, '192,57,43'))
+      }
+
+      update() {
+        if (this.dead || this.segDone) return
+
+        if (this.pausing) {
+          this.pauseTimer++
+          if (this.pauseTimer >= this.pauseDuration) {
+            this.pausing = false
+            this.pauseTimer = 0
+            if (Math.random() < this.diePr) {
+              this.dead = true
+              const pos = this.waypts[2]
+              const pcol = this.isGold ? this.col : '192,57,43'
+              for (let i = 0; i < (this.depth === 0 ? 12 : 6); i++) {
+                particles.push(new Particle(pos.x, pos.y, pcol))
+              }
+              return
+            }
+            if (this.currentNode >= NC - 1) {
+              this.segDone = true
+              return
+            }
+            const prevEnd = this.waypts[2]
+            this.currentNode++
+            this.segProgress = 0
+            this.pauseDuration = 14 + Math.floor(Math.random() * 24)
+            this.waypts = this.buildSegWaypts(prevEnd.x, prevEnd.y, this.currentNode)
           }
+          return
         }
-        this.children.forEach(ch => ch.update(t))
+
+        this.segProgress = Math.min(1, this.segProgress + this.segSpeed)
+        const pos = this.getSegPos(this.segProgress)
+        this.drawnPts.push({ x: pos.x, y: pos.y })
+        if (this.drawnPts.length > 200) this.drawnPts.shift()
+
+        if (this.segProgress >= 1) {
+          this.pausing = true
+          this.pauseTimer = 0
+          flashes.push(new Flash(this.waypts[2].x, this.waypts[2].y))
+        }
+
+        this.children.forEach(ch => ch.update())
       }
 
       checkCrossings(others: Branch[]) {
@@ -157,41 +188,48 @@ export default function SimulationTimeline() {
           const ol = o.drawnPts[o.drawnPts.length - 1]
           const op2 = o.drawnPts[o.drawnPts.length - 2]
           const fx = crossX(myP, myL, op2, ol)
-          if (fx && Math.random() < .3) flashes.push(new Flash(fx.x, fx.y))
+          if (fx && Math.random() < .25) flashes.push(new Flash(fx.x, fx.y))
         })
+        this.children.forEach(ch => ch.checkCrossings(others))
       }
 
-      draw(t: number) {
+      draw(time: number) {
         if (this.drawnPts.length < 2) return
+
         ctx.beginPath()
         ctx.moveTo(this.drawnPts[0].x, this.drawnPts[0].y)
         for (let i = 1; i < this.drawnPts.length; i++) ctx.lineTo(this.drawnPts[i].x, this.drawnPts[i].y)
-        const fade = this.dead ? .3 : 1
-        const pulse = this.isGold ? (.7 + Math.sin(t * 3 + this.depth) * .3) : 1
+        const fade = this.dead ? .28 : 1
+        const pulse = this.isGold ? (.7 + Math.sin(time * 3 + this.depth) * .3) : 1
         ctx.strokeStyle = `rgba(${this.col},${this.op * fade * pulse})`
         ctx.lineWidth = this.lw; ctx.stroke()
-        if (this.isGold && !this.dead && this.drawnPts.length > 1) {
+
+        if (!this.dead && this.drawnPts.length > 0) {
           const last = this.drawnPts[this.drawnPts.length - 1]
-          ctx.beginPath(); ctx.arc(last.x, last.y, 1.5 + Math.sin(t * 4) * .5, 0, Math.PI * 2)
-          ctx.fillStyle = `rgba(230,190,80,${.7 * pulse})`; ctx.fill()
+          const dotPulse = this.pausing
+            ? (.5 + Math.sin(time * 8) * .5)
+            : (.6 + Math.sin(time * 4) * .4)
+          const dotR = this.pausing ? 3 + Math.sin(time * 8) * 1.5 : 1.5
+          ctx.beginPath(); ctx.arc(last.x, last.y, dotR, 0, Math.PI * 2)
+          ctx.fillStyle = `rgba(${this.isGold ? '230,190,80' : this.col},${this.op * dotPulse})`
+          ctx.fill()
+          if (this.pausing) {
+            const ringOp = (1 - this.pauseTimer / this.pauseDuration) * .5
+            ctx.beginPath(); ctx.arc(last.x, last.y, 6 + (this.pauseTimer / this.pauseDuration) * 8, 0, Math.PI * 2)
+            ctx.strokeStyle = `rgba(${this.isGold ? '230,190,80' : this.col},${ringOp})`
+            ctx.lineWidth = .6; ctx.stroke()
+          }
         }
-        if (this.isGold && this.done && !this.dead) {
+
+        if (this.isGold && this.segDone) {
           const ep = this.drawnPts[this.drawnPts.length - 1];
-          [8, 16, 28].forEach((r, i) => {
-            ctx.beginPath(); ctx.arc(ep.x, ep.y, r + Math.sin(t * 2 + i) * .5, 0, Math.PI * 2)
+          [8, 16, 28].forEach((r: number, i: number) => {
+            ctx.beginPath(); ctx.arc(ep.x, ep.y, r + Math.sin(time * 2 + i) * .5, 0, Math.PI * 2)
             ctx.strokeStyle = `rgba(230,190,80,${(.3 - i * .08) * pulse})`; ctx.lineWidth = .5; ctx.stroke()
           })
         }
-      }
 
-      collectAll(arr: Branch[]) { arr.push(this); this.children.forEach(c => c.collectAll(arr)) }
-      isFullyComplete(): boolean {
-        if (!this.done && !this.dead) return false
-        return this.children.every(c => c.isFullyComplete())
-      }
-      hasGoldWinner(): boolean {
-        if (this.isGold && this.done && !this.dead) return true
-        return this.children.some(c => c.hasGoldWinner())
+        this.children.forEach(ch => ch.draw(time))
       }
     }
 
@@ -292,7 +330,7 @@ export default function SimulationTimeline() {
 
       const allBranches: Branch[] = []
       roots.forEach(r => r.collectAll(allBranches))
-      roots.forEach(r => r.update(t))
+      roots.forEach(r => r.update())
       if (Math.floor(t * 60) % 3 === 0) {
         const alive = allBranches.filter(b => !b.dead && b.drawnPts.length > 1)
         alive.forEach(b => b.checkCrossings(alive))
@@ -317,7 +355,7 @@ export default function SimulationTimeline() {
         if (won && !pulseBack) {
           let gy = CY
           function findGold(b: Branch): boolean {
-            if (b.isGold && b.done && !b.dead && b.drawnPts.length > 0) { gy = b.drawnPts[b.drawnPts.length - 1].y; return true }
+            if (b.isGold && b.segDone && !b.dead && b.drawnPts.length > 0) { gy = b.drawnPts[b.drawnPts.length - 1].y; return true }
             return b.children.some(findGold)
           }
           roots.some(findGold)
