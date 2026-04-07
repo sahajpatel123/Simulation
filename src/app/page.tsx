@@ -559,26 +559,6 @@ export default function LandingPage() {
       <section ref={heroRef} style={{ borderBottom: '0.5px solid var(--border-color)', overflow: 'hidden' }}>
         <motion.div style={{ opacity: heroOpacity, y: heroY }}>
 
-          {/* Issue line — grid keeps centre label truly centred */}
-          <div style={{
-            padding: '10px 48px',
-            borderBottom: '0.5px solid var(--border-color)',
-            display: 'grid',
-            gridTemplateColumns: '1fr auto 1fr',
-            alignItems: 'center',
-            background: 'var(--paper-dark)',
-          }}>
-            <span style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.15em', textTransform: 'uppercase', justifySelf: 'start' }}>
-              Vol. 01 — Issue 01
-            </span>
-            <span style={{ fontSize: '10px', color: 'var(--red)', letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 500, justifySelf: 'center', textAlign: 'center' }}>
-              ◆ Now in early access
-            </span>
-            <span style={{ fontSize: '10px', color: 'var(--ink-secondary)', letterSpacing: '0.12em', justifySelf: 'end' }}>
-              April 2026
-            </span>
-          </div>
-
           {/* Three-column hero grid */}
           <div style={{
             display: 'grid',
