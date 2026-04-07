@@ -72,19 +72,17 @@ export default function SimulationTimeline() {
 
     class Branch {
       depth: number; isGold: boolean; op: number; col: string; lw: number
-      dead = false; drawnPts: Pt[] = []; children: Branch[] = []
+      dead = false; drawnPts: Pt[] = []
 
       hasGoldWinner(): boolean {
-        if (this.isGold && !this.dead && this.currentNode >= NC - 1) return true
-        return this.children.some(c => c.hasGoldWinner())
+        return this.isGold && this.segDone && !this.dead
       }
 
       isFullyComplete(): boolean {
-        if (!this.segDone && !this.dead) return false
-        return this.children.every(c => c.isFullyComplete())
+        return this.segDone || this.dead
       }
 
-      collectAll(arr: Branch[]) { arr.push(this); this.children.forEach(c => c.collectAll(arr)) }
+      collectAll(arr: Branch[]) { arr.push(this) }
 
       /* segment state */
       currentNode: number
@@ -114,15 +112,15 @@ export default function SimulationTimeline() {
       }
 
       buildSegWaypts(fromX: number, fromY: number, toNodeIdx: number): Pt[] {
-        const toX = NX[toNodeIdx]
+        const nx = NX[toNodeIdx]
         const deviation = (Math.random() - .5) * FH * .9
-        const midX = fromX + (toX - fromX) * (.35 + Math.random() * .3)
+        const midX = fromX + (nx - fromX) * (.35 + Math.random() * .3)
         const midY = Math.max(FY + 8, Math.min(FY + FH - 8, CY + deviation))
         const endY = Math.max(FY + 8, Math.min(FY + FH - 8, CY + (Math.random() - .5) * FH * .5))
         return [
           { x: fromX, y: fromY },
           { x: midX, y: midY },
-          { x: toX, y: endY },
+          { x: NX[toNodeIdx], y: endY },
         ]
       }
 
@@ -173,10 +171,11 @@ export default function SimulationTimeline() {
         if (this.segProgress >= 1) {
           this.pausing = true
           this.pauseTimer = 0
-          flashes.push(new Flash(this.waypts[2].x, this.waypts[2].y))
+          const exactNode = { x: NX[this.currentNode], y: this.waypts[2].y }
+          this.drawnPts.push(exactNode)
+          this.waypts[2] = exactNode
+          flashes.push(new Flash(NX[this.currentNode], exactNode.y))
         }
-
-        this.children.forEach(ch => ch.update())
       }
 
       checkCrossings(others: Branch[]) {
@@ -190,7 +189,6 @@ export default function SimulationTimeline() {
           const fx = crossX(myP, myL, op2, ol)
           if (fx && Math.random() < .25) flashes.push(new Flash(fx.x, fx.y))
         })
-        this.children.forEach(ch => ch.checkCrossings(others))
       }
 
       draw(time: number) {
@@ -205,7 +203,9 @@ export default function SimulationTimeline() {
         ctx.lineWidth = this.lw; ctx.stroke()
 
         if (!this.dead && this.drawnPts.length > 0) {
-          const last = this.drawnPts[this.drawnPts.length - 1]
+          const pauseX = NX[this.currentNode]
+          const pauseY = this.waypts[2].y
+          const last = this.pausing ? { x: pauseX, y: pauseY } : this.drawnPts[this.drawnPts.length - 1]
           const dotPulse = this.pausing
             ? (.5 + Math.sin(time * 8) * .5)
             : (.6 + Math.sin(time * 4) * .4)
@@ -215,7 +215,7 @@ export default function SimulationTimeline() {
           ctx.fill()
           if (this.pausing) {
             const ringOp = (1 - this.pauseTimer / this.pauseDuration) * .5
-            ctx.beginPath(); ctx.arc(last.x, last.y, 6 + (this.pauseTimer / this.pauseDuration) * 8, 0, Math.PI * 2)
+            ctx.beginPath(); ctx.arc(pauseX, pauseY, 6 + (this.pauseTimer / this.pauseDuration) * 8, 0, Math.PI * 2)
             ctx.strokeStyle = `rgba(${this.isGold ? '230,190,80' : this.col},${ringOp})`
             ctx.lineWidth = .6; ctx.stroke()
           }
@@ -228,8 +228,6 @@ export default function SimulationTimeline() {
             ctx.strokeStyle = `rgba(230,190,80,${(.3 - i * .08) * pulse})`; ctx.lineWidth = .5; ctx.stroke()
           })
         }
-
-        this.children.forEach(ch => ch.draw(time))
       }
     }
 
@@ -268,9 +266,14 @@ export default function SimulationTimeline() {
         saveGhosts(all)
       }
       roots = []; runAge = 0
-      const n = 2 + Math.floor(Math.random() * 3)
+      const n = 3
       for (let i = 0; i < n; i++) {
-        roots.push(new Branch(PAD, CY + (Math.random() - .5) * FH * .3, 0.9, 0))
+        roots.push(new Branch(
+          PAD,
+          CY + (i - 1) * (FH * .28),
+          0.9,
+          0,
+        ))
       }
       runCount++
     }
@@ -354,11 +357,12 @@ export default function SimulationTimeline() {
         const won = roots.some(r => r.hasGoldWinner())
         if (won && !pulseBack) {
           let gy = CY
-          function findGold(b: Branch): boolean {
-            if (b.isGold && b.segDone && !b.dead && b.drawnPts.length > 0) { gy = b.drawnPts[b.drawnPts.length - 1].y; return true }
-            return b.children.some(findGold)
+          for (const b of roots) {
+            if (b.isGold && b.segDone && !b.dead && b.drawnPts.length > 0) {
+              gy = b.drawnPts[b.drawnPts.length - 1].y
+              break
+            }
           }
-          roots.some(findGold)
           pulseBack = new PulseBack(gy)
         }
         setTimeout(startRun, won ? 1400 : 500)
