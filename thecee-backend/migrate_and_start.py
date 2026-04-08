@@ -34,6 +34,14 @@ def run_migrations():
             ("simulations", "confidence_score", "FLOAT"),
             ("prototypes", "html_content", "TEXT"),
             ("prototypes", "funnel_graph_json", "TEXT"),
+            ("environments", "consumer_volume", "INTEGER DEFAULT 10000"),
+            ("environments", "growth_rate_per_month", "FLOAT DEFAULT 5.0"),
+            ("environments", "average_order_value", "FLOAT DEFAULT 999.0"),
+            ("environments", "price_sensitivity", "FLOAT DEFAULT 0.5"),
+            ("environments", "market_maturity", "FLOAT DEFAULT 0.3"),
+            ("environments", "scenario_type", "VARCHAR(50)"),
+            ("environments", "manual_params_json", "JSONB"),
+            ("environments", "trend_data_json", "JSONB"),
         ]:
             try:
                 conn.execute(

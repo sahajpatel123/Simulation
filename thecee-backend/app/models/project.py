@@ -1,7 +1,12 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.environment import Environment
 
 
 class Project(Base, TimestampMixin):
@@ -26,8 +31,11 @@ class Project(Base, TimestampMixin):
     simulations: Mapped[list["Simulation"]] = relationship(
         "Simulation", back_populates="project", cascade="all, delete-orphan"
     )
-    environments: Mapped[list["Environment"]] = relationship(
-        "Environment", back_populates="project", cascade="all, delete-orphan"
+    environment: Mapped["Environment | None"] = relationship(
+        "Environment",
+        back_populates="project",
+        uselist=False,
+        cascade="all, delete-orphan",
     )
     decisions: Mapped[list["Decision"]] = relationship(
         "Decision", back_populates="project", cascade="all, delete-orphan"

@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.core.deps import get_current_user, get_db
 from app.core.prompts import ASSUMPTION_EXTRACTION_PROMPT, PROTOTYPE_GENERATION_PROMPT
 from app.models.assumption import Assumption
+from app.models.environment import Environment
 from app.models.project import Project
 from app.models.prototype import Prototype
 from app.models.user import User
@@ -16,6 +17,13 @@ from app.schemas.assumption import (
     AssumptionExtractRequest,
     AssumptionListResponse,
     AssumptionOut,
+)
+from app.schemas.environment import (
+    EnvironmentCreate,
+    EnvironmentOut,
+    EnvironmentSummary,
+    ManualParams,
+    SCENARIO_PRESETS,
 )
 from app.schemas.project import ProjectCreate, ProjectListResponse, ProjectOut
 from app.schemas.prototype import FunnelEdge, FunnelGraph, FunnelNode, PrototypeOut
@@ -348,6 +356,122 @@ def get_prototype(
         html_content=prototype.html_content,
         funnel_graph=funnel_graph,
     )
+
+
+@router.post(
+    "/{project_id}/environments",
+    response_model=EnvironmentOut,
+    status_code=200,
+)
+def create_or_update_environment(
+    project_id: int,
+    payload: EnvironmentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if payload.mode.value == "SCENARIO" and payload.scenario_type:
+        preset = SCENARIO_PRESETS.get(payload.scenario_type.value)
+        effective = preset or ManualParams()
+        if payload.manual_params:
+            override = payload.manual_params.model_dump(exclude_none=True)
+            merged = effective.model_dump()
+            merged.update(override)
+            effective = ManualParams(**merged)
+    else:
+        effective = payload.manual_params or ManualParams()
+
+    existing = db.query(Environment).filter(Environment.project_id == project_id).first()
+
+    if existing:
+        existing.mode = payload.mode.value
+        existing.consumer_volume = effective.consumer_volume
+        existing.growth_rate_per_month = effective.growth_rate_per_month
+        existing.average_order_value = effective.average_order_value
+        existing.price_sensitivity = effective.price_sensitivity
+        existing.market_maturity = effective.market_maturity
+        existing.scenario_type = (
+            payload.scenario_type.value if payload.scenario_type else None
+        )
+        existing.manual_params_json = effective.model_dump()
+        env = existing
+    else:
+        env = Environment(
+            project_id=project_id,
+            mode=payload.mode.value,
+            consumer_volume=effective.consumer_volume,
+            growth_rate_per_month=effective.growth_rate_per_month,
+            average_order_value=effective.average_order_value,
+            price_sensitivity=effective.price_sensitivity,
+            market_maturity=effective.market_maturity,
+            scenario_type=(
+                payload.scenario_type.value if payload.scenario_type else None
+            ),
+            manual_params_json=effective.model_dump(),
+        )
+        db.add(env)
+
+    project.status = "ENVIRONMENT_SET"
+    db.commit()
+    db.refresh(env)
+    return EnvironmentOut.model_validate(env)
+
+
+@router.get(
+    "/{project_id}/environments",
+    response_model=EnvironmentOut,
+)
+def get_environment(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    env = db.query(Environment).filter(Environment.project_id == project_id).first()
+    if not env:
+        raise HTTPException(
+            status_code=404,
+            detail="No environment configured. Call POST /environments first.",
+        )
+    return EnvironmentOut.model_validate(env)
+
+
+@router.get(
+    "/{project_id}/environments/presets",
+    response_model=dict,
+)
+def get_scenario_presets(
+    project_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Returns all scenario preset configs so the frontend
+    can display them to the user before they choose.
+    """
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    return {name: preset.model_dump() for name, preset in SCENARIO_PRESETS.items()}
 
 
 @router.get("/{project_id}", response_model=ProjectOut)

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import decode_token
+from app.models.environment import Environment as EnvironmentModel
 from app.models.user import User
 
 security = HTTPBearer()
@@ -43,3 +44,23 @@ def get_current_user_optional(
     if not email:
         return None
     return db.query(User).filter(User.email == email).first()
+
+
+def require_environment(
+    project_id: int,
+    db: Session,
+) -> EnvironmentModel:
+    env = (
+        db.query(EnvironmentModel)
+        .filter(EnvironmentModel.project_id == project_id)
+        .first()
+    )
+    if not env:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Environment not configured. "
+                "POST /api/v1/projects/{id}/environments before running simulation."
+            ),
+        )
+    return env

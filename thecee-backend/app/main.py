@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.database import init_extensions
+from app.worker import celery_app as _celery_app
 
 
 @asynccontextmanager
@@ -32,6 +33,25 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
+
+
+@app.get("/celery/status")
+async def celery_status():
+    try:
+        result = _celery_app.control.inspect(timeout=2.0)
+        active_workers = result.active()
+        return {
+            "status": "configured",
+            "broker": settings.CELERY_BROKER_URL,
+            "workers_online": len(active_workers) if active_workers else 0,
+        }
+    except Exception:
+        return {
+            "status": "configured",
+            "broker": settings.CELERY_BROKER_URL,
+            "workers_online": 0,
+            "note": "Worker not running or Redis unreachable",
+        }
 
 
 @app.get("/")
