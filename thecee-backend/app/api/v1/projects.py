@@ -1,5 +1,6 @@
 import json
 import re
+from datetime import datetime, timezone
 
 from anthropic import Anthropic
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -7,11 +8,17 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import get_current_user, get_db
-from app.core.prompts import ASSUMPTION_EXTRACTION_PROMPT, PROTOTYPE_GENERATION_PROMPT
+from app.core.prompts import (
+    ASSUMPTION_EXTRACTION_PROMPT,
+    PREMORTEM_PROMPT,
+    PROTOTYPE_GENERATION_PROMPT,
+    build_simulation_summary,
+)
 from app.models.assumption import Assumption
 from app.models.environment import Environment
 from app.models.project import Project
 from app.models.prototype import Prototype
+from app.models.simulation import Simulation
 from app.models.user import User
 from app.schemas.assumption import (
     AssumptionExtractRequest,
@@ -26,6 +33,7 @@ from app.schemas.environment import (
     SCENARIO_PRESETS,
 )
 from app.schemas.project import ProjectCreate, ProjectListResponse, ProjectOut
+from app.schemas.premortem import FailureMode, PremortemOut, PremortemRequest
 from app.schemas.prototype import FunnelEdge, FunnelGraph, FunnelNode, PrototypeOut
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -355,6 +363,195 @@ def get_prototype(
         project_id=project_id,
         html_content=prototype.html_content,
         funnel_graph=funnel_graph,
+    )
+
+
+@router.post("/{project_id}/premortem", response_model=PremortemOut)
+def run_premortem(
+    project_id: int,
+    payload: PremortemRequest | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    description = (
+        payload.description_override if payload and payload.description_override else project.description
+    )
+    if not description or len(description.strip()) < 20:
+        raise HTTPException(
+            status_code=422,
+            detail="Project description too short for pre-mortem analysis",
+        )
+
+    assumptions = (
+        db.query(Assumption)
+        .filter(Assumption.project_id == project_id)
+        .order_by(Assumption.impact_score.desc())
+        .all()
+    )
+
+    latest_sim = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc())
+        .first()
+    )
+
+    assumptions_text = "\n".join(
+        f"- [{a.sensitivity}] {a.text} (impact: {a.impact_score}/10)" for a in assumptions
+    ) or "No assumptions extracted yet."
+
+    simulation_summary = build_simulation_summary(
+        latest_sim.results_json if latest_sim else None
+    )
+
+    try:
+        response = claude.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=2800,
+            system=(
+                "You are an elite startup failure analyst specialising in pre-mortem analysis. "
+                "You ALWAYS return valid JSON only. No markdown. No backticks. No explanation."
+            ),
+            messages=[
+                {
+                    "role": "user",
+                    "content": PREMORTEM_PROMPT.format(
+                        description=description,
+                        assumptions_text=assumptions_text,
+                        simulation_summary=simulation_summary,
+                    ),
+                }
+            ],
+        )
+
+        raw = response.content[0].text.strip()
+
+        if raw.startswith("```"):
+            raw = "\n".join(
+                line for line in raw.split("\n") if not line.strip().startswith("```")
+            )
+
+        json_match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if not json_match:
+            raise ValueError("No JSON object found in Claude response")
+
+        parsed = json.loads(json_match.group(0))
+        raw_modes = parsed.get("failure_modes", [])
+
+        if not isinstance(raw_modes, list) or len(raw_modes) == 0:
+            raise ValueError("Claude returned empty failure_modes list")
+
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=500,
+            detail="Claude returned malformed JSON - retry the request",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Pre-mortem analysis failed: {str(exc)}",
+        )
+
+    failure_modes: list[FailureMode] = []
+    for item in raw_modes:
+        try:
+            fm = FailureMode(
+                title=str(item.get("title", item.get("failure_mode", "Unknown failure"))).strip(),
+                probability=float(item.get("probability", 0.5)),
+                severity=str(item.get("severity", "MEDIUM")),
+                trigger_condition=str(item.get("trigger_condition", "")).strip(),
+                linked_assumption_texts=[
+                    str(a).strip()
+                    for a in item.get(
+                        "linked_assumption_texts", item.get("linked_assumptions", [])
+                    )
+                ],
+                intervention=str(
+                    item.get("intervention", item.get("recommended_intervention", ""))
+                ).strip(),
+                intervention_impact=str(
+                    item.get("intervention_impact", item.get("expected_impact", ""))
+                ).strip(),
+                earliest_signal=str(item.get("earliest_signal", "")).strip(),
+            )
+            if not fm.linked_assumption_texts:
+                continue
+            failure_modes.append(fm)
+        except Exception:
+            continue
+
+    if not failure_modes:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not parse any valid failure modes from Claude response",
+        )
+
+    failure_modes.sort(key=lambda f: f.probability, reverse=True)
+
+    now = datetime.now(timezone.utc).isoformat()
+    premortem_data = {
+        "failure_modes": [fm.model_dump() for fm in failure_modes],
+        "generated_at": now,
+        "simulation_id": latest_sim.id if latest_sim else None,
+        "assumptions_count": len(assumptions),
+    }
+
+    project.premortem_json = premortem_data
+    project.status = "PREMORTEM_COMPLETE"
+    db.commit()
+
+    critical_count = sum(1 for fm in failure_modes if fm.severity == "CRITICAL")
+
+    return PremortemOut(
+        project_id=project_id,
+        failure_modes=failure_modes,
+        total=len(failure_modes),
+        critical_count=critical_count,
+        generated_at=now,
+    )
+
+
+@router.get("/{project_id}/premortem", response_model=PremortemOut)
+def get_premortem(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    data = getattr(project, "premortem_json", None)
+    if not data:
+        raise HTTPException(
+            status_code=404,
+            detail="No pre-mortem generated yet - call POST /premortem first",
+        )
+
+    failure_modes = [FailureMode(**fm) for fm in data.get("failure_modes", [])]
+    critical_count = sum(1 for fm in failure_modes if fm.severity == "CRITICAL")
+
+    return PremortemOut(
+        project_id=project_id,
+        failure_modes=failure_modes,
+        total=len(failure_modes),
+        critical_count=critical_count,
+        generated_at=data.get("generated_at", ""),
     )
 
 

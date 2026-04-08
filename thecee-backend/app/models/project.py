@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, Index, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -23,6 +24,7 @@ class Project(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="DRAFT")
     prototype_html: Mapped[str | None] = mapped_column(Text)
     funnel_graph_json: Mapped[str | None] = mapped_column(Text)
+    premortem_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     user: Mapped["User"] = relationship("User", back_populates="projects")
     assumptions: Mapped[list["Assumption"]] = relationship(
