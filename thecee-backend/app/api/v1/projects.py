@@ -35,6 +35,12 @@ from app.schemas.environment import (
 from app.schemas.project import ProjectCreate, ProjectListResponse, ProjectOut
 from app.schemas.premortem import FailureMode, PremortemOut, PremortemRequest
 from app.schemas.prototype import FunnelEdge, FunnelGraph, FunnelNode, PrototypeOut
+from app.schemas.stress_test import (
+    AssumptionStressResult,
+    StressTestOut,
+    StressTestStatusOut,
+)
+from app.tasks.stress_test_tasks import run_assumption_stress_test
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -553,6 +559,128 @@ def get_premortem(
         critical_count=critical_count,
         generated_at=data.get("generated_at", ""),
     )
+
+
+@router.post("/{project_id}/stress-test", response_model=StressTestStatusOut)
+def start_stress_test(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    environment = db.query(Environment).filter(Environment.project_id == project_id).first()
+    if not environment:
+        raise HTTPException(
+            status_code=400,
+            detail="Environment not configured. POST /environments first.",
+        )
+
+    critical_count = (
+        db.query(Assumption)
+        .filter(
+            Assumption.project_id == project_id,
+            Assumption.sensitivity.in_(["CRITICAL", "HIGH"]),
+        )
+        .count()
+    )
+    if critical_count == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="No CRITICAL or HIGH assumptions found. Run assumption extraction first.",
+        )
+
+    task = run_assumption_stress_test.delay(project_id)
+    return StressTestStatusOut(
+        project_id=project_id,
+        status="PENDING",
+        task_id=task.id,
+        result=None,
+    )
+
+
+@router.get("/{project_id}/stress-test", response_model=StressTestStatusOut)
+def get_stress_test(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    raw = getattr(project, "stress_test_json", None)
+    if not raw:
+        raise HTTPException(
+            status_code=404,
+            detail="No stress test run yet — call POST /stress-test first",
+        )
+
+    status_value = raw.get("status", "UNKNOWN")
+    task_id = raw.get("task_id")
+
+    if status_value != "COMPLETED":
+        return StressTestStatusOut(
+            project_id=project_id,
+            status=status_value,
+            task_id=task_id,
+            result=None,
+        )
+
+    matrix = [AssumptionStressResult(**row) for row in raw.get("sensitivity_matrix", [])]
+    shots = [AssumptionStressResult(**row) for row in raw.get("kill_shots", [])]
+
+    result = StressTestOut(
+        project_id=project_id,
+        status="COMPLETED",
+        sensitivity_matrix=matrix,
+        kill_shots=shots,
+        overall_risk_level=raw.get("overall_risk_level", "UNKNOWN"),
+        baseline_conversion=raw.get("baseline_conversion", 0.0),
+        assumptions_tested=raw.get("assumptions_tested", 0),
+        generated_at=raw.get("generated_at", ""),
+    )
+
+    return StressTestStatusOut(
+        project_id=project_id,
+        status="COMPLETED",
+        task_id=task_id,
+        result=result,
+    )
+
+
+@router.delete("/{project_id}/stress-test")
+def clear_stress_test(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    from sqlalchemy import text as sql_text
+
+    db.execute(
+        sql_text("UPDATE projects SET stress_test_json = NULL WHERE id = :id"),
+        {"id": project_id},
+    )
+    db.commit()
+    return {"message": "Stress test result cleared"}
 
 
 @router.post(

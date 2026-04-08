@@ -8,6 +8,7 @@ celery_app = Celery(
     backend=settings.CELERY_RESULT_BACKEND,
     include=[
         "app.tasks.simulation_tasks",
+        "app.tasks.stress_test_tasks",
     ],
 )
 
