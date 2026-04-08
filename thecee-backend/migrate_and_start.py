@@ -32,6 +32,7 @@ def run_migrations():
             ("projects", "funnel_graph_json", "TEXT"),
             ("projects", "premortem_json", "JSONB"),
             ("projects", "stress_test_json", "JSONB"),
+            ("projects", "interventions_json", "JSONB"),
             ("simulations", "results_json", "TEXT"),
             ("simulations", "confidence_score", "FLOAT"),
             ("simulations", "task_id", "VARCHAR(255)"),

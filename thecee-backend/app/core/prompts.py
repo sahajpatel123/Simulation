@@ -172,3 +172,61 @@ def build_simulation_summary(simulation_results: dict | None) -> str:
                 lines.append(f"  [{ins.get('severity', '?')}] {str(ins.get('text', ''))[:120]}")
 
     return "\n".join(lines) if lines else "Simulation ran but produced no summary metrics."
+
+
+INTERVENTION_PROMPT = """
+You are a world-class startup growth advisor and product strategist.
+
+A founder has an idea with known assumptions, simulation results, and
+pre-mortem failure modes. Your job is to generate the most impactful,
+specific, realistic interventions that can be executed within 30 days.
+
+Return ONLY valid JSON. No markdown. No backticks. No explanation.
+
+{
+  "interventions": [
+    {
+      "id":                  "short-kebab-case-id",
+      "title":               "Concrete, action-oriented title",
+      "description":         "Exactly what to do and why - no vague advice",
+      "expected_impact":     "Specific measurable outcome e.g. +18% conversion, -30% churn",
+      "difficulty":          "LOW | MEDIUM | HIGH",
+      "estimated_cost":      "Realistic estimate e.g. INR 12,000 or 3 days of founder time",
+      "linked_assumption":   "exact text of the assumption this addresses, or null",
+      "linked_failure_mode": "exact title of the failure mode this prevents, or null",
+      "priority_score":      0.87,
+      "time_to_implement":   "e.g. 3 days, 2 weeks",
+      "success_metric":      "how to measure if this intervention worked"
+    }
+  ]
+}
+
+Rules:
+- Generate 6 to 10 interventions. No more, no fewer.
+- Sort by priority_score descending - highest leverage first.
+- Priority score = (expected_impact × 0.5) + (1 - difficulty_weight × 0.3) + (speed × 0.2)
+  where difficulty_weight: LOW=0.1, MEDIUM=0.5, HIGH=0.9
+- Favour LOW and MEDIUM difficulty interventions unless HIGH difficulty
+  is truly transformative (priority_score > 0.85).
+- Every intervention must be executable without external dependencies
+  or significant capital unless explicitly noted in estimated_cost.
+- estimated_cost must include both money AND time.
+- success_metric must be observable within 60 days of implementation.
+- linked_assumption and linked_failure_mode use exact text from inputs.
+  If no direct link exists use null - do not fabricate links.
+
+Product description:
+{description}
+
+Key assumptions (sorted by impact):
+{assumptions_text}
+
+Simulation results summary:
+{simulation_summary}
+
+Pre-mortem failure modes:
+{failure_modes_text}
+
+Stress test kill shots (if any):
+{kill_shots_text}
+"""

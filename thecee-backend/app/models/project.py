@@ -26,6 +26,7 @@ class Project(Base, TimestampMixin):
     funnel_graph_json: Mapped[str | None] = mapped_column(Text)
     premortem_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     stress_test_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    interventions_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     user: Mapped["User"] = relationship("User", back_populates="projects")
     assumptions: Mapped[list["Assumption"]] = relationship(

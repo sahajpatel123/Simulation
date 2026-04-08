@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.deps import get_current_user, get_db
 from app.core.prompts import (
     ASSUMPTION_EXTRACTION_PROMPT,
+    INTERVENTION_PROMPT,
     PREMORTEM_PROMPT,
     PROTOTYPE_GENERATION_PROMPT,
     build_simulation_summary,
@@ -32,6 +33,7 @@ from app.schemas.environment import (
     ManualParams,
     SCENARIO_PRESETS,
 )
+from app.schemas.intervention import Intervention, InterventionOut, InterventionRequest
 from app.schemas.project import ProjectCreate, ProjectListResponse, ProjectOut
 from app.schemas.premortem import FailureMode, PremortemOut, PremortemRequest
 from app.schemas.prototype import FunnelEdge, FunnelGraph, FunnelNode, PrototypeOut
@@ -681,6 +683,238 @@ def clear_stress_test(
     )
     db.commit()
     return {"message": "Stress test result cleared"}
+
+
+@router.post("/{project_id}/interventions", response_model=InterventionOut)
+def generate_interventions(
+    project_id: int,
+    payload: InterventionRequest | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    description = (
+        payload.description_override if payload and payload.description_override else project.description
+    )
+    if not description or len(description.strip()) < 20:
+        raise HTTPException(
+            status_code=422,
+            detail="Project description too short to generate interventions",
+        )
+
+    assumptions = (
+        db.query(Assumption)
+        .filter(Assumption.project_id == project_id)
+        .order_by(Assumption.impact_score.desc())
+        .all()
+    )
+
+    latest_sim = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc())
+        .first()
+    )
+
+    premortem_data = getattr(project, "premortem_json", None)
+    stress_test_data = getattr(project, "stress_test_json", None)
+
+    context_used = {
+        "assumptions": len(assumptions) > 0,
+        "simulation": latest_sim is not None,
+        "premortem": bool(premortem_data and premortem_data.get("failure_modes")),
+        "stress_test": bool(stress_test_data and stress_test_data.get("kill_shots")),
+    }
+
+    assumptions_text = (
+        "\n".join(
+            f"- [{a.sensitivity}] {a.text} (impact: {a.impact_score}/10)"
+            for a in assumptions
+        )
+        if assumptions
+        else "No assumptions extracted yet — interventions will be based on description only."
+    )
+
+    simulation_summary = build_simulation_summary(
+        latest_sim.results_json if latest_sim else None
+    )
+
+    failure_modes_text = "No pre-mortem data available."
+    if premortem_data and premortem_data.get("failure_modes"):
+        fm_lines = [
+            f"- [{fm.get('severity', '?')}] {fm.get('title', fm.get('failure_mode', '?'))}: "
+            f"{str(fm.get('trigger_condition', ''))[:100]}"
+            for fm in premortem_data["failure_modes"][:6]
+        ]
+        failure_modes_text = "\n".join(fm_lines)
+
+    kill_shots_text = "No stress test data available."
+    if stress_test_data and stress_test_data.get("kill_shots"):
+        ks_lines = [
+            f"- {str(ks.get('assumption_text', ''))[:80]} "
+            f"(stressed conversion drops to {float(ks.get('stressed_conversion', 0)):.1%})"
+            for ks in stress_test_data["kill_shots"][:4]
+        ]
+        kill_shots_text = "\n".join(ks_lines) if ks_lines else "No kill shots identified."
+
+    try:
+        response = claude.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=3200,
+            system=(
+                "You are an elite startup growth advisor. "
+                "You ALWAYS return valid JSON only. No markdown. No backticks. No explanation. "
+                "Every intervention you suggest is specific, executable, and tied to evidence."
+            ),
+            messages=[
+                {
+                    "role": "user",
+                    "content": INTERVENTION_PROMPT.format(
+                        description=description,
+                        assumptions_text=assumptions_text,
+                        simulation_summary=simulation_summary,
+                        failure_modes_text=failure_modes_text,
+                        kill_shots_text=kill_shots_text,
+                    ),
+                }
+            ],
+        )
+
+        raw = response.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = "\n".join(
+                line for line in raw.split("\n") if not line.strip().startswith("```")
+            )
+
+        json_match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if not json_match:
+            raise ValueError("No JSON object found in Claude response")
+
+        parsed = json.loads(json_match.group(0))
+        raw_items = parsed.get("interventions", [])
+        if not isinstance(raw_items, list) or len(raw_items) == 0:
+            raise ValueError("Claude returned empty interventions list")
+
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=500,
+            detail="Claude returned malformed JSON — retry the request",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Intervention generation failed: {str(exc)}",
+        )
+
+    interventions: list[Intervention] = []
+    for idx, item in enumerate(raw_items):
+        try:
+            intervention = Intervention(
+                id=str(item.get("id", f"int-{idx + 1:02d}")).strip()[:50],
+                title=str(item.get("title", "")).strip(),
+                description=str(item.get("description", "")).strip(),
+                expected_impact=str(item.get("expected_impact", "")).strip(),
+                difficulty=str(item.get("difficulty", "MEDIUM")),
+                estimated_cost=str(item.get("estimated_cost", "Unknown")).strip(),
+                linked_assumption=item.get("linked_assumption") or None,
+                linked_failure_mode=item.get("linked_failure_mode") or None,
+                priority_score=float(item.get("priority_score", 0.5)),
+                time_to_implement=str(item.get("time_to_implement", "Unknown")).strip(),
+                success_metric=str(item.get("success_metric", "")).strip(),
+            )
+            interventions.append(intervention)
+        except Exception:
+            continue
+
+    if not interventions:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not parse any valid interventions from Claude response",
+        )
+
+    interventions.sort(key=lambda item: item.priority_score, reverse=True)
+    max_n = payload.max_interventions if payload else 10
+    interventions = interventions[:max_n]
+
+    quick_wins = [
+        item for item in interventions if item.difficulty == "LOW" and item.priority_score > 0.70
+    ]
+
+    now = datetime.now(timezone.utc).isoformat()
+    interventions_data = {
+        "interventions": [iv.model_dump() for iv in interventions],
+        "quick_wins": [qw.model_dump() for qw in quick_wins],
+        "generated_at": now,
+        "context_used": context_used,
+        "simulation_id": latest_sim.id if latest_sim else None,
+    }
+
+    from sqlalchemy import text as sql_text
+
+    try:
+        db.execute(
+            sql_text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS interventions_json JSONB;")
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+
+    project.interventions_json = interventions_data
+    project.status = "INTERVENTIONS_READY"
+    db.commit()
+
+    return InterventionOut(
+        project_id=project_id,
+        interventions=interventions,
+        total=len(interventions),
+        quick_wins=quick_wins,
+        generated_at=now,
+        context_used=context_used,
+    )
+
+
+@router.get("/{project_id}/interventions", response_model=InterventionOut)
+def get_interventions(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    data = getattr(project, "interventions_json", None)
+    if not data:
+        raise HTTPException(
+            status_code=404,
+            detail="No interventions generated yet — call POST /interventions first",
+        )
+
+    interventions = [Intervention(**item) for item in data.get("interventions", [])]
+    quick_wins = [Intervention(**item) for item in data.get("quick_wins", [])]
+
+    return InterventionOut(
+        project_id=project_id,
+        interventions=interventions,
+        total=len(interventions),
+        quick_wins=quick_wins,
+        generated_at=data.get("generated_at", ""),
+        context_used=data.get("context_used", {}),
+    )
 
 
 @router.post(
