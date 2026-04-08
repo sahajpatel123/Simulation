@@ -13,6 +13,7 @@ from app.models.assumption import Assumption
 from app.models.environment import Environment
 from app.models.project import Project
 from app.models.simulation import Simulation
+from app.simulation.aggregation import ResultsAggregator
 from app.simulation.funnel import FunnelExecutionEngine, FunnelResult
 from app.simulation.profiles import AgentProfileGenerator
 from app.worker import celery_app
@@ -216,11 +217,18 @@ def run_full_simulation(self, simulation_id: int) -> dict:
             sim.consumer_volume,
         )
 
-        results_dict = _serialise_result(funnel_result)
+        aggregator = ResultsAggregator()
+        agg_result = aggregator.aggregate(
+            results=[funnel_result],
+            base_price=float(env_params.get("average_order_value", 999.0)),
+            price_sensitivity=float(env_params.get("price_sensitivity", 0.55)),
+        )
+        results_dict = aggregator.to_dict(agg_result)
+        results_dict["raw_funnel"] = _serialise_result(funnel_result)
 
         sim.status = "COMPLETED"
         sim.results_json = results_dict
-        sim.confidence_score = funnel_result.conversion_rate
+        sim.confidence_score = float(agg_result.confidence_score) / 100.0
         sim.updated_at = _utcnow()
 
         project.status = "SIMULATION_COMPLETE"
