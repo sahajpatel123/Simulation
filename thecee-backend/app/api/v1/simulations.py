@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -132,6 +133,60 @@ def get_simulation_results(
     )
 
 
+@router.get("/{simulation_id}/progress")
+def get_simulation_progress(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    agents_processed = 0
+    if sim.results_json and sim.status == "COMPLETED":
+        agents_processed = sim.results_json.get("total_agents", 0)
+
+    elapsed = 0.0
+    if sim.updated_at and sim.created_at:
+        elapsed = (sim.updated_at - sim.created_at).total_seconds()
+
+    pct_map = {"QUEUED": 0, "RUNNING": 50, "COMPLETED": 100, "FAILED": 0}
+    pct = pct_map.get(sim.status, 0)
+
+    if sim.status == "RUNNING" and sim.task_id:
+        try:
+            from app.worker import celery_app
+
+            task_result = celery_app.AsyncResult(sim.task_id)
+            if task_result.state == "PROGRESS":
+                meta = task_result.info or {}
+                pct = meta.get("pct", 50)
+        except Exception:
+            pass
+
+    return {
+        "simulation_id": sim.id,
+        "status": sim.status,
+        "pct": pct,
+        "agents_processed": agents_processed,
+        "agents_total": sim.consumer_volume,
+        "elapsed_seconds": round(elapsed, 1),
+        "task_id": sim.task_id,
+        "error": sim.error_message,
+        "results": sim.results_json if sim.status == "COMPLETED" else None,
+    }
+
+
+@router.get("/ws/info")
+def websocket_info():
+    from app.core.websocket import ws_manager
+
+    return {
+        "active_connections": ws_manager.connection_count,
+        "protocol": "ws",
+        "endpoint": "/api/v1/ws/simulation/{simulation_id}?token=<jwt>",
+    }
+
+
 @router.get("/project/{project_id}", response_model=list[SimulationStatusOut])
 def list_project_simulations(
     project_id: int,
@@ -169,4 +224,3 @@ def _get_owned_simulation(
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
     return sim
-

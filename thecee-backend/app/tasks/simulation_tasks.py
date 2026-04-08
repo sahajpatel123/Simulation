@@ -8,6 +8,7 @@ from celery import Task
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
+from app.core.websocket import sync_broadcast
 from app.models.assumption import Assumption
 from app.models.environment import Environment
 from app.models.project import Project
@@ -43,6 +44,7 @@ def _utcnow() -> datetime:
 
 
 def _mark_failed(db: Session, sim: Simulation, exc: Exception) -> None:
+    sync_broadcast(sim.id, "FAILED", "Error", 0, extra={"error": str(exc)[:200]})
     try:
         tb = traceback.format_exc()
         msg = f"{type(exc).__name__}: {str(exc)}\n{tb}"
@@ -120,10 +122,8 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         sim.updated_at = _utcnow()
         self.db.commit()
 
-        self.update_state(
-            state="PROGRESS",
-            meta={"stage": "Loading project data", "pct": 5},
-        )
+        self.update_state(state="PROGRESS", meta={"stage": "Loading project data", "pct": 5})
+        sync_broadcast(simulation_id, "RUNNING", "Loading project data", 5)
 
         project = self.db.query(Project).filter(Project.id == sim.project_id).first()
         if not project:
@@ -170,10 +170,8 @@ def run_full_simulation(self, simulation_id: int) -> dict:
             f"assumptions={len(assumption_dicts)} volume={sim.consumer_volume}"
         )
 
-        self.update_state(
-            state="PROGRESS",
-            meta={"stage": "Generating agent population", "pct": 15},
-        )
+        self.update_state(state="PROGRESS", meta={"stage": "Generating agent population", "pct": 15})
+        sync_broadcast(simulation_id, "RUNNING", "Generating agent population", 15)
 
         generator = AgentProfileGenerator()
         agents = generator.generate_population(
@@ -185,10 +183,8 @@ def run_full_simulation(self, simulation_id: int) -> dict:
 
         logger.info(f"[Simulation] Population generated - n={len(agents)}")
 
-        self.update_state(
-            state="PROGRESS",
-            meta={"stage": "Running funnel simulation", "pct": 25},
-        )
+        self.update_state(state="PROGRESS", meta={"stage": "Running funnel simulation", "pct": 25})
+        sync_broadcast(simulation_id, "RUNNING", "Running funnel simulation", 25, 0, sim.consumer_volume)
 
         engine = FunnelExecutionEngine(
             num_workers=1,
@@ -210,9 +206,14 @@ def run_full_simulation(self, simulation_id: int) -> dict:
             f"wall={funnel_result.wall_time_seconds:.1f}s"
         )
 
-        self.update_state(
-            state="PROGRESS",
-            meta={"stage": "Persisting results", "pct": 90},
+        self.update_state(state="PROGRESS", meta={"stage": "Persisting results", "pct": 90})
+        sync_broadcast(
+            simulation_id,
+            "RUNNING",
+            "Persisting results",
+            90,
+            funnel_result.total_agents,
+            sim.consumer_volume,
         )
 
         results_dict = _serialise_result(funnel_result)
@@ -226,6 +227,15 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         project.updated_at = _utcnow()
 
         self.db.commit()
+        sync_broadcast(
+            simulation_id,
+            "COMPLETED",
+            "Done",
+            100,
+            funnel_result.total_agents,
+            sim.consumer_volume,
+            extra={"conversion_rate": funnel_result.conversion_rate},
+        )
 
         logger.info(f"[Simulation] Persisted - simulation_id={simulation_id}")
 
