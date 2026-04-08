@@ -8,6 +8,7 @@ billiard==4.2.4
 celery==5.6.3
 certifi==2026.2.25
 cffi==2.0.0
+charset-normalizer==3.4.7
 click==8.3.2
 click-didyoumean==0.3.1
 click-plugins==1.1.1.2
@@ -33,6 +34,7 @@ openai==2.30.0
 packaging==26.0
 passlib==1.7.4
 pgvector==0.4.2
+pillow==12.2.0
 prometheus_client==0.24.1
 prompt_toolkit==3.0.52
 psycopg2-binary==2.9.11
@@ -48,6 +50,7 @@ python-multipart==0.0.24
 pytz==2026.1.post1
 PyYAML==6.0.3
 redis==6.4.0
+reportlab==4.4.10
 rsa==4.9.1
 scipy==1.17.1
 setuptools==82.0.1
