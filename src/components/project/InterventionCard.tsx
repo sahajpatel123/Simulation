@@ -8,7 +8,8 @@ const effortConfig = {
 }
 
 export default function InterventionCard({ intervention, rank }: { intervention: Intervention; rank: number }) {
-  const effort = effortConfig[intervention.effortLevel]
+  const effortKey = intervention.effortLevel ?? intervention.difficulty ?? 'MEDIUM'
+  const effort = effortConfig[effortKey]
   const EffortIcon = effort.icon
   return (
     <div className="glass rounded-xl p-5 glass-hover">

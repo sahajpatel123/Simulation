@@ -1,3 +1,23 @@
+/*
+  MIGRATION STATUS — Step 33
+  Replace each mock export below with the corresponding
+  React Query hook as pages are wired to the real API.
+
+  Completed:
+    - getAllProjects()       → useProjects()
+    - getProject(id)         → useProject(id)
+
+  Pending (replace these as you wire each page):
+    - getAssumptions(id)     → useAssumptions(id)
+    - getSimulation(id)      → useSimulationResults(id)
+    - getPremortem(id)       → usePremortem(id)
+    - getInterventions(id)   → useInterventions(id)
+    - getCompetitive(id)     → useCompetitiveAnalysis(id)
+    - getOutcomes(id)        → useOutcomes(id)
+
+  Once all pages are wired, delete this file entirely.
+*/
+
 import type {
   Project,
   Assumption,

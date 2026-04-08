@@ -1,125 +1,286 @@
+/* Backend-aligned status values */
 export enum SimulationStatus {
-  DRAFT = "DRAFT",
-  ASSUMPTIONS_EXTRACTED = "ASSUMPTIONS_EXTRACTED",
-  PROTOTYPE_GENERATED = "PROTOTYPE_GENERATED",
-  ENVIRONMENT_SET = "ENVIRONMENT_SET",
-  RUNNING = "RUNNING",
-  COMPLETED = "COMPLETED",
-  FAILED = "FAILED",
+  DRAFT = 'DRAFT',
+  ASSUMPTIONS_EXTRACTED = 'ASSUMPTIONS_EXTRACTED',
+  PROTOTYPE_GENERATED = 'PROTOTYPE_GENERATED',
+  ENVIRONMENT_SET = 'ENVIRONMENT_SET',
+  QUEUED = 'QUEUED',
+  RUNNING = 'RUNNING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+  PREMORTEM_COMPLETE = 'PREMORTEM_COMPLETE',
+  INTERVENTIONS_READY = 'INTERVENTIONS_READY',
+  COMPETITIVE_ANALYSIS_COMPLETE = 'COMPETITIVE_ANALYSIS_COMPLETE',
+  OUTCOME_RECORDED = 'OUTCOME_RECORDED',
 }
 
 export enum EnvironmentMode {
-  MANUAL = "MANUAL",
-  TREND = "TREND",
-  SCENARIO = "SCENARIO",
+  MANUAL = 'MANUAL',
+  TREND = 'TREND',
+  SCENARIO = 'SCENARIO',
 }
 
 export enum AssumptionSensitivity {
-  LOW = "LOW",
-  MEDIUM = "MEDIUM",
-  HIGH = "HIGH",
-  CRITICAL = "CRITICAL",
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+  CRITICAL = 'CRITICAL',
 }
 
-export type EffortLevel = "LOW" | "MEDIUM" | "HIGH"
-export type FunnelStage = "ARRIVE" | "BROWSE" | "CONSIDER" | "DECIDE" | "PURCHASE" | "ABANDON"
-
-export interface FunnelNode {
-  id: string
-  label: string
-  stage: FunnelStage
-  expectedTimeSeconds?: number
-}
-
-export interface FunnelEdge {
-  from: string
-  to: string
-  probability: number
-  label?: string
-}
-
-export interface FunnelGraph {
-  nodes: FunnelNode[]
-  edges: FunnelEdge[]
-}
-
+/* ── Project ── */
 export interface Project {
-  id: string
-  userId: string
+  id: number | string
   title: string
   description: string
-  createdAt: Date
-  updatedAt: Date
-  status: SimulationStatus
+  status: string
+  created_at?: string
+  updated_at?: string
+  /* legacy compatibility */
+  userId?: string
+  createdAt?: Date
+  updatedAt?: Date
   prototypeHtml?: string
-  funnelGraph?: FunnelGraph
 }
 
+/* ── Assumption ── */
 export interface Assumption {
-  id: string
+  id: number | string
+  project_id?: number
   text: string
-  category: string
-  sensitivity: AssumptionSensitivity
+  sensitivity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'
+  impact_score?: number
   impactScore: number
-  isHidden: boolean
+  category: string
+  created_at?: string
+  is_hidden?: boolean
+  isHidden?: boolean
 }
 
+/* ── Environment ── */
 export interface Environment {
+  id?: number
+  project_id?: number
   mode: EnvironmentMode
-  consumerVolume: number
+  consumer_volume?: number
+  growth_rate_per_month?: number
+  average_order_value?: number
+  price_sensitivity?: number
+  market_maturity?: number
+  scenario_type?: string | null
+  manual_params_json?: Record<string, number> | null
+  created_at?: string
+  updated_at?: string
+  /* legacy compatibility */
+  consumerVolume?: number
   growthRatePerMonth?: number
   averageOrderValue?: number
   manualParams?: Record<string, number>
   scenarioType?: string
 }
 
-export interface ConsumerProfile {
-  id: string
-  demographics: {
-    age: number
-    income: number
-    location: string
-    occupation?: string
-  }
-  priceSensitivity: number
-  intentLevel: number
-  trustThreshold: number
-  socialInfluence: number
+/* ── Simulation ── */
+export interface SimulationStatusResponse {
+  id?: number
+  project_id?: number
+  status?: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+  consumer_volume?: number
+  task_id?: string | null
+  error_message?: string | null
+  created_at?: string
+  updated_at?: string
 }
 
-export interface Intervention {
-  id: string
-  title: string
-  description: string
-  probabilityShift: number
-  effortLevel: EffortLevel
-  estimatedCost?: number
-}
-
-export interface SimulationResult {
+export interface SimulationResult extends SimulationStatusResponse {
+  results?: SimulationResultData | null
+  /* legacy compatibility fields still used by mock-based pages */
   simulationId: string
-  projectId: string
-  runAt: Date
+  projectId: string | number
+  runAt: Date | string
   consumerVolume: number
   conversionRate: number
   averageOrderValue: number
   projectedRevenue: number
   confidenceInterval: { low: number; high: number }
-  funnelDropOff: Array<{ stage: string; dropOffPercentage: number; reason?: string }>
+  funnelDropOff: Array<{ stage: string; dropOffPercentage: number }>
   sensitivityAnalysis: Record<string, number>
   topInterventions: Intervention[]
   overallConfidence: number
 }
 
-export interface OutcomeRecord {
-  simulationId: string
-  actualConversionRate: number
-  actualRevenue: number
-  actualDropOff: Array<{ stage: string; dropOffPercentage: number }>
-  notes?: string
-  recordedAt: Date
+export interface SimulationResultData {
+  mean_conversion_rate?: number
+  conversion_rate?: number
+  std_dev?: number
+  ci_90?: { low: number; high: number }
+  ci_95?: { low: number; high: number }
+  total_agents?: number
+  total_runs?: number
+  mean_revenue?: number
+  revenue_projection?: number
+  confidence_score?: number
+  worst_drop_off_stage?: string
+  optimal_price?: number
+  optimal_conversion?: number
+  stage_aggregations?: StageMetric[]
+  stage_metrics?: StageMetric[]
+  price_curve?: PriceCurvePoint[]
+  demographic_segments?: DemographicSegment[]
+  insights?: Insight[]
 }
 
+export interface StageMetric {
+  state: string
+  agent_count?: number
+  entry_rate?: number
+  drop_off_rate?: number
+  avg_time_seconds?: number
+  mean_entry_rate?: number
+  mean_drop_off_rate?: number
+  mean_time_seconds?: number
+}
+
+export interface PriceCurvePoint {
+  price: number
+  conversion_rate: number
+  revenue_per_1000_visitors: number
+  is_optimal: boolean
+}
+
+export interface DemographicSegment {
+  name: string
+  conversion_rate: number
+  count_fraction: number
+  revenue_index: number
+}
+
+export interface Insight {
+  severity: 'CRITICAL' | 'WARNING' | 'INFO'
+  category: string
+  text: string
+}
+
+/* ── Premortem ── */
+export interface FailureMode {
+  title: string
+  probability: number
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM'
+  trigger_condition: string
+  linked_assumption_texts: string[]
+  intervention: string
+  intervention_impact: string
+  earliest_signal: string
+}
+
+export interface Premortem {
+  project_id: number
+  failure_modes: FailureMode[]
+  total: number
+  critical_count: number
+  generated_at: string
+}
+
+/* ── Intervention ── */
+export interface Intervention {
+  id: string
+  title: string
+  description: string
+  expected_impact?: string
+  probabilityShift?: number
+  difficulty?: 'LOW' | 'MEDIUM' | 'HIGH'
+  effortLevel?: 'LOW' | 'MEDIUM' | 'HIGH'
+  estimated_cost?: string
+  linked_assumption?: string | null
+  linked_failure_mode?: string | null
+  priority_score?: number
+  time_to_implement?: string
+  success_metric?: string
+}
+
+export interface Interventions {
+  project_id: number
+  interventions: Intervention[]
+  total: number
+  quick_wins: Intervention[]
+  generated_at: string
+  context_used: Record<string, boolean>
+}
+
+/* ── Competitive ── */
+export interface Competitor {
+  name: string
+  category: string
+  features: string[]
+  pricing: string
+  positioning: string
+  target_segment: string
+  strengths: string[]
+  weaknesses: string[]
+  india_presence: string
+  threat_level: string
+}
+
+export interface CompetitiveAnalysis {
+  project_id: number
+  competitors: Competitor[]
+  gap_analysis: GapAnalysis
+  market_map: MarketMap
+  overall_competitive_position: string
+  position_rationale: string
+  direct_competitor_count: number
+  high_threat_count: number
+  generated_at: string
+}
+
+export interface GapAnalysis {
+  our_wins: string[]
+  our_losses: string[]
+  underserved_segments: string[]
+  key_differentiators: string[]
+  recommended_counter_moves: string[]
+}
+
+export interface MarketMap {
+  most_dangerous_competitor: string
+  easiest_to_displace: string
+  most_similar_to_us: string
+}
+
+/* ── Outcome ── */
+export interface OutcomeRecord {
+  id?: number
+  project_id?: number
+  actual_conversion_rate?: number
+  actual_mrr?: number
+  actual_cac?: number
+  actual_churn_rate?: number
+  days_since_launch?: number
+  notes?: string | null
+  predicted_conversion_rate?: number | null
+  calibration_score?: number
+  recorded_at?: string | Date
+  variance?: {
+    conversion: number | null
+    mrr: number | null
+  }
+  /* legacy compatibility */
+  simulationId?: string
+  actualConversionRate?: number
+  actualRevenue?: number
+  actualDropOff?: Array<{ stage: string; dropOffPercentage: number }>
+}
+
+/* ── Report preview ── */
+export interface ReportPreview {
+  project_id: number
+  title: string
+  sections: Record<string, boolean>
+  simulation_runs: number
+  assumptions_count: number
+  outcomes_count: number
+  recommended_action: string
+}
+
+/* ── Legacy API helpers ── */
 export interface SimulationProgress {
   simulationId: string
   status: SimulationStatus
@@ -127,11 +288,4 @@ export interface SimulationProgress {
   totalAgents: number
   currentStage: string
   estimatedTimeRemaining: number
-}
-
-export interface ApiResponse<T> {
-  success: boolean
-  data?: T
-  error?: string
-  message?: string
 }
