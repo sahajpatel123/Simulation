@@ -1,6 +1,7 @@
-from datetime import datetime
+from __future__ import annotations
 
-from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -14,16 +15,23 @@ class Simulation(Base, TimestampMixin):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-    environment_id: Mapped[int | None] = mapped_column(ForeignKey("environments.id", ondelete="SET NULL"))
-    status: Mapped[str] = mapped_column(String(50), default="QUEUED")
-    consumer_volume: Mapped[int] = mapped_column(Integer, default=10000)
-    results_json: Mapped[str | None] = mapped_column(Text)
-    confidence_score: Mapped[float | None] = mapped_column(Float)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    environment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("environments.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    status: Mapped[str] = mapped_column(String(50), default="QUEUED", nullable=False)
+    consumer_volume: Mapped[int] = mapped_column(Integer, default=10000, nullable=False)
+    task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    results_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     project: Mapped["Project"] = relationship("Project", back_populates="simulations")
-    environment: Mapped["Environment | None"] = relationship("Environment", back_populates="simulations")
-    consumer_agents: Mapped[list["ConsumerAgent"]] = relationship(
-        "ConsumerAgent", back_populates="simulation", cascade="all, delete-orphan"
+    environment: Mapped["Environment | None"] = relationship(
+        "Environment", back_populates="simulations"
     )

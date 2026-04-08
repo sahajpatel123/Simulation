@@ -32,6 +32,9 @@ def run_migrations():
             ("projects", "funnel_graph_json", "TEXT"),
             ("simulations", "results_json", "TEXT"),
             ("simulations", "confidence_score", "FLOAT"),
+            ("simulations", "task_id", "VARCHAR(255)"),
+            ("simulations", "error_message", "TEXT"),
+            ("simulations", "consumer_volume", "INTEGER DEFAULT 10000"),
             ("prototypes", "html_content", "TEXT"),
             ("prototypes", "funnel_graph_json", "TEXT"),
             ("environments", "consumer_volume", "INTEGER DEFAULT 10000"),
@@ -50,6 +53,25 @@ def run_migrations():
                 conn.commit()
             except Exception:
                 conn.rollback()
+
+        # Ensure simulations.results_json matches current SQLAlchemy JSONB model.
+        try:
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE simulations
+                    ALTER COLUMN results_json
+                    TYPE JSONB
+                    USING CASE
+                        WHEN results_json IS NULL THEN NULL
+                        ELSE results_json::jsonb
+                    END;
+                    """
+                )
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
 
     print("━━━ All migrations complete ━━━")
 
