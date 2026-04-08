@@ -40,3 +40,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Python backend (thecee-backend)
+venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
