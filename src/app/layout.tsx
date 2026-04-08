@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Playfair_Display, DM_Sans } from 'next/font/google'
 import Providers from './providers'
+import HydrateAuth from '@/components/layout/HydrateAuth'
 import './globals.css'
 
 const playfair = Playfair_Display({
@@ -26,7 +27,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" data-scroll-behavior="smooth" className={`${playfair.variable} ${dmSans.variable}`}>
       <body>
         <div style={{ position: 'relative' }}>
-          <Providers>{children}</Providers>
+          <Providers>
+            <HydrateAuth />
+            {children}
+          </Providers>
         </div>
       </body>
     </html>

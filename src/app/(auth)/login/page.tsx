@@ -5,10 +5,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowRight, Loader2 } from 'lucide-react'
 import type { UseFormRegisterReturn } from 'react-hook-form'
+import { useLogin, useRegister, apiError } from '@/hooks/useAuth'
 
 /* ─── SCHEMAS ───────────────────────────────────── */
 const loginSchema = z.object({
@@ -131,7 +132,6 @@ function Field({
 /* ─── MAIN (uses search params — wrap in Suspense) ─ */
 function AuthPage() {
   const [mode, setMode] = useState<'login' | 'signup'>('login')
-  const router = useRouter()
   const searchParams = useSearchParams()
 
   useEffect(() => {
@@ -143,50 +143,42 @@ function AuthPage() {
   const [fillRadius, setFillRadius] = useState(0)
   const signupBtnRef = useRef<HTMLButtonElement>(null)
 
-  const loginForm = useForm<LoginData>({ resolver: zodResolver(loginSchema) })
-  const signupForm = useForm<SignupData>({ resolver: zodResolver(signupSchema) })
+  const loginForm  = useForm<LoginData>({ resolver: zodResolver(loginSchema) })
+  const signupForm  = useForm<SignupData>({ resolver: zodResolver(signupSchema) })
+  const loginMutation   = useLogin()
+  const registerMutation = useRegister()
+  const [apiErr, setApiErr] = useState('')
 
   const onLogin = async (data: LoginData) => {
-    await new Promise(r => setTimeout(r, 1400))
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('thecee-auth', '1')
-      sessionStorage.setItem('thecee-user-email', data.email)
+    setApiErr('')
+    try {
+      await loginMutation.mutateAsync({ email: data.email, password: data.password })
+    } catch (err) {
+      setApiErr(apiError(err))
     }
-    router.push('/')
   }
 
   const onSignup = async (data: SignupData) => {
-    await new Promise(r => setTimeout(r, 1000))
-
-    const goHome = () => {
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('thecee-auth', '1')
-        sessionStorage.setItem('thecee-user-email', data.email)
+    setApiErr('')
+    try {
+      if (signupBtnRef.current) {
+        const rect = signupBtnRef.current.getBoundingClientRect()
+        const originX = rect.left + rect.width / 2
+        const originY = rect.top + rect.height / 2
+        const distToTopLeft     = Math.sqrt(originX ** 2 + originY ** 2)
+        const distToTopRight    = Math.sqrt((window.innerWidth - originX) ** 2 + originY ** 2)
+        const distToBottomLeft  = Math.sqrt(originX ** 2 + (window.innerHeight - originY) ** 2)
+        const distToBottomRight = Math.sqrt((window.innerWidth - originX) ** 2 + (window.innerHeight - originY) ** 2)
+        const maxRadius = Math.max(distToTopLeft, distToTopRight, distToBottomLeft, distToBottomRight)
+        setFillOrigin({ x: originX, y: originY })
+        setFillRadius(maxRadius)
+        setFilling(true)
+        await new Promise(r => setTimeout(r, 400))
       }
-      router.push('/')
-    }
-
-    if (signupBtnRef.current) {
-      const rect = signupBtnRef.current.getBoundingClientRect()
-      const originX = rect.left + rect.width / 2
-      const originY = rect.top + rect.height / 2
-
-      const distToTopLeft = Math.sqrt(originX ** 2 + originY ** 2)
-      const distToTopRight = Math.sqrt((window.innerWidth - originX) ** 2 + originY ** 2)
-      const distToBottomLeft = Math.sqrt(originX ** 2 + (window.innerHeight - originY) ** 2)
-      const distToBottomRight = Math.sqrt(
-        (window.innerWidth - originX) ** 2 + (window.innerHeight - originY) ** 2
-      )
-      const maxRadius = Math.max(distToTopLeft, distToTopRight, distToBottomLeft, distToBottomRight)
-
-      setFillOrigin({ x: originX, y: originY })
-      setFillRadius(maxRadius)
-      setFilling(true)
-
-      await new Promise(r => setTimeout(r, 700))
-      goHome()
-    } else {
-      goHome()
+      await registerMutation.mutateAsync({ email: data.email, password: data.password, full_name: data.name })
+    } catch (err) {
+      setFilling(false)
+      setApiErr(apiError(err))
     }
   }
 
@@ -613,6 +605,23 @@ function AuthPage() {
                     Forgot password?
                   </span>
                 </motion.div>
+
+                {apiErr && (
+                  <div
+                    style={{
+                      marginBottom: '18px',
+                      fontSize: '11px',
+                      color: '#c0392b',
+                      padding: '10px 12px',
+                      background: 'rgba(192,57,43,0.06)',
+                      border: '0.5px solid rgba(192,57,43,0.2)',
+                      borderRadius: '3px',
+                      fontFamily: 'DM Sans, sans-serif',
+                    }}
+                  >
+                    {apiErr}
+                  </div>
+                )}
 
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SPRING, delay: 0.22 }}>
                   <div style={{ width: '24px', height: '2px', background: '#c0392b', marginBottom: '22px' }} />
