@@ -9,6 +9,7 @@ celery_app = Celery(
     include=[
         "app.tasks.simulation_tasks",
         "app.tasks.stress_test_tasks",
+        "app.tasks.decision_tasks",
     ],
 )
 
