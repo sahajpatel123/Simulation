@@ -10,7 +10,7 @@ from app.models import (
     Simulation,
     ConsumerAgent,
     Decision,
-    OutcomeTracker,
+    Outcome,
 )
 
 
@@ -44,6 +44,17 @@ def run_migrations():
             ("decisions", "results_json", "JSONB"),
             ("decisions", "task_id", "VARCHAR(255)"),
             ("decisions", "error_message", "TEXT"),
+            ("outcomes", "actual_dau", "FLOAT"),
+            ("outcomes", "actual_nps", "FLOAT"),
+            ("outcomes", "days_since_launch", "INTEGER DEFAULT 30"),
+            ("outcomes", "predicted_conversion_rate", "FLOAT"),
+            ("outcomes", "predicted_mrr", "FLOAT"),
+            ("outcomes", "simulation_id", "INTEGER"),
+            ("outcomes", "variance_conversion", "FLOAT"),
+            ("outcomes", "variance_mrr", "FLOAT"),
+            ("outcomes", "variance_cac", "FLOAT"),
+            ("outcomes", "variance_churn", "FLOAT"),
+            ("outcomes", "calibration_score", "FLOAT"),
             ("prototypes", "html_content", "TEXT"),
             ("prototypes", "funnel_graph_json", "TEXT"),
             ("environments", "consumer_volume", "INTEGER DEFAULT 10000"),

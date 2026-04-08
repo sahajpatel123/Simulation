@@ -6,7 +6,7 @@ from app.models.environment import Environment, EnvironmentMode, ScenarioType
 from app.models.simulation import Simulation
 from app.models.consumer_agent import ConsumerAgent
 from app.models.decision import Decision
-from app.models.outcome_tracker import OutcomeTracker
+from app.models.outcome import Outcome
 from app.models.prototype import Prototype
 
 __all__ = [
@@ -21,6 +21,6 @@ __all__ = [
     "Simulation",
     "ConsumerAgent",
     "Decision",
-    "OutcomeTracker",
+    "Outcome",
     "Prototype",
 ]
