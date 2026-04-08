@@ -33,6 +33,32 @@ api.interceptors.response.use(
 
 export default api
 
+export const apiLong = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1',
+  timeout: 300_000,   /* 5 minutes for simulation creation + polling */
+  headers: { 'Content-Type': 'application/json' },
+})
+
+apiLong.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('access_token')
+    if (token && config.headers) config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+apiLong.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError) => {
+    if (error.response?.status === 401 && typeof window !== 'undefined') {
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('refresh_token')
+      window.location.href = '/login'
+    }
+    return Promise.reject(error)
+  }
+)
+
 export function apiError(err: unknown): string {
   if (axios.isAxiosError(err)) {
     const detail = err.response?.data?.detail as unknown

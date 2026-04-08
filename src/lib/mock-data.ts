@@ -145,12 +145,15 @@ export const mockEnvironments: Record<string, Environment> = {
 }
 
 export const mockSimulationProgress: SimulationProgress = {
-  simulationId: "sim_003",
-  status: SimulationStatus.RUNNING,
-  agentsCompleted: 6240,
-  totalAgents: 10000,
-  currentStage: "CONSIDER",
-  estimatedTimeRemaining: 14,
+  simulation_id:    3,
+  status:           SimulationStatus.RUNNING,
+  pct:              62,
+  agents_processed: 6240,
+  agents_total:     10000,
+  elapsed_seconds:  46,
+  task_id:          null,
+  error:            null,
+  results:          null,
 }
 
 export const getProjectById = (id: string): Project | undefined =>

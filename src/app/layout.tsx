@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Playfair_Display, DM_Sans } from 'next/font/google'
+import { Toaster } from 'sonner'
 import Providers from './providers'
 import HydrateAuth from '@/components/layout/HydrateAuth'
 import './globals.css'
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {children}
           </Providers>
         </div>
+        <Toaster position="bottom-right" theme="light" />
       </body>
     </html>
   )

@@ -280,12 +280,75 @@ export interface ReportPreview {
   recommended_action: string
 }
 
-/* ── Legacy API helpers ── */
+/* ── Simulation progress (backend shape) ── */
 export interface SimulationProgress {
-  simulationId: string
-  status: SimulationStatus
-  agentsCompleted: number
-  totalAgents: number
-  currentStage: string
-  estimatedTimeRemaining: number
+  simulation_id:    number
+  status:           string
+  pct:              number
+  agents_processed: number
+  agents_total:     number
+  elapsed_seconds:  number
+  task_id:          string | null
+  error:            string | null
+  results:          SimulationResultData | null
+}
+
+/* ── Stress test ── */
+export interface StressTestStatus {
+  project_id: number
+  status:     'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+  task_id:    string | null
+  result:     StressTestResult | null
+}
+
+export interface StressTestResult {
+  project_id:            number
+  status:                string
+  sensitivity_matrix:    AssumptionStressResult[]
+  kill_shots:            AssumptionStressResult[]
+  overall_risk_level:    string
+  baseline_conversion:   number
+  assumptions_tested:    number
+  generated_at:          string
+}
+
+export interface AssumptionStressResult {
+  assumption_id:       number
+  assumption_text:     string
+  sensitivity:         string
+  baseline_conversion: number
+  stressed_conversion: number
+  delta:               number
+  delta_pct:           number
+  kill_shot:           boolean
+  kill_shot_prob:      number
+  recommendation:      string
+}
+
+/* ── Decision ── */
+export interface Decision {
+  id:         number
+  project_id: number
+  title:      string
+  status:     string
+  task_id:    string | null
+  result: {
+    scenarios:            ScenarioResult[]
+    recommended_scenario: string
+    winner_margin:        number
+    key_insights:         string[]
+    generated_at:         string
+  } | null
+}
+
+export interface ScenarioResult {
+  scenario_name:        string
+  scenario_description: string
+  conversion_rate:      number
+  ci_low:               number
+  ci_high:              number
+  revenue_projection:   number
+  survival_probability: number
+  confidence_score:     number
+  rank:                 number
 }

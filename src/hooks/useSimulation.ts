@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import api from '@/lib/api'
+import api, { apiLong } from '@/lib/api'
 import type { SimulationResult, SimulationStatusResponse } from '@/types'
 
 export const useSimulations = (projectId: number | string | null) =>
@@ -43,7 +43,7 @@ export const useCreateSimulation = () => {
       projectId: number
       consumerVolume?: number
     }) =>
-      api
+      apiLong
         .post('/simulations', {
           project_id: projectId,
           consumer_volume: consumerVolume,
