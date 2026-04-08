@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.deps import get_current_user, get_db
 from app.core.prompts import (
     ASSUMPTION_EXTRACTION_PROMPT,
+    COMPETITIVE_ANALYSIS_PROMPT,
     INTERVENTION_PROMPT,
     PREMORTEM_PROMPT,
     PROTOTYPE_GENERATION_PROMPT,
@@ -25,6 +26,14 @@ from app.schemas.assumption import (
     AssumptionExtractRequest,
     AssumptionListResponse,
     AssumptionOut,
+)
+from app.schemas.competitive import (
+    CompetitiveAnalysisOut,
+    CompetitiveAnalysisRequest,
+    Competitor,
+    GapAnalysis,
+    MarketMap,
+    VALID_POSITIONS,
 )
 from app.schemas.environment import (
     EnvironmentCreate,
@@ -914,6 +923,225 @@ def get_interventions(
         quick_wins=quick_wins,
         generated_at=data.get("generated_at", ""),
         context_used=data.get("context_used", {}),
+    )
+
+
+@router.post("/{project_id}/competitive-analysis", response_model=CompetitiveAnalysisOut)
+def run_competitive_analysis(
+    project_id: int,
+    payload: CompetitiveAnalysisRequest | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    description = (
+        payload.description_override if payload and payload.description_override else project.description
+    )
+    if not description or len(description.strip()) < 20:
+        raise HTTPException(
+            status_code=422,
+            detail="Project description too short for competitive analysis",
+        )
+
+    target_market = (
+        payload.target_market if payload and payload.target_market else "Indian startup / SaaS / D2C market"
+    )
+
+    assumptions = (
+        db.query(Assumption)
+        .filter(Assumption.project_id == project_id)
+        .order_by(Assumption.impact_score.desc())
+        .limit(5)
+        .all()
+    )
+    assumptions_text = (
+        "\n".join(f"- {assumption.text}" for assumption in assumptions)
+        if assumptions
+        else "No assumptions available."
+    )
+
+    try:
+        response = claude.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=3200,
+            system=(
+                "You are a top-tier competitive strategy consultant with deep knowledge "
+                "of Indian and global markets. "
+                "You ALWAYS return valid JSON only. No markdown. No backticks. No explanation."
+            ),
+            messages=[
+                {
+                    "role": "user",
+                    "content": COMPETITIVE_ANALYSIS_PROMPT.format(
+                        description=description,
+                        target_market=target_market,
+                        assumptions_text=assumptions_text,
+                    ),
+                }
+            ],
+        )
+
+        raw = response.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = "\n".join(
+                line for line in raw.split("\n") if not line.strip().startswith("```")
+            )
+
+        json_match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if not json_match:
+            raise ValueError("No JSON object found in Claude response")
+        parsed = json.loads(json_match.group(0))
+
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=500,
+            detail="Claude returned malformed JSON — retry the request",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Competitive analysis failed: {str(exc)}",
+        )
+
+    raw_competitors = parsed.get("competitors", [])
+    if not isinstance(raw_competitors, list) or len(raw_competitors) == 0:
+        raise HTTPException(
+            status_code=500,
+            detail="Claude returned no competitors — retry the request",
+        )
+
+    competitors: list[Competitor] = []
+    for item in raw_competitors:
+        try:
+            competitors.append(
+                Competitor(
+                    name=str(item.get("name", "Unknown")).strip(),
+                    category=str(item.get("category", "DIRECT")),
+                    features=[str(feature) for feature in item.get("features", [])[:8]],
+                    pricing=str(item.get("pricing", "Unknown")).strip(),
+                    positioning=str(item.get("positioning", "")).strip(),
+                    target_segment=str(item.get("target_segment", "")).strip(),
+                    strengths=[str(strength) for strength in item.get("strengths", [])[:5]],
+                    weaknesses=[str(weakness) for weakness in item.get("weaknesses", [])[:5]],
+                    india_presence=str(item.get("india_presence", "MODERATE")),
+                    threat_level=str(item.get("threat_level", "MEDIUM")),
+                )
+            )
+        except Exception:
+            continue
+
+    if not competitors:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not parse any valid competitors from Claude response",
+        )
+
+    raw_gap = parsed.get("gap_analysis", {})
+    gap_analysis = GapAnalysis(
+        our_wins=[str(win) for win in raw_gap.get("our_wins", [])[:6]],
+        our_losses=[str(loss) for loss in raw_gap.get("our_losses", [])[:6]],
+        underserved_segments=[str(segment) for segment in raw_gap.get("underserved_segments", [])[:5]],
+        key_differentiators=[str(item) for item in raw_gap.get("key_differentiators", [])[:5]],
+        recommended_counter_moves=[str(move) for move in raw_gap.get("recommended_counter_moves", [])[:5]],
+    )
+
+    raw_map = parsed.get("market_map", {})
+    first_competitor_name = competitors[0].name
+    market_map = MarketMap(
+        most_dangerous_competitor=str(
+            raw_map.get("most_dangerous_competitor", first_competitor_name)
+        ),
+        easiest_to_displace=str(raw_map.get("easiest_to_displace", first_competitor_name)),
+        most_similar_to_us=str(raw_map.get("most_similar_to_us", first_competitor_name)),
+    )
+
+    raw_position = str(parsed.get("overall_competitive_position", "MODERATE")).upper().strip()
+    position = raw_position if raw_position in VALID_POSITIONS else "MODERATE"
+    rationale = str(parsed.get("position_rationale", "")).strip()
+
+    direct_count = sum(1 for competitor in competitors if competitor.category == "DIRECT")
+    high_threat_count = sum(1 for competitor in competitors if competitor.threat_level == "HIGH")
+
+    now = datetime.now(timezone.utc).isoformat()
+    competitive_data = {
+        "competitors": [competitor.model_dump() for competitor in competitors],
+        "gap_analysis": gap_analysis.model_dump(),
+        "market_map": market_map.model_dump(),
+        "overall_competitive_position": position,
+        "position_rationale": rationale,
+        "generated_at": now,
+        "target_market": target_market,
+        "assumptions_used": len(assumptions),
+    }
+
+    from sqlalchemy import text as sql_text
+
+    try:
+        db.execute(sql_text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS competitive_json JSONB;"))
+        db.commit()
+    except Exception:
+        db.rollback()
+
+    project.competitive_json = competitive_data
+    project.status = "COMPETITIVE_ANALYSIS_COMPLETE"
+    db.commit()
+
+    return CompetitiveAnalysisOut(
+        project_id=project_id,
+        competitors=competitors,
+        gap_analysis=gap_analysis,
+        market_map=market_map,
+        overall_competitive_position=position,
+        position_rationale=rationale,
+        direct_competitor_count=direct_count,
+        high_threat_count=high_threat_count,
+        generated_at=now,
+    )
+
+
+@router.get("/{project_id}/competitive-analysis", response_model=CompetitiveAnalysisOut)
+def get_competitive_analysis(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    data = getattr(project, "competitive_json", None)
+    if not data:
+        raise HTTPException(
+            status_code=404,
+            detail="No competitive analysis generated yet — call POST /competitive-analysis first",
+        )
+
+    competitors = [Competitor(**item) for item in data.get("competitors", [])]
+    gap_analysis = GapAnalysis(**data["gap_analysis"])
+    market_map = MarketMap(**data["market_map"])
+    position = data.get("overall_competitive_position", "MODERATE")
+
+    return CompetitiveAnalysisOut(
+        project_id=project_id,
+        competitors=competitors,
+        gap_analysis=gap_analysis,
+        market_map=market_map,
+        overall_competitive_position=position,
+        position_rationale=data.get("position_rationale", ""),
+        direct_competitor_count=sum(1 for competitor in competitors if competitor.category == "DIRECT"),
+        high_threat_count=sum(1 for competitor in competitors if competitor.threat_level == "HIGH"),
+        generated_at=data.get("generated_at", ""),
     )
 
 
