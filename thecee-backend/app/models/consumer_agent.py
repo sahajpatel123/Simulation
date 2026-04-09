@@ -17,4 +17,4 @@ class ConsumerAgent(Base, TimestampMixin):
     price_sensitivity: Mapped[float | None] = mapped_column(Float)
     intent_level: Mapped[float | None] = mapped_column(Float)
 
-    simulation: Mapped["Simulation"] = relationship("Simulation", back_populates="consumer_agents")
+    simulation: Mapped["Simulation"] = relationship("Simulation")
