@@ -8,7 +8,6 @@ from app.models import (
     Assumption,
     Environment,
     Simulation,
-    ConsumerAgent,
     Decision,
     Outcome,
 )
@@ -18,9 +17,13 @@ def run_migrations():
     print("━━━ Running TheCee migrations ━━━")
 
     with engine.connect() as conn:
-        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
-        conn.commit()
-        print("✅ pgvector extension ready")
+        try:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+            conn.commit()
+            print("✅ pgvector extension ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ pgvector skip: {e}")
 
     Base.metadata.create_all(bind=engine)
     print("✅ All tables created or verified")
