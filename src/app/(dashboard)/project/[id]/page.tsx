@@ -47,7 +47,7 @@ export default function ProjectPage() {
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
         <div className="mb-8">
           <div className="flex items-center gap-2 text-xs text-slate-600 mb-3">
-            <Link href="/dashboard" className="hover:text-slate-400 transition-colors">
+            <Link href="/projects" className="hover:text-slate-400 transition-colors">
               Dashboard
             </Link>
             <span>/</span>

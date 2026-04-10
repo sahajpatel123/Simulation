@@ -43,7 +43,7 @@ export const useLogin = () => {
         }
       }
       qc.clear()   /* clear any stale unauthenticated query cache */
-      router.push('/dashboard')
+      router.push('/')
     },
   })
 }
@@ -80,7 +80,7 @@ export const useRegister = () => {
         }
       }
       qc.clear()
-      router.push('/dashboard')
+      router.push('/')
     },
   })
 }

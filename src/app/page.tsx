@@ -6,6 +6,9 @@ import Link from 'next/link'
 import { ArrowRight, ArrowUpRight, ChevronDown, Minus } from 'lucide-react'
 import FeatureShowcase from '@/components/layout/FeatureShowcase'
 import SimulationTimeline from '@/components/layout/SimulationTimeline'
+import { useAuthStore } from '@/store/auth.store'
+import { auth } from '@/lib/auth'
+import { useLogout } from '@/hooks/useAuth'
 
 /* ─── CONSTANTS ─────────────────────────────────── */
 const WORDS = ['startup', 'product', 'idea', 'launch', 'decision']
@@ -144,24 +147,16 @@ export default function LandingPage() {
   const heroOpacity = useTransform(scrollYProgress, [0, 0.6], [1, 0])
   const heroY = useTransform(scrollYProgress, [0, 1], [0, 40])
   const [menuOpen, setMenuOpen] = useState(false)
-  const [isAuthed, setIsAuthed] = useState(false)
-  const [userEmail, setUserEmail] = useState('')
   const [profileOpen, setProfileOpen] = useState(false)
 
-  useEffect(() => {
-    const auth = sessionStorage.getItem('thecee-auth')
-    const email = sessionStorage.getItem('thecee-user-email') ?? ''
-    if (auth === '1') {
-      setIsAuthed(true)
-      setUserEmail(email)
-    }
-  }, [])
+  const user = useAuthStore(s => s.user)
+  const isHydrated = useAuthStore(s => s.isHydrated)
+  const logout = useLogout()
+  const isAuthenticated =
+    Boolean(user) || (isHydrated && typeof window !== 'undefined' && auth.isAuthenticated())
 
   const signOut = () => {
-    sessionStorage.removeItem('thecee-auth')
-    sessionStorage.removeItem('thecee-user-email')
-    setIsAuthed(false)
-    setUserEmail('')
+    logout()
     setProfileOpen(false)
     setMenuOpen(false)
   }
@@ -243,9 +238,28 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Right side — auth CTAs hidden when signed in (session hint) */}
+          {/* Right side — auth CTAs when logged out; Open app when logged in */}
           <div style={{ display: 'flex', gap: '20px', alignItems: 'center', minWidth: '140px', justifyContent: 'flex-end' }}>
-            {!isAuthed && (
+            {isHydrated && isAuthenticated ? (
+              <Link
+                href="/projects"
+                style={{
+                  fontSize: '11px',
+                  color: 'var(--paper)',
+                  background: 'var(--ink)',
+                  padding: '8px 18px',
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  textDecoration: 'none',
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                Open app <ArrowRight size={11} />
+              </Link>
+            ) : isHydrated ? (
               <>
                 <Link href="/login"
                   style={{ fontSize: '11px', color: 'var(--ink-secondary)', letterSpacing: '0.08em', textTransform: 'uppercase', textDecoration: 'none' }}
@@ -272,7 +286,7 @@ export default function LandingPage() {
                   Get started <ArrowRight size={11} />
                 </Link>
               </>
-            )}
+            ) : null}
           </div>
         </div>
       </motion.header>
@@ -389,7 +403,7 @@ export default function LandingPage() {
                   </motion.a>
                 ))}
 
-                {isAuthed ? (
+                {isAuthenticated ? (
                   <>
                     <motion.button
                       type="button"
@@ -443,7 +457,7 @@ export default function LandingPage() {
                               Signed in as
                             </p>
                             <p style={{ fontSize: '13px', color: 'var(--paper)', marginBottom: '16px', wordBreak: 'break-all' }}>
-                              {userEmail || '—'}
+                              {user?.email ?? '—'}
                             </p>
                             <button
                               type="button"
@@ -498,7 +512,7 @@ export default function LandingPage() {
               </nav>
 
               {/* Drawer CTA — hidden when already signed in */}
-              {!isAuthed && (
+              {isHydrated && !isAuthenticated && (
                 <div style={{ padding: '28px 36px', borderTop: '0.5px solid rgba(242,236,224,0.08)' }}>
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}

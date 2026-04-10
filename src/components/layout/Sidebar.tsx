@@ -4,8 +4,8 @@ import { usePathname } from 'next/navigation'
 import { Activity, LayoutDashboard, FolderOpen, Settings, LogOut } from 'lucide-react'
 
 const nav = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Projects', href: '/dashboard', icon: FolderOpen },
+  { label: 'Dashboard', href: '/projects', icon: LayoutDashboard },
+  { label: 'Projects', href: '/projects', icon: FolderOpen },
   { label: 'Settings', href: '#', icon: Settings },
 ]
 

@@ -56,7 +56,7 @@ export const auth = {
     /* Check expiry from JWT payload — avoids unnecessary API calls */
     const payload = decodePayload(token)
     if (!payload || typeof payload.exp !== 'number') return true
-    /* Give a 30-second buffer to account for clock skew */
+    /* Give a 0-second buffer to account for clock skew */
     return payload.exp > Math.floor(Date.now() / 1000) + 30
   },
 
