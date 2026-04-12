@@ -11,6 +11,15 @@ from app.simulation.architects.base import ArchitectOutput, BaseArchitect, Domai
 from app.simulation.clusters.definitions import ClusterDefinition
 
 
+def _geo_tier(geo: str) -> str:
+    geo = geo.lower()
+    if "tier3" in geo or "rural" in geo:
+        return "tier3"
+    if "tier2" in geo:
+        return "tier2"
+    return "metro"
+
+
 class OnboardingArchitect(BaseArchitect):
 
     @property
@@ -36,7 +45,7 @@ class OnboardingArchitect(BaseArchitect):
         patience   = t["patience_score"]
         motivation = t["motivation"]
         trust      = t["trust"]
-        geo        = cluster.demographic_profile.get("geography", "metro")
+        geo        = _geo_tier(cluster.demographic_profile.get("geography", "metro"))
 
         # ── Complexity from assumptions ──────────────────────────────────
         complexity = 0.5
