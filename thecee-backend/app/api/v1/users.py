@@ -29,7 +29,7 @@ def get_accuracy_profile(
 
     history = db.execute(
         text("""
-        SELECT predicted_conversion, actual_conversion, absolute_gap,
+        SELECT simulation_id, predicted_conversion, actual_conversion, absolute_gap,
                signal_quality_at_run, accuracy_trend, created_at
         FROM user_simulation_accuracy_history
         WHERE user_id=:uid ORDER BY created_at ASC
@@ -38,7 +38,7 @@ def get_accuracy_profile(
     ).fetchall()
 
     trend = history[-1].accuracy_trend if history else "INSUFFICIENT_DATA"
-    gaps = [r.absolute_gap for r in history if r.absolute_gap is not None]
+    gaps = [float(r.absolute_gap) for r in history if r.absolute_gap is not None]
     mean_gap = round(sum(gaps) / len(gaps), 4) if gaps else None
 
     return {
@@ -56,8 +56,11 @@ def get_accuracy_profile(
         ],
         "gap_history": [
             {
+                "simulation_id": r.simulation_id,
                 "predicted": round(float(r.predicted_conversion), 4),
-                "actual": round(float(r.actual_conversion), 4) if r.actual_conversion is not None else None,
+                "actual": round(float(r.actual_conversion), 4)
+                if r.actual_conversion is not None
+                else None,
                 "gap": round(float(r.absolute_gap), 4) if r.absolute_gap is not None else None,
                 "signal_quality": round(float(r.signal_quality_at_run), 4),
                 "date": r.created_at.isoformat() if r.created_at else None,

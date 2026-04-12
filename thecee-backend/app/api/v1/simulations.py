@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
+from app.models.assumption import Assumption
 from app.models.environment import Environment
 from app.models.project import Project
 from app.models.simulation import Simulation
@@ -19,6 +20,11 @@ from app.schemas.simulation import (
     SimulationStatusOut,
 )
 from app.simulation.clusters.registry import ClusterRegistry
+from app.simulation.scored_assumption import (
+    ClaimConfidence,
+    score_assumptions,
+    signal_quality_tier,
+)
 from app.tasks.simulation_tasks import health_check, run_full_simulation
 
 logger = logging.getLogger(__name__)
@@ -140,11 +146,36 @@ def get_signal_quality(
 ):
     sim = _get_owned_simulation(simulation_id, current_user.id, db)
     sq = float(sim.signal_quality or 0.0)
-    tier = "FULL" if sq >= 0.50 else "PARTIAL" if sq >= 0.25 else "QUARANTINED"
+    tier = signal_quality_tier(sq)
     dist = sim.claim_confidence_distribution or {}
+
+    # Re-score project assumptions to surface detailed counts for the UI
+    assumptions = (
+        db.query(Assumption)
+        .filter(Assumption.project_id == sim.project_id)
+        .all()
+    )
+    assumption_dicts = [
+        {"id": a.id, "text": a.text, "category": a.category, "impact_score": a.impact_score}
+        for a in assumptions
+    ]
+    validated_count = 0
+    hard_contradictions = 0
+    if assumption_dicts:
+        scored, hard_contradictions, _, _ = score_assumptions(assumption_dicts)
+        validated_count = sum(
+            1
+            for s in scored
+            if s.claim_confidence
+            in (ClaimConfidence.VALIDATED_EXTERNAL, ClaimConfidence.VALIDATED_INTERNAL)
+        )
+
     return {
         "signal_quality": round(sq, 4),
         "tier": tier,
+        "validated_assumption_count": validated_count,
+        "total_assumption_count": len(assumptions),
+        "hard_contradiction_count": hard_contradictions,
         "claim_confidence_distribution": dist,
         "improvement_suggestions": _signal_suggestions(sq, dist),
     }
