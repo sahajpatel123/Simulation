@@ -4,6 +4,8 @@ from app.models.project import Project
 from app.models.assumption import Assumption
 from app.models.environment import Environment, EnvironmentMode, ScenarioType
 from app.models.simulation import Simulation
+from app.models.cluster_run_summary import ClusterRunSummary
+from app.models.user_market_blindspot import UserMarketBlindspot
 from app.models.consumer_agent import ConsumerAgent
 from app.models.decision import Decision
 from app.models.outcome import Outcome
@@ -19,6 +21,8 @@ __all__ = [
     "EnvironmentMode",
     "ScenarioType",
     "Simulation",
+    "ClusterRunSummary",
+    "UserMarketBlindspot",
     "ConsumerAgent",
     "Decision",
     "Outcome",

@@ -27,6 +27,7 @@ from app.schemas.assumption import (
     AssumptionListResponse,
     AssumptionOut,
 )
+from app.simulation.scored_assumption import score_assumptions, signal_quality_tier
 from app.schemas.competitive import (
     CompetitiveAnalysisOut,
     CompetitiveAnalysisRequest,
@@ -219,6 +220,62 @@ def extract_assumptions(
     for assumption in saved:
         db.refresh(assumption)
 
+    # Score assumptions and compute signal quality for this extraction run.
+    scored_list, hard_count, soft_flags, sq = score_assumptions(
+        [
+            {
+                "id": a.id,
+                "text": a.text,
+                "category": a.category,
+                "impact_score": a.impact_score,
+            }
+            for a in saved
+        ]
+    )
+
+    # Build confidence distribution summary (count per tier).
+    confidence_dist: dict[str, int] = {}
+    for sa in scored_list:
+        key = sa.claim_confidence.value
+        confidence_dist[key] = confidence_dist.get(key, 0) + 1
+
+    sq_tier = signal_quality_tier(sq)
+
+    # Persist signal_quality on the most recent simulation for this project,
+    # or update it when the next simulation is created (Step 37 task picks this up).
+    # For now, write to the latest QUEUED/RUNNING simulation if one exists.
+    latest_sim = (
+        db.query(Simulation)
+        .filter(Simulation.project_id == project_id)
+        .order_by(Simulation.created_at.desc())
+        .first()
+    )
+    if latest_sim is not None:
+        latest_sim.signal_quality = sq
+        latest_sim.claim_confidence_distribution = confidence_dist
+        db.commit()
+
+    # Apply personal accuracy adjustment from user_claim_accuracy_profiles
+    # if the user has enough history (sample_count >= 3, reliability >= 0.40).
+    # This is a read-only advisory enrichment — it does not modify saved rows.
+    user_reliability_note: str | None = None
+    try:
+        from sqlalchemy import text as _text
+        profile_rows = db.execute(
+            _text(
+                "SELECT architect_name, ema_delta, reliability_score, sample_count "
+                "FROM user_claim_accuracy_profiles "
+                "WHERE user_id = :uid AND sample_count >= 3 AND reliability_score >= 0.40"
+            ),
+            {"uid": current_user.id},
+        ).fetchall()
+        if profile_rows:
+            user_reliability_note = (
+                f"Personal accuracy profile active: {len(profile_rows)} architects calibrated."
+            )
+    except Exception:
+        pass
+
     hidden_count = sum(1 for a in saved if a.is_hidden)
 
     return AssumptionListResponse(
@@ -226,6 +283,13 @@ def extract_assumptions(
         assumptions=[AssumptionOut.model_validate(a) for a in saved],
         total=len(saved),
         hidden_count=hidden_count,
+        signal_quality=sq,
+        signal_quality_tier=sq_tier,
+        claim_confidence_distribution=confidence_dist,
+        soft_contradiction_flags=soft_flags,
+        message=(
+            user_reliability_note or "Assumptions extracted successfully"
+        ),
     )
 
 
@@ -428,8 +492,27 @@ def run_premortem(
         f"- [{a.sensitivity}] {a.text} (impact: {a.impact_score}/10)" for a in assumptions
     ) or "No assumptions extracted yet."
 
-    simulation_summary = build_simulation_summary(
-        latest_sim.results_json if latest_sim else None
+    results = latest_sim.results_json or {} if latest_sim else {}
+    findings = results.get("domain_findings", [])
+    narrative = results.get("cluster_narrative", "")
+    primary_fd = results.get("primary_failure_domain", "unknown")
+    hv_cluster = results.get("highest_value_cluster", {})
+
+    domain_findings_text = (
+        "\n".join(
+            [
+                f"[{f.get('severity', 'INFO')}] {f.get('architect_name', '')} / "
+                f"{f.get('cluster_name', '')}: {f.get('finding', '')} "
+                f"(impact: {float(f.get('conversion_impact', 0) or 0):.3f})"
+                for f in findings[:10]
+            ]
+        )
+        if findings
+        else "No domain findings available."
+    )
+
+    hv_name = (
+        hv_cluster.get("name", "unknown") if isinstance(hv_cluster, dict) else str(hv_cluster)
     )
 
     try:
@@ -444,9 +527,10 @@ def run_premortem(
                 {
                     "role": "user",
                     "content": PREMORTEM_PROMPT.format(
-                        description=description,
-                        assumptions_text=assumptions_text,
-                        simulation_summary=simulation_summary,
+                        domain_findings_text=domain_findings_text,
+                        primary_failure_domain=primary_fd,
+                        highest_value_cluster=hv_name,
+                        cluster_narrative=narrative,
                     ),
                 }
             ],
@@ -502,8 +586,6 @@ def run_premortem(
                 ).strip(),
                 earliest_signal=str(item.get("earliest_signal", "")).strip(),
             )
-            if not fm.linked_assumption_texts:
-                continue
             failure_modes.append(fm)
         except Exception:
             continue
@@ -745,36 +827,26 @@ def generate_interventions(
         "stress_test": bool(stress_test_data and stress_test_data.get("kill_shots")),
     }
 
-    assumptions_text = (
+    results = latest_sim.results_json or {} if latest_sim else {}
+    findings = results.get("domain_findings", [])
+    narrative = results.get("cluster_narrative", "")
+    primary_fd = results.get("primary_failure_domain", "unknown")
+    hv_cluster = results.get("highest_value_cluster", {})
+
+    ranked_findings_text = (
         "\n".join(
-            f"- [{a.sensitivity}] {a.text} (impact: {a.impact_score}/10)"
-            for a in assumptions
+            [
+                f"{i + 1}. {f.get('finding', '')} → {f.get('recommended_action', '')}"
+                for i, f in enumerate(findings[:5])
+            ]
         )
-        if assumptions
-        else "No assumptions extracted yet — interventions will be based on description only."
+        if findings
+        else "No findings available."
     )
 
-    simulation_summary = build_simulation_summary(
-        latest_sim.results_json if latest_sim else None
+    hv_name = (
+        hv_cluster.get("name", "unknown") if isinstance(hv_cluster, dict) else str(hv_cluster)
     )
-
-    failure_modes_text = "No pre-mortem data available."
-    if premortem_data and premortem_data.get("failure_modes"):
-        fm_lines = [
-            f"- [{fm.get('severity', '?')}] {fm.get('title', fm.get('failure_mode', '?'))}: "
-            f"{str(fm.get('trigger_condition', ''))[:100]}"
-            for fm in premortem_data["failure_modes"][:6]
-        ]
-        failure_modes_text = "\n".join(fm_lines)
-
-    kill_shots_text = "No stress test data available."
-    if stress_test_data and stress_test_data.get("kill_shots"):
-        ks_lines = [
-            f"- {str(ks.get('assumption_text', ''))[:80]} "
-            f"(stressed conversion drops to {float(ks.get('stressed_conversion', 0)):.1%})"
-            for ks in stress_test_data["kill_shots"][:4]
-        ]
-        kill_shots_text = "\n".join(ks_lines) if ks_lines else "No kill shots identified."
 
     try:
         response = claude.messages.create(
@@ -789,11 +861,10 @@ def generate_interventions(
                 {
                     "role": "user",
                     "content": INTERVENTION_PROMPT.format(
-                        description=description,
-                        assumptions_text=assumptions_text,
-                        simulation_summary=simulation_summary,
-                        failure_modes_text=failure_modes_text,
-                        kill_shots_text=kill_shots_text,
+                        highest_value_cluster=hv_name,
+                        primary_failure_domain=primary_fd,
+                        cluster_narrative=narrative or "No cluster narrative available.",
+                        ranked_findings_text=ranked_findings_text,
                     ),
                 }
             ],

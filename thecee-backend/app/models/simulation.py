@@ -30,6 +30,8 @@ class Simulation(Base, TimestampMixin):
     results_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signal_quality: Mapped[float | None] = mapped_column(Float, nullable=True)
+    claim_confidence_distribution: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     project: Mapped["Project"] = relationship("Project", back_populates="simulations")
     environment: Mapped["Environment | None"] = relationship(

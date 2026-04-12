@@ -22,3 +22,7 @@ class AssumptionListResponse(BaseModel):
     total: int
     hidden_count: int
     message: str = "Assumptions extracted successfully"
+    signal_quality: float | None = None
+    signal_quality_tier: str | None = None
+    claim_confidence_distribution: dict | None = None
+    soft_contradiction_flags: list[str] = []
