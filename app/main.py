@@ -13,6 +13,18 @@ from app.worker import celery_app as _celery_app
 async def lifespan(app: FastAPI):
     init_extensions()
     print("✅ TheCee backend running — pgvector enabled")
+
+    from app.simulation.clusters.registry import ClusterRegistry
+    from app.core.database import SessionLocal
+    db = SessionLocal()
+    try:
+        ClusterRegistry().sync_to_db(db)
+        print("✅ Cluster parameters synced to DB")
+    except Exception as e:
+        print(f"⚠️ Cluster sync warning: {e}")
+    finally:
+        db.close()
+
     yield
     print("TheCee backend shutting down")
 
