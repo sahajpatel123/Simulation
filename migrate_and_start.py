@@ -159,6 +159,15 @@ def run_migrations():
 
         try:
             conn.execute(text("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_cluster_run_summaries_sim_cluster
+                ON cluster_run_summaries (simulation_id, cluster_id);
+            """))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
+        try:
+            conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS architect_corrections (
                     id SERIAL PRIMARY KEY,
                     architect_name VARCHAR(100) NOT NULL,
