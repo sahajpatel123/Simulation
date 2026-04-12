@@ -1,35 +1,21 @@
 """
 Conductor — orchestrates 52 clusters × architect stack per product type,
-applies ClusterReweightingEngine (see `_reweight_clusters`), and optionally
-persists `cluster_run_summaries` for the learning system.
+applies ClusterReweightingEngine, and optionally persists cluster_run_summaries
+for the learning system.
 """
 from __future__ import annotations
 
-import json
 import traceback
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from enum import Enum
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import delete
 
 from app.simulation.architects.base import ArchitectOutput, DomainReport
+from app.simulation.cluster_reweighting import ClusterReweightingEngine
 from app.simulation.clusters.definitions import ClusterDefinition
 from app.simulation.clusters.registry import ClusterRegistry
-
-
-class ProductType(str, Enum):
-    SAAS                = "saas"
-    MARKETPLACE         = "marketplace"
-    MOBILE_APP          = "mobile_app"
-    DEVELOPER_TOOL      = "developer_tool"
-    ENTERPRISE_SOFTWARE = "enterprise_software"
-    CONSUMER_HARDWARE   = "consumer_hardware"
-    HEALTH_HARDWARE     = "health_hardware"
-    IOT_HARDWARE        = "iot_hardware"
-    WEARABLE            = "wearable"
-    B2B_HARDWARE        = "b2b_hardware"
+from app.simulation.product_type import ProductType
 
 
 # Keyword → ProductType scoring
@@ -332,73 +318,6 @@ class Conductor:
                     resolved[param_name] = val
         return resolved
 
-    def _reweight_clusters(
-        self,
-        product_type: ProductType,
-        env_params: dict,
-    ) -> dict[str, float]:
-        base = {c.cluster_id: c.population_weight for c in self._registry.all_clusters()}
-        AOV = float(env_params.get("average_order_value", 999))
-
-        suppress: list[str] = []
-        amplify: dict[str, float] = {}
-
-        if product_type == ProductType.ENTERPRISE_SOFTWARE:
-            suppress = [
-                "high_literacy_student_freemium_ceiling", "low_literacy_student_passive",
-                "tier3_first_time_app_user", "tier3_community_influenced_buyer",
-                "value_hardware_buyer", "gift_hardware_buyer", "impulsive_trend_follower",
-            ]
-            amplify = {
-                "senior_enterprise_decision_maker": 8,
-                "mid_market_it_decision_maker": 7,
-                "technical_founder_evaluator": 5,
-                "enterprise_procurement_gatekeeper": 4,
-                "non_technical_co_founder_buyer": 4,
-            }
-        elif product_type == ProductType.CONSUMER_HARDWARE and AOV < 3000:
-            amplify = {
-                "value_hardware_buyer": 3.5,
-                "tier2_price_sensitive_pragmatist": 2.5,
-                "replacement_hardware_buyer": 2.0,
-                "impulsive_trend_follower": 1.8,
-            }
-        elif product_type == ProductType.HEALTH_HARDWARE:
-            suppress = [
-                "high_literacy_student_freemium_ceiling", "low_literacy_student_passive",
-                "college_group_purchase", "impulsive_trend_follower",
-            ]
-            amplify = {
-                "health_hardware_skeptic": 4.0,
-                "health_hardware_enthusiast": 3.5,
-                "wealthy_health_conscious_buyer": 3.0,
-                "anxiety_driven_researcher": 2.0,
-            }
-        elif product_type == ProductType.IOT_HARDWARE:
-            amplify = {
-                "smart_home_early_adopter": 4.0,
-                "high_income_early_adopter": 2.5,
-                "high_income_hardware_enthusiast": 2.0,
-            }
-        elif product_type in (ProductType.SAAS, ProductType.MOBILE_APP):
-            amplify = {
-                "urban_mid_income_saas_buyer": 1.5,
-                "mid_income_startup_founder": 1.8,
-                "young_urban_professional_first_job": 1.3,
-            }
-
-        for cid in suppress:
-            if cid in base:
-                base[cid] = 0.0
-        for cid, mult in amplify.items():
-            if cid in base:
-                base[cid] *= mult
-
-        total = sum(base.values())
-        if total == 0:
-            total = 1.0
-        return {k: v / total for k, v in base.items()}
-
     def run(
         self,
         agents: list[Any],
@@ -409,15 +328,28 @@ class Conductor:
         user_id: int | None = None,
         signal_quality: float = 0.0,
         db: Any = None,
+        simulation: Any | None = None,
     ) -> ConductorResult:
-        del user_id  # reserved for future learning hooks
-
         if product_type is None:
             desc = str(env_params.get("description", ""))
             product_type = self.detect_product_type(desc, assumptions)
 
         env_params = {**env_params, "product_type": product_type.value}
-        cluster_weights = self._reweight_clusters(product_type, env_params)
+        reweighter = ClusterReweightingEngine()
+        cluster_weights = reweighter.compute_weights(
+            product_type=product_type,
+            aov=float(env_params.get("average_order_value", 999)),
+            geography=str(env_params.get("geography", "ALL_INDIA")),
+            segment=str(env_params.get("target_segment", "B2C")),
+            age_target=str(env_params.get("age_target", "ALL")),
+        )
+
+        sq = float(signal_quality or 0.0)
+        if simulation is not None and getattr(simulation, "signal_quality", None) is not None:
+            sq = float(simulation.signal_quality)
+        claim_conf_dist = None
+        if simulation is not None:
+            claim_conf_dist = getattr(simulation, "claim_confidence_distribution", None)
         stack = ARCHITECT_STACKS.get(product_type, ARCHITECT_STACKS[ProductType.SAAS])
         all_clusters = self._registry.all_clusters()
 
@@ -495,18 +427,7 @@ class Conductor:
             cluster_results, cluster_weights, all_clusters
         )
 
-        if db is not None and simulation_id is not None:
-            self._write_cluster_summaries(
-                db,
-                simulation_id,
-                cluster_results,
-                cluster_breakdown,
-                cluster_agent_counts,
-                signal_quality,
-                product_type.value,
-            )
-
-        return ConductorResult(
+        result = ConductorResult(
             product_type=product_type,
             cluster_results=cluster_results,
             population_weighted_conversion=round(pwc, 4),
@@ -514,8 +435,33 @@ class Conductor:
             cluster_breakdown=cluster_breakdown,
             architect_accountability=architect_accountability,
             per_cluster_matrices=per_cluster_matrices,
-            signal_quality=signal_quality,
+            signal_quality=sq,
         )
+
+        if db is not None and simulation_id is not None:
+            self._write_cluster_summaries(
+                db,
+                simulation_id,
+                cluster_results,
+                cluster_breakdown,
+                cluster_agent_counts,
+                sq,
+                product_type.value,
+                claim_confidence_distribution=claim_conf_dist,
+            )
+
+        if db is not None and user_id is not None:
+            from app.simulation.blindspot_detector import BlindspotDetector
+
+            BlindspotDetector().scan(
+                user_id=user_id,
+                simulation=simulation,
+                cluster_weights=cluster_weights,
+                conductor_result=result,
+                db=db,
+            )
+
+        return result
 
     def _estimate_cluster_conversion(
         self,
@@ -585,8 +531,19 @@ class Conductor:
         cluster_agent_counts: dict[str, int],
         signal_quality: float,
         product_type: str,
+        claim_confidence_distribution: dict | None = None,
     ) -> None:
-        ts = datetime.now(timezone.utc)
+        from app.models.cluster_run_summary import ClusterRunSummary
+
+        try:
+            db.execute(
+                delete(ClusterRunSummary).where(
+                    ClusterRunSummary.simulation_id == simulation_id
+                )
+            )
+        except Exception as e:
+            print(f"WARN: cluster_run_summaries delete failed: {e}")
+
         for cluster_id, arch_outputs in cluster_results.items():
             conversion_rate = cluster_breakdown.get(cluster_id, 0.0)
             total_agents = cluster_agent_counts.get(cluster_id, 0)
@@ -614,33 +571,24 @@ class Conductor:
             )
 
             try:
-                db.execute(
-                    text("""
-                        INSERT INTO cluster_run_summaries
-                        (simulation_id, cluster_id, agents_assigned, agents_converted,
-                         conversion_rate, drop_state_distribution, mean_drop_state,
-                         architect_scores, primary_drop_trigger, signal_quality, product_type, created_at)
-                        VALUES (:sim_id, :cid, :assigned, :converted, :cr,
-                                CAST(:drop_dist AS JSONB), :mean_drop, CAST(:arch_scores AS JSONB), :trigger, :sq, :pt, :ts)
-                        ON CONFLICT (simulation_id, cluster_id) DO NOTHING
-                    """),
-                    {
-                        "sim_id":     simulation_id,
-                        "cid":        cluster_id,
-                        "assigned":   total_agents,
-                        "converted":  converted,
-                        "cr":         conversion_rate,
-                        "drop_dist":  json.dumps(drop_dist),
-                        "mean_drop":  mean_drop,
-                        "arch_scores": json.dumps(architect_scores),
-                        "trigger":    primary_trigger,
-                        "sq":         signal_quality,
-                        "pt":         product_type,
-                        "ts":         ts,
-                    },
+                db.add(
+                    ClusterRunSummary(
+                        simulation_id=simulation_id,
+                        cluster_id=cluster_id,
+                        agents_assigned=total_agents,
+                        agents_converted=converted,
+                        conversion_rate=float(conversion_rate),
+                        drop_state_distribution=drop_dist,
+                        mean_drop_state=mean_drop,
+                        architect_scores=architect_scores,
+                        primary_drop_trigger=primary_trigger,
+                        signal_quality=signal_quality,
+                        claim_confidence_distribution=claim_confidence_distribution,
+                        product_type=product_type,
+                    )
                 )
             except Exception as e:
-                print(f"WARN: ClusterRunSummary write failed for {cluster_id}: {e}")
+                print(f"WARN: ClusterRunSummary ORM add failed for {cluster_id}: {e}")
         try:
             db.commit()
         except Exception:
