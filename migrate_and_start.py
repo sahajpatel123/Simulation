@@ -96,7 +96,254 @@ def run_migrations():
         except Exception:
             conn.rollback()
 
+        # Step 36a: add signal_quality and claim_confidence_distribution to simulations
+        for column, col_type in [
+            ("signal_quality", "FLOAT"),
+            ("claim_confidence_distribution", "JSONB"),
+        ]:
+            try:
+                conn.execute(
+                    text(f"ALTER TABLE simulations ADD COLUMN IF NOT EXISTS {column} {col_type};")
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
+    # Step 36a: learning system tables
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS cluster_parameters (
+                    id SERIAL PRIMARY KEY,
+                    cluster_id VARCHAR(100) NOT NULL,
+                    trait_name VARCHAR(100) NOT NULL,
+                    base_value FLOAT NOT NULL,
+                    calibrated_value FLOAT NOT NULL,
+                    calibration_count INTEGER DEFAULT 0,
+                    effective_sample_count FLOAT DEFAULT 0.0,
+                    last_updated TIMESTAMP DEFAULT NOW(),
+                    calibration_source VARCHAR(50) DEFAULT 'AUTHORED',
+                    UNIQUE(cluster_id, trait_name)
+                );
+            """))
+            conn.commit()
+            print("✅ cluster_parameters ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ cluster_parameters skip: {e}")
+
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS cluster_run_summaries (
+                    id SERIAL PRIMARY KEY,
+                    simulation_id INTEGER REFERENCES simulations(id),
+                    cluster_id VARCHAR(100) NOT NULL,
+                    agents_assigned INTEGER NOT NULL,
+                    agents_converted INTEGER NOT NULL,
+                    conversion_rate FLOAT NOT NULL,
+                    drop_state_distribution JSONB NOT NULL,
+                    mean_drop_state VARCHAR(50),
+                    architect_scores JSONB NOT NULL,
+                    primary_drop_trigger VARCHAR(100),
+                    signal_quality FLOAT DEFAULT 0.0,
+                    claim_confidence_distribution JSONB,
+                    product_type VARCHAR(50),
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+            """))
+            conn.commit()
+            print("✅ cluster_run_summaries ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ cluster_run_summaries skip: {e}")
+
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS architect_corrections (
+                    id SERIAL PRIMARY KEY,
+                    architect_name VARCHAR(100) NOT NULL,
+                    product_type VARCHAR(50) NOT NULL,
+                    product_attribute VARCHAR(200) NOT NULL,
+                    cluster_id VARCHAR(100) NOT NULL,
+                    correction_scalar FLOAT NOT NULL DEFAULT 1.0,
+                    confidence_weight FLOAT NOT NULL DEFAULT 0.0,
+                    sample_count INTEGER DEFAULT 0,
+                    effective_sample_count FLOAT DEFAULT 0.0,
+                    scope VARCHAR(50) NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    last_updated TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(architect_name, product_type, product_attribute, cluster_id)
+                );
+            """))
+            conn.commit()
+            print("✅ architect_corrections ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ architect_corrections skip: {e}")
+
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS founder_outcomes (
+                    id SERIAL PRIMARY KEY,
+                    simulation_id INTEGER REFERENCES simulations(id),
+                    project_id INTEGER REFERENCES projects(id),
+                    days_since_launch INTEGER NOT NULL,
+                    actual_conversion_rate FLOAT NOT NULL,
+                    actual_drop_at_browse_pct FLOAT,
+                    actual_drop_at_consider_pct FLOAT,
+                    actual_drop_at_decide_pct FLOAT,
+                    primary_failure_reason VARCHAR(50),
+                    product_changed_since_sim BOOLEAN DEFAULT FALSE,
+                    pricing_changed BOOLEAN DEFAULT FALSE,
+                    target_market_changed BOOLEAN DEFAULT FALSE,
+                    data_confidence VARCHAR(20) NOT NULL DEFAULT 'ESTIMATED',
+                    validated BOOLEAN DEFAULT FALSE,
+                    signal_quality_at_run FLOAT,
+                    learning_weight FLOAT DEFAULT 0.0,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+            """))
+            conn.commit()
+            print("✅ founder_outcomes ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ founder_outcomes skip: {e}")
+
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS user_claim_accuracy_profiles (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER REFERENCES users(id),
+                    architect_name VARCHAR(100) NOT NULL,
+                    ema_delta FLOAT DEFAULT 0.0,
+                    reliability_score FLOAT DEFAULT 0.0,
+                    sample_count INTEGER DEFAULT 0,
+                    last_updated TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(user_id, architect_name)
+                );
+            """))
+            conn.commit()
+            print("✅ user_claim_accuracy_profiles ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ user_claim_accuracy_profiles skip: {e}")
+
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS user_market_blindspots (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER REFERENCES users(id),
+                    blindspot_type VARCHAR(50) NOT NULL,
+                    blindspot_value VARCHAR(200) NOT NULL,
+                    occurrence_count INTEGER DEFAULT 1,
+                    first_seen TIMESTAMP DEFAULT NOW(),
+                    last_surfaced_to_user TIMESTAMP,
+                    UNIQUE(user_id, blindspot_type, blindspot_value)
+                );
+            """))
+            conn.commit()
+            print("✅ user_market_blindspots ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ user_market_blindspots skip: {e}")
+
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS user_simulation_accuracy_history (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER REFERENCES users(id),
+                    simulation_id INTEGER REFERENCES simulations(id),
+                    predicted_conversion FLOAT NOT NULL,
+                    actual_conversion FLOAT,
+                    absolute_gap FLOAT,
+                    signal_quality_at_run FLOAT NOT NULL,
+                    accuracy_trend VARCHAR(30) DEFAULT 'INSUFFICIENT_DATA',
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+            """))
+            conn.commit()
+            print("✅ user_simulation_accuracy_history ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ user_simulation_accuracy_history skip: {e}")
+
+    # Seed cluster_parameters with 416 placeholder rows (52 clusters × 8 traits)
+    _seed_cluster_parameters()
+
     print("━━━ All migrations complete ━━━")
+
+
+_CLUSTER_IDS = [
+    "urban_high_income_tech_early", "urban_high_income_tech_late",
+    "urban_high_income_nonttech_early", "urban_high_income_nonttech_late",
+    "urban_mid_income_tech_early", "urban_mid_income_tech_late",
+    "urban_mid_income_nonttech_early", "urban_mid_income_nonttech_late",
+    "urban_low_income_tech_early", "urban_low_income_tech_late",
+    "urban_low_income_nonttech_early", "urban_low_income_nonttech_late",
+    "suburban_high_income_tech_early", "suburban_high_income_tech_late",
+    "suburban_high_income_nonttech_early", "suburban_high_income_nonttech_late",
+    "suburban_mid_income_tech_early", "suburban_mid_income_tech_late",
+    "suburban_mid_income_nonttech_early", "suburban_mid_income_nonttech_late",
+    "suburban_low_income_tech_early", "suburban_low_income_tech_late",
+    "suburban_low_income_nonttech_early", "suburban_low_income_nonttech_late",
+    "rural_high_income_tech_early", "rural_high_income_tech_late",
+    "rural_high_income_nonttech_early", "rural_high_income_nonttech_late",
+    "rural_mid_income_tech_early", "rural_mid_income_tech_late",
+    "rural_mid_income_nonttech_early", "rural_mid_income_nonttech_late",
+    "rural_low_income_tech_early", "rural_low_income_tech_late",
+    "rural_low_income_nonttech_early", "rural_low_income_nonttech_late",
+    "metro_student_tech", "metro_student_nonttech",
+    "metro_professional_tech", "metro_professional_nonttech",
+    "metro_homemaker_tech", "metro_homemaker_nonttech",
+    "metro_retiree_tech", "metro_retiree_nonttech",
+    "tier2_student_tech", "tier2_student_nonttech",
+    "tier2_professional_tech", "tier2_professional_nonttech",
+    "tier2_homemaker_tech", "tier2_homemaker_nonttech",
+    "tier2_retiree_tech", "tier2_retiree_nonttech",
+]
+
+_TRAIT_NAMES = [
+    "income_level",
+    "digital_literacy",
+    "motivation",
+    "trust",
+    "price_sensitivity",
+    "risk_aversion",
+    "patience_score",
+    "social_orientation",
+]
+
+
+def _seed_cluster_parameters():
+    with engine.connect() as conn:
+        try:
+            row = conn.execute(text("SELECT COUNT(*) FROM cluster_parameters")).scalar()
+            if row and row > 0:
+                print(f"✅ cluster_parameters already seeded ({row} rows)")
+                return
+
+            rows = [
+                {"cluster_id": cid, "trait_name": trait}
+                for cid in _CLUSTER_IDS
+                for trait in _TRAIT_NAMES
+            ]
+            conn.execute(
+                text("""
+                    INSERT INTO cluster_parameters
+                        (cluster_id, trait_name, base_value, calibrated_value,
+                         calibration_count, effective_sample_count, calibration_source)
+                    VALUES
+                        (:cluster_id, :trait_name, 0.5, 0.5, 0, 0.0, 'AUTHORED')
+                    ON CONFLICT (cluster_id, trait_name) DO NOTHING
+                """),
+                rows,
+            )
+            conn.commit()
+            inserted = conn.execute(text("SELECT COUNT(*) FROM cluster_parameters")).scalar()
+            print(f"✅ cluster_parameters seeded: {inserted} rows")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ cluster_parameters seed failed: {e}")
 
 
 if __name__ == "__main__":
