@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -43,5 +44,14 @@ class SimulationResultOut(BaseModel):
     error_message: str | None
     created_at: datetime
     updated_at: datetime
+    cluster_breakdown: list[dict[str, Any]] = Field(default_factory=list)
+    domain_findings: list[Any] = Field(default_factory=list)
+    primary_failure_domain: str = "unknown"
+    highest_value_cluster: dict[str, Any] = Field(default_factory=dict)
+    architect_accountability: dict[str, Any] = Field(default_factory=dict)
+    product_type_detected: str = ""
+    cluster_narrative: str = ""
+    signal_quality: float | None = None
+    user_blindspots: list[dict[str, Any]] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
