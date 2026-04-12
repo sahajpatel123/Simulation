@@ -1,12 +1,24 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass as _dc
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+if TYPE_CHECKING:
+    from app.simulation.clusters.definitions import ClusterDefinition
+
 logger = logging.getLogger(__name__)
+
+
+@_dc
+class ClusterTransitionMatrix:
+    cluster_id: str
+    matrix: np.ndarray
+    architect_inputs_used: dict[str, float]
+    conversion_estimate: float
 
 # ================================================================
 # STATE DEFINITIONS
@@ -152,6 +164,17 @@ class MarkovBehaviourModel:
         result = model.run_chain(agent_profile, matrix)
     """
 
+    def __init__(
+        self,
+        env_params: dict[str, Any] | None = None,
+        assumptions: list[dict[str, Any]] | None = None,
+        seed: int | None = None,
+    ) -> None:
+        """Optional stored defaults for tooling; core methods still take explicit args."""
+        self._env_params = env_params
+        self._assumptions = assumptions
+        self._seed = seed
+
     def build_transition_matrix(
         self,
         env_params: dict[str, Any],
@@ -222,6 +245,101 @@ class MarkovBehaviourModel:
         matrix = matrix / row_sums
 
         return matrix
+
+    def build_for_cluster(
+        self,
+        cluster: "ClusterDefinition",
+        architect_outputs: dict[str, Any],
+        env_params: dict[str, Any],
+        seed: int = 42,
+    ) -> ClusterTransitionMatrix:
+        """
+        Builds a per-cluster transition matrix using architect outputs.
+        Architect transition_overrides() are applied multiplicatively
+        to BASE_TRANSITIONS. Row-normalised at end.
+        """
+        del env_params  # reserved for future env-based matrix tweaks
+        if seed is not None:
+            np.random.seed(seed)
+
+        from app.simulation.conductor import _ARCHITECTS
+
+        STATE_ORDER = ["ARRIVE", "BROWSE", "CONSIDER", "DECIDE", "PURCHASE", "ABANDON", "RETURN"]
+        n = len(STATE_ORDER)
+        idx = {s: i for i, s in enumerate(STATE_ORDER)}
+
+        # Flatten module-level BASE_TRANSITIONS (State enums → string keys)
+        base: dict[tuple[str, str], float] = {}
+        for from_s, to_dict in BASE_TRANSITIONS.items():
+            for to_s, prob in to_dict.items():
+                base[(from_s.value, to_s.value)] = float(prob)
+
+        matrix = np.zeros((n, n), dtype=np.float64)
+        for (from_s, to_s), prob in base.items():
+            if from_s in idx and to_s in idx:
+                matrix[idx[from_s]][idx[to_s]] = prob
+
+        inputs_used: dict[str, float] = {}
+        for arch_name, output in architect_outputs.items():
+            architect = _ARCHITECTS.get(arch_name)
+            if architect is None:
+                continue
+            try:
+                overrides = architect.transition_overrides(output)
+            except Exception:
+                continue
+            for (from_s, to_s), multiplier in overrides.items():
+                if from_s not in idx or to_s not in idx:
+                    continue
+                current = matrix[idx[from_s]][idx[to_s]]
+                matrix[idx[from_s]][idx[to_s]] = max(
+                    0.001, min(0.999, current * float(multiplier))
+                )
+                inputs_used[f"{arch_name}:{from_s}->{to_s}"] = round(float(multiplier), 4)
+
+        for i in range(n):
+            row_sum = matrix[i].sum()
+            if row_sum > 0:
+                matrix[i] /= row_sum
+            else:
+                matrix[i][idx["ABANDON"]] = 1.0
+
+        conversion = (
+            matrix[idx["ARRIVE"]][idx["BROWSE"]]
+            * matrix[idx["BROWSE"]][idx["CONSIDER"]]
+            * matrix[idx["CONSIDER"]][idx["DECIDE"]]
+            * matrix[idx["DECIDE"]][idx["PURCHASE"]]
+        )
+
+        return ClusterTransitionMatrix(
+            cluster_id=cluster.cluster_id,
+            matrix=matrix,
+            architect_inputs_used=inputs_used,
+            conversion_estimate=round(float(conversion), 4),
+        )
+
+    @classmethod
+    def build(
+        cls,
+        env_params: dict[str, Any],
+        assumptions: list[Any],
+        seed: int = 42,
+        cluster: "ClusterDefinition | None" = None,
+        architect_outputs: dict[str, Any] | None = None,
+    ) -> ClusterTransitionMatrix | np.ndarray:
+        """
+        Factory: uses build_for_cluster() when architect outputs available,
+        falls back to existing build_transition_matrix() otherwise.
+        """
+        instance = cls()
+        if cluster is not None and architect_outputs:
+            return instance.build_for_cluster(
+                cluster=cluster,
+                architect_outputs=architect_outputs,
+                env_params=env_params,
+                seed=seed,
+            )
+        return instance.build_transition_matrix(env_params, assumptions, seed=seed)
 
     def run_chain(
         self,
