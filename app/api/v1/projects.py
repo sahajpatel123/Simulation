@@ -27,6 +27,7 @@ from app.schemas.assumption import (
     AssumptionListResponse,
     AssumptionOut,
 )
+from app.simulation.scored_assumption import score_assumptions, signal_quality_tier
 from app.schemas.competitive import (
     CompetitiveAnalysisOut,
     CompetitiveAnalysisRequest,
@@ -219,6 +220,62 @@ def extract_assumptions(
     for assumption in saved:
         db.refresh(assumption)
 
+    # Score assumptions and compute signal quality for this extraction run.
+    scored_list, hard_count, soft_flags, sq = score_assumptions(
+        [
+            {
+                "id": a.id,
+                "text": a.text,
+                "category": a.category,
+                "impact_score": a.impact_score,
+            }
+            for a in saved
+        ]
+    )
+
+    # Build confidence distribution summary (count per tier).
+    confidence_dist: dict[str, int] = {}
+    for sa in scored_list:
+        key = sa.claim_confidence.value
+        confidence_dist[key] = confidence_dist.get(key, 0) + 1
+
+    sq_tier = signal_quality_tier(sq)
+
+    # Persist signal_quality on the most recent simulation for this project,
+    # or update it when the next simulation is created (Step 37 task picks this up).
+    # For now, write to the latest QUEUED/RUNNING simulation if one exists.
+    latest_sim = (
+        db.query(Simulation)
+        .filter(Simulation.project_id == project_id)
+        .order_by(Simulation.created_at.desc())
+        .first()
+    )
+    if latest_sim is not None:
+        latest_sim.signal_quality = sq
+        latest_sim.claim_confidence_distribution = confidence_dist
+        db.commit()
+
+    # Apply personal accuracy adjustment from user_claim_accuracy_profiles
+    # if the user has enough history (sample_count >= 3, reliability >= 0.40).
+    # This is a read-only advisory enrichment — it does not modify saved rows.
+    user_reliability_note: str | None = None
+    try:
+        from sqlalchemy import text as _text
+        profile_rows = db.execute(
+            _text(
+                "SELECT architect_name, ema_delta, reliability_score, sample_count "
+                "FROM user_claim_accuracy_profiles "
+                "WHERE user_id = :uid AND sample_count >= 3 AND reliability_score >= 0.40"
+            ),
+            {"uid": current_user.id},
+        ).fetchall()
+        if profile_rows:
+            user_reliability_note = (
+                f"Personal accuracy profile active: {len(profile_rows)} architects calibrated."
+            )
+    except Exception:
+        pass
+
     hidden_count = sum(1 for a in saved if a.is_hidden)
 
     return AssumptionListResponse(
@@ -226,6 +283,13 @@ def extract_assumptions(
         assumptions=[AssumptionOut.model_validate(a) for a in saved],
         total=len(saved),
         hidden_count=hidden_count,
+        signal_quality=sq,
+        signal_quality_tier=sq_tier,
+        claim_confidence_distribution=confidence_dist,
+        soft_contradiction_flags=soft_flags,
+        message=(
+            user_reliability_note or "Assumptions extracted successfully"
+        ),
     )
 
 
