@@ -1,4 +1,5 @@
 from celery import Celery
+from celery.schedules import crontab
 
 from app.core.config import settings
 
@@ -10,6 +11,7 @@ celery_app = Celery(
         "app.tasks.simulation_tasks",
         "app.tasks.stress_test_tasks",
         "app.tasks.decision_tasks",
+        "app.tasks.calibration_tasks",
     ],
 )
 
@@ -29,3 +31,22 @@ celery_app.conf.update(
     result_expires=86400,
     broker_connection_retry_on_startup=True,
 )
+
+
+@celery_app.on_after_configure.connect
+def setup_periodic_tasks(sender, **kwargs) -> None:
+    from app.tasks.calibration_tasks import (
+        run_structural_pattern_update,
+        run_systematic_bias_update,
+    )
+
+    sender.add_periodic_task(
+        crontab(day_of_week=1, hour=3),
+        run_systematic_bias_update.s(),
+        name="weekly-bias-correction",
+    )
+    sender.add_periodic_task(
+        crontab(day_of_month=1, hour=4),
+        run_structural_pattern_update.s(),
+        name="monthly-pattern-correction",
+    )

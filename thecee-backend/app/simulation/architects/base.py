@@ -13,6 +13,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from sqlalchemy import text
+
 if TYPE_CHECKING:
     from app.simulation.clusters.definitions import ClusterDefinition
 
@@ -139,3 +141,38 @@ class BaseArchitect(ABC):
         Default returns an empty dict (no overrides).
         """
         return {}
+
+    def _apply_correction(
+        self,
+        metrics: dict[str, float],
+        cluster_id: str,
+        product_type: str,
+        db=None,
+    ) -> dict[str, float]:
+        """
+        Applies architect_corrections from DB if correction
+        exists and confidence_weight >= 0.20.
+        No-op if db is None (pure function path preserved).
+        """
+        if db is None:
+            return metrics
+        try:
+            row = db.execute(
+                text("""
+                    SELECT correction_scalar, confidence_weight
+                    FROM architect_corrections
+                    WHERE architect_name = :an
+                      AND product_type   = :pt
+                      AND cluster_id IN (:cid, 'ALL')
+                      AND confidence_weight >= 0.20
+                    ORDER BY confidence_weight DESC LIMIT 1
+                """),
+                {"an": self.name, "pt": product_type, "cid": cluster_id},
+            ).fetchone()
+            if row:
+                for k in metrics:
+                    if isinstance(metrics[k], float):
+                        metrics[k] = max(0.0, min(1.0, metrics[k] * float(row.correction_scalar)))
+        except Exception:
+            pass
+        return metrics
