@@ -65,7 +65,7 @@ class CalibrationEngine:
             )
             db.commit()
             return False
-        if predicted > 0.10 and actual < predicted * 0.10:
+        if predicted > 0.10 and actual <= predicted * 0.10:
             db.execute(
                 text("UPDATE founder_outcomes SET validated=false WHERE id=:id"),
                 {"id": outcome.id},

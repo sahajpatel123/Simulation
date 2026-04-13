@@ -216,7 +216,7 @@ def submit_outcome_feedback(
             "error": "Outcome outside plausible range — actual is 3x+ predicted. Please verify numbers.",
             "code": "IMPLAUSIBLE_HIGH",
         }
-    if predicted > 0.10 and actual_cr < predicted * 0.10:
+        if predicted > 0.10 and actual_cr <= predicted * 0.10:
         return {
             "error": "Outcome outside plausible range — actual is 90%+ below predicted. Please verify numbers.",
             "code": "IMPLAUSIBLE_LOW",
