@@ -81,6 +81,7 @@ class AccountabilityEngine:
         "total_cascade_risk",
         "blind_spot_score",
         "empty_state_bounce_probability",
+        "free_trial_as_trust_substitute",
     })
 
     FINDING_TEMPLATES: dict[str, str] = {

@@ -112,7 +112,7 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Looks too mainstream → loses interest",
             "No beta/early-access framing → skips",
         ],
-        product_affinities=["consumer_app", "hardware", "developer_tool", "saas"],
+        product_affinities=["consumer_app", "consumer_hardware", "wearable", "iot_hardware", "developer_tool", "saas"],
         demographic_profile={"geography": "metro", "age_bracket": "25-38", "device_primary": "mobile"},
     ),
 
@@ -144,7 +144,7 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No benchmark data → defers",
             "Specs page missing → bounces",
         ],
-        product_affinities=["hardware", "smart_home", "health_hardware"],
+        product_affinities=["consumer_hardware", "wearable", "iot_hardware", "smart_home", "health_hardware"],
         demographic_profile={"geography": "metro", "age_bracket": "26-42", "device_primary": "desktop"},
     ),
 
@@ -194,7 +194,7 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No EMI option → drops at checkout",
             "Price higher than Amazon listing → bounces",
         ],
-        product_affinities=["hardware", "smart_home", "health_hardware"],
+        product_affinities=["consumer_hardware", "iot_hardware", "smart_home", "health_hardware"],
         demographic_profile={"geography": "metro_tier1", "age_bracket": "28-45", "device_primary": "mobile"},
     ),
 
@@ -554,7 +554,7 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No crowdfunding/pre-order campaign → waits for public launch",
             "No community/Discord for product → loses excitement",
         ],
-        product_affinities=["hardware", "smart_home", "health_hardware"],
+        product_affinities=["consumer_hardware", "wearable", "iot_hardware", "smart_home", "health_hardware"],
         demographic_profile={"geography": "metro", "age_bracket": "22-38", "device_primary": "desktop"},
     ),
 
@@ -570,7 +570,7 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No long-form comparison content → excluded from shortlist",
             "Unavailable on Amazon/Flipkart → won't buy direct",
         ],
-        product_affinities=["hardware", "smart_home"],
+        product_affinities=["consumer_hardware", "iot_hardware", "smart_home"],
         demographic_profile={"geography": "metro_tier1", "age_bracket": "28-48", "device_primary": "desktop"},
     ),
 
@@ -586,7 +586,7 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Competing product ₹300 cheaper with similar specs → lost",
             "No value-tier SKU → exits to competitor",
         ],
-        product_affinities=["hardware", "d2c"],
+        product_affinities=["consumer_hardware", "d2c"],
         demographic_profile={"geography": "metro_tier1_tier2", "age_bracket": "25-45", "device_primary": "mobile"},
     ),
 
@@ -602,7 +602,7 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No gift packaging option → drops to Amazon",
             "Unknown brand at same price as known brand → loses",
         ],
-        product_affinities=["hardware", "d2c", "health_hardware"],
+        product_affinities=["consumer_hardware", "wearable", "d2c", "health_hardware"],
         demographic_profile={"geography": "metro_tier1_tier2", "age_bracket": "25-55", "device_primary": "mobile"},
     ),
 
@@ -618,7 +618,7 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No expedited delivery option → waits for sale elsewhere",
             "No loyalty discount for returning buyer → feels undervalued",
         ],
-        product_affinities=["hardware", "smart_home"],
+        product_affinities=["consumer_hardware", "iot_hardware", "smart_home"],
         demographic_profile={"geography": "metro_tier1_tier2", "age_bracket": "28-50", "device_primary": "mobile"},
     ),
 
@@ -668,7 +668,7 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Not compatible with Google Home or Alexa → eliminated",
             "No local control option → privacy concern blocks purchase",
         ],
-        product_affinities=["smart_home", "hardware"],
+        product_affinities=["smart_home", "iot_hardware", "consumer_hardware"],
         demographic_profile={"geography": "metro", "age_bracket": "26-45", "device_primary": "mobile"},
     ),
 
@@ -686,7 +686,7 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No money-back guarantee → paralysed",
             "Any negative review visible → deters conversion",
         ],
-        product_affinities=["consumer_app", "saas", "hardware", "d2c"],
+        product_affinities=["consumer_app", "saas", "consumer_hardware", "wearable", "iot_hardware", "d2c"],
         demographic_profile={"geography": "metro_tier1", "age_bracket": "25-45", "device_primary": "desktop"},
     ),
 
@@ -896,7 +896,7 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No international card acceptance → checkout failure",
             "No gift delivery or COD option for recipient → loses",
         ],
-        product_affinities=["d2c", "consumer_app", "hardware"],
+        product_affinities=["d2c", "consumer_app", "consumer_hardware", "wearable"],
         demographic_profile={"geography": "international", "age_bracket": "25-55", "device_primary": "desktop"},
     ),
 
@@ -922,12 +922,27 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
 # This ensures the registry is always consistent even after adding clusters.
 # ---------------------------------------------------------------------------
 _raw_total = sum(c.population_weight for c in _CLUSTERS.values())
+_normalised_weights = {
+    cid: round(c.population_weight / _raw_total, 6)
+    for cid, c in _CLUSTERS.items()
+}
+_weight_residual = round(1.0 - sum(_normalised_weights.values()), 6)
+if _weight_residual:
+    _anchor_cluster_id = max(
+        _normalised_weights,
+        key=lambda cid: _normalised_weights[cid],
+    )
+    _normalised_weights[_anchor_cluster_id] = round(
+        _normalised_weights[_anchor_cluster_id] + _weight_residual,
+        6,
+    )
+
 _CLUSTERS = {
     cid: ClusterDefinition(
         cluster_id=c.cluster_id,
         name=c.name,
         description=c.description,
-        population_weight=round(c.population_weight / _raw_total, 6),
+        population_weight=_normalised_weights[cid],
         base_traits=c.base_traits,
         trait_variance=c.trait_variance,
         dominant_behavior_pattern=c.dominant_behavior_pattern,

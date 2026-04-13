@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
@@ -120,6 +121,208 @@ def _hydrate_record(outcome: Outcome) -> OutcomeRecord:
         calibration_score=outcome.calibration_score or 0.0,
         recorded_at=outcome.created_at,
     )
+
+
+def _predicted_from_results(results: dict) -> float:
+    return float(
+        results.get("mean_conversion_rate")
+        or results.get("conversion_rate")
+        or results.get("population_weighted_conversion")
+        or 0
+    )
+
+
+@router.post("/{project_id}/outcome-feedback")
+def submit_outcome_feedback(
+    project_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Submit real-world launch outcomes to improve future simulation accuracy.
+    Runs CalibrationEngine Layer 1 + 4 synchronously; schedules Layer 2 via
+    Celery if new effective_sample_count crosses the activation threshold (10).
+    """
+    from app.simulation.calibration_engine import CalibrationEngine
+    from app.tasks.calibration_tasks import run_systematic_bias_update
+
+    simulation_id = body.get("simulation_id")
+    actual_cr = body.get("actual_conversion_rate")
+
+    if simulation_id is None or actual_cr is None:
+        raise HTTPException(
+            status_code=400,
+            detail="simulation_id and actual_conversion_rate are required",
+        )
+
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    sim = (
+        db.query(Simulation)
+        .filter(Simulation.id == simulation_id, Simulation.project_id == project_id)
+        .first()
+    )
+    if not sim:
+        raise HTTPException(status_code=404, detail="Simulation not found")
+
+    actual_cr = float(actual_cr)
+    results = sim.results_json or {}
+    predicted = _predicted_from_results(results)
+
+    # ── Plausibility guard ──
+    if predicted > 0.10:
+        if actual_cr > predicted * 3.0:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "This outcome falls outside the plausible range. "
+                    "actual_conversion_rate is more than 3× predicted. "
+                    "Please verify your numbers or contact support."
+                ),
+            )
+        if actual_cr < predicted * 0.10:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "This outcome falls outside the plausible range. "
+                    "actual_conversion_rate is less than 10% of predicted. "
+                    "Please verify your numbers or contact support."
+                ),
+            )
+
+    # ── Compute learning_weight ──
+    conf_weights = {"EXACT": 1.0, "ESTIMATED": 0.6, "ROUGH": 0.3}
+    data_confidence = str(body.get("data_confidence", "ESTIMATED")).upper()
+    product_changed = bool(body.get("product_changed_since_sim", False))
+    conf_w = conf_weights.get(data_confidence, 0.3)
+    sq = float(sim.signal_quality or 0.0)
+
+    if product_changed:
+        learning_weight = 0.0
+    elif sq >= 0.50:
+        learning_weight = sq * conf_w
+    elif sq >= 0.25:
+        learning_weight = sq * 0.5 * conf_w
+    else:
+        learning_weight = 0.0
+
+    # ── Persist to founder_outcomes ──
+    db.execute(
+        text("""
+            INSERT INTO founder_outcomes
+            (simulation_id, project_id, days_since_launch, actual_conversion_rate,
+             actual_drop_at_browse_pct, actual_drop_at_consider_pct, actual_drop_at_decide_pct,
+             primary_failure_reason, product_changed_since_sim, pricing_changed,
+             target_market_changed, data_confidence, signal_quality_at_run,
+             learning_weight, validated, created_at)
+            VALUES (:sid, :pid, :days, :acr, :br, :cr_val, :dr,
+                    :pfr, :pc, :pricing, :tm, :dc, :sq, :lw, :val, NOW())
+        """),
+        {
+            "sid": simulation_id,
+            "pid": project_id,
+            "days": int(body.get("days_since_launch", 90)),
+            "acr": actual_cr,
+            "br": body.get("actual_drop_at_browse_pct"),
+            "cr_val": body.get("actual_drop_at_consider_pct"),
+            "dr": body.get("actual_drop_at_decide_pct"),
+            "pfr": body.get("primary_failure_reason"),
+            "pc": product_changed,
+            "pricing": bool(body.get("pricing_changed", False)),
+            "tm": bool(body.get("target_market_changed", False)),
+            "dc": data_confidence,
+            "sq": sq,
+            "lw": learning_weight,
+            "val": learning_weight > 0.0,
+        },
+    )
+    db.commit()
+
+    outcome_row = db.execute(
+        text(
+            "SELECT * FROM founder_outcomes "
+            "WHERE simulation_id=:sid ORDER BY id DESC LIMIT 1"
+        ),
+        {"sid": simulation_id},
+    ).fetchone()
+
+    if not outcome_row:
+        raise HTTPException(status_code=500, detail="Failed to load inserted outcome row")
+
+    class _OutcomeProxy:
+        def __init__(self, r, lw: float) -> None:
+            self.id = r.id
+            self.actual_conversion_rate = float(r.actual_conversion_rate)
+            self.product_changed_since_sim = bool(r.product_changed_since_sim)
+            self.data_confidence = r.data_confidence
+            self.learning_weight = lw
+            self.validated = lw > 0.0
+
+    outcome = _OutcomeProxy(outcome_row, learning_weight)
+
+    # ── Layer 4: user accuracy profile (synchronous, fast) ──
+    eng = CalibrationEngine()
+    will_learn = eng.validate_outcome(outcome, sim, db)
+    eng.update_user_accuracy_profile(current_user.id, outcome, sim, db)
+
+    # ── Check whether Layer 2 threshold is newly crossed → fire Celery task ──
+    product_type_detected = results.get("product_type_detected") or "saas"
+    try:
+        eff_count_row = db.execute(
+            text("""
+                SELECT COALESCE(SUM(learning_weight), 0) AS eff
+                FROM founder_outcomes fo
+                JOIN simulations s ON s.id = fo.simulation_id
+                WHERE fo.validated = true
+                  AND fo.learning_weight > 0
+                  AND s.results_json->>'product_type_detected' = :pt
+            """),
+            {"pt": product_type_detected},
+        ).fetchone()
+        eff_count = float(eff_count_row.eff) if eff_count_row else 0.0
+        if eff_count >= 10:
+            run_systematic_bias_update.delay()
+            logger.info(
+                "[OutcomeFeedback] Triggered systematic bias update for product_type=%s (eff=%.1f)",
+                product_type_detected,
+                eff_count,
+            )
+    except Exception as exc:
+        logger.warning("[OutcomeFeedback] Could not trigger bias update: %s", exc)
+
+    # ── Latest accuracy trend ──
+    trend_row = db.execute(
+        text("""
+            SELECT accuracy_trend
+            FROM user_simulation_accuracy_history
+            WHERE user_id=:uid ORDER BY created_at DESC LIMIT 1
+        """),
+        {"uid": current_user.id},
+    ).fetchone()
+    trend = trend_row.accuracy_trend if trend_row else "INSUFFICIENT_DATA"
+
+    return {
+        "stored": True,
+        "will_improve_model": will_learn,
+        "learning_weight": round(learning_weight, 4),
+        "signal_quality": sq,
+        "accuracy_trend": trend,
+        "message": (
+            "Thank you — your outcome data improves TheCee for all founders."
+            if will_learn
+            else (
+                "Stored but not used for calibration "
+                "(signal quality too low or product changed since simulation)."
+            )
+        ),
+    }
 
 
 @router.post(

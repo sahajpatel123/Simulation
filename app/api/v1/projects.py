@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from anthropic import Anthropic
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -52,6 +53,7 @@ from app.schemas.stress_test import (
     StressTestOut,
     StressTestStatusOut,
 )
+from app.simulation.clusters.registry import ClusterRegistry
 from app.tasks.stress_test_tasks import run_assumption_stress_test
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -92,6 +94,214 @@ def list_projects(
         projects=[ProjectOut.model_validate(p) for p in projects],
         total=len(projects),
     )
+
+
+@router.get("/{project_id}/clusters")
+def get_project_clusters(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    latest_sim = (
+        db.query(Simulation)
+        .filter(Simulation.project_id == project_id, Simulation.status == "COMPLETED")
+        .order_by(Simulation.created_at.desc())
+        .first()
+    )
+    if not latest_sim or not latest_sim.results_json:
+        return {"clusters": [], "message": "No completed simulation found"}
+
+    breakdown = latest_sim.results_json.get("cluster_breakdown", {})
+    _clusters = {c.cluster_id: c for c in ClusterRegistry().all_clusters()}
+    clusters_out = [
+        {
+            "cluster_id": cid,
+            "name": _clusters[cid].name if cid in _clusters else cid,
+            "conversion_rate": round(float(cr), 4),
+            "population_fraction": round(_clusters[cid].population_weight, 4)
+            if cid in _clusters
+            else 0.0,
+            "dominant_behavior": _clusters[cid].dominant_behavior_pattern
+            if cid in _clusters
+            else "",
+            "known_failure_modes": _clusters[cid].known_failure_modes if cid in _clusters else [],
+            "demographic_profile": _clusters[cid].demographic_profile if cid in _clusters else {},
+        }
+        for cid, cr in sorted(breakdown.items(), key=lambda x: -x[1])
+    ]
+    return {"clusters": clusters_out, "simulation_id": latest_sim.id}
+
+
+@router.get("/{project_id}/domain-findings")
+def get_domain_findings(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    latest_sim = (
+        db.query(Simulation)
+        .filter(Simulation.project_id == project_id, Simulation.status == "COMPLETED")
+        .order_by(Simulation.created_at.desc())
+        .first()
+    )
+    if not latest_sim or not latest_sim.results_json:
+        return {"findings": [], "message": "No completed simulation found"}
+
+    results = latest_sim.results_json
+    return {
+        "findings": results.get("domain_findings", []),
+        "primary_failure_domain": results.get("primary_failure_domain", "unknown"),
+        "highest_value_cluster": results.get("highest_value_cluster", {}),
+        "cluster_narrative": results.get("cluster_narrative", ""),
+        "simulation_id": latest_sim.id,
+    }
+
+
+@router.post("/{project_id}/outcome-feedback")
+def submit_outcome_feedback(
+    project_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.simulation.calibration_engine import CalibrationEngine
+
+    simulation_id = body.get("simulation_id")
+    actual_cr = body.get("actual_conversion_rate")
+    if not simulation_id or actual_cr is None:
+        raise HTTPException(
+            status_code=400,
+            detail="simulation_id and actual_conversion_rate required",
+        )
+
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    sim = db.query(Simulation).filter(Simulation.id == simulation_id).first()
+    if not sim or sim.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Simulation not found")
+
+    results = sim.results_json or {}
+    predicted = float(
+        results.get("mean_conversion_rate")
+        or results.get("conversion_rate")
+        or results.get("population_weighted_conversion")
+        or 0
+    )
+    actual_cr = float(actual_cr)
+
+    if predicted > 0.10 and actual_cr > predicted * 3.0:
+        return {
+            "error": "Outcome outside plausible range — actual is 3x+ predicted. Please verify numbers.",
+            "code": "IMPLAUSIBLE_HIGH",
+        }
+        if predicted > 0.10 and actual_cr <= predicted * 0.10:
+        return {
+            "error": "Outcome outside plausible range — actual is 90%+ below predicted. Please verify numbers.",
+            "code": "IMPLAUSIBLE_LOW",
+        }
+
+    eng = CalibrationEngine()
+    db.execute(
+        text("""
+        INSERT INTO founder_outcomes
+        (simulation_id, project_id, days_since_launch, actual_conversion_rate,
+         actual_drop_at_browse_pct, actual_drop_at_consider_pct, actual_drop_at_decide_pct,
+         primary_failure_reason, product_changed_since_sim, pricing_changed,
+         target_market_changed, data_confidence, signal_quality_at_run, created_at)
+        VALUES (:sid,:pid,:days,:acr,:br,:cr,:dr,:pfr,:pc,:pricing,:tm,:dc,:sq,NOW())
+    """),
+        {
+            "sid": simulation_id,
+            "pid": project_id,
+            "days": body.get("days_since_launch", 90),
+            "acr": actual_cr,
+            "br": body.get("actual_drop_at_browse_pct"),
+            "cr": body.get("actual_drop_at_consider_pct"),
+            "dr": body.get("actual_drop_at_decide_pct"),
+            "pfr": body.get("primary_failure_reason"),
+            "pc": body.get("product_changed_since_sim", False),
+            "pricing": body.get("pricing_changed", False),
+            "tm": body.get("target_market_changed", False),
+            "dc": body.get("data_confidence", "ESTIMATED"),
+            "sq": float(sim.signal_quality or 0.0),
+        },
+    )
+    db.commit()
+
+    outcome_row = db.execute(
+        text("SELECT * FROM founder_outcomes WHERE simulation_id=:sid ORDER BY id DESC LIMIT 1"),
+        {"sid": simulation_id},
+    ).fetchone()
+
+    if not outcome_row:
+        raise HTTPException(status_code=500, detail="Failed to load inserted outcome")
+
+    class _OutcomeProxy:
+        def __init__(self, r) -> None:
+            self.id = r.id
+            self.actual_conversion_rate = r.actual_conversion_rate
+            self.product_changed_since_sim = r.product_changed_since_sim
+            self.data_confidence = r.data_confidence
+            self.learning_weight = getattr(r, "learning_weight", None)
+            self.validated = getattr(r, "validated", True)
+
+    outcome = _OutcomeProxy(outcome_row)
+    will_learn = eng.validate_outcome(outcome, sim, db)
+    fresh = db.execute(
+        text("SELECT learning_weight, validated FROM founder_outcomes WHERE id=:id"),
+        {"id": outcome.id},
+    ).fetchone()
+    if fresh:
+        outcome.learning_weight = fresh.learning_weight
+        outcome.validated = fresh.validated
+    learning_weight_val = (
+        float(fresh.learning_weight) if fresh and fresh.learning_weight is not None else 0.0
+    )
+
+    eng.update_user_accuracy_profile(current_user.id, outcome, sim, db)
+
+    trend_row = db.execute(
+        text("""
+        SELECT accuracy_trend FROM user_simulation_accuracy_history
+        WHERE user_id=:uid ORDER BY created_at DESC LIMIT 1
+    """),
+        {"uid": current_user.id},
+    ).fetchone()
+
+    return {
+        "stored": True,
+        "will_improve_model": will_learn,
+        "learning_weight": round(learning_weight_val, 4),
+        "signal_quality": float(sim.signal_quality or 0.0),
+        "accuracy_trend": trend_row.accuracy_trend if trend_row else "INSUFFICIENT_DATA",
+        "message": (
+            "Thank you — your outcome data improves TheCee for all founders."
+            if will_learn
+            else "Stored but not used for calibration (signal quality too low or product changed)."
+        ),
+    }
 
 
 @router.get("/{project_id}/assumptions", response_model=AssumptionListResponse)
@@ -492,8 +702,27 @@ def run_premortem(
         f"- [{a.sensitivity}] {a.text} (impact: {a.impact_score}/10)" for a in assumptions
     ) or "No assumptions extracted yet."
 
-    simulation_summary = build_simulation_summary(
-        latest_sim.results_json if latest_sim else None
+    results = latest_sim.results_json or {} if latest_sim else {}
+    findings = results.get("domain_findings", [])
+    narrative = results.get("cluster_narrative", "")
+    primary_fd = results.get("primary_failure_domain", "unknown")
+    hv_cluster = results.get("highest_value_cluster", {})
+
+    domain_findings_text = (
+        "\n".join(
+            [
+                f"[{f.get('severity', 'INFO')}] {f.get('architect_name', '')} / "
+                f"{f.get('cluster_name', '')}: {f.get('finding', '')} "
+                f"(impact: {float(f.get('conversion_impact', 0) or 0):.3f})"
+                for f in findings[:10]
+            ]
+        )
+        if findings
+        else "No domain findings available."
+    )
+
+    hv_name = (
+        hv_cluster.get("name", "unknown") if isinstance(hv_cluster, dict) else str(hv_cluster)
     )
 
     try:
@@ -508,9 +737,10 @@ def run_premortem(
                 {
                     "role": "user",
                     "content": PREMORTEM_PROMPT.format(
-                        description=description,
-                        assumptions_text=assumptions_text,
-                        simulation_summary=simulation_summary,
+                        domain_findings_text=domain_findings_text,
+                        primary_failure_domain=primary_fd,
+                        highest_value_cluster=hv_name,
+                        cluster_narrative=narrative,
                     ),
                 }
             ],
@@ -566,8 +796,6 @@ def run_premortem(
                 ).strip(),
                 earliest_signal=str(item.get("earliest_signal", "")).strip(),
             )
-            if not fm.linked_assumption_texts:
-                continue
             failure_modes.append(fm)
         except Exception:
             continue
@@ -809,36 +1037,26 @@ def generate_interventions(
         "stress_test": bool(stress_test_data and stress_test_data.get("kill_shots")),
     }
 
-    assumptions_text = (
+    results = latest_sim.results_json or {} if latest_sim else {}
+    findings = results.get("domain_findings", [])
+    narrative = results.get("cluster_narrative", "")
+    primary_fd = results.get("primary_failure_domain", "unknown")
+    hv_cluster = results.get("highest_value_cluster", {})
+
+    ranked_findings_text = (
         "\n".join(
-            f"- [{a.sensitivity}] {a.text} (impact: {a.impact_score}/10)"
-            for a in assumptions
+            [
+                f"{i + 1}. {f.get('finding', '')} → {f.get('recommended_action', '')}"
+                for i, f in enumerate(findings[:5])
+            ]
         )
-        if assumptions
-        else "No assumptions extracted yet — interventions will be based on description only."
+        if findings
+        else "No findings available."
     )
 
-    simulation_summary = build_simulation_summary(
-        latest_sim.results_json if latest_sim else None
+    hv_name = (
+        hv_cluster.get("name", "unknown") if isinstance(hv_cluster, dict) else str(hv_cluster)
     )
-
-    failure_modes_text = "No pre-mortem data available."
-    if premortem_data and premortem_data.get("failure_modes"):
-        fm_lines = [
-            f"- [{fm.get('severity', '?')}] {fm.get('title', fm.get('failure_mode', '?'))}: "
-            f"{str(fm.get('trigger_condition', ''))[:100]}"
-            for fm in premortem_data["failure_modes"][:6]
-        ]
-        failure_modes_text = "\n".join(fm_lines)
-
-    kill_shots_text = "No stress test data available."
-    if stress_test_data and stress_test_data.get("kill_shots"):
-        ks_lines = [
-            f"- {str(ks.get('assumption_text', ''))[:80]} "
-            f"(stressed conversion drops to {float(ks.get('stressed_conversion', 0)):.1%})"
-            for ks in stress_test_data["kill_shots"][:4]
-        ]
-        kill_shots_text = "\n".join(ks_lines) if ks_lines else "No kill shots identified."
 
     try:
         response = claude.messages.create(
@@ -853,11 +1071,10 @@ def generate_interventions(
                 {
                     "role": "user",
                     "content": INTERVENTION_PROMPT.format(
-                        description=description,
-                        assumptions_text=assumptions_text,
-                        simulation_summary=simulation_summary,
-                        failure_modes_text=failure_modes_text,
-                        kill_shots_text=kill_shots_text,
+                        highest_value_cluster=hv_name,
+                        primary_failure_domain=primary_fd,
+                        cluster_narrative=narrative or "No cluster narrative available.",
+                        ranked_findings_text=ranked_findings_text,
                     ),
                 }
             ],

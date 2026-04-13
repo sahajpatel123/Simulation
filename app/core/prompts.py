@@ -83,48 +83,47 @@ Idea:
 """
 
 PREMORTEM_PROMPT = """
-You are a world-class startup failure analyst.
+Domain analysis has already identified these failure points
+across 52 behavioral clusters:
 
-A founder has described their idea below. You have their key assumptions
-and simulation results. Your job is to perform a rigorous pre-mortem:
-assume the product has already failed completely - work backwards and
-identify the most probable root causes with surgical precision.
+{domain_findings_text}
 
-Return ONLY valid JSON. No markdown. No explanation. No backticks.
+Primary failure domain: {primary_failure_domain}
+Highest-value acquisition target: {highest_value_cluster}
 
-{
+Cluster breakdown:
+{cluster_narrative}
+
+Build the pre-mortem around these findings. Your job is to add:
+1. Second-order effects the domain analysis may have missed
+2. Non-obvious failure modes from cluster interactions
+3. Pre-launch vs post-launch timing of each failure
+
+Do NOT repeat what the domain findings already state.
+Add strategic reasoning on top of the structured data.
+
+Return ONLY valid JSON. No markdown. No backticks.
+
+{{
   "failure_modes": [
-    {
-      "title":                    "specific, concrete failure title",
-      "probability":              0.72,
-      "severity":                 "CRITICAL | HIGH | MEDIUM",
-      "trigger_condition":        "the exact scenario that causes this failure",
-      "linked_assumption_texts":  ["exact text of assumption 1", "exact text of assumption 2"],
-      "intervention":             "concrete, actionable thing to do before launch",
-      "intervention_impact":      "expected improvement e.g. +18% conversion survival",
-      "earliest_signal":          "the first real-world indicator this failure is happening"
-    }
+    {{
+      "title": "specific, concrete failure title",
+      "probability": 0.72,
+      "severity": "CRITICAL | HIGH | MEDIUM",
+      "trigger_condition": "the exact scenario that causes this failure",
+      "linked_assumption_texts": ["cluster/architect phrase or assumption text tied to this mode"],
+      "intervention": "concrete, actionable response",
+      "intervention_impact": "expected improvement e.g. +18% conversion survival",
+      "earliest_signal": "first observable indicator within 30 days of launch"
+    }}
   ]
-}
+}}
 
 Rules:
 - Generate 5 to 8 failure modes. No more, no fewer.
 - Probability must be a float between 0.05 and 0.95.
-- Every failure mode must reference at least one assumption by its exact text.
-- Interventions must be specific - never generic advice like "improve UX".
-- Severity is CRITICAL if failure alone ends the business,
-  HIGH if it severely damages growth, MEDIUM if it reduces efficiency.
+- Each failure mode must tie to the domain findings (cluster name, architect, or metric) in linked_assumption_texts or trigger_condition.
 - Sort by probability descending.
-- earliest_signal must be observable within 30 days of launch.
-
-Product description:
-{description}
-
-Key assumptions (from TheCee assumption extraction):
-{assumptions_text}
-
-Latest simulation summary:
-{simulation_summary}
 """
 
 
@@ -175,60 +174,51 @@ def build_simulation_summary(simulation_results: dict | None) -> str:
 
 
 INTERVENTION_PROMPT = """
-You are a world-class startup growth advisor and product strategist.
+Highest-impact cluster: {highest_value_cluster}
+Primary failure domain: {primary_failure_domain}
 
-A founder has an idea with known assumptions, simulation results, and
-pre-mortem failure modes. Your job is to generate the most impactful,
-specific, realistic interventions that can be executed within 30 days.
+Cluster breakdown (from simulation):
+{cluster_narrative}
 
-Return ONLY valid JSON. No markdown. No backticks. No explanation.
+Top domain findings by impact:
+{ranked_findings_text}
 
-{
+Generate 6-10 interventions that specifically address
+these identified failure points in order of impact.
+Each intervention must:
+- Target a specific cluster or architect domain by name
+- State the expected conversion lift
+- Classify as: pre-launch-required | post-launch-acceptable
+- Rate effort: low (days) | medium (weeks) | high (months)
+
+No generic advice. Every intervention must reference
+a specific finding from the domain analysis above.
+
+Return ONLY valid JSON. No markdown. No backticks.
+
+{{
   "interventions": [
-    {
-      "id":                  "short-kebab-case-id",
-      "title":               "Concrete, action-oriented title",
-      "description":         "Exactly what to do and why - no vague advice",
-      "expected_impact":     "Specific measurable outcome e.g. +18% conversion, -30% churn",
-      "difficulty":          "LOW | MEDIUM | HIGH",
-      "estimated_cost":      "Realistic estimate e.g. INR 12,000 or 3 days of founder time",
-      "linked_assumption":   "exact text of the assumption this addresses, or null",
-      "linked_failure_mode": "exact title of the failure mode this prevents, or null",
-      "priority_score":      0.87,
-      "time_to_implement":   "e.g. 3 days, 2 weeks",
-      "success_metric":      "how to measure if this intervention worked"
-    }
+    {{
+      "id": "short-kebab-case-id",
+      "title": "Concrete, action-oriented title",
+      "description": "What to do; include pre-launch-required OR post-launch-acceptable",
+      "expected_impact": "Specific lift e.g. +12% conversion; name cluster/architect",
+      "difficulty": "LOW | MEDIUM | HIGH",
+      "estimated_cost": "Realistic INR + time; align effort with low/medium/high",
+      "linked_assumption": "exact finding line or null",
+      "linked_failure_mode": "exact pre-mortem title or null",
+      "priority_score": 0.87,
+      "time_to_implement": "e.g. 3 days, 2 weeks",
+      "success_metric": "observable within 60 days"
+    }}
   ]
-}
+}}
 
 Rules:
 - Generate 6 to 10 interventions. No more, no fewer.
-- Sort by priority_score descending - highest leverage first.
-- Priority score = (expected_impact × 0.5) + (1 - difficulty_weight × 0.3) + (speed × 0.2)
-  where difficulty_weight: LOW=0.1, MEDIUM=0.5, HIGH=0.9
-- Favour LOW and MEDIUM difficulty interventions unless HIGH difficulty
-  is truly transformative (priority_score > 0.85).
-- Every intervention must be executable without external dependencies
-  or significant capital unless explicitly noted in estimated_cost.
-- estimated_cost must include both money AND time.
-- success_metric must be observable within 60 days of implementation.
-- linked_assumption and linked_failure_mode use exact text from inputs.
-  If no direct link exists use null - do not fabricate links.
-
-Product description:
-{description}
-
-Key assumptions (sorted by impact):
-{assumptions_text}
-
-Simulation results summary:
-{simulation_summary}
-
-Pre-mortem failure modes:
-{failure_modes_text}
-
-Stress test kill shots (if any):
-{kill_shots_text}
+- Sort by priority_score descending.
+- Map effort bands: low=LOW difficulty, medium=MEDIUM, high=HIGH.
+- linked_assumption should quote or paraphrase a specific domain finding line when possible.
 """
 
 
