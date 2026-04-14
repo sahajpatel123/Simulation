@@ -56,8 +56,8 @@ PRODUCT_TYPE_KEYWORDS: dict[ProductType, list[str]] = {
         "smartwatch", "fitness tracker", "wearable", "band", "watch", "ring wearable",
     ],
     ProductType.B2B_HARDWARE: [
-        "b2b hardware", "enterprise hardware", "pos device", "kiosk", "ruggedized",
-        "fleet device",
+        "b2b hardware", "b2b", "enterprise hardware", "pos device", "pos ", "kiosk",
+        "ruggedized", "rugged", "fleet device", "retail fleet",
     ],
 }
 
@@ -304,6 +304,21 @@ class Conductor:
                     return hw
         return best
 
+    def _reweight_clusters(
+        self,
+        product_type: ProductType,
+        env_slice: dict[str, Any],
+    ) -> dict[str, float]:
+        """Return normalized cluster weights for a product type (used by tests and tooling)."""
+        reweighter = ClusterReweightingEngine()
+        return reweighter.compute_weights(
+            product_type=product_type,
+            aov=float(env_slice.get("average_order_value", 999)),
+            geography=str(env_slice.get("geography", "ALL_INDIA")),
+            segment=str(env_slice.get("target_segment", "B2C")),
+            age_target=str(env_slice.get("age_target", "ALL")),
+        )
+
     def _resolve_deps(
         self,
         architect_name: str,
@@ -430,7 +445,7 @@ class Conductor:
         result = ConductorResult(
             product_type=product_type,
             cluster_results=cluster_results,
-            population_weighted_conversion=round(pwc, 4),
+            population_weighted_conversion=round(pwc, 6),
             domain_reports=domain_reports,
             cluster_breakdown=cluster_breakdown,
             architect_accountability=architect_accountability,
@@ -504,7 +519,8 @@ class Conductor:
             max(0.01, min(0.95, consider_decide)) *
             max(0.01, min(0.95, decide_purchase))
         )
-        return round(max(0.001, min(0.95, conversion)), 4)
+        # Preserve ordering across clusters (student vs metro, tier-3 vs metro) — avoid 0.001 floor.
+        return round(max(0.0, min(0.95, conversion)), 6)
 
     def _compute_accountability(
         self,
