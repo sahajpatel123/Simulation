@@ -10,6 +10,7 @@ from app.models import (
     Simulation,
     Decision,
     Outcome,
+    OutcomeTracker,
 )
 
 

@@ -21,4 +21,4 @@ class OutcomeTracker(Base, TimestampMixin):
     notes: Mapped[str | None] = mapped_column(Text)
     recorded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    project: Mapped["Project"] = relationship("Project", back_populates="outcomes")
+    project: Mapped["Project"] = relationship("Project", back_populates="outcome_trackers")

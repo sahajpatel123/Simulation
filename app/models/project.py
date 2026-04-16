@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from app.models.decision import Decision
     from app.models.environment import Environment
     from app.models.outcome import Outcome
+    from app.models.outcome_tracker import OutcomeTracker
 
 
 class Project(Base, TimestampMixin):
@@ -55,4 +56,10 @@ class Project(Base, TimestampMixin):
         back_populates="project",
         cascade="all, delete-orphan",
         order_by="Outcome.created_at.desc()",
+    )
+    outcome_trackers: Mapped[list["OutcomeTracker"]] = relationship(
+        "OutcomeTracker",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        order_by="OutcomeTracker.recorded_at.desc()",
     )

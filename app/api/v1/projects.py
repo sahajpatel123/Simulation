@@ -28,7 +28,6 @@ from app.schemas.assumption import (
     AssumptionListResponse,
     AssumptionOut,
 )
-from app.simulation.scored_assumption import score_assumptions, signal_quality_tier
 from app.schemas.competitive import (
     CompetitiveAnalysisOut,
     CompetitiveAnalysisRequest,
@@ -45,15 +44,17 @@ from app.schemas.environment import (
     SCENARIO_PRESETS,
 )
 from app.schemas.intervention import Intervention, InterventionOut, InterventionRequest
-from app.schemas.project import ProjectCreate, ProjectListResponse, ProjectOut
 from app.schemas.premortem import FailureMode, PremortemOut, PremortemRequest
+from app.schemas.project import ProjectCreate, ProjectListResponse, ProjectOut
 from app.schemas.prototype import FunnelEdge, FunnelGraph, FunnelNode, PrototypeOut
 from app.schemas.stress_test import (
     AssumptionStressResult,
     StressTestOut,
     StressTestStatusOut,
 )
+from app.simulation.calibration_engine import CalibrationEngine
 from app.simulation.clusters.registry import ClusterRegistry
+from app.simulation.scored_assumption import score_assumptions, signal_quality_tier
 from app.tasks.stress_test_tasks import run_assumption_stress_test
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -180,8 +181,6 @@ def submit_outcome_feedback(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from app.simulation.calibration_engine import CalibrationEngine
-
     simulation_id = body.get("simulation_id")
     actual_cr = body.get("actual_conversion_rate")
     if not simulation_id or actual_cr is None:
@@ -471,9 +470,8 @@ def extract_assumptions(
     # This is a read-only advisory enrichment — it does not modify saved rows.
     user_reliability_note: str | None = None
     try:
-        from sqlalchemy import text as _text
         profile_rows = db.execute(
-            _text(
+            text(
                 "SELECT architect_name, ema_delta, reliability_score, sample_count "
                 "FROM user_claim_accuracy_profiles "
                 "WHERE user_id = :uid AND sample_count >= 3 AND reliability_score >= 0.40"
@@ -977,10 +975,8 @@ def clear_stress_test(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    from sqlalchemy import text as sql_text
-
     db.execute(
-        sql_text("UPDATE projects SET stress_test_json = NULL WHERE id = :id"),
+        text("UPDATE projects SET stress_test_json = NULL WHERE id = :id"),
         {"id": project_id},
     )
     db.commit()
@@ -1149,16 +1145,6 @@ def generate_interventions(
         "context_used": context_used,
         "simulation_id": latest_sim.id if latest_sim else None,
     }
-
-    from sqlalchemy import text as sql_text
-
-    try:
-        db.execute(
-            sql_text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS interventions_json JSONB;")
-        )
-        db.commit()
-    except Exception:
-        db.rollback()
 
     project.interventions_json = interventions_data
     project.status = "INTERVENTIONS_READY"
@@ -1362,14 +1348,6 @@ def run_competitive_analysis(
         "target_market": target_market,
         "assumptions_used": len(assumptions),
     }
-
-    from sqlalchemy import text as sql_text
-
-    try:
-        db.execute(sql_text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS competitive_json JSONB;"))
-        db.commit()
-    except Exception:
-        db.rollback()
 
     project.competitive_json = competitive_data
     project.status = "COMPETITIVE_ANALYSIS_COMPLETE"
