@@ -1,64 +1,48 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowRight, FolderOpen, Loader2, Plus, X, Zap } from 'lucide-react'
+import { ArrowUpRight, Loader2, Plus, X } from 'lucide-react'
 import Link from 'next/link'
 
 import { apiError } from '@/lib/api'
 import { useCreateProject, useProjects } from '@/hooks/useProjects'
+import type { Project } from '@/types'
 
-const statusConfig: Record<string, { label: string; color: string; dot: string }> = {
-  DRAFT: { label: 'Draft', color: 'text-slate-400 bg-slate-400/10 border-slate-400/20', dot: 'bg-slate-400' },
-  ASSUMPTIONS_EXTRACTED: {
-    label: 'Assumptions ready',
-    color: 'text-amber-400 bg-amber-400/10 border-amber-400/20',
-    dot: 'bg-amber-400',
-  },
-  PROTOTYPE_GENERATED: {
-    label: 'Prototype ready',
-    color: 'text-blue-400 bg-blue-400/10 border-blue-400/20',
-    dot: 'bg-blue-400',
-  },
-  ENVIRONMENT_SET: {
-    label: 'Environment set',
-    color: 'text-purple-400 bg-purple-400/10 border-purple-400/20',
-    dot: 'bg-purple-400',
-  },
-  QUEUED: { label: 'Queued', color: 'text-indigo-400 bg-indigo-400/10 border-indigo-400/20', dot: 'bg-indigo-400' },
-  RUNNING: {
-    label: 'Running',
-    color: 'text-indigo-400 bg-indigo-400/10 border-indigo-400/20',
-    dot: 'bg-indigo-400 animate-pulse',
-  },
-  COMPLETED: {
-    label: 'Completed',
-    color: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
-    dot: 'bg-emerald-400',
-  },
-  FAILED: { label: 'Failed', color: 'text-red-400 bg-red-400/10 border-red-400/20', dot: 'bg-red-400' },
+/* ── Status taxonomy — editorial labels, not SaaS tags. ──────────── */
+type StatusBucket = 'draft' | 'ready' | 'running' | 'done' | 'failed'
+
+const statusMeta: Record<string, { bucket: StatusBucket; label: string }> = {
+  DRAFT:                 { bucket: 'draft',   label: 'In notes' },
+  ASSUMPTIONS_EXTRACTED: { bucket: 'ready',   label: 'Outline ready' },
+  PROTOTYPE_GENERATED:   { bucket: 'ready',   label: 'Draft typeset' },
+  ENVIRONMENT_SET:       { bucket: 'ready',   label: 'Cast assembled' },
+  QUEUED:                { bucket: 'running', label: 'At press' },
+  RUNNING:               { bucket: 'running', label: 'At press' },
+  COMPLETED:             { bucket: 'done',    label: 'Filed' },
+  FAILED:                { bucket: 'failed',  label: 'Returned' },
 }
 
+function resolveStatus(s: string) {
+  return statusMeta[s] ?? { bucket: 'draft' as StatusBucket, label: s.toLowerCase().replace(/_/g, ' ') }
+}
+
+/* ── Page ─────────────────────────────────────────────────────────── */
 export default function ProjectsPage() {
   const [showModal, setShowModal] = useState(false)
   const [idea, setIdea] = useState('')
 
   const { data: projects, isLoading, isError, error } = useProjects()
   const createProject = useCreateProject()
-  const projectList = projects ?? []
 
-  if (isLoading) {
-    return (
-      <div className="p-8 flex items-center gap-2 text-slate-400">
-        <Loader2 className="w-4 h-4 animate-spin" />
-        Loading projects...
-      </div>
-    )
-  }
-
-  if (isError) {
-    return <div className="p-8 text-red-400">Error: {apiError(error)}</div>
-  }
+  const projectList = useMemo(() => {
+    const list = projects ?? []
+    return [...list].sort((a, b) => {
+      const ad = a.created_at ? new Date(a.created_at).getTime() : 0
+      const bd = b.created_at ? new Date(b.created_at).getTime() : 0
+      return bd - ad
+    })
+  }, [projects])
 
   const handleCreate = async () => {
     const description = idea.trim()
@@ -68,133 +52,700 @@ export default function ProjectsPage() {
     setIdea('')
   }
 
+  /* ── Loading ────────────────────────────────────────────────────── */
+  if (isLoading) {
+    return (
+      <div style={{ padding: '80px 48px', display: 'flex', gap: 12, alignItems: 'center', color: 'var(--ink-secondary)' }}>
+        <Loader2 className="animate-spin" style={{ width: 14, height: 14 }} />
+        <span style={{ fontSize: 10, letterSpacing: '0.24em', textTransform: 'uppercase' }}>Pulling the archive…</span>
+      </div>
+    )
+  }
+
+  /* ── Error ──────────────────────────────────────────────────────── */
+  if (isError) {
+    return (
+      <div style={{ padding: '80px 48px' }}>
+        <div className="kicker" style={{ color: 'var(--red)', marginBottom: 12 }}>Errata</div>
+        <h1 className="font-serif" style={{ fontSize: 40, fontWeight: 800, fontStyle: 'italic', color: 'var(--ink)' }}>
+          The press is silent.
+        </h1>
+        <p style={{ marginTop: 16, color: 'var(--ink-secondary)', maxWidth: 520 }}>{apiError(error)}</p>
+      </div>
+    )
+  }
+
+  const count = projectList.length
+  const [featured, ...rest] = projectList as [Project | undefined, ...Project[]]
+
   return (
-    <div className="p-8">
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="flex items-center justify-between mb-8"
-      >
+    <div
+      className="rise"
+      style={{
+        padding: '48px 48px 120px',
+        maxWidth: 1280,
+        margin: '0 auto',
+        position: 'relative',
+      }}
+    >
+      {/* ─── Page header ──────────────────────────────────────── */}
+      <section style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'end', gap: 40, marginBottom: 32 }}>
         <div>
-          <h1 className="font-display text-2xl font-700 text-white">Projects</h1>
-          <p className="text-slate-500 text-sm mt-0.5">
-            {projectList.length} simulation{projectList.length !== 1 ? 's' : ''} in progress
+          <div
+            className="kicker"
+            style={{ color: 'var(--red)', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 12 }}
+          >
+            <span style={{ width: 24, height: 0.5, background: 'var(--red)' }} />
+            The Dossier Index
+            <span style={{ color: 'var(--ink-secondary)' }}>·</span>
+            <span style={{ color: 'var(--ink-secondary)' }}>{count} filed</span>
+          </div>
+
+          <h1
+            className="font-serif"
+            style={{
+              fontSize: 'clamp(52px, 7vw, 88px)',
+              fontWeight: 900,
+              lineHeight: 0.95,
+              letterSpacing: '-0.035em',
+              color: 'var(--ink)',
+              marginBottom: 8,
+            }}
+          >
+            Your<span style={{ fontStyle: 'italic', color: 'var(--red)' }}> ideas</span>,
+            <br />
+            under review.
+          </h1>
+
+          <p
+            style={{
+              fontFamily: 'var(--font-body)',
+              fontSize: 15,
+              lineHeight: 1.7,
+              color: 'var(--ink-secondary)',
+              maxWidth: 560,
+              marginTop: 18,
+              fontWeight: 300,
+            }}
+          >
+            Every entry below is a hypothesis in your hand — drafted, cast with synthetic readers,
+            and run against a market that doesn&rsquo;t flatter you. Open one to read its report.
           </p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-all duration-200 hover:shadow-lg hover:shadow-indigo-500/20"
-        >
-          <Plus className="w-4 h-4" /> New simulation
-        </button>
-      </motion.div>
 
-      {projectList.length === 0 ? (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="flex flex-col items-center justify-center py-32 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4">
-            <FolderOpen className="w-7 h-7 text-slate-600" />
-          </div>
-          <h3 className="font-display text-lg font-600 text-white mb-2">No simulations yet</h3>
-          <p className="text-slate-500 text-sm mb-6 max-w-xs">Describe your idea and run it through synthetic consumers before committing.</p>
-          <button
-            onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-all"
+        <button onClick={() => setShowModal(true)} className="btn-ink" style={{ whiteSpace: 'nowrap' }}>
+          <Plus style={{ width: 13, height: 13 }} /> File New Dossier
+        </button>
+      </section>
+
+      <div style={{ height: 3, background: 'var(--ink)', marginBottom: 4 }} />
+      <div style={{ height: 0.5, background: 'var(--border-color)', marginBottom: 48 }} />
+
+      {/* ─── Empty state ──────────────────────────────────────── */}
+      {count === 0 && <EmptyArchive onOpen={() => setShowModal(true)} />}
+
+      {/* ─── Featured (lead) + index ──────────────────────────── */}
+      {count > 0 && featured && (
+        <>
+          <FeaturedDossier project={featured} index={count} />
+          <div style={{ height: 0.5, background: 'var(--border-color)', margin: '56px 0 40px' }} />
+
+          {/* Index header */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '96px minmax(0,1fr) 180px 140px 32px',
+              gap: 32,
+              paddingBottom: 16,
+              borderBottom: '2px solid var(--ink)',
+              marginBottom: 0,
+            }}
           >
-            <Plus className="w-4 h-4" /> Start first simulation
-          </button>
-        </motion.div>
-      ) : (
-        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {projectList.map((project, i) => {
-            const status = statusConfig[project.status] ?? statusConfig.DRAFT
-            const created = project.created_at ? new Date(project.created_at) : null
-            return (
-              <motion.div key={project.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: i * 0.07 }}>
-                <Link href={`/project/${project.id}`} className="block glass rounded-2xl p-6 glass-hover group cursor-pointer">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
-                      <Zap className="w-4 h-4 text-indigo-400" />
-                    </div>
-                    <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border font-medium ${status.color}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
-                      {status.label}
-                    </span>
-                  </div>
-                  <h3 className="font-display text-base font-600 text-white mb-1.5 line-clamp-1">{project.title}</h3>
-                  <p className="text-slate-500 text-xs leading-relaxed line-clamp-2 mb-4">{project.description}</p>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600 text-xs">
-                      {created ? created.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}
-                    </span>
-                    <ArrowRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all" />
-                  </div>
-                </Link>
-              </motion.div>
-            )
-          })}
-        </div>
+            <span className="kicker" style={{ color: 'var(--ink-secondary)' }}>№</span>
+            <span className="kicker" style={{ color: 'var(--ink-secondary)' }}>Title / Précis</span>
+            <span className="kicker" style={{ color: 'var(--ink-secondary)' }}>Filed</span>
+            <span className="kicker" style={{ color: 'var(--ink-secondary)' }}>Status</span>
+            <span />
+          </div>
+
+          {/* Index rows */}
+          <div>
+            {rest.map((project, i) => (
+              <DossierRow key={project.id} project={project} number={count - 1 - i} />
+            ))}
+            {rest.length === 0 && (
+              <p
+                style={{
+                  padding: '36px 0',
+                  color: 'var(--ink-tertiary)',
+                  fontSize: 13,
+                  fontStyle: 'italic',
+                  borderTop: '0.5px solid var(--border-color)',
+                  borderBottom: '0.5px solid var(--border-color)',
+                }}
+              >
+                No further entries in this volume.
+              </p>
+            )}
+          </div>
+        </>
       )}
 
+      {/* ─── Modal ─────────────────────────────────────────────── */}
       <AnimatePresence>
         {showModal && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
-              onClick={() => setShowModal(false)}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 16 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 16 }}
-              transition={{ duration: 0.2 }}
-              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg z-50"
-            >
-              <div className="glass rounded-2xl p-8 border border-white/10">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h2 className="font-display text-lg font-700 text-white">Describe your idea</h2>
-                    <p className="text-slate-500 text-xs mt-0.5">This creates a real project in your backend</p>
-                  </div>
-                  <button onClick={() => setShowModal(false)} className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors">
-                    <X className="w-3.5 h-3.5 text-slate-400" />
-                  </button>
-                </div>
-                <textarea
-                  value={idea}
-                  onChange={(e) => setIdea(e.target.value)}
-                  placeholder="Describe your product idea in plain language..."
-                  rows={5}
-                  className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-indigo-500/50 transition-all resize-none mb-5"
-                />
-                <div className="flex items-center gap-3 justify-end">
-                  <button onClick={() => setShowModal(false)} className="px-4 py-2 rounded-lg text-slate-400 hover:text-white text-sm transition-colors">
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleCreate}
-                    disabled={!idea.trim() || createProject.isPending}
-                    className="flex items-center gap-2 px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-all"
-                  >
-                    {createProject.isPending ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Creating...
-                      </>
-                    ) : (
-                      <>
-                        Create project <ArrowRight className="w-3.5 h-3.5" />
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </>
+          <FileDossierModal
+            idea={idea}
+            setIdea={setIdea}
+            onClose={() => setShowModal(false)}
+            onSubmit={handleCreate}
+            pending={createProject.isPending}
+          />
         )}
       </AnimatePresence>
     </div>
+  )
+}
+
+/* ── Empty state ─────────────────────────────────────────────────── */
+function EmptyArchive({ onOpen }: { onOpen: () => void }) {
+  return (
+    <section
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: 64,
+        alignItems: 'start',
+        paddingTop: 32,
+        minHeight: 420,
+      }}
+    >
+      <div>
+        <div className="kicker" style={{ color: 'var(--red)', marginBottom: 20 }}>
+          Editor&rsquo;s Note &nbsp;·&nbsp; No. 001
+        </div>
+
+        <h2
+          className="font-serif"
+          style={{
+            fontSize: 'clamp(36px, 5vw, 60px)',
+            fontWeight: 900,
+            fontStyle: 'italic',
+            lineHeight: 1,
+            letterSpacing: '-0.03em',
+            color: 'var(--ink)',
+            marginBottom: 24,
+          }}
+        >
+          &ldquo;The archive<br />is empty —<br />for now.&rdquo;
+        </h2>
+
+        <div style={{ height: 2, background: 'var(--red)', width: 80, marginBottom: 24 }} />
+
+        <p
+          className="dropcap"
+          style={{
+            fontSize: 15,
+            lineHeight: 1.75,
+            color: 'var(--ink)',
+            maxWidth: 440,
+            marginBottom: 28,
+            fontWeight: 300,
+          }}
+        >
+          Every issue begins with a single dossier. Describe the idea you cannot stop thinking about —
+          a product, a pivot, a suspicion — and the press will cast it against a room of synthetic
+          readers who have no reason to be kind. What returns is not a verdict. It is material.
+        </p>
+
+        <button onClick={onOpen} className="btn-ink">
+          <Plus style={{ width: 13, height: 13 }} /> Begin The First Dossier
+        </button>
+      </div>
+
+      {/* Right column — a folio illustration */}
+      <div style={{ paddingTop: 12 }}>
+        <Folio />
+      </div>
+    </section>
+  )
+}
+
+/* An SVG "empty folder" redrawn as an editorial folio. */
+function Folio() {
+  return (
+    <div
+      style={{
+        position: 'relative',
+        aspectRatio: '4 / 5',
+        maxWidth: 420,
+        marginLeft: 'auto',
+        border: '0.5px solid var(--border-strong)',
+        background:
+          'repeating-linear-gradient(0deg, rgba(26,23,20,0.035) 0 0.5px, transparent 0.5px 28px)',
+        padding: 28,
+      }}
+    >
+      {/* Folder tab */}
+      <div
+        style={{
+          position: 'absolute',
+          top: -16,
+          left: 28,
+          padding: '4px 14px',
+          background: 'var(--paper)',
+          border: '0.5px solid var(--border-strong)',
+          borderBottom: 'none',
+          fontSize: 9,
+          letterSpacing: '0.3em',
+          textTransform: 'uppercase',
+          color: 'var(--ink-secondary)',
+          fontWeight: 600,
+        }}
+      >
+        File · Vacant
+      </div>
+
+      {/* Stamp */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 36,
+          right: 28,
+          transform: 'rotate(-12deg)',
+          border: '1.5px solid var(--red)',
+          color: 'var(--red)',
+          padding: '6px 14px',
+          fontSize: 10,
+          letterSpacing: '0.26em',
+          textTransform: 'uppercase',
+          fontWeight: 700,
+          opacity: 0.85,
+        }}
+      >
+        Awaiting Material
+      </div>
+
+      {/* Ruled lines */}
+      <div style={{ marginTop: 88, display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {[92, 78, 85, 62, 0, 70, 55].map((w, i) => (
+          <div
+            key={i}
+            style={{
+              height: 0.5,
+              width: `${w}%`,
+              background: w === 0 ? 'transparent' : 'var(--border-strong)',
+              minHeight: 0.5,
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Watermark numeral */}
+      <div
+        className="numeral"
+        style={{
+          position: 'absolute',
+          bottom: 18,
+          right: 24,
+          fontSize: 120,
+          color: 'var(--ink)',
+          opacity: 0.05,
+          lineHeight: 0.8,
+        }}
+      >
+        00
+      </div>
+    </div>
+  )
+}
+
+/* ── Featured dossier (lead story) ───────────────────────────────── */
+function FeaturedDossier({ project, index }: { project: Project; index: number }) {
+  const status = resolveStatus(project.status)
+  const date = project.created_at ? new Date(project.created_at) : null
+  const num = String(index).padStart(3, '0')
+
+  return (
+    <Link
+      href={`/project/${project.id}`}
+      className="rise rise-1"
+      style={{
+        textDecoration: 'none',
+        color: 'var(--ink)',
+        display: 'grid',
+        gridTemplateColumns: '1.5fr 1fr',
+        gap: 48,
+        alignItems: 'start',
+        padding: '8px 0',
+      }}
+    >
+      <div>
+        <div className="kicker" style={{ color: 'var(--red)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+          Lead Dossier · This Issue
+          <span className={`status-dot status-dot--${status.bucket}`} />
+          <span>{status.label}</span>
+        </div>
+
+        <h2
+          className="font-serif"
+          style={{
+            fontSize: 'clamp(38px, 4.8vw, 64px)',
+            fontWeight: 900,
+            lineHeight: 1,
+            letterSpacing: '-0.03em',
+            color: 'var(--ink)',
+            marginBottom: 20,
+          }}
+        >
+          {project.title}
+        </h2>
+
+        <p
+          style={{
+            fontFamily: 'var(--font-body)',
+            fontSize: 15,
+            lineHeight: 1.75,
+            color: 'var(--ink-secondary)',
+            maxWidth: 640,
+            marginBottom: 28,
+            fontWeight: 300,
+            display: '-webkit-box',
+            WebkitLineClamp: 4,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}
+        >
+          {project.description}
+        </p>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, color: 'var(--ink)' }}>
+          <span
+            style={{
+              fontSize: 10,
+              letterSpacing: '0.26em',
+              textTransform: 'uppercase',
+              fontWeight: 600,
+              borderBottom: '1.5px solid var(--ink)',
+              paddingBottom: 3,
+            }}
+          >
+            Open the full report
+          </span>
+          <ArrowUpRight style={{ width: 18, height: 18 }} />
+        </div>
+      </div>
+
+      {/* Right column: giant numeral + meta */}
+      <div style={{ textAlign: 'right', position: 'relative', paddingTop: 8 }}>
+        <div
+          className="numeral"
+          style={{
+            fontSize: 'clamp(140px, 16vw, 220px)',
+            color: 'var(--ink)',
+            lineHeight: 0.85,
+            letterSpacing: '-0.06em',
+          }}
+        >
+          {num}
+        </div>
+
+        <div
+          style={{
+            marginTop: 16,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            gap: 8,
+            fontSize: 10,
+            letterSpacing: '0.22em',
+            textTransform: 'uppercase',
+            color: 'var(--ink-secondary)',
+            fontWeight: 500,
+          }}
+        >
+          <div>
+            Filed ·{' '}
+            <span style={{ color: 'var(--ink)' }}>
+              {date
+                ? date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                : '—'}
+            </span>
+          </div>
+          <div>
+            Section · <span style={{ color: 'var(--red)' }}>Idea Review</span>
+          </div>
+          <div style={{ width: 60, height: 2, background: 'var(--red)', marginTop: 4 }} />
+        </div>
+      </div>
+    </Link>
+  )
+}
+
+/* ── Index row ───────────────────────────────────────────────────── */
+function DossierRow({ project, number }: { project: Project; number: number }) {
+  const status = resolveStatus(project.status)
+  const date = project.created_at ? new Date(project.created_at) : null
+  const num = String(number).padStart(3, '0')
+
+  return (
+    <Link href={`/project/${project.id}`} style={{ textDecoration: 'none', color: 'var(--ink)', display: 'block' }}>
+      <div className="dossier-row">
+        <span className="dossier-rule" />
+
+        <div className="numeral dossier-numeral" style={{ fontSize: 44, color: 'var(--ink)' }}>
+          {num}
+        </div>
+
+        <div style={{ minWidth: 0 }}>
+          <h3
+            className="font-serif"
+            style={{
+              fontSize: 26,
+              fontWeight: 800,
+              lineHeight: 1.1,
+              letterSpacing: '-0.02em',
+              color: 'var(--ink)',
+              marginBottom: 8,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {project.title}
+          </h3>
+          <p
+            style={{
+              fontSize: 13.5,
+              lineHeight: 1.65,
+              color: 'var(--ink-secondary)',
+              fontWeight: 300,
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+            }}
+          >
+            {project.description}
+          </p>
+        </div>
+
+        <div
+          style={{
+            fontSize: 11,
+            letterSpacing: '0.18em',
+            textTransform: 'uppercase',
+            color: 'var(--ink-secondary)',
+            fontWeight: 500,
+            paddingTop: 8,
+          }}
+        >
+          {date ? (
+            <>
+              <div style={{ color: 'var(--ink)', fontWeight: 600 }}>
+                {date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+              </div>
+              <div style={{ marginTop: 3 }}>{date.getFullYear()}</div>
+            </>
+          ) : (
+            '—'
+          )}
+        </div>
+
+        <div
+          style={{
+            fontSize: 10,
+            letterSpacing: '0.22em',
+            textTransform: 'uppercase',
+            fontWeight: 600,
+            color: status.bucket === 'failed' ? 'var(--red)' : 'var(--ink)',
+            paddingTop: 10,
+            display: 'flex',
+            alignItems: 'center',
+          }}
+        >
+          <span className={`status-dot status-dot--${status.bucket}`} />
+          {status.label}
+        </div>
+
+        <div className="dossier-arrow" style={{ paddingTop: 10, color: 'var(--ink-tertiary)' }}>
+          <ArrowUpRight style={{ width: 18, height: 18 }} />
+        </div>
+      </div>
+    </Link>
+  )
+}
+
+/* ── Modal: File New Dossier ─────────────────────────────────────── */
+function FileDossierModal({
+  idea,
+  setIdea,
+  onClose,
+  onSubmit,
+  pending,
+}: {
+  idea: string
+  setIdea: (s: string) => void
+  onClose: () => void
+  onSubmit: () => void
+  pending: boolean
+}) {
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(26,23,20,0.55)',
+          zIndex: 80,
+          backdropFilter: 'blur(2px)',
+        }}
+      />
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 24 }}
+        transition={{ duration: 0.35, ease: [0.2, 0.7, 0.2, 1] }}
+        style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: 'min(640px, 92vw)',
+          background: 'var(--paper)',
+          border: '0.5px solid var(--ink)',
+          boxShadow: '24px 24px 0 rgba(26,23,20,0.12)',
+          zIndex: 90,
+          padding: '36px 40px 32px',
+        }}
+      >
+        {/* Masthead-style header */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingBottom: 14,
+            borderBottom: '2px solid var(--ink)',
+            marginBottom: 6,
+          }}
+        >
+          <div className="kicker" style={{ color: 'var(--red)' }}>
+            Submission · Editor&rsquo;s Desk
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            style={{
+              width: 28,
+              height: 28,
+              border: '0.5px solid var(--border-strong)',
+              background: 'transparent',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--ink)',
+            }}
+          >
+            <X style={{ width: 14, height: 14 }} />
+          </button>
+        </div>
+        <div style={{ height: 0.5, background: 'var(--border-color)', marginBottom: 24 }} />
+
+        <h2
+          className="font-serif"
+          style={{
+            fontSize: 'clamp(32px, 3.4vw, 44px)',
+            fontWeight: 900,
+            lineHeight: 1,
+            letterSpacing: '-0.03em',
+            color: 'var(--ink)',
+            marginBottom: 14,
+          }}
+        >
+          File a new<span style={{ fontStyle: 'italic', color: 'var(--red)' }}> dossier.</span>
+        </h2>
+        <p style={{ fontSize: 13.5, lineHeight: 1.7, color: 'var(--ink-secondary)', marginBottom: 22, fontWeight: 300 }}>
+          Describe your idea in plain language — one paragraph. The press will read it as if a
+          stranger handed it across a café table.
+        </p>
+
+        <label className="kicker" style={{ color: 'var(--ink-secondary)', display: 'block', marginBottom: 10 }}>
+          The Idea
+        </label>
+        <textarea
+          value={idea}
+          onChange={(e) => setIdea(e.target.value)}
+          placeholder="We&rsquo;re building a&nbsp;…"
+          rows={6}
+          autoFocus
+          style={{
+            width: '100%',
+            padding: '16px 18px',
+            background: 'rgba(26,23,20,0.03)',
+            border: '0.5px solid var(--border-strong)',
+            borderRadius: 0,
+            fontFamily: 'var(--font-serif)',
+            fontSize: 18,
+            fontStyle: 'italic',
+            lineHeight: 1.55,
+            color: 'var(--ink)',
+            outline: 'none',
+            resize: 'none',
+            fontWeight: 500,
+          }}
+          onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--ink)')}
+          onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border-strong)')}
+        />
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginTop: 22,
+            gap: 16,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              letterSpacing: '0.22em',
+              textTransform: 'uppercase',
+              color: 'var(--ink-tertiary)',
+              fontWeight: 500,
+            }}
+          >
+            {idea.trim().length} characters · submitted in confidence
+          </div>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button onClick={onClose} className="btn-ghost" type="button">
+              Withdraw
+            </button>
+            <button
+              onClick={onSubmit}
+              disabled={!idea.trim() || pending}
+              className="btn-ink"
+              type="button"
+            >
+              {pending ? (
+                <>
+                  <Loader2 className="animate-spin" style={{ width: 12, height: 12 }} /> Filing…
+                </>
+              ) : (
+                <>
+                  Send to Press <ArrowUpRight style={{ width: 13, height: 13 }} />
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </>
   )
 }

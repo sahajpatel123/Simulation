@@ -1,42 +1,189 @@
 'use client'
+
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Activity, LayoutDashboard, FolderOpen, Settings, LogOut } from 'lucide-react'
 
-const nav = [
-  { label: 'Dashboard', href: '/projects', icon: LayoutDashboard },
-  { label: 'Projects', href: '/projects', icon: FolderOpen },
-  { label: 'Settings', href: '#', icon: Settings },
+type Item = { num: string; label: string; href: string; hint?: string }
+
+const sections: { title: string; items: Item[] }[] = [
+  {
+    title: 'The Desk',
+    items: [
+      { num: '01', label: 'Dossiers', href: '/projects', hint: 'Your filed ideas' },
+      { num: '02', label: 'Dashboard', href: '/dashboard', hint: 'Overview' },
+    ],
+  },
+  {
+    title: 'Field Work',
+    items: [
+      { num: '03', label: 'Drafts', href: '/projects?filter=draft' },
+      { num: '04', label: 'In Simulation', href: '/projects?filter=running' },
+      { num: '05', label: 'Archived', href: '/projects?filter=done' },
+    ],
+  },
+  {
+    title: 'Operations',
+    items: [
+      { num: '06', label: 'Settings', href: '#' },
+      { num: '07', label: 'Help & Style Guide', href: '#' },
+    ],
+  },
 ]
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const isActive = (href: string) => {
+    const base = href.split('?')[0]
+    if (base === '#') return false
+    if (base === '/projects') return pathname === '/projects' || pathname.startsWith('/project/')
+    return pathname === base
+  }
+
   return (
-    <aside className="fixed left-0 top-0 h-screen w-60 bg-[#080810] border-r border-white/5 flex flex-col px-4 py-6 z-40">
-      <div className="flex items-center gap-2 mb-10 px-2">
-        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-cyan-400 flex items-center justify-center">
-          <Activity className="w-4 h-4 text-white" />
+    <aside
+      style={{
+        position: 'sticky',
+        top: 120,
+        alignSelf: 'start',
+        height: 'calc(100vh - 120px)',
+        borderRight: '0.5px solid var(--border-color)',
+        padding: '40px 28px 32px 40px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 40,
+        overflow: 'auto',
+      }}
+      className="archive-scroll"
+    >
+      {/* Tag */}
+      <div>
+        <div
+          style={{
+            fontSize: 9,
+            letterSpacing: '0.3em',
+            textTransform: 'uppercase',
+            color: 'var(--ink-tertiary)',
+            marginBottom: 8,
+          }}
+        >
+          Section Index
         </div>
-        <span className="font-display font-700 text-white">TheCee</span>
+        <div
+          style={{
+            fontFamily: 'var(--font-serif)',
+            fontSize: 28,
+            fontWeight: 800,
+            fontStyle: 'italic',
+            lineHeight: 1,
+            letterSpacing: '-0.02em',
+            color: 'var(--ink)',
+          }}
+        >
+          Contents
+        </div>
+        <div style={{ height: 2, background: 'var(--red)', width: 40, marginTop: 12 }} />
       </div>
 
-      <nav className="flex-1 space-y-1">
-        {nav.map(({ label, href, icon: Icon }) => (
-          <Link key={label} href={href}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200 ${
-              pathname.startsWith(href) && href !== '#'
-                ? 'bg-indigo-600/15 text-indigo-400 border border-indigo-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-white/5'
-            }`}
+      {sections.map((section) => (
+        <nav key={section.title}>
+          <div
+            style={{
+              fontSize: 9,
+              letterSpacing: '0.3em',
+              textTransform: 'uppercase',
+              color: 'var(--ink-secondary)',
+              fontWeight: 600,
+              marginBottom: 14,
+              paddingBottom: 10,
+              borderBottom: '0.5px solid var(--border-color)',
+            }}
           >
-            <Icon className="w-4 h-4" />{label}
-          </Link>
-        ))}
-      </nav>
+            {section.title}
+          </div>
 
-      <button className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-600 hover:text-slate-400 transition-colors">
-        <LogOut className="w-4 h-4" /> Sign out
-      </button>
+          <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {section.items.map((item) => {
+              const active = isActive(item.href)
+              return (
+                <li key={item.num + item.label}>
+                  <Link
+                    href={item.href}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '28px 1fr',
+                      alignItems: 'baseline',
+                      gap: 10,
+                      padding: '8px 0',
+                      textDecoration: 'none',
+                      color: active ? 'var(--red)' : 'var(--ink)',
+                      borderLeft: active ? '2px solid var(--red)' : '2px solid transparent',
+                      paddingLeft: active ? 10 : 0,
+                      transition: 'all 220ms ease',
+                    }}
+                    className="sidebar-link"
+                  >
+                    <span
+                      className="numeral"
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: active ? 'var(--red)' : 'var(--ink-tertiary)',
+                      }}
+                    >
+                      {item.num}
+                    </span>
+                    <span style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-serif)',
+                          fontSize: 17,
+                          fontWeight: active ? 800 : 700,
+                          fontStyle: active ? 'italic' : 'normal',
+                          lineHeight: 1.15,
+                          letterSpacing: '-0.01em',
+                        }}
+                      >
+                        {item.label}
+                      </span>
+                      {item.hint && (
+                        <span
+                          style={{
+                            fontSize: 10,
+                            letterSpacing: '0.14em',
+                            textTransform: 'uppercase',
+                            color: 'var(--ink-secondary)',
+                            marginTop: 3,
+                            fontWeight: 400,
+                          }}
+                        >
+                          {item.hint}
+                        </span>
+                      )}
+                    </span>
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        </nav>
+      ))}
+
+      {/* Colophon */}
+      <div
+        style={{
+          marginTop: 'auto',
+          paddingTop: 24,
+          borderTop: '0.5px solid var(--border-color)',
+          fontSize: 9,
+          letterSpacing: '0.22em',
+          textTransform: 'uppercase',
+          color: 'var(--ink-tertiary)',
+          lineHeight: 1.7,
+        }}
+      >
+        Printed in the browser<br />
+        Est. 2026 · Ed.&nbsp;I
+      </div>
     </aside>
   )
 }

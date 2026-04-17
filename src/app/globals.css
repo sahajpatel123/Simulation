@@ -113,3 +113,170 @@ body {
 .rule-thick  { height: 3px;   background: var(--ink); }
 .rule-thin   { height: 0.5px; background: var(--border-color); }
 .rule-red    { height: 2px;   background: var(--red); }
+
+/* ── Editorial workspace — "The Archive" ────────────────────────────── */
+
+/* Subtle paper grain. Applied on top-level workspace wrapper. */
+.paper-grain::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.35;
+  mix-blend-mode: multiply;
+  background-image:
+    radial-gradient(rgba(26,23,20,0.08) 1px, transparent 1px),
+    radial-gradient(rgba(26,23,20,0.05) 1px, transparent 1px);
+  background-size: 3px 3px, 7px 7px;
+  background-position: 0 0, 1px 2px;
+}
+
+/* Old-paper vignette, keeps centre bright. */
+.paper-vignette::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: radial-gradient(ellipse 90% 80% at 50% 40%, transparent 40%, rgba(120,90,40,0.06) 100%);
+}
+
+/* Display numerals — large serif figures used for dossier numbers. */
+.numeral {
+  font-family: var(--font-serif, 'Playfair Display', Georgia, serif);
+  font-weight: 800;
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 0.9;
+  font-feature-settings: 'lnum' 1, 'tnum' 1;
+}
+
+/* Uppercase editorial labels. */
+.kicker {
+  font-family: var(--font-body, 'DM Sans', sans-serif);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+/* Status dots — use inside .kicker spans. */
+.status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: middle;
+  background: var(--ink-tertiary);
+}
+.status-dot--draft    { background: var(--ink-tertiary); }
+.status-dot--ready    { background: #b88a3a; }           /* ochre */
+.status-dot--running  { background: var(--red); animation: pulse-red 1.6s ease-in-out infinite; }
+.status-dot--done     { background: #3d7a4a; }           /* ink green */
+.status-dot--failed   { background: var(--red); }
+
+@keyframes pulse-red {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(192,57,43,0.5); }
+  50%      { opacity: 0.6; box-shadow: 0 0 0 6px rgba(192,57,43,0); }
+}
+
+/* Dossier row — used in the index. */
+.dossier-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 96px minmax(0,1fr) 180px 140px 32px;
+  align-items: start;
+  gap: 32px;
+  padding: 36px 0 32px;
+  border-top: 0.5px solid var(--border-color);
+  transition: background 280ms ease, padding-left 280ms ease;
+}
+.dossier-row:hover {
+  background: linear-gradient(90deg, rgba(192,57,43,0.04) 0%, transparent 70%);
+  padding-left: 12px;
+}
+.dossier-row:hover .dossier-rule { background: var(--red); height: 2px; top: -1px; }
+.dossier-row:hover .dossier-numeral { color: var(--red); transform: translateX(-4px); }
+.dossier-row:hover .dossier-arrow   { transform: translateX(6px); color: var(--red); }
+
+.dossier-rule {
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 0.5px; background: var(--border-color);
+  transition: all 280ms ease;
+}
+.dossier-numeral  { transition: color 280ms ease, transform 280ms ease; }
+.dossier-arrow    { transition: all 280ms ease; }
+
+/* Drop cap for editorial intros. */
+.dropcap::first-letter {
+  font-family: var(--font-serif, 'Playfair Display', Georgia, serif);
+  font-weight: 800;
+  font-style: italic;
+  float: left;
+  font-size: 64px;
+  line-height: 0.82;
+  padding: 6px 10px 0 0;
+  color: var(--ink);
+}
+
+/* Column rule for two-column editorial text. */
+.col-rule {
+  column-rule: 0.5px solid var(--border-color);
+  column-gap: 40px;
+}
+
+/* Ink button — editorial primary. */
+.btn-ink {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 14px 22px;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-body, 'DM Sans', sans-serif);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  border: none;
+  cursor: pointer;
+  transition: background 200ms ease, transform 200ms ease;
+}
+.btn-ink:hover      { background: var(--red); transform: translateY(-1px); }
+.btn-ink:disabled   { opacity: 0.4; cursor: not-allowed; transform: none; background: var(--ink); }
+
+.btn-ghost {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 14px 22px;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-body, 'DM Sans', sans-serif);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  border: 0.5px solid var(--border-strong);
+  cursor: pointer;
+  transition: border-color 200ms ease, color 200ms ease;
+}
+.btn-ghost:hover { border-color: var(--ink); color: var(--red); }
+
+/* Editorial scrollbar (webkit). */
+.archive-scroll::-webkit-scrollbar { width: 10px; }
+.archive-scroll::-webkit-scrollbar-track { background: transparent; }
+.archive-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border: 3px solid var(--paper);
+  border-radius: 0;
+}
+
+/* Reveal */
+@keyframes editorial-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.rise { animation: editorial-rise 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.rise-1 { animation-delay: 40ms; }
+.rise-2 { animation-delay: 120ms; }
+.rise-3 { animation-delay: 220ms; }
+.rise-4 { animation-delay: 340ms; }

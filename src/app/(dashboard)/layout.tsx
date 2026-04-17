@@ -5,15 +5,147 @@ import ProtectedRoute from '@/components/layout/ProtectedRoute'
 import UserMenu from '@/components/layout/UserMenu'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const today = new Date().toLocaleDateString('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+  const issue = `VOL. ${new Date().getFullYear() - 2024 || 1} · NO. ${Math.floor(Math.random() * 900) + 100}`
+
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-[#080810] flex">
-        <Sidebar />
-        <div className="flex-1 ml-60 min-h-screen flex flex-col">
-          <div className="flex justify-end items-center px-8 py-4 border-b border-white/5">
-            <UserMenu />
+      <div
+        className="paper-grain paper-vignette archive-scroll"
+        style={{
+          minHeight: '100vh',
+          background: 'var(--paper)',
+          color: 'var(--ink)',
+          position: 'relative',
+        }}
+      >
+        {/* ─── MASTHEAD ───────────────────────────────────────── */}
+        <header
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 30,
+            background: 'var(--paper)',
+            borderBottom: '0.5px solid var(--border-strong)',
+          }}
+        >
+          {/* Top meta strip */}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '10px 40px',
+              fontSize: 10,
+              letterSpacing: '0.22em',
+              textTransform: 'uppercase',
+              color: 'var(--ink-secondary)',
+              borderBottom: '0.5px solid var(--border-color)',
+              fontWeight: 500,
+            }}
+          >
+            <span>{today}</span>
+            <span style={{ color: 'var(--red)', fontWeight: 600 }}>THE ARCHIVE · WORKSPACE EDITION</span>
+            <span>{issue}</span>
           </div>
-          <main className="flex-1">{children}</main>
+
+          {/* Masthead row */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr auto 1fr',
+              alignItems: 'center',
+              padding: '18px 40px',
+              gap: 24,
+            }}
+          >
+            {/* Left — section indicator */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <span
+                style={{
+                  fontSize: 10,
+                  letterSpacing: '0.3em',
+                  textTransform: 'uppercase',
+                  color: 'var(--ink-secondary)',
+                  fontWeight: 500,
+                }}
+              >
+                Workspace
+              </span>
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: 28,
+                  height: 0.5,
+                  background: 'var(--ink-secondary)',
+                }}
+              />
+              <span
+                style={{
+                  fontSize: 10,
+                  letterSpacing: '0.3em',
+                  textTransform: 'uppercase',
+                  color: 'var(--red)',
+                  fontWeight: 600,
+                }}
+              >
+                Private Files
+              </span>
+            </div>
+
+            {/* Centre — wordmark */}
+            <a
+              href="/projects"
+              style={{
+                fontFamily: 'var(--font-serif)',
+                fontSize: 34,
+                fontWeight: 900,
+                letterSpacing: '-0.03em',
+                color: 'var(--ink)',
+                textDecoration: 'none',
+                lineHeight: 1,
+              }}
+            >
+              TheCee<span style={{ color: 'var(--red)' }}>.</span>
+            </a>
+
+            {/* Right — account */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 20 }}>
+              <span
+                style={{
+                  fontSize: 10,
+                  letterSpacing: '0.22em',
+                  textTransform: 'uppercase',
+                  color: 'var(--ink-secondary)',
+                  fontWeight: 500,
+                }}
+              >
+                Editor&rsquo;s Desk
+              </span>
+              <UserMenu />
+            </div>
+          </div>
+
+          {/* Bottom rule (thin red, like a printed masthead) */}
+          <div style={{ height: 2, background: 'var(--red)' }} />
+        </header>
+
+        {/* ─── BODY: left rail + main ─────────────────────────── */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '220px 1fr',
+            position: 'relative',
+            zIndex: 2,
+          }}
+        >
+          <Sidebar />
+          <main style={{ minHeight: 'calc(100vh - 120px)', position: 'relative' }}>{children}</main>
         </div>
       </div>
     </ProtectedRoute>
