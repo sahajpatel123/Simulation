@@ -1,0 +1,23 @@
+# Python backend (deployed separately on Railway) — must not be uploaded
+# to Vercel because Next.js 16 prefers ./app over ./src/app and would
+# try to use the Python backend as the App Router source, producing an
+# empty build and a 404 on every route.
+/app/
+/thecee-backend/
+/tests/
+/migrations/
+/venv/
+/__pycache__/
+
+# Python files at repo root
+migrate_and_start.py
+start_worker.sh
+start_flower.sh
+requirements.txt
+Dockerfile
+railway.toml
+*.pyc
+
+# Python config / docs (not needed for frontend build)
+AGENTS.md
+CLAUDE.md
