@@ -600,149 +600,172 @@ function FileDossierModal({
         style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(26,23,20,0.55)',
-          zIndex: 80,
-          backdropFilter: 'blur(2px)',
+          background: 'rgba(26,23,20,0.12)',
+          zIndex: 100,
+          backdropFilter: 'blur(4px)',
+          WebkitBackdropFilter: 'blur(4px)',
         }}
       />
       <motion.div
-        initial={{ opacity: 0, y: 24 }}
+        role="dialog"
+        aria-modal="true"
+        initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 24 }}
-        transition={{ duration: 0.35, ease: [0.2, 0.7, 0.2, 1] }}
+        exit={{ opacity: 0, y: 16 }}
+        transition={{ duration: 0.3, ease: [0.2, 0.7, 0.2, 1] }}
         style={{
           position: 'fixed',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          width: 'min(640px, 92vw)',
-          background: 'var(--paper)',
-          border: '0.5px solid var(--ink)',
-          boxShadow: '24px 24px 0 rgba(26,23,20,0.12)',
-          zIndex: 90,
-          padding: '36px 40px 32px',
+          inset: 0,
+          zIndex: 101,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 24,
+          pointerEvents: 'none',
         }}
       >
-        {/* Masthead-style header */}
         <div
+          onClick={(e) => e.stopPropagation()}
           style={{
+            width: 'min(640px, 100%)',
+            maxHeight: 'calc(100vh - 48px)',
+            background: 'var(--paper)',
+            border: '0.5px solid var(--ink)',
+            boxShadow: '24px 24px 0 rgba(26,23,20,0.12)',
+            padding: '28px 36px 24px',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            paddingBottom: 14,
-            borderBottom: '2px solid var(--ink)',
-            marginBottom: 6,
+            flexDirection: 'column',
+            overflow: 'hidden',
+            pointerEvents: 'auto',
           }}
         >
-          <div className="kicker" style={{ color: 'var(--red)' }}>
-            Submission · Editor&rsquo;s Desk
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            style={{
-              width: 28,
-              height: 28,
-              border: '0.5px solid var(--border-strong)',
-              background: 'transparent',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--ink)',
-            }}
-          >
-            <X style={{ width: 14, height: 14 }} />
-          </button>
-        </div>
-        <div style={{ height: 0.5, background: 'var(--border-color)', marginBottom: 24 }} />
-
-        <h2
-          className="font-serif"
-          style={{
-            fontSize: 'clamp(32px, 3.4vw, 44px)',
-            fontWeight: 900,
-            lineHeight: 1,
-            letterSpacing: '-0.03em',
-            color: 'var(--ink)',
-            marginBottom: 14,
-          }}
-        >
-          File a new<span style={{ fontStyle: 'italic', color: 'var(--red)' }}> dossier.</span>
-        </h2>
-        <p style={{ fontSize: 13.5, lineHeight: 1.7, color: 'var(--ink-secondary)', marginBottom: 22, fontWeight: 300 }}>
-          Describe your idea in plain language — one paragraph. The press will read it as if a
-          stranger handed it across a café table.
-        </p>
-
-        <label className="kicker" style={{ color: 'var(--ink-secondary)', display: 'block', marginBottom: 10 }}>
-          The Idea
-        </label>
-        <textarea
-          value={idea}
-          onChange={(e) => setIdea(e.target.value)}
-          placeholder="We&rsquo;re building a&nbsp;…"
-          rows={6}
-          autoFocus
-          style={{
-            width: '100%',
-            padding: '16px 18px',
-            background: 'rgba(26,23,20,0.03)',
-            border: '0.5px solid var(--border-strong)',
-            borderRadius: 0,
-            fontFamily: 'var(--font-serif)',
-            fontSize: 18,
-            fontStyle: 'italic',
-            lineHeight: 1.55,
-            color: 'var(--ink)',
-            outline: 'none',
-            resize: 'none',
-            fontWeight: 500,
-          }}
-          onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--ink)')}
-          onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border-strong)')}
-        />
-
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginTop: 22,
-            gap: 16,
-          }}
-        >
+          {/* Masthead-style header */}
           <div
             style={{
-              fontSize: 10,
-              letterSpacing: '0.22em',
-              textTransform: 'uppercase',
-              color: 'var(--ink-tertiary)',
-              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingBottom: 12,
+              borderBottom: '2px solid var(--ink)',
+              marginBottom: 6,
+              flexShrink: 0,
             }}
           >
-            {idea.trim().length} characters · submitted in confidence
-          </div>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <button onClick={onClose} className="btn-ghost" type="button">
-              Withdraw
-            </button>
+            <div className="kicker" style={{ color: 'var(--red)' }}>
+              Submission · Editor&rsquo;s Desk
+            </div>
             <button
-              onClick={onSubmit}
-              disabled={!idea.trim() || pending}
-              className="btn-ink"
-              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              style={{
+                width: 28,
+                height: 28,
+                border: '0.5px solid var(--border-strong)',
+                background: 'transparent',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--ink)',
+              }}
             >
-              {pending ? (
-                <>
-                  <Loader2 className="animate-spin" style={{ width: 12, height: 12 }} /> Filing…
-                </>
-              ) : (
-                <>
-                  Send to Press <ArrowUpRight style={{ width: 13, height: 13 }} />
-                </>
-              )}
+              <X style={{ width: 14, height: 14 }} />
             </button>
+          </div>
+          <div style={{ height: 0.5, background: 'var(--border-color)', marginBottom: 18, flexShrink: 0 }} />
+
+          {/* Scrollable body */}
+          <div style={{ overflowY: 'auto', minHeight: 0, paddingRight: 2 }}>
+            <h2
+              className="font-serif"
+              style={{
+                fontSize: 'clamp(28px, 3vw, 40px)',
+                fontWeight: 900,
+                lineHeight: 1,
+                letterSpacing: '-0.03em',
+                color: 'var(--ink)',
+                marginBottom: 12,
+              }}
+            >
+              File a new<span style={{ fontStyle: 'italic', color: 'var(--red)' }}> dossier.</span>
+            </h2>
+            <p style={{ fontSize: 13.5, lineHeight: 1.65, color: 'var(--ink-secondary)', marginBottom: 18, fontWeight: 300 }}>
+              Describe your idea in plain language — one paragraph. The press will read it as if a
+              stranger handed it across a café table.
+            </p>
+
+            <label className="kicker" style={{ color: 'var(--ink-secondary)', display: 'block', marginBottom: 8 }}>
+              The Idea
+            </label>
+            <textarea
+              value={idea}
+              onChange={(e) => setIdea(e.target.value)}
+              placeholder="We&rsquo;re building a&nbsp;…"
+              rows={5}
+              autoFocus
+              style={{
+                width: '100%',
+                padding: '14px 16px',
+                background: 'rgba(26,23,20,0.03)',
+                border: '0.5px solid var(--border-strong)',
+                borderRadius: 0,
+                fontFamily: 'var(--font-serif)',
+                fontSize: 18,
+                fontStyle: 'italic',
+                lineHeight: 1.55,
+                color: 'var(--ink)',
+                outline: 'none',
+                resize: 'none',
+                fontWeight: 500,
+              }}
+              onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--ink)')}
+              onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border-strong)')}
+            />
+          </div>
+
+          {/* Footer */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginTop: 18,
+              gap: 16,
+              flexShrink: 0,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 10,
+                letterSpacing: '0.22em',
+                textTransform: 'uppercase',
+                color: 'var(--ink-tertiary)',
+                fontWeight: 500,
+              }}
+            >
+              {idea.trim().length} characters · submitted in confidence
+            </div>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={onClose} className="btn-ghost" type="button">
+                Withdraw
+              </button>
+              <button
+                onClick={onSubmit}
+                disabled={!idea.trim() || pending}
+                className="btn-ink"
+                type="button"
+              >
+                {pending ? (
+                  <>
+                    <Loader2 className="animate-spin" style={{ width: 12, height: 12 }} /> Filing…
+                  </>
+                ) : (
+                  <>
+                    Send to Press <ArrowUpRight style={{ width: 13, height: 13 }} />
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </motion.div>
