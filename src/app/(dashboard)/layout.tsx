@@ -16,7 +16,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <ProtectedRoute>
       <div
-        className="paper-grain paper-vignette archive-scroll"
+        id="app-shell"
+        className="paper-grain paper-vignette archive-scroll app-shell"
         style={{
           minHeight: '100vh',
           background: 'var(--paper)',

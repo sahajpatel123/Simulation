@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowUpRight, Loader2, Plus, X } from 'lucide-react'
 import Link from 'next/link'
@@ -590,6 +590,13 @@ function FileDossierModal({
   onSubmit: () => void
   pending: boolean
 }) {
+  useEffect(() => {
+    document.body.classList.add('modal-open')
+    return () => {
+      document.body.classList.remove('modal-open')
+    }
+  }, [])
+
   return (
     <>
       <motion.div
@@ -600,10 +607,8 @@ function FileDossierModal({
         style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(26,23,20,0.12)',
+          background: 'rgba(26,23,20,0.08)',
           zIndex: 100,
-          backdropFilter: 'blur(4px)',
-          WebkitBackdropFilter: 'blur(4px)',
         }}
       />
       <motion.div

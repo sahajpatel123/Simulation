@@ -280,3 +280,8 @@ body {
 .rise-2 { animation-delay: 120ms; }
 .rise-3 { animation-delay: 220ms; }
 .rise-4 { animation-delay: 340ms; }
+
+/* Modal-open state: blur the whole app shell (header, sidebar, main). */
+.app-shell { transition: filter 220ms ease; }
+body.modal-open .app-shell { filter: blur(5px); }
+body.modal-open { overflow: hidden; }
