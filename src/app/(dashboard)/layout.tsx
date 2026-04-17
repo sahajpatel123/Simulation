@@ -1,10 +1,36 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+
 import Sidebar from '@/components/layout/Sidebar'
 import ProtectedRoute from '@/components/layout/ProtectedRoute'
 import UserMenu from '@/components/layout/UserMenu'
 
+const STORAGE_KEY = 'thecee.archive.rail.collapsed'
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const [collapsed, setCollapsed] = useState<boolean>(false)
+  const [mounted, setMounted] = useState(false)
+
+  /* Restore preference on mount (client-only to avoid hydration mismatch). */
+  useEffect(() => {
+    try {
+      setCollapsed(localStorage.getItem(STORAGE_KEY) === '1')
+    } catch {
+      /* ignore */
+    }
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (!mounted) return
+    try {
+      localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  }, [collapsed, mounted])
+
   const today = new Date().toLocaleDateString('en-GB', {
     weekday: 'long',
     day: 'numeric',
@@ -139,12 +165,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: '220px 1fr',
+            gridTemplateColumns: `${collapsed ? 56 : 220}px 1fr`,
+            transition: 'grid-template-columns 320ms cubic-bezier(0.2, 0.7, 0.2, 1)',
             position: 'relative',
             zIndex: 2,
           }}
         >
-          <Sidebar />
+          <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} />
           <main style={{ minHeight: 'calc(100vh - 120px)', position: 'relative' }}>{children}</main>
         </div>
       </div>
