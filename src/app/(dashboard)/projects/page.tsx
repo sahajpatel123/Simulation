@@ -751,7 +751,7 @@ function FileDossierModal({
                 fontWeight: 500,
               }}
             >
-              {idea.trim().length} characters · submitted in confidence
+              {idea.trim().length} characters
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <button onClick={onClose} className="btn-ghost" type="button">
