@@ -1,9 +1,12 @@
 'use client'
-import { useState, use } from 'react'
+
+import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { getProjectById } from '@/lib/mock-data'
-import { Monitor, Smartphone, ArrowRight, ArrowLeft, AlertCircle } from 'lucide-react'
+import { Monitor, Smartphone, ArrowRight, ArrowLeft, AlertCircle, Loader2 } from 'lucide-react'
 import Link from 'next/link'
+import { useParams } from 'next/navigation'
+
+import { useProject } from '@/hooks/useProjects'
 
 const MOCK_HTML = `<!DOCTYPE html>
 <html>
@@ -42,19 +45,55 @@ const MOCK_HTML = `<!DOCTYPE html>
 </body>
 </html>`
 
-export default function PrototypePage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params)
-  const project = getProjectById(id)
+export default function PrototypePage() {
+  const params = useParams()
+  const rawId = params.id
+  const projectId = typeof rawId === 'string' ? Number(rawId) : Number(Array.isArray(rawId) ? rawId[0] : rawId)
+
+  const { data: project, isLoading, isError } = useProject(Number.isFinite(projectId) ? projectId : null)
   const [view, setView] = useState<'desktop' | 'mobile'>('desktop')
 
-  if (!project) return (
-    <div className="p-8 flex items-center justify-center min-h-screen">
-      <div className="text-center">
-        <AlertCircle className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-        <p className="text-slate-400">Project not found</p>
+  const idStr = String(projectId)
+
+  if (!Number.isFinite(projectId)) {
+    return (
+      <div style={{ padding: '80px 48px', maxWidth: 640 }}>
+        <div className="kicker" style={{ color: 'var(--red)', marginBottom: 10 }}>Errata</div>
+        <h1 className="font-serif" style={{ fontSize: 36, fontWeight: 900, fontStyle: 'italic', color: 'var(--ink)' }}>
+          Invalid dossier number.
+        </h1>
+        <Link href="/projects" style={{ marginTop: 16, display: 'inline-block', color: 'var(--red)', fontSize: 14 }}>
+          Return to the index.
+        </Link>
       </div>
-    </div>
-  )
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <div style={{ padding: '80px 48px', display: 'flex', gap: 12, alignItems: 'center', color: 'var(--ink-secondary)' }}>
+        <Loader2 className="animate-spin" style={{ width: 14, height: 14 }} />
+        <span className="kicker">Opening the plate…</span>
+      </div>
+    )
+  }
+
+  if (!isLoading && (isError || !project)) {
+    return (
+      <div style={{ padding: '80px 48px', maxWidth: 640 }}>
+        <div className="kicker" style={{ color: 'var(--red)', marginBottom: 10 }}>Errata</div>
+        <h1 className="font-serif" style={{ fontSize: 36, fontWeight: 900, fontStyle: 'italic', color: 'var(--ink)' }}>
+          This dossier is missing from the archive.
+        </h1>
+        <p style={{ marginTop: 14, color: 'var(--ink-secondary)', fontSize: 14, lineHeight: 1.7 }}>
+          The plate could not be found. It may have been recalled or the link was misprinted.
+        </p>
+        <Link href="/projects" style={{ marginTop: 18, display: 'inline-block', color: 'var(--red)', fontSize: 14 }}>
+          Return to the index.
+        </Link>
+      </div>
+    )
+  }
 
   return (
     <div className="p-8 h-screen flex flex-col max-h-screen overflow-hidden">
@@ -63,7 +102,9 @@ export default function PrototypePage({ params }: { params: Promise<{ id: string
         <div className="flex items-center justify-between mb-6 shrink-0">
           <div>
             <div className="flex items-center gap-2 text-xs text-slate-600 mb-1.5">
-              <Link href={`/project/${id}`} className="hover:text-slate-400">Assumptions</Link>
+              <Link href={`/project/${idStr}`} className="hover:text-slate-400">
+                Dossier
+              </Link>
               <span>/</span>
               <span className="text-slate-400">Prototype</span>
             </div>
@@ -76,11 +117,16 @@ export default function PrototypePage({ params }: { params: Promise<{ id: string
               { mode: 'desktop' as const, icon: Monitor, label: 'Desktop' },
               { mode: 'mobile' as const, icon: Smartphone, label: 'Mobile' },
             ]).map(({ mode, icon: Icon, label }) => (
-              <button key={mode} onClick={() => setView(mode)}
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setView(mode)}
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
                   view === mode ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
-                }`}>
-                <Icon className="w-3.5 h-3.5" />{label}
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {label}
               </button>
             ))}
           </div>
@@ -88,16 +134,21 @@ export default function PrototypePage({ params }: { params: Promise<{ id: string
       </motion.div>
 
       {/* Iframe container */}
-      <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.4, delay: 0.1 }}
-        className="flex-1 flex flex-col items-center min-h-0">
-        <div className={`glass rounded-2xl overflow-hidden transition-all duration-500 flex flex-col ${
-          view === 'desktop' ? 'w-full' : 'w-[390px]'
-        } flex-1`}>
+        className="flex-1 flex flex-col items-center min-h-0"
+      >
+        <div
+          className={`glass rounded-2xl overflow-hidden transition-all duration-500 flex flex-col ${
+            view === 'desktop' ? 'w-full' : 'w-[390px]'
+          } flex-1`}
+        >
           {/* Browser chrome */}
           <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 shrink-0">
             <div className="flex gap-1.5">
-              {['bg-red-500', 'bg-amber-500', 'bg-emerald-500'].map(c => (
+              {['bg-red-500', 'bg-amber-500', 'bg-emerald-500'].map((c) => (
                 <div key={c} className={`w-2.5 h-2.5 rounded-full ${c} opacity-60`} />
               ))}
             </div>
@@ -116,12 +167,16 @@ export default function PrototypePage({ params }: { params: Promise<{ id: string
 
       {/* Footer nav */}
       <div className="flex items-center justify-between mt-4 shrink-0">
-        <Link href={`/project/${id}`}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg glass glass-hover text-slate-400 text-sm">
-          <ArrowLeft className="w-3.5 h-3.5" /> Assumptions
+        <Link
+          href={`/project/${idStr}`}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg glass glass-hover text-slate-400 text-sm"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" /> Dossier
         </Link>
-        <Link href={`/project/${id}/environment`}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-all">
+        <Link
+          href={`/project/${idStr}/environment`}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-all"
+        >
           Set environment <ArrowRight className="w-4 h-4" />
         </Link>
       </div>
