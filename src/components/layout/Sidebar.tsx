@@ -155,23 +155,6 @@ export default function Sidebar() {
           </ul>
         </nav>
       ))}
-
-      {/* Colophon */}
-      <div
-        style={{
-          marginTop: 'auto',
-          paddingTop: 24,
-          borderTop: '0.5px solid var(--border-color)',
-          fontSize: 9,
-          letterSpacing: '0.22em',
-          textTransform: 'uppercase',
-          color: 'var(--ink-tertiary)',
-          lineHeight: 1.7,
-        }}
-      >
-        Printed in the browser<br />
-        Est. 2026 · Ed.&nbsp;I
-      </div>
     </aside>
   )
 }
