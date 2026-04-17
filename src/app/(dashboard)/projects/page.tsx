@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowUpRight, Loader2, Plus, X } from 'lucide-react'
 import Link from 'next/link'
@@ -597,7 +598,9 @@ function FileDossierModal({
     }
   }, [])
 
-  return (
+  if (typeof document === 'undefined') return null
+
+  return createPortal(
     <>
       <motion.div
         initial={{ opacity: 0 }}
@@ -774,6 +777,7 @@ function FileDossierModal({
           </div>
         </div>
       </motion.div>
-    </>
+    </>,
+    document.body,
   )
 }
