@@ -59,17 +59,6 @@ export default function Sidebar() {
       <div>
         <div
           style={{
-            fontSize: 9,
-            letterSpacing: '0.3em',
-            textTransform: 'uppercase',
-            color: 'var(--ink-tertiary)',
-            marginBottom: 8,
-          }}
-        >
-          Section Index
-        </div>
-        <div
-          style={{
             fontFamily: 'var(--font-serif)',
             fontSize: 28,
             fontWeight: 800,
