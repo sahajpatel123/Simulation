@@ -78,7 +78,7 @@ export default function PrototypePage() {
     )
   }
 
-  if (!isLoading && (isError || !project)) {
+  if (isError || !project) {
     return (
       <div style={{ padding: '80px 48px', maxWidth: 640 }}>
         <div className="kicker" style={{ color: 'var(--red)', marginBottom: 10 }}>Errata</div>
