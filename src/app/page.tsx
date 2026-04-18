@@ -211,10 +211,10 @@ function BroadsheetFolio() {
         display: 'grid',
         gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
         alignItems: 'center',
-        columnGap: 14,
-        rowGap: 2,
-        padding: '5px 40px 6px',
-        fontSize: 8,
+        columnGap: 16,
+        rowGap: 4,
+        padding: '7px 40px 9px',
+        fontSize: 9,
         letterSpacing: '0.22em',
         textTransform: 'uppercase',
         color: 'var(--ink-secondary)',
@@ -236,7 +236,7 @@ function BroadsheetFolio() {
         className="font-serif"
         style={{
           justifySelf: 'center',
-          fontSize: 11,
+          fontSize: 12,
           letterSpacing: '0.02em',
           fontStyle: 'italic',
           fontWeight: 700,
@@ -315,7 +315,7 @@ export default function LandingPage() {
       >
         <div
           style={{
-            padding: '11px 40px',
+            padding: '14px 40px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
