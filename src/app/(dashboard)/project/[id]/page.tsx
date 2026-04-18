@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowUpRight, Loader2, RefreshCw } from 'lucide-react'
+import { ArrowUpRight, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 
@@ -35,8 +35,8 @@ export default function ProjectPage() {
   const params = useParams()
   const projectId = Number(params.id)
 
-  const { data: project, isLoading: pLoading, refetch: refetchProject } = useProject(projectId)
-  const { data: assumptions, isLoading: aLoading, refetch: refetchAssumptions } = useAssumptions(projectId)
+  const { data: project, isLoading: pLoading } = useProject(projectId)
+  const { data: assumptions, isLoading: aLoading } = useAssumptions(projectId)
   const { data: simulations, isLoading: sLoading } = useSimulations(projectId)
 
   const assumptionList = useMemo<Assumption[]>(() => assumptions ?? [], [assumptions])
@@ -73,15 +73,7 @@ export default function ProjectPage() {
 
   const status = statusMeta[project.status] ?? { bucket: 'draft' as const, label: project.status?.toLowerCase() ?? 'in notes' }
   const filedDate = project.created_at ? new Date(project.created_at) : null
-  const pulledLabel = filedDate
-    ? filedDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-    : '—'
   const issueNumber = String(Number.isFinite(projectId) ? projectId : 1).padStart(3, '0')
-
-  const onRefresh = () => {
-    refetchProject()
-    refetchAssumptions()
-  }
 
   /* ── Page ─────────────────────────────────────────────────────── */
   return (
@@ -94,48 +86,6 @@ export default function ProjectPage() {
         position: 'relative',
       }}
     >
-      {/* ── Running header slug ───────────────────────────────── */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          paddingBottom: 12,
-          gap: 24,
-        }}
-      >
-        <div className="kicker" style={{ color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <Link href="/projects" style={{ color: 'inherit', textDecoration: 'none' }}>
-            The Archive
-          </Link>
-          <span style={{ color: 'var(--ink-tertiary)' }}>·</span>
-          <span style={{ color: 'var(--ink-secondary)' }}>Vol 2</span>
-          <span style={{ color: 'var(--ink-tertiary)' }}>·</span>
-          <span>Dossier N<span style={{ verticalAlign: 'super', fontSize: '0.7em' }}>o</span> {issueNumber}</span>
-          <span style={{ color: 'var(--ink-tertiary)' }}>·</span>
-          <span style={{ color: 'var(--ink-secondary)' }}>Pulled {pulledLabel}</span>
-          <span className={`status-dot status-dot--${status.bucket}`} style={{ marginLeft: 4 }} />
-          <span style={{ color: 'var(--ink-secondary)' }}>{status.label}</span>
-        </div>
-        <button
-          onClick={onRefresh}
-          className="btn-ghost"
-          type="button"
-          style={{ padding: '8px 14px', fontSize: 10 }}
-        >
-          <RefreshCw style={{ width: 12, height: 12 }} /> Pull again
-        </button>
-      </div>
-
-      {/* ── Red hairline rule that "draws in" ───────────────── */}
-      <motion.div
-        initial={{ scaleX: 0, transformOrigin: 'left' }}
-        animate={{ scaleX: 1 }}
-        transition={{ duration: 0.32, ease: [0.2, 0.7, 0.2, 1] }}
-        style={{ height: 2, background: 'var(--red)', marginBottom: 4 }}
-      />
-      <div style={{ height: 0.5, background: 'var(--border-color)', marginBottom: 36 }} />
-
       {/* ── Title row: huge italic title + giant numeral ─────── */}
       <section
         style={{
