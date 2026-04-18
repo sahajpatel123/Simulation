@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowUpRight, FileText, Hourglass, Layers, Loader2, Plus, Radio } from 'lucide-react'
 import Link from 'next/link'
@@ -25,9 +25,23 @@ const statusMeta: Record<string, { bucket: StatusBucket; label: string }> = {
 const resolveStatus = (s: string) =>
   statusMeta[s] ?? { bucket: 'draft' as StatusBucket, label: s.toLowerCase().replace(/_/g, ' ') }
 
+/** Local wall-clock hour (0–23); `Date` in the browser uses the user’s timezone. */
+function salutationForHour(hour: number): string {
+  if (hour >= 5 && hour < 12) return 'Good morning'
+  if (hour >= 12 && hour < 17) return 'Good afternoon'
+  if (hour >= 17 && hour < 21) return 'Good evening'
+  return 'Good night' /* 21:00–04:59 */
+}
+
 export default function DashboardPage() {
   const { data: projects, isLoading } = useProjects()
   const user = useAuthStore((s) => s.user)
+
+  /* Same string on server + first client paint avoids hydration mismatch; then snap to local time. */
+  const [salutation, setSalutation] = useState('Good morning')
+  useEffect(() => {
+    setSalutation(salutationForHour(new Date().getHours()))
+  }, [])
 
   const todayLong = new Date().toLocaleDateString('en-GB', {
     weekday: 'long',
@@ -119,7 +133,7 @@ export default function DashboardPage() {
               marginBottom: 8,
             }}
           >
-            Good morning,{' '}
+            {salutation},{' '}
             <span style={{ fontStyle: 'italic', color: 'var(--red)' }}>{firstName}</span>.
           </h1>
           <p
