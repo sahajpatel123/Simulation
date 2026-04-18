@@ -1,14 +1,7 @@
 'use client'
 
-import { useRef, useState, type CSSProperties } from 'react'
-import {
-  AnimatePresence,
-  motion,
-  useMotionValue,
-  useScroll,
-  useSpring,
-  useTransform,
-} from 'framer-motion'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { AnimatePresence, motion, useScroll, useSpring } from 'framer-motion'
 import Link from 'next/link'
 import { ArrowRight, ArrowUpRight, ChevronDown } from 'lucide-react'
 
@@ -1366,35 +1359,35 @@ function LetterCard({
   letter: (typeof LETTERS)[number]
   edgeRight: boolean
 }) {
-  const rx = useMotionValue(0)
-  const ry = useMotionValue(0)
+  const [tilt, setTilt] = useState({ rx: 0, ry: 0 })
+  const [hover, setHover] = useState(false)
   const onMove = (e: React.MouseEvent<HTMLElement>) => {
     const r = e.currentTarget.getBoundingClientRect()
     const px = (e.clientX - r.left) / r.width - 0.5
     const py = (e.clientY - r.top) / r.height - 0.5
-    rx.set(-py * 4)
-    ry.set(px * 4)
+    setTilt({ rx: -py * 4, ry: px * 4 })
   }
   const reset = () => {
-    rx.set(0)
-    ry.set(0)
+    setTilt({ rx: 0, ry: 0 })
   }
   return (
-    <motion.article
+    <article
       onMouseMove={onMove}
-      onMouseLeave={reset}
+      onMouseLeave={() => {
+        reset()
+        setHover(false)
+      }}
+      onMouseEnter={() => setHover(true)}
       style={{
         padding: 44,
         borderTop: '0.5px solid var(--border-color)',
         borderRight: edgeRight ? '0.5px solid var(--border-color)' : 'none',
-        background: 'var(--paper-dark)',
-        transformStyle: 'preserve-3d',
-        rotateX: rx,
-        rotateY: ry,
-        transition: 'background 0.3s',
+        background: hover ? 'var(--paper)' : 'var(--paper-dark)',
+        transform: `perspective(900px) rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg)`,
+        transformStyle: 'preserve-3d' as const,
+        transition: 'background 0.3s ease',
         position: 'relative',
       }}
-      whileHover={{ background: 'var(--paper)' }}
     >
       <div
         style={{
@@ -1451,7 +1444,7 @@ function LetterCard({
       >
         — {letter.sig}
       </div>
-    </motion.article>
+    </article>
   )
 }
 
@@ -1716,12 +1709,31 @@ function TierCard({
 /*                          FINAL CTA                               */
 /* ─────────────────────────────────────────────────────────────── */
 function FinalCTA({ onSignup }: { onSignup: () => void }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ['start end', 'end start'],
-  })
-  const y = useTransform(scrollYProgress, [0, 1], [40, -40])
+  const ref = useRef<HTMLElement>(null)
+  const [parallaxY, setParallaxY] = useState(0)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+
+    const update = () => {
+      const rect = el.getBoundingClientRect()
+      const vh = window.innerHeight
+      const start = vh * 0.9
+      const raw = (start - rect.top) / (rect.height + vh * 0.4)
+      setParallaxY(Math.min(1, Math.max(0, raw)))
+    }
+
+    update()
+    window.addEventListener('scroll', update, { passive: true })
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
+    }
+  }, [])
+
+  const yPx = 40 - 80 * parallaxY
 
   return (
     <section
@@ -1734,7 +1746,7 @@ function FinalCTA({ onSignup }: { onSignup: () => void }) {
       }}
     >
       {/* Giant faint serif watermark */}
-      <motion.div
+      <div
         aria-hidden
         style={{
           position: 'absolute',
@@ -1743,7 +1755,8 @@ function FinalCTA({ onSignup }: { onSignup: () => void }) {
           alignItems: 'center',
           justifyContent: 'center',
           pointerEvents: 'none',
-          y,
+          transform: `translateY(${yPx}px)`,
+          willChange: 'transform',
         }}
       >
         <span
@@ -1760,7 +1773,7 @@ function FinalCTA({ onSignup }: { onSignup: () => void }) {
         >
           TheCee
         </span>
-      </motion.div>
+      </div>
 
       <div
         style={{

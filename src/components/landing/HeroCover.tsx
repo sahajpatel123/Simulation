@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { AnimatePresence, motion, useScroll, useTransform } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowRight } from 'lucide-react'
 import MagneticCTA from './MagneticCTA'
 
@@ -40,17 +40,36 @@ export default function HeroCover({
   onSignup: () => void
   onHowItWorks: () => void
 }) {
-  const ref = useRef<HTMLDivElement>(null)
+  const ref = useRef<HTMLElement>(null)
   const word = useRotating()
   const now = useLiveClock()
 
-  /* Scroll parallax — the cover lifts and dims as you leave it behind. */
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ['start start', 'end start'],
-  })
-  const y = useTransform(scrollYProgress, [0, 1], ['0%', '-8%'])
-  const dim = useTransform(scrollYProgress, [0, 1], [1, 0.55])
+  /**
+   * Manual scroll progress (same intent as Motion's useScroll target offsets).
+   * Avoids useScroll({ target }) which throws in production if the ref is not
+   * yet hydrated when Motion's internal useEffect runs (Next.js + Strict Mode).
+   */
+  const [leaveProgress, setLeaveProgress] = useState(0)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+
+    const update = () => {
+      const rect = el.getBoundingClientRect()
+      const h = Math.max(rect.height, 1)
+      /* 0 = hero top at viewport top; 1 = hero scrolled up by one full height */
+      const p = Math.min(1, Math.max(0, -rect.top / h))
+      setLeaveProgress(p)
+    }
+
+    update()
+    window.addEventListener('scroll', update, { passive: true })
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
+    }
+  }, [])
 
   /* Cursor-tracked warm spotlight. */
   const [spot, setSpot] = useState<{ x: number; y: number } | null>(null)
@@ -99,8 +118,12 @@ export default function HeroCover({
         }}
       />
 
-      <motion.div
-        style={{ y, opacity: dim }}
+      <div
+        style={{
+          transform: `translateY(${-8 * leaveProgress}%)`,
+          opacity: 1 - 0.45 * leaveProgress,
+          willChange: 'transform, opacity',
+        }}
       >
         {/* ── masthead strip ─────────────────────────────────── */}
         <motion.div
@@ -424,7 +447,7 @@ export default function HeroCover({
             </span>
           </motion.div>
         </div>
-      </motion.div>
+      </div>
     </section>
   )
 }

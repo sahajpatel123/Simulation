@@ -1,7 +1,6 @@
 'use client'
 
-import { useRef } from 'react'
-import { motion, useScroll, useTransform, type MotionValue } from 'framer-motion'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 type Plate = {
   n: string
@@ -10,19 +9,46 @@ type Plate = {
   body: string
 }
 
+/** Piecewise linear map through (x0,y0)-(x1,y1)-(x2,y2) for x in [x0,x2]. */
+function triLerp(x: number, x0: number, x1: number, x2: number, y0: number, y1: number, y2: number) {
+  if (x <= x0) return y0
+  if (x >= x2) return y2
+  if (x <= x1) return y0 + ((x - x0) / Math.max(1e-6, x1 - x0)) * (y1 - y0)
+  return y1 + ((x - x1) / Math.max(1e-6, x2 - x1)) * (y2 - y1)
+}
+
 /**
- * Sticky, scroll-driven plate advance. Three plates travel horizontally
- * across the viewport as the user scrolls the section, with a typeset
- * progress ledger underneath.
+ * Sticky, scroll-driven plate advance. Uses manual scroll progress instead of
+ * Motion's `useScroll({ target })`, which throws in production if the ref is
+ * not hydrated when Motion's internal effect runs (Next.js + Strict Mode).
  */
 export default function ProcessReel({ plates }: { plates: readonly Plate[] }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ['start start', 'end end'],
-  })
+  const trackRef = useRef<HTMLDivElement>(null)
+  const [progress, setProgress] = useState(0)
 
-  const x = useTransform(scrollYProgress, [0, 1], ['0%', `-${(plates.length - 1) * 100}%`])
+  const updateProgress = useCallback(() => {
+    const el = trackRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const scrollTop = window.scrollY || document.documentElement.scrollTop
+    const elementTop = scrollTop + rect.top
+    const range = Math.max(1, el.offsetHeight - window.innerHeight)
+    const p = Math.min(1, Math.max(0, (scrollTop - elementTop) / range))
+    setProgress(p)
+  }, [])
+
+  useEffect(() => {
+    updateProgress()
+    window.addEventListener('scroll', updateProgress, { passive: true })
+    window.addEventListener('resize', updateProgress)
+    return () => {
+      window.removeEventListener('scroll', updateProgress)
+      window.removeEventListener('resize', updateProgress)
+    }
+  }, [updateProgress])
+
+  const n = plates.length
+  const xPercent = -(n - 1) * 100 * progress
 
   return (
     <section
@@ -33,7 +59,6 @@ export default function ProcessReel({ plates }: { plates: readonly Plate[] }) {
         position: 'relative',
       }}
     >
-      {/* Heading rail */}
       <div
         style={{
           maxWidth: 1280,
@@ -73,8 +98,7 @@ export default function ProcessReel({ plates }: { plates: readonly Plate[] }) {
         </h2>
       </div>
 
-      {/* Scroll track — 3× viewport tall so each plate gets real scroll */}
-      <div ref={ref} style={{ height: `${plates.length * 100}vh`, position: 'relative' }}>
+      <div ref={trackRef} style={{ height: `${plates.length * 100}vh`, position: 'relative' }}>
         <div
           style={{
             position: 'sticky',
@@ -85,19 +109,19 @@ export default function ProcessReel({ plates }: { plates: readonly Plate[] }) {
             overflow: 'hidden',
           }}
         >
-          <motion.div
+          <div
             style={{
               display: 'flex',
               width: `${plates.length * 100}%`,
-              x,
+              transform: `translateX(${xPercent}%)`,
+              willChange: 'transform',
             }}
           >
             {plates.map((p, i) => (
-              <Plate key={p.n} plate={p} index={i} progress={scrollYProgress} total={plates.length} />
+              <Plate key={p.n} plate={p} index={i} total={plates.length} progress={progress} />
             ))}
-          </motion.div>
+          </div>
 
-          {/* Ledger of progress */}
           <div
             style={{
               position: 'absolute',
@@ -109,7 +133,7 @@ export default function ProcessReel({ plates }: { plates: readonly Plate[] }) {
               pointerEvents: 'none',
             }}
           >
-            <Ledger plates={plates} progress={scrollYProgress} />
+            <Ledger plates={plates} progress={progress} />
           </div>
         </div>
       </div>
@@ -120,24 +144,18 @@ export default function ProcessReel({ plates }: { plates: readonly Plate[] }) {
 function Plate({
   plate,
   index,
-  progress,
   total,
+  progress,
 }: {
   plate: Plate
   index: number
-  progress: MotionValue<number>
   total: number
+  progress: number
 }) {
-  const center = index / (total - 1)
-  const span = 1 / (total - 1)
-
-  // A subtle lift + shadow as this plate passes centre-stage.
-  const y = useTransform(progress, [center - span * 0.6, center, center + span * 0.6], [40, 0, -40])
-  const opacity = useTransform(
-    progress,
-    [center - span * 0.7, center, center + span * 0.7],
-    [0.3, 1, 0.3]
-  )
+  const center = index / Math.max(1, total - 1)
+  const span = 1 / Math.max(1, total - 1)
+  const y = triLerp(progress, center - span * 0.6, center, center + span * 0.6, 40, 0, -40)
+  const opacity = triLerp(progress, center - span * 0.7, center, center + span * 0.7, 0.3, 1, 0.3)
 
   return (
     <div
@@ -149,9 +167,9 @@ function Plate({
         justifyContent: 'center',
       }}
     >
-      <motion.article
+      <article
         style={{
-          y,
+          transform: `translateY(${y}px)`,
           opacity,
           maxWidth: 1040,
           width: '100%',
@@ -164,9 +182,9 @@ function Plate({
           padding: 'clamp(40px, 6vw, 72px)',
           position: 'relative',
           boxShadow: '12px 12px 0 var(--ink)',
+          willChange: 'transform, opacity',
         }}
       >
-        {/* torn-paper red edge */}
         <span
           aria-hidden
           style={{
@@ -248,7 +266,7 @@ function Plate({
             {plate.body}
           </p>
         </div>
-      </motion.article>
+      </article>
     </div>
   )
 }
@@ -258,7 +276,7 @@ function Ledger({
   progress,
 }: {
   plates: readonly Plate[]
-  progress: MotionValue<number>
+  progress: number
 }) {
   return (
     <div
@@ -286,41 +304,39 @@ function LedgerItem({
   plate: Plate
   index: number
   total: number
-  progress: MotionValue<number>
+  progress: number
 }) {
-  const center = index / (total - 1)
-  const span = 1 / (total - 1)
-  const active = useTransform(
-    progress,
-    [center - span * 0.5, center, center + span * 0.5],
-    [0, 1, 0]
-  )
-  const opacity = useTransform(active, (v) => 0.35 + v * 0.65)
+  const center = index / Math.max(1, total - 1)
+  const span = 1 / Math.max(1, total - 1)
+  const active = triLerp(progress, center - span * 0.5, center, center + span * 0.5, 0, 1, 0)
+  const labelOpacity = 0.35 + active * 0.65
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <motion.span
+      <span
         style={{
           display: 'inline-block',
           width: 8,
           height: 8,
           borderRadius: '50%',
           background: 'var(--red)',
-          scale: active,
+          transform: `scale(${0.35 + active * 0.65})`,
+          transformOrigin: 'center',
         }}
       />
-      <motion.span
+      <span
         style={{
           fontSize: 10,
           letterSpacing: '0.24em',
           textTransform: 'uppercase',
           color: 'var(--ink-secondary)',
-          opacity,
+          opacity: labelOpacity,
           fontWeight: 600,
           fontVariantNumeric: 'tabular-nums',
         }}
       >
         {String(index + 1).padStart(2, '0')} — {plate.kicker}
-      </motion.span>
+      </span>
     </div>
   )
 }

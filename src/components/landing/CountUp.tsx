@@ -1,12 +1,11 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useInView } from 'framer-motion'
 
 /**
  * Numeric count-up that starts when it scrolls into view.
- * Honors prefers-reduced-motion and uses an eased tween so the number
- * settles like a press counter, not a scoreboard.
+ * Uses IntersectionObserver (not Motion's useInView) so behaviour is identical
+ * in dev and production and does not depend on Motion ref timing.
  */
 export default function CountUp({
   to,
@@ -24,8 +23,22 @@ export default function CountUp({
   style?: React.CSSProperties
 }) {
   const ref = useRef<HTMLSpanElement>(null)
-  const inView = useInView(ref, { once: true, margin: '-30% 0px -30% 0px' })
+  const [inView, setInView] = useState(false)
   const [value, setValue] = useState(0)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e?.isIntersecting) setInView(true)
+      },
+      { root: null, rootMargin: '-20% 0px -20% 0px', threshold: 0.01 }
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
 
   useEffect(() => {
     if (!inView) return
