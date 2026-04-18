@@ -255,7 +255,7 @@ export default function EnvironmentPage() {
             transition={{ duration: 0.3 }}
             style={{ display: 'flex', flexDirection: 'column', gap: 18 }}
           >
-            {sliderRow('Consumer volume', volume, setVolume, 1000, 50000, 500, (v) => v.toLocaleString(), 'agents')}
+            {sliderRow('Consumer volume', volume, setVolume, 1000, 10000, 500, (v) => v.toLocaleString(), 'agents')}
             {sliderRow('Monthly growth rate', growth, setGrowth, 0, 100, 1, (v) => String(v), '%')}
             {sliderRow(
               'Average order value',
