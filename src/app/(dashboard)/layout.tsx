@@ -20,9 +20,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <ProtectedRoute>
       <div
         id="app-shell"
-        className="paper-grain paper-vignette archive-scroll app-shell"
+        className="paper-grain paper-vignette app-shell"
         style={{
-          minHeight: '100vh',
+          minHeight: '100dvh',
           background: 'var(--paper)',
           color: 'var(--ink)',
           position: 'relative',
@@ -154,7 +154,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             onCollapse={() => setSidebarCollapsed(true)}
             onExpand={() => setSidebarCollapsed(false)}
           />
-          <main style={{ minHeight: 'calc(100vh - 120px)', position: 'relative' }}>{children}</main>
+          <main style={{ minHeight: 'calc(100dvh - 120px)', position: 'relative' }}>{children}</main>
         </div>
       </div>
     </ProtectedRoute>

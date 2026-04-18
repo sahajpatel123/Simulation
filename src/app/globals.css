@@ -90,13 +90,34 @@ html[data-scroll-behavior="smooth"] {
   scroll-behavior: smooth;
 }
 
+/* Full-height document so the viewport scrollbar runs edge-to-edge (no “cut off” track). */
+html {
+  height: 100%;
+}
+
 body {
+  min-height: 100%;
+  min-height: 100dvh;
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font-body, 'DM Sans', sans-serif);
   font-weight: 300;
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
+  overflow-x: clip;
+  overflow-y: auto;
+  /* Firefox — thumb hidden until ScrollChrome adds .thecee-scroll-reveal on <body> */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(107, 101, 96, 0) transparent;
+}
+
+body.thecee-scroll-reveal {
+  scrollbar-color: rgba(107, 101, 96, 0.42) transparent;
+}
+
+/* Root wrap: stretch with the body so inner layouts never sit shorter than the viewport. */
+.thecee-root-wrap {
+  position: relative;
+  min-height: 100%;
 }
 
 .font-serif {
@@ -285,13 +306,48 @@ aside.sidebar-collapsed-rail:focus-visible {
   outline-offset: -2px;
 }
 
-/* Editorial scrollbar (webkit). */
-.archive-scroll::-webkit-scrollbar { width: 10px; }
-.archive-scroll::-webkit-scrollbar-track { background: transparent; }
+/* ── Global editorial scrollbar — WebKit & Blink (viewport may attach to html or body) ── */
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  width: 6px;
+}
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track {
+  background: transparent;
+}
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-left: 0.5px solid transparent;
+  transition: background-color 0.45s ease, border-color 0.45s ease;
+}
+html.thecee-scroll-reveal::-webkit-scrollbar-thumb,
+body.thecee-scroll-reveal::-webkit-scrollbar-thumb {
+  background-color: rgba(107, 101, 96, 0.38);
+  border-left-color: rgba(192, 57, 43, 0.35);
+}
+html.thecee-scroll-reveal::-webkit-scrollbar-thumb:hover,
+body.thecee-scroll-reveal::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(26, 23, 20, 0.35);
+}
+
+/* Narrow rails inside the shell (sidebar TOC) — thin, always faint so it never reads as “system UI”. */
+.archive-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(107, 101, 96, 0.22) transparent;
+}
+.archive-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+.archive-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
 .archive-scroll::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border: 3px solid var(--paper);
-  border-radius: 0;
+  background-color: rgba(107, 101, 96, 0.2);
+  border-left: 0.5px solid rgba(192, 57, 43, 0.18);
+}
+.archive-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(107, 101, 96, 0.38);
 }
 
 /* Reveal */

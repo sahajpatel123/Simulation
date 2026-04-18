@@ -3,6 +3,7 @@ import { Playfair_Display, DM_Sans } from 'next/font/google'
 import { Toaster } from 'sonner'
 import Providers from './providers'
 import HydrateAuth from '@/components/layout/HydrateAuth'
+import ScrollChrome from '@/components/layout/ScrollChrome'
 import './globals.css'
 
 const playfair = Playfair_Display({
@@ -27,7 +28,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" data-scroll-behavior="smooth" className={`${playfair.variable} ${dmSans.variable}`}>
       <body>
-        <div style={{ position: 'relative' }}>
+        <ScrollChrome />
+        <div className="thecee-root-wrap">
           <Providers>
             <HydrateAuth />
             {children}

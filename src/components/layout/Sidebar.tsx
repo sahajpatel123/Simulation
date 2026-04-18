@@ -87,7 +87,7 @@ function SidebarInner({ collapsed, onCollapse, onExpand }: SidebarProps) {
         position: 'sticky',
         top: 120,
         alignSelf: 'start',
-        height: 'calc(100vh - 120px)',
+        height: 'calc(100dvh - 120px)',
         borderRight: '0.5px solid var(--border-color)',
         padding: collapsed ? '20px 0' : '40px 28px 32px 40px',
         display: 'flex',
