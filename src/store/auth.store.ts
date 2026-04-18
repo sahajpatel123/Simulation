@@ -5,7 +5,19 @@ export interface AuthUser {
   id:         number
   email:      string
   full_name:  string | null
-  created_at: string
+  created_at?: string
+  tier?:      string
+
+  /* ── Press Office settings ── */
+  handle?:               string | null
+  reduced_motion?:       boolean
+  email_notices?:        boolean
+  weekly_brief?:         boolean
+  default_units?:        'inr' | 'usd' | 'eur'
+  default_reader_count?: number
+  default_scenario?:     'base' | 'recession' | 'viral' | 'competitor'
+  default_aov?:          number
+  keep_past_results?:    boolean
 }
 
 interface AuthState {

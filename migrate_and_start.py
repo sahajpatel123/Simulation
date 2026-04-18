@@ -32,6 +32,15 @@ def run_migrations():
     with engine.connect() as conn:
         for table, column, col_type in [
             ("users", "tier", "VARCHAR(50) DEFAULT 'free'"),
+            ("users", "handle", "VARCHAR(64)"),
+            ("users", "reduced_motion", "BOOLEAN DEFAULT FALSE NOT NULL"),
+            ("users", "email_notices", "BOOLEAN DEFAULT TRUE NOT NULL"),
+            ("users", "weekly_brief", "BOOLEAN DEFAULT FALSE NOT NULL"),
+            ("users", "default_units", "VARCHAR(8) DEFAULT 'inr' NOT NULL"),
+            ("users", "default_reader_count", "INTEGER DEFAULT 10000 NOT NULL"),
+            ("users", "default_scenario", "VARCHAR(32) DEFAULT 'base' NOT NULL"),
+            ("users", "default_aov", "FLOAT DEFAULT 1000.0 NOT NULL"),
+            ("users", "keep_past_results", "BOOLEAN DEFAULT TRUE NOT NULL"),
             ("projects", "prototype_html", "TEXT"),
             ("projects", "funnel_graph_json", "TEXT"),
             ("projects", "premortem_json", "JSONB"),

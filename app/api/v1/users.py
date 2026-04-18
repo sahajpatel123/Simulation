@@ -7,9 +7,71 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
+from app.models.project import Project
 from app.models.user import User
+from app.schemas.auth import MessageResponse
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+@router.post("/me/clear-archive", response_model=MessageResponse)
+def clear_archive(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete every project (and its cascade) owned by the authenticated user."""
+    deleted = (
+        db.query(Project)
+        .filter(Project.user_id == current_user.id)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return MessageResponse(message=f"Cleared {deleted} dossiers from your archive")
+
+
+@router.get("/me/export")
+def export_archive(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return a JSON dump of the user's profile and dossiers."""
+    projects = (
+        db.query(Project).filter(Project.user_id == current_user.id).all()
+    )
+
+    def _project_row(p: Project) -> dict:
+        return {
+            "id": p.id,
+            "title": getattr(p, "title", None),
+            "description": getattr(p, "description", None),
+            "status": getattr(p, "status", None),
+            "created_at": p.created_at.isoformat() if getattr(p, "created_at", None) else None,
+            "updated_at": p.updated_at.isoformat() if getattr(p, "updated_at", None) else None,
+        }
+
+    return {
+        "user": {
+            "id": current_user.id,
+            "email": current_user.email,
+            "full_name": current_user.full_name,
+            "handle": current_user.handle,
+            "tier": current_user.tier,
+            "preferences": {
+                "reduced_motion": current_user.reduced_motion,
+                "email_notices": current_user.email_notices,
+                "weekly_brief": current_user.weekly_brief,
+                "default_units": current_user.default_units,
+            },
+            "cast_defaults": {
+                "default_reader_count": current_user.default_reader_count,
+                "default_scenario": current_user.default_scenario,
+                "default_aov": current_user.default_aov,
+                "keep_past_results": current_user.keep_past_results,
+            },
+        },
+        "dossiers": [_project_row(p) for p in projects],
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @router.get("/me/accuracy-profile")

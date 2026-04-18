@@ -86,10 +86,16 @@ export const useRegister = () => {
 }
 
 /* ── Current user (server-validated) ── */
-export const useCurrentUser = () =>
-  useQuery<AuthUser>({
+export const useCurrentUser = () => {
+  const setUser = useAuthStore(s => s.setUser)
+  return useQuery<AuthUser>({
     queryKey: ['me'],
-    queryFn:  async () => (await api.get('/auth/me')).data,
+    queryFn:  async () => {
+      const { data } = await api.get<AuthUser>('/auth/me')
+      /* Keep the auth store in sync so settings fields rehydrate on reload. */
+      setUser(data)
+      return data
+    },
     enabled:  auth.isAuthenticated(),
     staleTime: 1000 * 60 * 10,   /* re-fetch every 10 minutes */
     retry: (count, err: unknown) => {
@@ -97,6 +103,7 @@ export const useCurrentUser = () =>
       return status !== 401 && count < 1
     },
   })
+}
 
 /* ── Logout ── */
 export const useLogout = () => {

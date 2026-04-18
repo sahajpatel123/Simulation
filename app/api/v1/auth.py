@@ -11,12 +11,15 @@ from app.core.security import (
 )
 from app.models.user import User
 from app.schemas.auth import (
+    AccountDelete,
     MessageResponse,
+    PasswordChange,
     RefreshRequest,
     Token,
     UserCreate,
     UserLogin,
     UserOut,
+    UserUpdate,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -91,6 +94,77 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user)):
     return UserOut.model_validate(current_user)
+
+
+@router.patch("/me", response_model=UserOut)
+def update_me(
+    payload: UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update identity, preferences, or cast defaults on the authenticated user."""
+    data = payload.model_dump(exclude_unset=True)
+
+    # Guard: email uniqueness if changing
+    if "email" in data and data["email"] and data["email"] != current_user.email:
+        taken = (
+            db.query(User)
+            .filter(User.email == data["email"], User.id != current_user.id)
+            .first()
+        )
+        if taken:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Email already in use",
+            )
+
+    # Guard: enforce reader count ceiling at the simulation limit (10k)
+    if "default_reader_count" in data and data["default_reader_count"] is not None:
+        rc = int(data["default_reader_count"])
+        data["default_reader_count"] = max(1000, min(10000, rc))
+
+    for field, value in data.items():
+        setattr(current_user, field, value)
+
+    db.commit()
+    db.refresh(current_user)
+    return UserOut.model_validate(current_user)
+
+
+@router.post("/change-password", response_model=MessageResponse)
+def change_password(
+    payload: PasswordChange,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+    current_user.hashed_password = get_password_hash(payload.new_password)
+    db.commit()
+    return MessageResponse(message="Password updated")
+
+
+@router.delete("/me", response_model=MessageResponse)
+def delete_me(
+    payload: AccountDelete,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Permanently delete the authenticated account and every cascade-linked
+    record (projects, assumptions, environments, simulations, outcomes…).
+    """
+    if not verify_password(payload.password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password is incorrect",
+        )
+    db.delete(current_user)
+    db.commit()
+    return MessageResponse(message="Account deleted")
 
 
 @router.post("/logout", response_model=MessageResponse)
