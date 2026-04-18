@@ -122,7 +122,7 @@ export default function HeroCover({
             position: 'relative',
             maxWidth: 1280,
             margin: '0 auto',
-            padding: 'clamp(72px, 10vh, 120px) 48px clamp(56px, 9vh, 96px)',
+            padding: 'clamp(28px, 4.5vh, 56px) 48px clamp(40px, 6vh, 72px)',
           }}
         >
           {/* Red kicker */}
@@ -134,7 +134,7 @@ export default function HeroCover({
               display: 'flex',
               alignItems: 'center',
               gap: 14,
-              marginBottom: 36,
+              marginBottom: 22,
             }}
           >
             <span style={{ width: 32, height: 0.5, background: 'var(--red)' }} />
@@ -151,112 +151,257 @@ export default function HeroCover({
             </span>
           </motion.div>
 
-          {/* Headline */}
-          <h1
-            className="font-serif"
+          {/* Headline stage — print-shop atmosphere without “form” flatness */}
+          <div
             style={{
-              fontSize: 'clamp(64px, 11vw, 188px)',
-              fontWeight: 900,
-              lineHeight: 0.88,
-              letterSpacing: '-0.045em',
-              color: 'var(--ink)',
-              margin: 0,
-              maxWidth: '18ch',
+              position: 'relative',
+              marginBottom: 4,
             }}
           >
-            <motion.span
-              initial={{ y: '0.45em', opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ duration: 0.8, delay: 0.2, ease: [0.2, 0.7, 0.2, 1] }}
-              style={{ display: 'inline-block' }}
-            >
-              Know
-            </motion.span>{' '}
-            <motion.span
-              initial={{ y: '0.45em', opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ duration: 0.8, delay: 0.32, ease: [0.2, 0.7, 0.2, 1] }}
-              style={{ display: 'inline-block' }}
-            >
-              before
-            </motion.span>{' '}
-            <motion.span
-              initial={{ y: '0.45em', opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ duration: 0.8, delay: 0.44, ease: [0.2, 0.7, 0.2, 1] }}
-              style={{ display: 'inline-block' }}
-            >
-              you
-            </motion.span>
-            <br />
-            <motion.span
-              initial={{ y: '0.45em', opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ duration: 0.8, delay: 0.56, ease: [0.2, 0.7, 0.2, 1] }}
-              style={{ display: 'inline-block' }}
-            >
-              build your
-            </motion.span>{' '}
-            {/* Rotating accent word with a soft ink bloom behind it */}
             <span
+              aria-hidden
+              className="font-serif"
               style={{
-                position: 'relative',
-                display: 'inline-block',
-                perspective: 800,
-                verticalAlign: 'baseline',
+                position: 'absolute',
+                right: 'max(-12px, -2vw)',
+                top: 'clamp(-52px, -5vw, -24px)',
+                fontSize: 'clamp(88px, 13vw, 200px)',
+                lineHeight: 0.82,
+                fontWeight: 900,
+                fontStyle: 'italic',
+                color: 'rgba(26,23,20,0.042)',
+                pointerEvents: 'none',
+                userSelect: 'none',
+                zIndex: 0,
               }}
             >
-              <AnimatePresence mode="wait">
+              01
+            </span>
+            <div
+              aria-hidden
+              style={{
+                position: 'absolute',
+                left: -20,
+                right: -12,
+                top: -12,
+                bottom: -28,
+                opacity: 0.05,
+                backgroundImage:
+                  'repeating-linear-gradient(-26deg, rgba(26,23,20,0.5) 0 0.4px, transparent 0.4px 5px)',
+                mixBlendMode: 'multiply',
+                pointerEvents: 'none',
+                zIndex: 0,
+              }}
+            />
+            {/* Registration corners */}
+            <span
+              aria-hidden
+              style={{
+                position: 'absolute',
+                top: -8,
+                left: 0,
+                width: 14,
+                height: 14,
+                borderTop: '1.5px solid rgba(26,23,20,0.2)',
+                borderLeft: '1.5px solid rgba(26,23,20,0.2)',
+                pointerEvents: 'none',
+                zIndex: 2,
+              }}
+            />
+            <span
+              aria-hidden
+              style={{
+                position: 'absolute',
+                top: -8,
+                right: 0,
+                width: 14,
+                height: 14,
+                borderTop: '1.5px solid rgba(26,23,20,0.2)',
+                borderRight: '1.5px solid rgba(26,23,20,0.2)',
+                pointerEvents: 'none',
+                zIndex: 2,
+              }}
+            />
+            <span
+              aria-hidden
+              style={{
+                position: 'absolute',
+                bottom: -6,
+                left: 0,
+                width: 14,
+                height: 14,
+                borderBottom: '1.5px solid rgba(26,23,20,0.16)',
+                borderLeft: '1.5px solid rgba(26,23,20,0.16)',
+                pointerEvents: 'none',
+                zIndex: 2,
+              }}
+            />
+            <span
+              aria-hidden
+              style={{
+                position: 'absolute',
+                bottom: -6,
+                right: 0,
+                width: 14,
+                height: 14,
+                borderBottom: '1.5px solid rgba(26,23,20,0.16)',
+                borderRight: '1.5px solid rgba(26,23,20,0.16)',
+                pointerEvents: 'none',
+                zIndex: 2,
+              }}
+            />
+
+            <div
+              style={{
+                position: 'relative',
+                paddingLeft: 22,
+                zIndex: 1,
+              }}
+            >
+              <span
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: '0.5em',
+                  bottom: '0.28em',
+                  width: 4,
+                  borderRadius: 1,
+                  background: 'linear-gradient(180deg, var(--red) 0%, rgba(192,57,43,0.28) 100%)',
+                  boxShadow: '0 0 24px rgba(192,57,43,0.12)',
+                }}
+              />
+              <h1
+                className="font-serif"
+                style={{
+                  fontSize: 'clamp(52px, 10vw, 172px)',
+                  fontWeight: 900,
+                  lineHeight: 0.88,
+                  letterSpacing: '-0.045em',
+                  color: 'var(--ink)',
+                  margin: 0,
+                  maxWidth: '18ch',
+                  textShadow: '0 1px 0 rgba(242,236,224,0.35)',
+                }}
+              >
                 <motion.span
-                  key={word}
-                  initial={{ y: '0.5em', opacity: 0, rotateX: 60 }}
-                  animate={{ y: 0, opacity: 1, rotateX: 0 }}
-                  exit={{ y: '-0.45em', opacity: 0, rotateX: -60 }}
-                  transition={{ duration: 0.55, ease: [0.76, 0, 0.24, 1] }}
+                  initial={{ y: '0.45em', opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ duration: 0.8, delay: 0.2, ease: [0.2, 0.7, 0.2, 1] }}
+                  style={{ display: 'inline-block', fontWeight: 900 }}
+                >
+                  Know
+                </motion.span>{' '}
+                <motion.span
+                  initial={{ y: '0.45em', opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ duration: 0.8, delay: 0.32, ease: [0.2, 0.7, 0.2, 1] }}
+                  style={{ display: 'inline-block', fontWeight: 800 }}
+                >
+                  before
+                </motion.span>{' '}
+                <motion.span
+                  initial={{ y: '0.45em', opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ duration: 0.8, delay: 0.44, ease: [0.2, 0.7, 0.2, 1] }}
+                  style={{ display: 'inline-block', fontWeight: 900 }}
+                >
+                  you
+                </motion.span>
+                <br />
+                <motion.span
+                  initial={{ y: '0.45em', opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ duration: 0.8, delay: 0.56, ease: [0.2, 0.7, 0.2, 1] }}
                   style={{
                     display: 'inline-block',
                     fontStyle: 'italic',
-                    color: 'var(--red)',
+                    fontWeight: 700,
+                    letterSpacing: '-0.03em',
+                    color: 'rgba(26,23,20,0.88)',
+                  }}
+                >
+                  build your
+                </motion.span>{' '}
+                <span
+                  style={{
                     position: 'relative',
-                    transformOrigin: 'center bottom',
+                    display: 'inline-block',
+                    perspective: 800,
+                    verticalAlign: 'baseline',
                   }}
                 >
                   <span
                     aria-hidden
                     style={{
                       position: 'absolute',
-                      inset: '-0.05em -0.08em -0.1em -0.08em',
+                      left: '-0.12em',
+                      right: '-0.12em',
+                      top: '-0.08em',
+                      bottom: '-0.14em',
                       background:
-                        'radial-gradient(closest-side, rgba(192,57,43,0.12), transparent 70%)',
-                      filter: 'blur(6px)',
+                        'linear-gradient(118deg, rgba(192,57,43,0.14), rgba(26,23,20,0.04) 55%, transparent 88%)',
+                      borderRadius: 3,
+                      transform: 'rotate(-1.2deg)',
                       zIndex: -1,
                     }}
                   />
-                  {word}
+                  <AnimatePresence mode="wait">
+                    <motion.span
+                      key={word}
+                      initial={{ y: '0.5em', opacity: 0, rotateX: 60 }}
+                      animate={{ y: 0, opacity: 1, rotateX: 0 }}
+                      exit={{ y: '-0.45em', opacity: 0, rotateX: -60 }}
+                      transition={{ duration: 0.55, ease: [0.76, 0, 0.24, 1] }}
+                      style={{
+                        display: 'inline-block',
+                        fontStyle: 'italic',
+                        color: 'var(--red)',
+                        position: 'relative',
+                        transformOrigin: 'center bottom',
+                        textShadow:
+                          '0.03em 0 0 rgba(192,57,43,0.35), -0.025em 0 0 rgba(26,23,20,0.12), 0 0.08em 28px rgba(192,57,43,0.18)',
+                      }}
+                    >
+                      <span
+                        aria-hidden
+                        style={{
+                          position: 'absolute',
+                          inset: '-0.05em -0.08em -0.1em -0.08em',
+                          background:
+                            'radial-gradient(closest-side, rgba(192,57,43,0.14), transparent 72%)',
+                          filter: 'blur(8px)',
+                          zIndex: -1,
+                        }}
+                      />
+                      {word}
+                    </motion.span>
+                  </AnimatePresence>
+                  <motion.span
+                    initial={{ scaleX: 0, opacity: 0 }}
+                    animate={{ scaleX: 1, opacity: 0.85 }}
+                    transition={{ duration: 0.6, delay: 0.7 }}
+                    style={{
+                      display: 'block',
+                      height: 2,
+                      marginTop: 3,
+                      background:
+                        'linear-gradient(90deg, var(--red), rgba(192,57,43,0.15) 72%, transparent)',
+                      transformOrigin: 'left',
+                    }}
+                  />
+                </span>
+                <motion.span
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.6, delay: 0.85 }}
+                  style={{ color: 'var(--ink-tertiary)' }}
+                >
+                  .
                 </motion.span>
-              </AnimatePresence>
-              <motion.span
-                initial={{ scaleX: 0, opacity: 0 }}
-                animate={{ scaleX: 1, opacity: 0.8 }}
-                transition={{ duration: 0.6, delay: 0.7 }}
-                style={{
-                  display: 'block',
-                  height: 2,
-                  marginTop: 2,
-                  background: 'var(--red)',
-                  transformOrigin: 'left',
-                }}
-              />
-            </span>
-            <motion.span
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.6, delay: 0.85 }}
-              style={{ color: 'var(--ink-tertiary)' }}
-            >
-              .
-            </motion.span>
-          </h1>
+              </h1>
+            </div>
+          </div>
 
           {/* Lede + actions — one single line of calm */}
           <motion.div
@@ -264,7 +409,7 @@ export default function HeroCover({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.9 }}
             style={{
-              marginTop: 52,
+              marginTop: 36,
               display: 'grid',
               gridTemplateColumns: 'minmax(0, 1.2fr) auto',
               alignItems: 'end',
@@ -350,7 +495,7 @@ export default function HeroCover({
             animate={{ opacity: 1 }}
             transition={{ duration: 0.7, delay: 1.1 }}
             style={{
-              marginTop: 72,
+              marginTop: 48,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
