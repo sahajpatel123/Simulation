@@ -16,16 +16,6 @@ function useRotating(intervalMs = 2600) {
   return ROTATING[i]
 }
 
-function useLiveClock() {
-  const [now, setNow] = useState<Date | null>(null)
-  useEffect(() => {
-    setNow(new Date())
-    const id = setInterval(() => setNow(new Date()), 1000)
-    return () => clearInterval(id)
-  }, [])
-  return now
-}
-
 /**
  * A quiet broadsheet cover.
  *   - One huge line of type that rotates its last word.
@@ -42,7 +32,6 @@ export default function HeroCover({
 }) {
   const ref = useRef<HTMLElement>(null)
   const word = useRotating()
-  const now = useLiveClock()
 
   /**
    * Manual scroll progress (same intent as Motion's useScroll target offsets).
@@ -79,18 +68,6 @@ export default function HeroCover({
   }
   const onLeave = () => setSpot(null)
 
-  const dateLabel = now
-    ? now.toLocaleDateString('en-GB', {
-        weekday: 'long',
-        day: '2-digit',
-        month: 'long',
-        year: 'numeric',
-      })
-    : '—'
-  const timeLabel = now
-    ? now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
-    : '—'
-
   return (
     <section
       ref={ref}
@@ -125,50 +102,7 @@ export default function HeroCover({
           willChange: 'transform, opacity',
         }}
       >
-        {/* ── masthead strip ─────────────────────────────────── */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr auto 1fr',
-            alignItems: 'center',
-            padding: '22px 48px 14px',
-            fontSize: 10,
-            letterSpacing: '0.24em',
-            textTransform: 'uppercase',
-            color: 'var(--ink-secondary)',
-            fontWeight: 500,
-          }}
-        >
-          <span style={{ justifySelf: 'start' }}>Vol. I — Issue 04</span>
-          <span
-            className="font-serif"
-            style={{
-              justifySelf: 'center',
-              fontSize: 13,
-              letterSpacing: 0,
-              fontStyle: 'italic',
-              fontWeight: 700,
-              color: 'var(--ink)',
-              textTransform: 'none',
-            }}
-          >
-            The Simulation Broadsheet
-          </span>
-          <span
-            style={{
-              justifySelf: 'end',
-              fontVariantNumeric: 'tabular-nums',
-              color: 'var(--ink-tertiary)',
-            }}
-          >
-            {dateLabel} · {timeLabel}
-          </span>
-        </motion.div>
-
-        {/* Animated rules */}
+        {/* Animated rules — folio (vol / broadsheet / clock) lives in sticky page masthead */}
         <motion.div
           initial={{ scaleX: 0 }}
           animate={{ scaleX: 1 }}

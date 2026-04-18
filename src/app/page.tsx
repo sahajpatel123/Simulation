@@ -181,6 +181,89 @@ function PressProgress() {
   )
 }
 
+/** Live folio line — lives in the sticky masthead so the hero cover can start at the rules. */
+function BroadsheetFolio() {
+  const [now, setNow] = useState<Date | null>(null)
+  useEffect(() => {
+    setNow(new Date())
+    const id = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  const dateLabel = now
+    ? now.toLocaleDateString('en-GB', {
+        weekday: 'long',
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+      })
+    : '—'
+  const timeLabel = now
+    ? now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+    : '—'
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.45, delay: 0.08 }}
+      style={{
+        borderTop: '0.5px solid var(--border-color)',
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
+        alignItems: 'center',
+        columnGap: 16,
+        rowGap: 4,
+        padding: '7px 40px 9px',
+        fontSize: 9,
+        letterSpacing: '0.22em',
+        textTransform: 'uppercase',
+        color: 'var(--ink-secondary)',
+        fontWeight: 500,
+      }}
+    >
+      <span
+        style={{
+          justifySelf: 'start',
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        Vol. I — Issue 04
+      </span>
+      <span
+        className="font-serif"
+        style={{
+          justifySelf: 'center',
+          fontSize: 12,
+          letterSpacing: '0.02em',
+          fontStyle: 'italic',
+          fontWeight: 700,
+          color: 'var(--ink)',
+          textTransform: 'none',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        The Simulation Broadsheet
+      </span>
+      <span
+        style={{
+          justifySelf: 'end',
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          fontVariantNumeric: 'tabular-nums',
+          color: 'var(--ink-tertiary)',
+        }}
+      >
+        {dateLabel} · {timeLabel}
+      </span>
+    </motion.div>
+  )
+}
+
 /* ═══════════════════════════════════════════════════════════════ */
 export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -364,6 +447,7 @@ export default function LandingPage() {
             ) : null}
           </div>
         </div>
+        <BroadsheetFolio />
       </motion.header>
 
       {/* ━━━ DRAWER MENU ━━━ */}
