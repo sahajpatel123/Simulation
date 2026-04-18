@@ -209,6 +209,19 @@ body {
 .dossier-numeral  { transition: color 280ms ease, transform 280ms ease; }
 .dossier-arrow    { transition: all 280ms ease; }
 
+/* Lead paragraph — shared across longform editorial pages (help, settings). */
+.lead-para {
+  font-family: var(--font-serif, 'Playfair Display', Georgia, serif);
+  font-size: 18px;
+  line-height: 1.75;
+  color: var(--ink);
+  font-weight: 300;
+  letter-spacing: -0.005em;
+  margin: 0 0 18px;
+  max-width: 62ch;
+}
+.lead-para + .lead-para { margin-top: 8px; }
+
 /* Drop cap for editorial intros. */
 .dropcap::first-letter {
   font-family: var(--font-serif, 'Playfair Display', Georgia, serif);

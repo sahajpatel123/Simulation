@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowUpRight, Loader2, Plus, X } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 import { apiError } from '@/lib/api'
 import { useCreateProject, useProjects } from '@/hooks/useProjects'
@@ -28,15 +29,108 @@ function resolveStatus(s: string) {
   return statusMeta[s] ?? { bucket: 'draft' as StatusBucket, label: s.toLowerCase().replace(/_/g, ' ') }
 }
 
+/* ── Filter taxonomy ─────────────────────────────────────────────── */
+type Filter = 'all' | 'draft' | 'ready' | 'running' | 'done' | 'failed'
+
+const filterTabs: { id: Filter; label: string; note: string }[] = [
+  { id: 'all',     label: 'All dossiers',    note: 'The complete index' },
+  { id: 'draft',   label: 'Drafts',          note: 'Still in your handwriting' },
+  { id: 'ready',   label: 'Ready for press', note: 'Outlines, casts, proofs set' },
+  { id: 'running', label: 'In simulation',   note: 'At press now' },
+  { id: 'done',    label: 'Archived',        note: 'Filed, with proofs on record' },
+  { id: 'failed',  label: 'Returned',        note: 'Sent back by the press' },
+]
+
+const headlineForFilter: Record<Filter, { kicker: string; headline: React.ReactNode; lede: string }> = {
+  all: {
+    kicker: 'The Dossier Index',
+    headline: (
+      <>
+        Your<span style={{ fontStyle: 'italic', color: 'var(--red)' }}> ideas</span>,
+        <br />
+        under review.
+      </>
+    ),
+    lede:
+      'Every entry below is a hypothesis in your hand — drafted, cast with synthetic readers, and run against a market that doesn’t flatter you. Open one to read its report.',
+  },
+  draft: {
+    kicker: 'Field Work · Drafts',
+    headline: (
+      <>
+        Still in your<span style={{ fontStyle: 'italic', color: 'var(--red)' }}> handwriting</span>.
+      </>
+    ),
+    lede:
+      'Notes that have not yet been set in type. The margins are wide, the punctuation is ugly, and that is the point.',
+  },
+  ready: {
+    kicker: 'Field Work · Ready',
+    headline: (
+      <>
+        <span style={{ fontStyle: 'italic', color: 'var(--red)' }}>Proofs</span> on the bench.
+      </>
+    ),
+    lede:
+      'Outlines drawn, casts assembled, type laid out. One more pass and these are ready to go under the press.',
+  },
+  running: {
+    kicker: 'Field Work · In Simulation',
+    headline: (
+      <>
+        Running through the<span style={{ fontStyle: 'italic', color: 'var(--red)' }}> press</span>.
+      </>
+    ),
+    lede:
+      'Agents are moving through the plate now. The room is loud, the edition is coming. You can leave this page — we’ll keep count.',
+  },
+  done: {
+    kicker: 'Field Work · Archived',
+    headline: (
+      <>
+        <span style={{ fontStyle: 'italic', color: 'var(--red)' }}>Filed</span>, with proofs on record.
+      </>
+    ),
+    lede:
+      'Dossiers that have been read, measured and filed. Their impressions are on the ledger and their interventions are on the desk.',
+  },
+  failed: {
+    kicker: 'Errata · Returned',
+    headline: (
+      <>
+        Sent back from the<span style={{ fontStyle: 'italic', color: 'var(--red)' }}> press</span>.
+      </>
+    ),
+    lede:
+      'These dossiers did not complete their impression. Open one to see what the press objected to, and set it again when it is ready.',
+  },
+}
+
 /* ── Page ─────────────────────────────────────────────────────────── */
-export default function ProjectsPage() {
+export default function ProjectsPageRoute() {
+  return (
+    <Suspense fallback={null}>
+      <ProjectsPage />
+    </Suspense>
+  )
+}
+
+function ProjectsPage() {
   const [showModal, setShowModal] = useState(false)
   const [idea, setIdea] = useState('')
+
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const rawFilter = (searchParams.get('filter') || 'all').toLowerCase()
+  const activeFilter: Filter =
+    (['all', 'draft', 'ready', 'running', 'done', 'failed'] as Filter[]).includes(rawFilter as Filter)
+      ? (rawFilter as Filter)
+      : 'all'
 
   const { data: projects, isLoading, isError, error } = useProjects()
   const createProject = useCreateProject()
 
-  const projectList = useMemo(() => {
+  const sortedList = useMemo(() => {
     const list = projects ?? []
     return [...list].sort((a, b) => {
       const ad = a.created_at ? new Date(a.created_at).getTime() : 0
@@ -45,12 +139,31 @@ export default function ProjectsPage() {
     })
   }, [projects])
 
+  const countsByBucket = useMemo(() => {
+    const c: Record<Filter, number> = { all: 0, draft: 0, ready: 0, running: 0, done: 0, failed: 0 }
+    sortedList.forEach((p) => {
+      c.all += 1
+      c[resolveStatus(p.status).bucket] += 1
+    })
+    return c
+  }, [sortedList])
+
+  const filteredList = useMemo(() => {
+    if (activeFilter === 'all') return sortedList
+    return sortedList.filter((p) => resolveStatus(p.status).bucket === activeFilter)
+  }, [sortedList, activeFilter])
+
   const handleCreate = async () => {
     const description = idea.trim()
     if (!description) return
     await createProject.mutateAsync({ description })
     setShowModal(false)
     setIdea('')
+  }
+
+  const setFilter = (f: Filter) => {
+    const url = f === 'all' ? '/projects' : `/projects?filter=${f}`
+    router.replace(url, { scroll: false })
   }
 
   /* ── Loading ────────────────────────────────────────────────────── */
@@ -76,8 +189,11 @@ export default function ProjectsPage() {
     )
   }
 
-  const count = projectList.length
-  const [featured, ...rest] = projectList as [Project | undefined, ...Project[]]
+  const totalCount = sortedList.length
+  const count = filteredList.length
+  const [featured, ...rest] = filteredList as [Project | undefined, ...Project[]]
+  const meta = headlineForFilter[activeFilter]
+  const isFiltered = activeFilter !== 'all'
 
   return (
     <div
@@ -90,16 +206,19 @@ export default function ProjectsPage() {
       }}
     >
       {/* ─── Page header ──────────────────────────────────────── */}
-      <section style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'end', gap: 40, marginBottom: 32 }}>
+      <section style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'end', gap: 40, marginBottom: 28 }}>
         <div>
           <div
             className="kicker"
-            style={{ color: 'var(--red)', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 12 }}
+            style={{ color: 'var(--red)', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}
           >
             <span style={{ width: 24, height: 0.5, background: 'var(--red)' }} />
-            The Dossier Index
+            {meta.kicker}
             <span style={{ color: 'var(--ink-secondary)' }}>·</span>
-            <span style={{ color: 'var(--ink-secondary)' }}>{count} filed</span>
+            <span style={{ color: 'var(--ink-secondary)' }}>
+              {count} {count === 1 ? 'entry' : 'entries'}
+              {isFiltered && ` of ${totalCount}`}
+            </span>
           </div>
 
           <h1
@@ -113,9 +232,7 @@ export default function ProjectsPage() {
               marginBottom: 8,
             }}
           >
-            Your<span style={{ fontStyle: 'italic', color: 'var(--red)' }}> ideas</span>,
-            <br />
-            under review.
+            {meta.headline}
           </h1>
 
           <p
@@ -129,8 +246,7 @@ export default function ProjectsPage() {
               fontWeight: 300,
             }}
           >
-            Every entry below is a hypothesis in your hand — drafted, cast with synthetic readers,
-            and run against a market that doesn&rsquo;t flatter you. Open one to read its report.
+            {meta.lede}
           </p>
         </div>
 
@@ -139,11 +255,18 @@ export default function ProjectsPage() {
         </button>
       </section>
 
+      {/* ─── Filter ribbon ──────────────────────────────────────── */}
+      <FilterRibbon active={activeFilter} counts={countsByBucket} onChange={setFilter} />
+
       <div style={{ height: 3, background: 'var(--ink)', marginBottom: 4 }} />
       <div style={{ height: 0.5, background: 'var(--border-color)', marginBottom: 48 }} />
 
-      {/* ─── Empty state ──────────────────────────────────────── */}
-      {count === 0 && <EmptyArchive onOpen={() => setShowModal(true)} />}
+      {/* ─── Empty states ───────────────────────────────────────── */}
+      {totalCount === 0 && <EmptyArchive onOpen={() => setShowModal(true)} />}
+
+      {totalCount > 0 && count === 0 && (
+        <EmptyForFilter filter={activeFilter} onClear={() => setFilter('all')} />
+      )}
 
       {/* ─── Featured (lead) + index ──────────────────────────── */}
       {count > 0 && featured && (
@@ -208,7 +331,169 @@ export default function ProjectsPage() {
   )
 }
 
-/* ── Empty state ─────────────────────────────────────────────────── */
+/* ── Filter ribbon ─────────────────────────────────────────────── */
+function FilterRibbon({
+  active,
+  counts,
+  onChange,
+}: {
+  active: Filter
+  counts: Record<Filter, number>
+  onChange: (f: Filter) => void
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label="Filter dossiers"
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'stretch',
+        gap: 0,
+        marginBottom: 24,
+        borderTop: '0.5px solid var(--border-strong)',
+        borderBottom: '0.5px solid var(--border-strong)',
+        padding: '6px 0',
+      }}
+    >
+      {filterTabs.map((tab, i) => {
+        const isActive = active === tab.id
+        const n = counts[tab.id] ?? 0
+        const isLast = i === filterTabs.length - 1
+        return (
+          <button
+            key={tab.id}
+            role="tab"
+            aria-selected={isActive}
+            onClick={() => onChange(tab.id)}
+            style={{
+              flex: '1 1 160px',
+              minWidth: 160,
+              background: isActive ? 'var(--ink)' : 'transparent',
+              color: isActive ? 'var(--paper)' : 'var(--ink)',
+              border: 'none',
+              borderRight: isLast ? 'none' : '0.5px solid var(--border-color)',
+              padding: '14px 18px 12px',
+              cursor: 'pointer',
+              textAlign: 'left',
+              transition: 'background 180ms ease, color 180ms ease',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+            }}
+            className={`filter-tab ${isActive ? 'filter-tab--active' : ''}`}
+          >
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+              <span
+                className="font-serif"
+                style={{
+                  fontSize: 18,
+                  fontWeight: 800,
+                  fontStyle: isActive ? 'italic' : 'normal',
+                  letterSpacing: '-0.01em',
+                  lineHeight: 1,
+                }}
+              >
+                {tab.label}
+              </span>
+              <span
+                className="numeral"
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: isActive ? 'var(--paper)' : 'var(--red)',
+                  opacity: isActive ? 0.75 : 1,
+                }}
+              >
+                {String(n).padStart(2, '0')}
+              </span>
+            </div>
+            <span
+              className="kicker"
+              style={{
+                color: isActive ? 'rgba(242, 236, 224, 0.65)' : 'var(--ink-secondary)',
+                fontSize: 9,
+              }}
+            >
+              {tab.note}
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ── Empty for filter ──────────────────────────────────────────── */
+function EmptyForFilter({ filter, onClear }: { filter: Filter; onClear: () => void }) {
+  const copy: Record<Exclude<Filter, 'all'>, { title: string; body: string }> = {
+    draft: {
+      title: 'No drafts on the desk.',
+      body: 'Every dossier has already moved past the first reading. Start a new idea, or look elsewhere in the archive.',
+    },
+    ready: {
+      title: 'Nothing queued for press.',
+      body: 'No outlines are sitting typeset and waiting. Open a draft and take it through the room.',
+    },
+    running: {
+      title: 'The press is quiet.',
+      body: 'No runs are in motion right now. File a dossier and send it under the plate to fill this column.',
+    },
+    done: {
+      title: 'The archive room is empty.',
+      body: 'Nothing has been filed with proofs yet. Once a dossier finishes its run, it lives here.',
+    },
+    failed: {
+      title: 'No errata on file.',
+      body: 'No run has been returned by the press. Good news — that is how you want it.',
+    },
+  }
+  const c = filter === 'all' ? null : copy[filter]
+  if (!c) return null
+
+  return (
+    <div
+      style={{
+        padding: '48px 0 40px',
+        borderTop: '0.5px solid var(--border-color)',
+        borderBottom: '0.5px solid var(--border-color)',
+        display: 'grid',
+        gridTemplateColumns: '1fr auto',
+        gap: 32,
+        alignItems: 'center',
+        marginBottom: 40,
+      }}
+    >
+      <div>
+        <div className="kicker" style={{ color: 'var(--red)', marginBottom: 10 }}>
+          Editor&rsquo;s note
+        </div>
+        <h2
+          className="font-serif"
+          style={{
+            fontSize: 'clamp(28px, 3.2vw, 40px)',
+            fontWeight: 900,
+            fontStyle: 'italic',
+            lineHeight: 1,
+            letterSpacing: '-0.03em',
+            color: 'var(--ink)',
+            marginBottom: 12,
+          }}
+        >
+          {c.title}
+        </h2>
+        <p style={{ fontSize: 14, lineHeight: 1.7, color: 'var(--ink-secondary)', maxWidth: 520, fontWeight: 300 }}>
+          {c.body}
+        </p>
+      </div>
+      <button onClick={onClear} className="btn-ghost" style={{ whiteSpace: 'nowrap' }}>
+        Show full index
+      </button>
+    </div>
+  )
+}
+
+/* ── Empty state (no projects at all) ───────────────────────────── */
 function EmptyArchive({ onOpen }: { onOpen: () => void }) {
   return (
     <section
@@ -264,7 +549,6 @@ function EmptyArchive({ onOpen }: { onOpen: () => void }) {
         </button>
       </div>
 
-      {/* Right column — a folio illustration */}
       <div style={{ paddingTop: 12 }}>
         <Folio />
       </div>
@@ -272,7 +556,6 @@ function EmptyArchive({ onOpen }: { onOpen: () => void }) {
   )
 }
 
-/* An SVG "empty folder" redrawn as an editorial folio. */
 function Folio() {
   return (
     <div
@@ -287,7 +570,6 @@ function Folio() {
         padding: 28,
       }}
     >
-      {/* Folder tab */}
       <div
         style={{
           position: 'absolute',
@@ -307,7 +589,6 @@ function Folio() {
         File · Vacant
       </div>
 
-      {/* Stamp */}
       <div
         style={{
           position: 'absolute',
@@ -327,7 +608,6 @@ function Folio() {
         Awaiting Material
       </div>
 
-      {/* Ruled lines */}
       <div style={{ marginTop: 88, display: 'flex', flexDirection: 'column', gap: 18 }}>
         {[92, 78, 85, 62, 0, 70, 55].map((w, i) => (
           <div
@@ -342,7 +622,6 @@ function Folio() {
         ))}
       </div>
 
-      {/* Watermark numeral */}
       <div
         className="numeral"
         style={{
@@ -437,7 +716,6 @@ function FeaturedDossier({ project, index }: { project: Project; index: number }
         </div>
       </div>
 
-      {/* Right column: giant numeral + meta */}
       <div style={{ textAlign: 'right', position: 'relative', paddingTop: 8 }}>
         <div
           className="numeral"
@@ -647,7 +925,6 @@ function FileDossierModal({
             pointerEvents: 'auto',
           }}
         >
-          {/* Masthead-style header */}
           <div
             style={{
               display: 'flex',
@@ -682,7 +959,6 @@ function FileDossierModal({
           </div>
           <div style={{ height: 0.5, background: 'var(--border-color)', marginBottom: 18, flexShrink: 0 }} />
 
-          {/* Scrollable body */}
           <div style={{ overflowY: 'auto', minHeight: 0, paddingRight: 2 }}>
             <h2
               className="font-serif"
@@ -731,7 +1007,6 @@ function FileDossierModal({
             />
           </div>
 
-          {/* Footer */}
           <div
             style={{
               display: 'flex',

@@ -1,7 +1,8 @@
 'use client'
 
+import { Suspense } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 
 type Item = { num: string; label: string; href: string; hint?: string }
 
@@ -24,8 +25,8 @@ const sections: { title: string; items: Item[] }[] = [
   {
     title: 'Operations',
     items: [
-      { num: '06', label: 'Settings', href: '#' },
-      { num: '07', label: 'Help & Style Guide', href: '#' },
+      { num: '06', label: 'Settings', href: '/settings', hint: 'The press office' },
+      { num: '07', label: 'Help & Style Guide', href: '/help', hint: 'How this paper is set' },
     ],
   },
 ]
@@ -36,12 +37,33 @@ type SidebarProps = {
   onExpand: () => void
 }
 
-export default function Sidebar({ collapsed, onCollapse, onExpand }: SidebarProps) {
+export default function Sidebar(props: SidebarProps) {
+  return (
+    <Suspense fallback={<aside style={{ width: props.collapsed ? 52 : 220 }} aria-hidden />}>
+      <SidebarInner {...props} />
+    </Suspense>
+  )
+}
+
+function SidebarInner({ collapsed, onCollapse, onExpand }: SidebarProps) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const activeFilter = (searchParams.get('filter') || '').toLowerCase()
+
   const isActive = (href: string) => {
-    const base = href.split('?')[0]
+    const [base, query] = href.split('?')
     if (base === '#') return false
-    if (base === '/projects') return pathname === '/projects' || pathname.startsWith('/project/')
+
+    const hrefFilter = new URLSearchParams(query || '').get('filter') || ''
+
+    if (base === '/projects') {
+      const onProjectsPath = pathname === '/projects' || pathname.startsWith('/project/')
+      if (!onProjectsPath) return false
+      // Match only when the filter matches the current URL.
+      // Dossiers (no filter) should NOT highlight when a filter is active.
+      return hrefFilter === activeFilter
+    }
+
     return pathname === base
   }
 
