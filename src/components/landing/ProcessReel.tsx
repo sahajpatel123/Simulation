@@ -161,27 +161,31 @@ function Plate({
     <div
       style={{
         flex: `0 0 100%`,
-        padding: '0 clamp(48px, 8vw, 140px)',
+        /* Leave room on the right so the ink drop-shadow never clips
+           — especially on the final plate (viewport edge). */
+        padding: '0 clamp(32px, 5vw, 96px) 0 clamp(48px, 7vw, 120px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        boxSizing: 'border-box',
       }}
     >
       <article
         style={{
           transform: `translateY(${y}px)`,
           opacity,
-          maxWidth: 1040,
           width: '100%',
+          maxWidth: 980,
           display: 'grid',
-          gridTemplateColumns: '220px 1fr',
-          gap: 64,
+          gridTemplateColumns: 'minmax(160px, 200px) 1fr',
+          gap: 'clamp(32px, 4vw, 56px)',
           alignItems: 'center',
           background: 'var(--paper-dark)',
           border: '0.5px solid var(--ink)',
-          padding: 'clamp(40px, 6vw, 72px)',
+          padding: 'clamp(32px, 4.5vw, 64px)',
           position: 'relative',
-          boxShadow: '12px 12px 0 var(--ink)',
+          boxShadow: '10px 10px 0 var(--ink)',
+          boxSizing: 'border-box',
           willChange: 'transform, opacity',
         }}
       >
@@ -197,11 +201,11 @@ function Plate({
           }}
         />
 
-        <div style={{ borderRight: '0.5px solid var(--border-color)', paddingRight: 40 }}>
+        <div style={{ borderRight: '0.5px solid var(--border-color)', paddingRight: 28 }}>
           <div
             className="font-serif numeral"
             style={{
-              fontSize: 'clamp(100px, 12vw, 176px)',
+              fontSize: 'clamp(84px, 9vw, 140px)',
               lineHeight: 0.9,
               letterSpacing: '-0.06em',
               color: 'var(--ink)',
@@ -240,7 +244,7 @@ function Plate({
           <h3
             className="font-serif"
             style={{
-              fontSize: 'clamp(28px, 2.8vw, 44px)',
+              fontSize: 'clamp(24px, 2.4vw, 38px)',
               fontWeight: 800,
               fontStyle: 'italic',
               color: 'var(--ink)',
@@ -248,6 +252,7 @@ function Plate({
               letterSpacing: '-0.02em',
               margin: 0,
               marginBottom: 20,
+              overflowWrap: 'break-word',
             }}
           >
             {plate.title}
