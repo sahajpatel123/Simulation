@@ -261,6 +261,17 @@ body {
 }
 .btn-ghost:hover { border-color: var(--ink); color: var(--red); }
 
+.sidebar-contents-trigger:hover { color: var(--red); }
+.sidebar-contents-trigger:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 4px;
+}
+
+aside.sidebar-collapsed-rail:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: -2px;
+}
+
 /* Editorial scrollbar (webkit). */
 .archive-scroll::-webkit-scrollbar { width: 10px; }
 .archive-scroll::-webkit-scrollbar-track { background: transparent; }

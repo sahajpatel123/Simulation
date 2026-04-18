@@ -1,124 +1,266 @@
 'use client'
-import { useState, use } from 'react'
+
+import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { getProjectById, getSimulationResultByProjectId } from '@/lib/mock-data'
+import Link from 'next/link'
+import { useParams } from 'next/navigation'
+import { ArrowRight, TrendingUp, Users, IndianRupee, Target, ChevronDown, Loader2 } from 'lucide-react'
+
 import InterventionCard from '@/components/project/InterventionCard'
 import ProbabilityChart from '@/components/project/ProbabilityChart'
-import { ArrowRight, AlertCircle, TrendingUp, Users, IndianRupee, Target, ChevronDown } from 'lucide-react'
-import Link from 'next/link'
+import { useProject } from '@/hooks/useProjects'
+import { getSimulationResultByProjectId } from '@/lib/mock-data'
 
-export default function ResultsPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params)
-  const project = getProjectById(id)
-  const result = getSimulationResultByProjectId(id)
+export default function ResultsPage() {
+  const params = useParams()
+  const projectId = Number(params.id)
+  const idStr = String(projectId)
+
+  const { data: project, isLoading, isError } = useProject(Number.isFinite(projectId) ? projectId : null)
+  const result = getSimulationResultByProjectId(idStr)
   const [volume, setVolume] = useState(result?.consumerVolume || 10000)
 
-  if (!project || !result) return (
-    <div className="p-8 flex flex-col items-center justify-center min-h-screen text-center">
-      <AlertCircle className="w-10 h-10 text-slate-600 mb-3" />
-      <p className="text-slate-400 text-sm">No results found for this project.</p>
-      <Link href={`/project/${id}/simulation`} className="mt-4 text-indigo-400 text-sm hover:underline">
-        Run simulation first
-      </Link>
-    </div>
-  )
+  if (!Number.isFinite(projectId) || isError) {
+    return (
+      <div style={{ padding: '64px 48px', maxWidth: 560 }}>
+        <div className="kicker" style={{ color: 'var(--red)', marginBottom: 10 }}>
+          Errata
+        </div>
+        <h1 className="font-serif" style={{ fontSize: 32, fontWeight: 900, fontStyle: 'italic', color: 'var(--ink)' }}>
+          This dossier could not be opened.
+        </h1>
+        <Link href="/projects" style={{ marginTop: 16, display: 'inline-block', color: 'var(--red)', fontSize: 14 }}>
+          Return to the index.
+        </Link>
+      </div>
+    )
+  }
+
+  if (isLoading || !project) {
+    return (
+      <div style={{ padding: '64px 48px', display: 'flex', gap: 12, alignItems: 'center', color: 'var(--ink-secondary)' }}>
+        <Loader2 className="animate-spin" style={{ width: 14, height: 14 }} />
+        <span className="kicker">Gathering proofs…</span>
+      </div>
+    )
+  }
+
+  if (!result) {
+    return (
+      <div style={{ padding: '48px 48px 64px', maxWidth: 560 }}>
+        <div className="kicker" style={{ color: 'var(--red)', marginBottom: 12 }}>
+          Proofs missing
+        </div>
+        <h1 className="font-serif" style={{ fontSize: 32, fontWeight: 900, fontStyle: 'italic', color: 'var(--ink)', marginBottom: 12 }}>
+          No impression on file.
+        </h1>
+        <p style={{ fontSize: 14, lineHeight: 1.7, color: 'var(--ink-secondary)', marginBottom: 24 }}>
+          Run the press once to generate probability tables and recommended interventions for this dossier.
+        </p>
+        <Link href={`/project/${idStr}/simulation`} className="btn-ink" style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+          Run the press <ArrowRight style={{ width: 14, height: 14 }} />
+        </Link>
+      </div>
+    )
+  }
 
   const scaledRevenue = Math.round((result.projectedRevenue * volume) / result.consumerVolume)
 
   const metrics = [
-    { label: 'Conversion rate', value: `${result.conversionRate}%`, sub: `${result.confidenceInterval.low}–${result.confidenceInterval.high}% CI`, icon: Target, color: 'text-indigo-400' },
-    { label: 'Projected revenue', value: `₹${(scaledRevenue / 1000).toFixed(0)}K`, sub: `at ${volume.toLocaleString()} agents`, icon: IndianRupee, color: 'text-emerald-400' },
-    { label: 'Avg order value', value: `₹${result.averageOrderValue.toLocaleString()}`, sub: 'per conversion', icon: TrendingUp, color: 'text-cyan-400' },
-    { label: 'Consumer volume', value: volume.toLocaleString(), sub: 'simulation agents', icon: Users, color: 'text-amber-400' },
+    {
+      label: 'Conversion rate',
+      value: `${result.conversionRate}%`,
+      sub: `${result.confidenceInterval.low}–${result.confidenceInterval.high}% CI`,
+      icon: Target,
+    },
+    {
+      label: 'Projected revenue',
+      value: `₹${(scaledRevenue / 1000).toFixed(0)}K`,
+      sub: `at ${volume.toLocaleString()} agents`,
+      icon: IndianRupee,
+    },
+    {
+      label: 'Avg order value',
+      value: `₹${result.averageOrderValue.toLocaleString()}`,
+      sub: 'per conversion',
+      icon: TrendingUp,
+    },
+    {
+      label: 'Consumer volume',
+      value: volume.toLocaleString(),
+      sub: 'simulation agents',
+      icon: Users,
+    },
   ]
 
   return (
-    <div className="p-8 max-w-5xl">
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-        {/* Header */}
-        <div className="flex items-start justify-between mb-8">
+    <div style={{ padding: '36px 48px 56px', maxWidth: 1000 }}>
+      <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }}>
+        <header
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 24,
+            flexWrap: 'wrap',
+            marginBottom: 28,
+          }}
+        >
           <div>
-            <div className="flex items-center gap-2 text-xs text-slate-600 mb-1.5">
-              <Link href={`/project/${id}/simulation`} className="hover:text-slate-400">Simulation</Link>
-              <span>/</span>
-              <span className="text-slate-400">Results</span>
+            <div
+              className="kicker"
+              style={{ color: 'var(--red)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
+            >
+              <Link href={`/project/${idStr}/simulation`} style={{ color: 'inherit', textDecoration: 'none' }}>
+                At press
+              </Link>
+              <span style={{ color: 'var(--ink-tertiary)' }}>·</span>
+              <span style={{ color: 'var(--ink-secondary)' }}>Proofs</span>
             </div>
-            <h1 className="font-display text-2xl font-700 text-white mb-1">Simulation results</h1>
-            <p className="text-slate-500 text-sm">{project.title}</p>
+            <h1
+              className="font-serif"
+              style={{
+                fontSize: 'clamp(28px, 3.5vw, 40px)',
+                fontWeight: 900,
+                fontStyle: 'italic',
+                color: 'var(--ink)',
+                marginBottom: 6,
+              }}
+            >
+              The <span style={{ color: 'var(--red)' }}>numbers</span> in brief.
+            </h1>
+            <p style={{ fontSize: 13, color: 'var(--ink-secondary)', fontWeight: 300 }}>{project.title}</p>
           </div>
-          {/* Confidence score */}
-          <div className="glass rounded-xl px-5 py-3 text-center">
-            <div className="font-display text-3xl font-800 text-indigo-400">{result.overallConfidence}%</div>
-            <div className="text-xs text-slate-500 mt-0.5">Confidence score</div>
+          <div
+            style={{
+              border: '0.5px solid var(--ink)',
+              background: 'var(--paper)',
+              padding: '18px 28px',
+              textAlign: 'center',
+              minWidth: 140,
+            }}
+            className="rise"
+          >
+            <div className="font-serif" style={{ fontSize: 36, fontWeight: 800, fontStyle: 'italic', color: 'var(--red)', lineHeight: 1 }}>
+              {result.overallConfidence}%
+            </div>
+            <div className="kicker" style={{ marginTop: 8, color: 'var(--ink-tertiary)' }}>
+              Confidence
+            </div>
           </div>
-        </div>
+        </header>
 
-        {/* Metrics grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          {metrics.map(({ label, value, sub, icon: Icon, color }, i) => (
-            <motion.div key={label} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.07 }} className="glass rounded-xl p-5">
-              <Icon className={`w-4 h-4 ${color} mb-3`} />
-              <div className={`font-display text-2xl font-800 ${color} mb-0.5`}>{value}</div>
-              <div className="text-xs text-slate-500">{label}</div>
-              <div className="text-xs text-slate-600 mt-0.5">{sub}</div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+            gap: 14,
+            marginBottom: 22,
+          }}
+        >
+          {metrics.map(({ label, value, sub, icon: Icon }, i) => (
+            <motion.div
+              key={label}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.06 }}
+              style={{
+                border: '0.5px solid var(--border-strong)',
+                background: 'var(--paper)',
+                padding: 20,
+              }}
+              className="rise"
+            >
+              <Icon style={{ width: 16, height: 16, color: 'var(--red)', opacity: 0.85, marginBottom: 12 }} />
+              <div className="font-serif" style={{ fontSize: 22, fontWeight: 800, fontStyle: 'italic', color: 'var(--ink)', marginBottom: 4 }}>
+                {value}
+              </div>
+              <div className="kicker" style={{ fontSize: 9, color: 'var(--ink-secondary)', marginBottom: 6 }}>
+                {label}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--ink-tertiary)', lineHeight: 1.45 }}>{sub}</div>
             </motion.div>
           ))}
         </div>
 
-        <div className="grid lg:grid-cols-[3fr_2fr] gap-6 mb-6">
-          {/* Chart */}
-          <div className="glass rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-1">
-              <h3 className="font-display text-sm font-600 text-white">Probability distribution</h3>
-              <span className="text-xs text-slate-500">across 3 stochastic runs</span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 18, marginBottom: 22 }}>
+          <div
+            style={{ border: '0.5px solid var(--border-strong)', background: 'var(--paper)', padding: 24 }}
+            className="rise"
+          >
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+              <h3 className="font-serif" style={{ fontSize: 16, fontWeight: 800, fontStyle: 'italic', color: 'var(--ink)' }}>
+                Probability spread
+              </h3>
+              <span className="kicker" style={{ color: 'var(--ink-tertiary)' }}>
+                3 runs
+              </span>
             </div>
-            <p className="text-xs text-slate-600 mb-5">Conversion rate confidence interval: {result.confidenceInterval.low}% – {result.confidenceInterval.high}%</p>
+            <p style={{ fontSize: 11, color: 'var(--ink-secondary)', marginBottom: 18, lineHeight: 1.5 }}>
+              Interval {result.confidenceInterval.low}% – {result.confidenceInterval.high}%
+            </p>
             <ProbabilityChart conversionRate={result.conversionRate} confidenceInterval={result.confidenceInterval} />
 
-            {/* Volume slider */}
-            <div className="mt-6 pt-5 border-t border-white/5">
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs text-slate-400">Adjust consumer volume</label>
-                <span className="font-display text-sm font-700 text-indigo-400">{volume.toLocaleString()}</span>
+            <div style={{ marginTop: 22, paddingTop: 20, borderTop: '0.5px solid var(--border-color)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <label className="kicker" style={{ color: 'var(--ink-secondary)' }}>
+                  Adjust reader count
+                </label>
+                <span className="font-serif" style={{ fontSize: 15, fontWeight: 800, fontStyle: 'italic', color: 'var(--red)' }}>
+                  {volume.toLocaleString()}
+                </span>
               </div>
-              <input type="range" min={1000} max={50000} step={500} value={volume}
-                onChange={e => setVolume(Number(e.target.value))}
-                className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-indigo-500 bg-white/10" />
+              <input
+                type="range"
+                min={1000}
+                max={50000}
+                step={500}
+                value={volume}
+                onChange={(e) => setVolume(Number(e.target.value))}
+                style={{ width: '100%', height: 4, accentColor: 'var(--red)', cursor: 'pointer' }}
+              />
             </div>
           </div>
 
-          {/* Funnel drop-off */}
-          <div className="glass rounded-2xl p-6">
-            <h3 className="font-display text-sm font-600 text-white mb-5">Funnel drop-off</h3>
-            <div className="space-y-3">
+          <div
+            style={{ border: '0.5px solid var(--border-strong)', background: 'var(--paper)', padding: 24 }}
+            className="rise"
+          >
+            <h3 className="font-serif" style={{ fontSize: 16, fontWeight: 800, fontStyle: 'italic', color: 'var(--ink)', marginBottom: 18 }}>
+              Funnel bleed
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {result.funnelDropOff.map(({ stage, dropOffPercentage }) => (
                 <div key={stage}>
-                  <div className="flex justify-between text-xs text-slate-400 mb-1.5">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 6, color: 'var(--ink-secondary)' }}>
                     <span>{stage}</span>
-                    <span className="text-red-400">−{dropOffPercentage}%</span>
+                    <span style={{ color: 'var(--red)', fontWeight: 600 }}>−{dropOffPercentage}%</span>
                   </div>
-                  <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-                    <motion.div className="h-full bg-red-500/50 rounded-full"
-                      initial={{ width: 0 }} animate={{ width: `${dropOffPercentage}%` }}
-                      transition={{ duration: 0.8, delay: 0.3 }} />
+                  <div style={{ height: 3, background: 'rgba(26,23,20,0.08)', overflow: 'hidden' }}>
+                    <motion.div
+                      style={{ height: '100%', background: 'rgba(192,57,43,0.45)' }}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${dropOffPercentage}%` }}
+                      transition={{ duration: 0.75, delay: 0.25 }}
+                    />
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* Sensitivity */}
-            <div className="mt-6 pt-5 border-t border-white/5">
-              <h4 className="text-xs text-slate-500 mb-3">Sensitivity analysis</h4>
-              <div className="space-y-2">
+            <div style={{ marginTop: 22, paddingTop: 20, borderTop: '0.5px solid var(--border-color)' }}>
+              <h4 className="kicker" style={{ marginBottom: 12, color: 'var(--ink-tertiary)' }}>
+                Sensitivity
+              </h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {Object.entries(result.sensitivityAnalysis).map(([key, val]) => (
-                  <div key={key} className="flex items-center justify-between text-xs">
-                    <span className="text-slate-400">{key}</span>
-                    <div className="flex items-center gap-2">
-                      <div className="w-20 h-1 bg-white/5 rounded-full overflow-hidden">
-                        <div className="h-full bg-indigo-400 rounded-full" style={{ width: `${val * 100}%` }} />
+                  <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, fontSize: 11 }}>
+                    <span style={{ color: 'var(--ink-secondary)' }}>{key}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 72, height: 3, background: 'rgba(26,23,20,0.08)', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${val * 100}%`, background: 'var(--ink)' }} />
                       </div>
-                      <span className="text-slate-500 w-8 text-right">{Math.round(val * 100)}%</span>
+                      <span style={{ color: 'var(--ink-tertiary)', width: 32, textAlign: 'right' }}>{Math.round(val * 100)}%</span>
                     </div>
                   </div>
                 ))}
@@ -127,30 +269,39 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
           </div>
         </div>
 
-        {/* Interventions */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-display text-base font-600 text-white">Recommended interventions</h3>
-            <span className="text-xs text-slate-600">{result.topInterventions.length} actions found</span>
+        <section style={{ marginBottom: 28 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14, gap: 12 }}>
+            <h3 className="font-serif" style={{ fontSize: 18, fontWeight: 800, fontStyle: 'italic', color: 'var(--ink)' }}>
+              Marginalia — interventions
+            </h3>
+            <span className="kicker" style={{ color: 'var(--ink-tertiary)' }}>
+              {result.topInterventions.length} actions
+            </span>
           </div>
-          <div className="grid sm:grid-cols-2 gap-3">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
             {result.topInterventions.map((intervention, i) => (
-              <motion.div key={intervention.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }}>
+              <motion.div
+                key={intervention.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.08 }}
+              >
                 <InterventionCard intervention={intervention} rank={i + 1} />
               </motion.div>
             ))}
           </div>
-        </div>
+        </section>
 
-        {/* Footer nav */}
-        <div className="flex items-center justify-end gap-3">
-          <button className="flex items-center gap-2 px-4 py-2 rounded-lg glass glass-hover text-slate-400 text-sm">
-            <ChevronDown className="w-3.5 h-3.5" /> Export PDF
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="btn-ghost"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+          >
+            <ChevronDown style={{ width: 14, height: 14 }} /> Export folio
           </button>
-          <Link href={`/project/${id}/tracker`}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-all">
-            Track real outcomes <ArrowRight className="w-4 h-4" />
+          <Link href={`/project/${idStr}/tracker`} className="btn-ink" style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            Record what happened <ArrowRight style={{ width: 14, height: 14 }} />
           </Link>
         </div>
       </motion.div>

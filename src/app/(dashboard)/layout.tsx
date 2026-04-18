@@ -1,10 +1,13 @@
 'use client'
 
+import { useState } from 'react'
+
 import Sidebar from '@/components/layout/Sidebar'
 import ProtectedRoute from '@/components/layout/ProtectedRoute'
 import UserMenu from '@/components/layout/UserMenu'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const today = new Date().toLocaleDateString('en-GB', {
     weekday: 'long',
     day: 'numeric',
@@ -140,12 +143,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: '220px 1fr',
+            gridTemplateColumns: sidebarCollapsed ? '52px 1fr' : '220px 1fr',
+            transition: 'grid-template-columns 280ms cubic-bezier(0.2, 0.75, 0.2, 1)',
             position: 'relative',
             zIndex: 2,
           }}
         >
-          <Sidebar />
+          <Sidebar
+            collapsed={sidebarCollapsed}
+            onCollapse={() => setSidebarCollapsed(true)}
+            onExpand={() => setSidebarCollapsed(false)}
+          />
           <main style={{ minHeight: 'calc(100vh - 120px)', position: 'relative' }}>{children}</main>
         </div>
       </div>

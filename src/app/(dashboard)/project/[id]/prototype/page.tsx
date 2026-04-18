@@ -2,53 +2,133 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Monitor, Smartphone, ArrowRight, ArrowLeft, AlertCircle, Loader2 } from 'lucide-react'
+import { Monitor, Smartphone, ArrowRight, ArrowLeft, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 
 import { useProject } from '@/hooks/useProjects'
 
+/**
+ * Editorial fallback when the API has not yet typeset a prototype HTML.
+ * Matches the workspace "Archive" paper / ink / red rule language.
+ */
 const MOCK_HTML = `<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Reader's proof — TheCee</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, sans-serif; }
-  body { background: #f8fafc; color: #1e293b; }
-  nav { background: white; padding: 16px 24px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; }
-  nav .logo { font-weight: 700; font-size: 18px; color: #4f46e5; }
-  nav button { background: #4f46e5; color: white; border: none; padding: 8px 20px; border-radius: 8px; font-size: 14px; cursor: pointer; }
-  .hero { text-align: center; padding: 80px 24px 60px; }
-  .hero h1 { font-size: 42px; font-weight: 800; margin-bottom: 16px; line-height: 1.1; }
-  .hero p { color: #64748b; font-size: 16px; max-width: 480px; margin: 0 auto 32px; }
-  .hero .cta { background: #4f46e5; color: white; border: none; padding: 14px 32px; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; }
-  .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; padding: 40px 24px; max-width: 900px; margin: 0 auto; }
-  .card { background: white; border-radius: 12px; padding: 24px; border: 1px solid #e2e8f0; }
-  .card h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
-  .card p { font-size: 14px; color: #64748b; line-height: 1.5; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    background: #f2ece0;
+    color: #1a1714;
+    min-height: 100vh;
+  }
+  .mast { border-bottom: 2px solid #1a1714; padding: 18px 28px 14px; }
+  .kicker {
+    font-family: system-ui, sans-serif;
+    font-size: 9px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: #c0392b;
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+  .wordmark { font-size: 26px; font-weight: 900; letter-spacing: -0.03em; }
+  .wordmark span { color: #c0392b; }
+  .rule-red { height: 2px; background: #c0392b; margin-top: 12px; }
+  main { max-width: 720px; margin: 0 auto; padding: 48px 28px 80px; }
+  h1 {
+    font-size: clamp(32px, 5vw, 52px);
+    font-weight: 900;
+    line-height: 0.98;
+    letter-spacing: -0.035em;
+    margin-bottom: 18px;
+  }
+  h1 em { font-style: italic; color: #c0392b; }
+  .lead {
+    font-family: system-ui, sans-serif;
+    font-weight: 300;
+    font-size: 15px;
+    line-height: 1.75;
+    color: #6b6560;
+    max-width: 48ch;
+    margin-bottom: 32px;
+  }
+  .lead::first-letter {
+    float: left;
+    font-family: Georgia, serif;
+    font-size: 3.4em;
+    line-height: 0.85;
+    padding-right: 10px;
+    font-weight: 800;
+    color: #1a1714;
+  }
+  .folio {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: rgba(26,23,20,0.18);
+    border: 0.5px solid rgba(26,23,20,0.25);
+    margin-top: 40px;
+  }
+  .folio article {
+    background: #f2ece0;
+    padding: 22px 18px;
+  }
+  .folio h3 {
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-family: system-ui, sans-serif;
+    color: #c0392b;
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+  .folio p { font-size: 14px; line-height: 1.55; color: #4a4540; }
+  .stamp {
+    display: inline-block;
+    margin-top: 36px;
+    border: 1.5px solid #c0392b;
+    color: #c0392b;
+    padding: 6px 14px;
+    font-family: system-ui, sans-serif;
+    font-size: 9px;
+    letter-spacing: 0.26em;
+    text-transform: uppercase;
+    font-weight: 700;
+    transform: rotate(-3deg);
+    opacity: 0.9;
+  }
 </style>
 </head>
 <body>
-  <nav>
-    <div class="logo">YourBrand</div>
-    <button>Get Started</button>
-  </nav>
-  <div class="hero">
-    <h1>Your Headline<br/>Goes Here</h1>
-    <p>A brief description of your product value proposition. Clear and compelling.</p>
-    <button class="cta">Start for free →</button>
-  </div>
-  <div class="features">
-    <div class="card"><h3>Feature One</h3><p>Short description of the first key feature benefit.</p></div>
-    <div class="card"><h3>Feature Two</h3><p>Short description of the second key feature benefit.</p></div>
-    <div class="card"><h3>Feature Three</h3><p>Short description of the third key feature benefit.</p></div>
-  </div>
+  <header class="mast">
+    <div class="kicker">Reader's proof · Plate not yet filed</div>
+    <div class="wordmark">TheCee<span>.</span></div>
+    <div class="rule-red"></div>
+  </header>
+  <main>
+    <h1>Your headline <em>still</em> goes here.</h1>
+    <p class="lead">
+      This is a standing type block — a placeholder until the press returns your real page.
+      When the prototype is generated, this entire sheet is replaced with your idea as the synthetic reader sees it.
+    </p>
+    <div class="folio">
+      <article><h3>Column I</h3><p>First argument in favour — crisp, declarative, no decoration.</p></article>
+      <article><h3>Column II</h3><p>Second tension — what the room might doubt before they buy.</p></article>
+      <article><h3>Column III</h3><p>Third move — the line that turns a browser into a believer.</p></article>
+    </div>
+    <div class="stamp">Awaiting impression</div>
+  </main>
 </body>
 </html>`
 
 export default function PrototypePage() {
   const params = useParams()
-  const rawId = params.id
-  const projectId = typeof rawId === 'string' ? Number(rawId) : Number(Array.isArray(rawId) ? rawId[0] : rawId)
+  const projectId = Number(params.id)
 
   const { data: project, isLoading, isError } = useProject(Number.isFinite(projectId) ? projectId : null)
   const [view, setView] = useState<'desktop' | 'mobile'>('desktop')
@@ -96,90 +176,232 @@ export default function PrototypePage() {
   }
 
   return (
-    <div className="p-8 h-screen flex flex-col max-h-screen overflow-hidden">
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6 shrink-0">
+    <div
+      className="rise"
+      style={{
+        padding: '36px 48px 48px',
+        maxWidth: 1200,
+        margin: '0 auto',
+        minHeight: 'calc(100vh - 120px)',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* Masthead */}
+      <header style={{ flexShrink: 0, marginBottom: 20 }}>
+        <div
+          className="kicker"
+          style={{
+            color: 'var(--red)',
+            marginBottom: 12,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            flexWrap: 'wrap',
+          }}
+        >
+          <Link href={`/project/${idStr}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+            Dossier
+          </Link>
+          <span style={{ color: 'var(--ink-tertiary)' }}>·</span>
+          <span style={{ color: 'var(--ink-secondary)' }}>Press room</span>
+          <span style={{ color: 'var(--ink-tertiary)' }}>·</span>
+          <span>Reader&rsquo;s proof</span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap' }}>
           <div>
-            <div className="flex items-center gap-2 text-xs text-slate-600 mb-1.5">
-              <Link href={`/project/${idStr}`} className="hover:text-slate-400">
-                Dossier
-              </Link>
-              <span>/</span>
-              <span className="text-slate-400">Prototype</span>
-            </div>
-            <h1 className="font-display text-xl font-700 text-white">Generated prototype</h1>
+            <h1
+              className="font-serif"
+              style={{
+                fontSize: 'clamp(32px, 4vw, 48px)',
+                fontWeight: 900,
+                fontStyle: 'italic',
+                lineHeight: 1,
+                letterSpacing: '-0.03em',
+                color: 'var(--ink)',
+                marginBottom: 8,
+              }}
+            >
+              The <span style={{ color: 'var(--red)' }}>setting</span> in full.
+            </h1>
+            <p
+              style={{
+                fontSize: 13,
+                lineHeight: 1.65,
+                color: 'var(--ink-secondary)',
+                maxWidth: 520,
+                fontWeight: 300,
+              }}
+            >
+              Preview the page as it will appear to synthetic readers — desktop measure or narrow folio. This is not the
+              final edition until the presses run.
+            </p>
           </div>
 
-          {/* Toggle */}
-          <div className="flex items-center gap-1 glass rounded-xl p-1">
-            {([
-              { mode: 'desktop' as const, icon: Monitor, label: 'Desktop' },
-              { mode: 'mobile' as const, icon: Smartphone, label: 'Mobile' },
-            ]).map(({ mode, icon: Icon, label }) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setView(mode)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
-                  view === mode ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                {label}
-              </button>
-            ))}
+          {/* View toggle — letterpress segmented control */}
+          <div
+            role="group"
+            aria-label="Preview width"
+            style={{
+              display: 'inline-flex',
+              border: '0.5px solid var(--ink)',
+              background: 'var(--paper-dark)',
+            }}
+          >
+            {(
+              [
+                { mode: 'desktop' as const, icon: Monitor, label: 'Broadsheet' },
+                { mode: 'mobile' as const, icon: Smartphone, label: 'Folio' },
+              ] as const
+            ).map(({ mode, icon: Icon, label }) => {
+              const active = view === mode
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setView(mode)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '10px 16px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 10,
+                    fontWeight: 600,
+                    letterSpacing: '0.18em',
+                    textTransform: 'uppercase',
+                    color: active ? 'var(--paper)' : 'var(--ink-secondary)',
+                    background: active ? 'var(--ink)' : 'transparent',
+                    transition: 'background 180ms ease, color 180ms ease',
+                  }}
+                >
+                  <Icon style={{ width: 14, height: 14 }} />
+                  {label}
+                </button>
+              )
+            })}
           </div>
         </div>
-      </motion.div>
 
-      {/* Iframe container */}
+        <motion.div
+          initial={{ scaleX: 0, transformOrigin: 'left' }}
+          animate={{ scaleX: 1 }}
+          transition={{ duration: 0.35, ease: [0.2, 0.7, 0.2, 1] }}
+          style={{ height: 2, background: 'var(--red)', marginTop: 16 }}
+        />
+        <div style={{ height: 0.5, background: 'var(--border-color)', marginTop: 4 }} />
+      </header>
+
+      {/* Press window */}
       <motion.div
-        initial={{ opacity: 0, scale: 0.98 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.4, delay: 0.1 }}
-        className="flex-1 flex flex-col items-center min-h-0"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, delay: 0.05 }}
+        style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+        }}
       >
         <div
-          className={`glass rounded-2xl overflow-hidden transition-all duration-500 flex flex-col ${
-            view === 'desktop' ? 'w-full' : 'w-[390px]'
-          } flex-1`}
+          style={{
+            width: view === 'desktop' ? '100%' : 390,
+            maxWidth: '100%',
+            flex: 1,
+            minHeight: 420,
+            display: 'flex',
+            flexDirection: 'column',
+            border: '0.5px solid var(--ink)',
+            background: 'var(--paper)',
+            boxShadow: '16px 16px 0 rgba(26,23,20,0.1)',
+            overflow: 'hidden',
+            transition: 'width 420ms cubic-bezier(0.2, 0.7, 0.2, 1)',
+          }}
         >
-          {/* Browser chrome */}
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 shrink-0">
-            <div className="flex gap-1.5">
-              {['bg-red-500', 'bg-amber-500', 'bg-emerald-500'].map((c) => (
-                <div key={c} className={`w-2.5 h-2.5 rounded-full ${c} opacity-60`} />
+          {/* Chrome bar — editorial, not macOS glass */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '10px 14px',
+              borderBottom: '0.5px solid var(--border-strong)',
+              background: 'var(--paper-dark)',
+              flexShrink: 0,
+            }}
+          >
+            <div style={{ display: 'flex', gap: 6 }}>
+              {['var(--red)', '#b88a3a', '#3d7a4a'].map((c) => (
+                <span
+                  key={c}
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    background: c,
+                    opacity: 0.85,
+                  }}
+                />
               ))}
             </div>
-            <div className="flex-1 mx-3 px-3 py-1 rounded-md bg-white/5 border border-white/5 text-xs text-slate-600 text-center">
-              preview.thecee.app
+            <div
+              className="kicker"
+              style={{
+                flex: 1,
+                textAlign: 'center',
+                color: 'var(--ink-tertiary)',
+                letterSpacing: '0.14em',
+                border: '0.5px solid var(--border-color)',
+                padding: '6px 10px',
+                background: 'rgba(26,23,20,0.03)',
+              }}
+            >
+              proof.thecee.app · {project.title.slice(0, 42)}
+              {project.title.length > 42 ? '…' : ''}
             </div>
           </div>
+
           <iframe
             srcDoc={project.prototypeHtml || MOCK_HTML}
-            className="flex-1 w-full bg-white"
-            sandbox="allow-scripts"
             title="Prototype preview"
+            sandbox="allow-scripts"
+            style={{
+              flex: 1,
+              width: '100%',
+              border: 'none',
+              minHeight: 360,
+              background: 'var(--paper)',
+            }}
           />
         </div>
       </motion.div>
 
-      {/* Footer nav */}
-      <div className="flex items-center justify-between mt-4 shrink-0">
-        <Link
-          href={`/project/${idStr}`}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg glass glass-hover text-slate-400 text-sm"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" /> Dossier
+      {/* Footer */}
+      <footer
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 16,
+          marginTop: 28,
+          paddingTop: 20,
+          borderTop: '0.5px solid var(--border-color)',
+          flexShrink: 0,
+          flexWrap: 'wrap',
+        }}
+      >
+        <Link href={`/project/${idStr}`} className="btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+          <ArrowLeft style={{ width: 14, height: 14 }} /> Back to dossier
         </Link>
-        <Link
-          href={`/project/${idStr}/environment`}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-all"
-        >
-          Set environment <ArrowRight className="w-4 h-4" />
+        <Link href={`/project/${idStr}/environment`} className="btn-ink" style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+          Cast the room <ArrowRight style={{ width: 14, height: 14 }} />
         </Link>
-      </div>
+      </footer>
     </div>
   )
 }

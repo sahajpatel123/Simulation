@@ -30,7 +30,13 @@ const sections: { title: string; items: Item[] }[] = [
   },
 ]
 
-export default function Sidebar() {
+type SidebarProps = {
+  collapsed: boolean
+  onCollapse: () => void
+  onExpand: () => void
+}
+
+export default function Sidebar({ collapsed, onCollapse, onExpand }: SidebarProps) {
   const pathname = usePathname()
   const isActive = (href: string) => {
     const base = href.split('?')[0]
@@ -41,120 +47,188 @@ export default function Sidebar() {
 
   return (
     <aside
+      role="navigation"
+      aria-label={collapsed ? 'Table of contents collapsed. Activate to expand.' : 'Workspace table of contents'}
+      onClick={collapsed ? () => onExpand() : undefined}
+      onKeyDown={
+        collapsed
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onExpand()
+              }
+            }
+          : undefined
+      }
+      tabIndex={collapsed ? 0 : undefined}
       style={{
         position: 'sticky',
         top: 120,
         alignSelf: 'start',
         height: 'calc(100vh - 120px)',
         borderRight: '0.5px solid var(--border-color)',
-        padding: '40px 28px 32px 40px',
+        padding: collapsed ? '20px 0' : '40px 28px 32px 40px',
         display: 'flex',
         flexDirection: 'column',
-        gap: 40,
-        overflow: 'auto',
+        gap: collapsed ? 0 : 40,
+        overflow: collapsed ? 'hidden' : 'auto',
+        cursor: collapsed ? 'pointer' : 'default',
+        outline: 'none',
       }}
-      className="archive-scroll"
+      className={`archive-scroll${collapsed ? ' sidebar-collapsed-rail' : ''}`}
     >
-      {/* Tag */}
-      <div>
+      {collapsed ? (
         <div
+          aria-hidden
           style={{
-            fontFamily: 'var(--font-serif)',
-            fontSize: 28,
-            fontWeight: 800,
-            fontStyle: 'italic',
-            lineHeight: 1,
-            letterSpacing: '-0.02em',
-            color: 'var(--ink)',
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            paddingTop: 12,
+            gap: 14,
+            pointerEvents: 'none',
+            userSelect: 'none',
           }}
         >
-          Contents
-        </div>
-        <div style={{ height: 2, background: 'var(--red)', width: 40, marginTop: 12 }} />
-      </div>
-
-      {sections.map((section) => (
-        <nav key={section.title}>
-          <div
+          <div style={{ width: 2, height: 40, background: 'var(--red)', flexShrink: 0 }} />
+          <span
+            className="font-serif"
             style={{
-              fontSize: 9,
-              letterSpacing: '0.3em',
+              writingMode: 'vertical-rl',
+              transform: 'rotate(180deg)',
+              fontSize: 11,
+              fontWeight: 800,
+              fontStyle: 'italic',
+              letterSpacing: '0.2em',
               textTransform: 'uppercase',
-              color: 'var(--ink-secondary)',
-              fontWeight: 600,
-              marginBottom: 14,
-              paddingBottom: 10,
-              borderBottom: '0.5px solid var(--border-color)',
+              color: 'var(--ink-tertiary)',
             }}
           >
-            {section.title}
+            Open
+          </span>
+        </div>
+      ) : (
+        <>
+          <div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onCollapse()
+              }}
+              aria-expanded={!collapsed}
+              aria-controls="sidebar-toc-nav"
+              id="sidebar-contents-toggle"
+              style={{
+                display: 'block',
+                margin: 0,
+                padding: 0,
+                border: 'none',
+                background: 'none',
+                cursor: 'pointer',
+                textAlign: 'left',
+                fontFamily: 'var(--font-serif)',
+                fontSize: 28,
+                fontWeight: 800,
+                fontStyle: 'italic',
+                lineHeight: 1,
+                letterSpacing: '-0.02em',
+                color: 'var(--ink)',
+              }}
+              className="sidebar-contents-trigger"
+            >
+              Contents
+            </button>
+            <div style={{ height: 2, background: 'var(--red)', width: 40, marginTop: 12 }} />
           </div>
 
-          <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {section.items.map((item) => {
-              const active = isActive(item.href)
-              return (
-                <li key={item.num + item.label}>
-                  <Link
-                    href={item.href}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '28px 1fr',
-                      alignItems: 'baseline',
-                      gap: 10,
-                      padding: '8px 0',
-                      textDecoration: 'none',
-                      color: active ? 'var(--red)' : 'var(--ink)',
-                      borderLeft: active ? '2px solid var(--red)' : '2px solid transparent',
-                      paddingLeft: active ? 10 : 0,
-                      transition: 'all 220ms ease',
-                    }}
-                  >
-                    <span
-                      className="numeral"
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 700,
-                        color: active ? 'var(--red)' : 'var(--ink-tertiary)',
-                      }}
-                    >
-                      {item.num}
-                    </span>
-                    <span style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span
-                        style={{
-                          fontFamily: 'var(--font-serif)',
-                          fontSize: 17,
-                          fontWeight: active ? 800 : 700,
-                          fontStyle: active ? 'italic' : 'normal',
-                          lineHeight: 1.15,
-                          letterSpacing: '-0.01em',
-                        }}
-                      >
-                        {item.label}
-                      </span>
-                      {item.hint && (
-                        <span
+          <div id="sidebar-toc-nav">
+            {sections.map((section) => (
+              <nav key={section.title}>
+                <div
+                  style={{
+                    fontSize: 9,
+                    letterSpacing: '0.3em',
+                    textTransform: 'uppercase',
+                    color: 'var(--ink-secondary)',
+                    fontWeight: 600,
+                    marginBottom: 14,
+                    paddingBottom: 10,
+                    borderBottom: '0.5px solid var(--border-color)',
+                  }}
+                >
+                  {section.title}
+                </div>
+
+                <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {section.items.map((item) => {
+                    const active = isActive(item.href)
+                    return (
+                      <li key={item.num + item.label}>
+                        <Link
+                          href={item.href}
                           style={{
-                            fontSize: 10,
-                            letterSpacing: '0.14em',
-                            textTransform: 'uppercase',
-                            color: 'var(--ink-secondary)',
-                            marginTop: 3,
-                            fontWeight: 400,
+                            display: 'grid',
+                            gridTemplateColumns: '28px 1fr',
+                            alignItems: 'baseline',
+                            gap: 10,
+                            padding: '8px 0',
+                            textDecoration: 'none',
+                            color: active ? 'var(--red)' : 'var(--ink)',
+                            borderLeft: active ? '2px solid var(--red)' : '2px solid transparent',
+                            paddingLeft: active ? 10 : 0,
+                            transition: 'all 220ms ease',
                           }}
                         >
-                          {item.hint}
-                        </span>
-                      )}
-                    </span>
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
-        </nav>
-      ))}
+                          <span
+                            className="numeral"
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 700,
+                              color: active ? 'var(--red)' : 'var(--ink-tertiary)',
+                            }}
+                          >
+                            {item.num}
+                          </span>
+                          <span style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span
+                              style={{
+                                fontFamily: 'var(--font-serif)',
+                                fontSize: 17,
+                                fontWeight: active ? 800 : 700,
+                                fontStyle: active ? 'italic' : 'normal',
+                                lineHeight: 1.15,
+                                letterSpacing: '-0.01em',
+                              }}
+                            >
+                              {item.label}
+                            </span>
+                            {item.hint && (
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  letterSpacing: '0.14em',
+                                  textTransform: 'uppercase',
+                                  color: 'var(--ink-secondary)',
+                                  marginTop: 3,
+                                  fontWeight: 400,
+                                }}
+                              >
+                                {item.hint}
+                              </span>
+                            )}
+                          </span>
+                        </Link>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </nav>
+            ))}
+          </div>
+        </>
+      )}
     </aside>
   )
 }
