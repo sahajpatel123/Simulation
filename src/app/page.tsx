@@ -952,12 +952,60 @@ function AtAGlance() {
 /* ─────────────────────────────────────────────────────────────── */
 /*                        DISTRIBUTION STRIP                        */
 /* ─────────────────────────────────────────────────────────────── */
+/**
+ * Distribution palette — each bucket has its own identity so hover
+ * reinforces the segment instead of washing every non-accent fill to ink.
+ *   rest : base (unhovered) fill on the bar
+ *   hover: darker sibling used when the segment is hovered
+ *   label: colour used for the legend word in both states
+ */
 const DISTRIBUTION = [
-  { label: 'Dies fast', sub: 'runway gone inside 90 days', pct: 14 },
-  { label: 'Quiet death', sub: 'grows, then stalls without recovering', pct: 23 },
-  { label: 'Pivots', sub: 'the idea survives; the shape changes', pct: 31, accent: true },
-  { label: 'Survives', sub: 'modest, durable, compounding', pct: 22 },
-  { label: 'Scales', sub: 'the distribution you are betting on', pct: 10 },
+  {
+    label: 'Dies fast',
+    sub: 'runway gone inside 90 days',
+    pct: 14,
+    rest: 'rgba(26,23,20,0.08)',
+    hover: 'rgba(26,23,20,0.55)',
+    label_rest: 'var(--ink-secondary)',
+    label_hover: 'rgba(26,23,20,0.78)',
+  },
+  {
+    label: 'Quiet death',
+    sub: 'grows, then stalls without recovering',
+    pct: 23,
+    rest: 'rgba(90,78,66,0.18)',
+    hover: 'rgba(90,78,66,0.62)',
+    label_rest: 'var(--ink-secondary)',
+    label_hover: 'rgba(90,78,66,0.92)',
+  },
+  {
+    label: 'Pivots',
+    sub: 'the idea survives; the shape changes',
+    pct: 31,
+    accent: true,
+    rest: 'rgba(192,57,43,0.16)',
+    hover: 'var(--red)',
+    label_rest: 'var(--red)',
+    label_hover: 'var(--red)',
+  },
+  {
+    label: 'Survives',
+    sub: 'modest, durable, compounding',
+    pct: 22,
+    rest: 'rgba(120,110,72,0.22)',
+    hover: 'rgba(120,110,72,0.72)',
+    label_rest: 'var(--ink-secondary)',
+    label_hover: 'rgba(120,110,72,0.96)',
+  },
+  {
+    label: 'Scales',
+    sub: 'the distribution you are betting on',
+    pct: 10,
+    rest: 'rgba(58,90,72,0.26)',
+    hover: 'rgba(58,90,72,0.82)',
+    label_rest: 'var(--ink-secondary)',
+    label_hover: 'rgba(58,90,72,1)',
+  },
 ] as const
 
 function DistributionStrip() {
@@ -1043,7 +1091,6 @@ function DistributionStrip() {
               >
                 {DISTRIBUTION.map((row, i) => {
                   const isHover = hover === i
-                  const isAccent = 'accent' in row && row.accent
                   return (
                     <motion.div
                       key={row.label}
@@ -1060,13 +1107,7 @@ function DistributionStrip() {
                         position: 'relative',
                         borderRight:
                           i < DISTRIBUTION.length - 1 ? '0.5px solid var(--ink)' : 'none',
-                        background: isHover
-                          ? isAccent
-                            ? 'var(--red)'
-                            : 'var(--ink)'
-                          : isAccent
-                          ? 'rgba(192,57,43,0.14)'
-                          : `rgba(26,23,20,${0.04 + i * 0.02})`,
+                        background: isHover ? row.hover : row.rest,
                         transition: 'background 260ms ease',
                         cursor: 'default',
                       }}
@@ -1092,7 +1133,7 @@ function DistributionStrip() {
                               fontWeight: 800,
                               fontSize: 28,
                               letterSpacing: '-0.02em',
-                              color: isAccent ? 'var(--red)' : 'var(--ink)',
+                              color: row.label_hover,
                             }}
                           >
                             {row.pct}
@@ -1109,7 +1150,6 @@ function DistributionStrip() {
             <div style={{ display: 'flex', marginTop: 20 }}>
               {DISTRIBUTION.map((row, i) => {
                 const isHover = hover === i
-                const isAccent = 'accent' in row && row.accent
                 return (
                   <div
                     key={row.label}
@@ -1120,9 +1160,12 @@ function DistributionStrip() {
                       flexGrow: 0,
                       flexShrink: 0,
                       paddingRight: 12,
-                      borderTop: '0.5px solid var(--border-color)',
+                      borderTop: `0.5px solid ${
+                        isHover ? row.label_hover : 'var(--border-color)'
+                      }`,
                       paddingTop: 14,
                       minWidth: 0,
+                      transition: 'border-color 220ms ease',
                     }}
                   >
                     <div
@@ -1131,11 +1174,7 @@ function DistributionStrip() {
                         letterSpacing: '0.14em',
                         textTransform: 'uppercase',
                         fontWeight: 600,
-                        color: isAccent
-                          ? 'var(--red)'
-                          : isHover
-                          ? 'var(--ink)'
-                          : 'var(--ink-secondary)',
+                        color: isHover ? row.label_hover : row.label_rest,
                         transition: 'color 220ms ease',
                         marginBottom: 6,
                         whiteSpace: 'nowrap',
