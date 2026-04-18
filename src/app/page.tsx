@@ -1,24 +1,30 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion'
+import { useRef, useState, type CSSProperties } from 'react'
+import {
+  AnimatePresence,
+  motion,
+  useMotionValue,
+  useScroll,
+  useSpring,
+  useTransform,
+} from 'framer-motion'
 import Link from 'next/link'
-import { ArrowRight, ArrowUpRight, ChevronDown, Minus } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, ChevronDown } from 'lucide-react'
 
-import TypesetHeadline from '@/components/landing/TypesetHeadline'
 import MagneticCTA from '@/components/landing/MagneticCTA'
 import PressTicker from '@/components/landing/PressTicker'
-import LiveCounters from '@/components/landing/LiveCounters'
 import DossierSpecimen from '@/components/landing/DossierSpecimen'
 import InlineAuth from '@/components/landing/InlineAuth'
+import HeroCover from '@/components/landing/HeroCover'
+import ProcessReel from '@/components/landing/ProcessReel'
+import CountUp from '@/components/landing/CountUp'
 
 import { useAuthStore } from '@/store/auth.store'
 import { auth as authLib } from '@/lib/auth'
 import { useLogout } from '@/hooks/useAuth'
 
 /* ─── COPY ──────────────────────────────────────────── */
-const ROTATING = ['startup', 'product', 'idea', 'launch', 'pricing', 'pivot']
-
 const PLATES = [
   {
     n: 'I',
@@ -46,25 +52,29 @@ const PLATES = [
 const LETTERS = [
   {
     title: 'First-time founders',
-    body: 'You are launching your first product with limited runway. Run it through the press before you spend it.',
+    body:
+      'You are launching your first product with limited runway. Run it through the press before you spend it.',
     sig: 'Field, Bangalore',
     tag: 'Validate before you build',
   },
   {
     title: 'Product managers',
-    body: 'You are going into the next planning meeting with scenario data, not a deck of opinions and a slide of vibes.',
+    body:
+      'You are going into the next planning meeting with scenario data, not a deck of opinions and a slide of vibes.',
     sig: 'Studio, Pune',
     tag: 'Data over opinion',
   },
   {
     title: 'D2C and physical products',
-    body: 'You are about to commit to inventory or a manufacturer. Test pricing, channels, response — before the pallets ship.',
+    body:
+      'You are about to commit to inventory or a manufacturer. Test pricing, channels, response — before the pallets ship.',
     sig: 'Workshop, Surat',
     tag: 'Test before you manufacture',
   },
   {
     title: 'Side-project builders',
-    body: 'You have weekends, not months. Find out if the idea is worth your evenings before you give it a year.',
+    body:
+      'You have weekends, not months. Find out if the idea is worth your evenings before you give it a year.',
     sig: 'Desk, Hyderabad',
     tag: 'Know before you commit',
   },
@@ -85,7 +95,13 @@ const TIERS = [
     note: 'For working founders',
     price: '₹1,200',
     sub: 'per month',
-    bullets: ['10 active dossiers', '10,000 readers per run', 'Decision Studio', 'Cross-validation 3×', 'Priority press'],
+    bullets: [
+      '10 active dossiers',
+      '10,000 readers per run',
+      'Decision Studio',
+      'Cross-validation 3×',
+      'Priority press',
+    ],
     cta: 'Open a quarterly',
     accent: true,
   },
@@ -94,7 +110,13 @@ const TIERS = [
     note: 'For studios & funds',
     price: 'Talk',
     sub: 'with the editor',
-    bullets: ['Unlimited dossiers', 'Custom cohort design', 'Studio collaborators', 'API & exports', 'Named editor'],
+    bullets: [
+      'Unlimited dossiers',
+      'Custom cohort design',
+      'Studio collaborators',
+      'API & exports',
+      'Named editor',
+    ],
     cta: 'Request press pass',
     accent: false,
   },
@@ -105,14 +127,16 @@ function Reveal({
   children,
   delay = 0,
   className = '',
+  y = 28,
 }: {
   children: React.ReactNode
   delay?: number
   className?: string
+  y?: number
 }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 28 }}
+      initial={{ opacity: 0, y }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-60px' }}
       transition={{ duration: 0.7, delay, ease: [0.2, 0.7, 0.2, 1] }}
@@ -130,7 +154,7 @@ function SectionKicker({ label }: { label: string }) {
       <span
         style={{
           fontSize: 10,
-          letterSpacing: '0.22em',
+          letterSpacing: '0.3em',
           textTransform: 'uppercase',
           color: 'var(--red)',
           fontWeight: 600,
@@ -142,77 +166,22 @@ function SectionKicker({ label }: { label: string }) {
   )
 }
 
-/* ─── ROTATING WORD WITH PAPER FLIP ─────────────────── */
-function PaperFlipWord() {
-  const [i, setI] = useState(0)
-  useEffect(() => {
-    const t = setInterval(() => setI(p => (p + 1) % ROTATING.length), 4200)
-    return () => clearInterval(t)
-  }, [])
-  return (
-    <span
-      style={{
-        position: 'relative',
-        display: 'inline-block',
-        verticalAlign: 'baseline',
-        minWidth: '2ch',
-        perspective: 800,
-      }}
-    >
-      <AnimatePresence mode="wait">
-        <motion.span
-          key={ROTATING[i]}
-          initial={{ rotateX: 90, opacity: 0, y: 10 }}
-          animate={{ rotateX: 0, opacity: 1, y: 0 }}
-          exit={{ rotateX: -90, opacity: 0, y: -10 }}
-          transition={{ duration: 0.5, ease: [0.76, 0, 0.24, 1] }}
-          style={{
-            display: 'inline-block',
-            color: 'var(--red)',
-            fontStyle: 'italic',
-            transformOrigin: 'center bottom',
-          }}
-        >
-          {ROTATING[i]}
-        </motion.span>
-      </AnimatePresence>
-    </span>
-  )
-}
-
-/* ─── LIVE CLOCK STRIP ─────────────────────────────── */
-function ClockStrip() {
-  const [now, setNow] = useState<Date | null>(null)
-  useEffect(() => {
-    setNow(new Date())
-    const t = setInterval(() => setNow(new Date()), 1000)
-    return () => clearInterval(t)
-  }, [])
-  if (!now) return <span>—</span>
-  const fmt = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
-  const date = now.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
-  return (
-    <span style={{ fontVariantNumeric: 'tabular-nums' }}>
-      {date} · {fmt} IST
-    </span>
-  )
-}
-
 /* ─── SCROLL-DRIVEN PRESS PROGRESS BAR ──────────────── */
 function PressProgress() {
   const { scrollYProgress } = useScroll()
-  const w = useTransform(scrollYProgress, v => `${v * 100}%`)
+  const scaleX = useSpring(scrollYProgress, { stiffness: 180, damping: 34, mass: 0.3 })
   return (
     <motion.div
       style={{
         position: 'fixed',
         top: 0,
         left: 0,
+        right: 0,
         height: 3,
         background: 'var(--red)',
-        width: w,
-        zIndex: 300,
         transformOrigin: '0 50%',
+        scaleX,
+        zIndex: 300,
       }}
       aria-hidden
     />
@@ -221,17 +190,16 @@ function PressProgress() {
 
 /* ═══════════════════════════════════════════════════════════════ */
 export default function LandingPage() {
-  const heroRef = useRef<HTMLDivElement>(null)
-
   const [menuOpen, setMenuOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login')
 
-  const user = useAuthStore(s => s.user)
-  const isHydrated = useAuthStore(s => s.isHydrated)
+  const user = useAuthStore((s) => s.user)
+  const isHydrated = useAuthStore((s) => s.isHydrated)
   const logout = useLogout()
-  const isAuthed = Boolean(user) || (isHydrated && typeof window !== 'undefined' && authLib.isAuthenticated())
+  const isAuthed =
+    Boolean(user) || (isHydrated && typeof window !== 'undefined' && authLib.isAuthenticated())
 
   const openAuth = (m: 'login' | 'signup') => {
     setAuthMode(m)
@@ -245,48 +213,33 @@ export default function LandingPage() {
     setMenuOpen(false)
   }
 
+  const scrollToHow = () => {
+    const el = document.getElementById('how')
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   return (
     <div style={{ background: 'var(--paper)', minHeight: '100vh', position: 'relative' }}>
       <PressProgress />
 
-      {/* ━━━ MASTHEAD ━━━ */}
+      {/* ━━━ MASTHEAD — compact sticky bar ━━━ */}
       <motion.header
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6 }}
+        initial={{ opacity: 0, y: -12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
         style={{
-          borderBottom: '3px solid var(--ink)',
+          borderBottom: '0.5px solid var(--border-color)',
           position: 'sticky',
           top: 0,
           zIndex: 50,
-          background: 'var(--paper)',
+          background: 'rgba(242,236,224,0.92)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
         }}
       >
-        {/* Top tier strip */}
         <div
           style={{
-            borderBottom: '0.5px solid var(--border-color)',
-            padding: '6px 48px',
-            display: 'grid',
-            gridTemplateColumns: '1fr auto 1fr',
-            alignItems: 'center',
-            fontSize: 10,
-            letterSpacing: '0.14em',
-            textTransform: 'uppercase',
-            color: 'var(--ink-secondary)',
-          }}
-        >
-          <span style={{ justifySelf: 'start' }}>Vol. I — Issue 04 · The Simulation Broadsheet</span>
-          <span style={{ justifySelf: 'center' }}>
-            <ClockStrip />
-          </span>
-          <span style={{ justifySelf: 'end' }}>thecee.app · Early access</span>
-        </div>
-
-        {/* Main row */}
-        <div
-          style={{
-            padding: '16px 48px',
+            padding: '14px 40px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -308,23 +261,31 @@ export default function LandingPage() {
             }}
             aria-label="Open menu"
           >
-            {[0, 1, 2].map(i => (
+            {[0, 1, 2].map((i) => (
               <div
                 key={i}
                 style={{
                   width: i === 2 ? 16 : 24,
                   height: 1.5,
                   background: 'var(--ink)',
+                  transition: 'width 220ms ease',
                 }}
               />
             ))}
           </button>
 
-          <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', textAlign: 'center' }}>
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              textAlign: 'center',
+            }}
+          >
             <div
               className="font-serif"
               style={{
-                fontSize: 36,
+                fontSize: 26,
                 fontWeight: 900,
                 color: 'var(--ink)',
                 letterSpacing: '-0.04em',
@@ -337,7 +298,13 @@ export default function LandingPage() {
           </div>
 
           <div
-            style={{ display: 'flex', gap: 20, alignItems: 'center', minWidth: 140, justifyContent: 'flex-end' }}
+            style={{
+              display: 'flex',
+              gap: 16,
+              alignItems: 'center',
+              minWidth: 140,
+              justifyContent: 'flex-end',
+            }}
           >
             {isHydrated && isAuthed ? (
               <Link
@@ -347,7 +314,7 @@ export default function LandingPage() {
                   color: 'var(--paper)',
                   background: 'var(--ink)',
                   padding: '8px 18px',
-                  letterSpacing: '0.12em',
+                  letterSpacing: '0.16em',
                   textTransform: 'uppercase',
                   textDecoration: 'none',
                   fontWeight: 600,
@@ -369,13 +336,13 @@ export default function LandingPage() {
                     cursor: 'pointer',
                     fontSize: 11,
                     color: 'var(--ink-secondary)',
-                    letterSpacing: '0.12em',
+                    letterSpacing: '0.16em',
                     textTransform: 'uppercase',
                     fontFamily: 'inherit',
                     padding: 0,
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--ink)')}
-                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-secondary)')}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--ink)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--ink-secondary)')}
                 >
                   Sign in
                 </button>
@@ -388,7 +355,7 @@ export default function LandingPage() {
                     background: 'var(--ink)',
                     border: 'none',
                     padding: '8px 18px',
-                    letterSpacing: '0.12em',
+                    letterSpacing: '0.16em',
                     textTransform: 'uppercase',
                     fontWeight: 600,
                     display: 'flex',
@@ -509,8 +476,10 @@ export default function LandingPage() {
                       letterSpacing: '0.08em',
                       textTransform: 'uppercase',
                     }}
-                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--paper)')}
-                    onMouseLeave={e => (e.currentTarget.style.color = 'rgba(242,236,224,0.7)')}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--paper)')}
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.color = 'rgba(242,236,224,0.7)')
+                    }
                   >
                     {label}
                     <ArrowRight size={12} style={{ opacity: 0.3 }} />
@@ -521,7 +490,7 @@ export default function LandingPage() {
                   <>
                     <button
                       type="button"
-                      onClick={() => setProfileOpen(o => !o)}
+                      onClick={() => setProfileOpen((o) => !o)}
                       style={{
                         display: 'flex',
                         justifyContent: 'space-between',
@@ -558,9 +527,14 @@ export default function LandingPage() {
                           animate={{ height: 'auto', opacity: 1 }}
                           exit={{ height: 0, opacity: 0 }}
                           transition={{ duration: 0.25 }}
-                          style={{ overflow: 'hidden', borderBottom: '0.5px solid rgba(242,236,224,0.06)' }}
+                          style={{
+                            overflow: 'hidden',
+                            borderBottom: '0.5px solid rgba(242,236,224,0.06)',
+                          }}
                         >
-                          <div style={{ padding: '16px 36px 20px', background: 'rgba(242,236,224,0.04)' }}>
+                          <div
+                            style={{ padding: '16px 36px 20px', background: 'rgba(242,236,224,0.04)' }}
+                          >
                             <p
                               style={{
                                 fontSize: 9,
@@ -572,7 +546,14 @@ export default function LandingPage() {
                             >
                               Signed in as
                             </p>
-                            <p style={{ fontSize: 13, color: 'var(--paper)', marginBottom: 16, wordBreak: 'break-all' }}>
+                            <p
+                              style={{
+                                fontSize: 13,
+                                color: 'var(--paper)',
+                                marginBottom: 16,
+                                wordBreak: 'break-all',
+                              }}
+                            >
                               {user?.email ?? '—'}
                             </p>
                             <button
@@ -671,379 +652,68 @@ export default function LandingPage() {
         )}
       </AnimatePresence>
 
-      {/* ━━━ HERO — broadsheet front page ━━━ */}
-      <section ref={heroRef} style={{ borderBottom: '0.5px solid var(--border-color)', overflow: 'hidden', position: 'relative' }}>
-        <div>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '0.85fr 2.4fr 1fr',
-              minHeight: '82vh',
-            }}
-          >
-            {/* LEFT spine */}
-            <div
-              style={{
-                borderRight: '0.5px solid var(--border-color)',
-                padding: '40px 30px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    fontSize: 9,
-                    letterSpacing: '0.22em',
-                    textTransform: 'uppercase',
-                    color: 'var(--ink-secondary)',
-                    marginBottom: 18,
-                  }}
-                >
-                  In this issue
-                </div>
-                {[
-                  'Idea validation',
-                  'Risk discovery',
-                  'Revenue forecasting',
-                  'Launch readiness',
-                  'Pricing confidence',
-                  'Pre-mortem report',
-                ].map((item, i) => (
-                  <a
-                    key={item}
-                    href="#how"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      padding: '10px 0',
-                      borderBottom: '0.5px solid var(--border-color)',
-                      fontSize: 11,
-                      color: 'var(--ink-secondary)',
-                      textDecoration: 'none',
-                      transition: 'color 0.2s, padding-left 0.2s',
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.color = 'var(--red)'
-                      e.currentTarget.style.paddingLeft = '6px'
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.color = 'var(--ink-secondary)'
-                      e.currentTarget.style.paddingLeft = '0px'
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontVariantNumeric: 'tabular-nums',
-                        color: 'var(--ink-tertiary)',
-                        fontSize: 9,
-                        letterSpacing: '0.18em',
-                        minWidth: 22,
-                      }}
-                    >
-                      {String(i + 1).padStart(2, '0')}
-                    </span>
-                    <Minus size={8} color="var(--red)" />
-                    <span style={{ flex: 1 }}>{item}</span>
-                  </a>
-                ))}
-              </div>
-
-              <div>
-                <div style={{ width: 24, height: 2, background: 'var(--red)', marginBottom: 12 }} />
-                <p className="font-serif" style={{ fontSize: 14, fontStyle: 'italic', fontWeight: 700, color: 'var(--ink)', lineHeight: 1.5 }}>
-                  TheCee simulates reality before you commit to it.
-                </p>
-              </div>
-            </div>
-
-            {/* CENTRE story */}
-            <div
-              style={{
-                borderRight: '0.5px solid var(--border-color)',
-                padding: '48px 56px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-              }}
-            >
-              <div>
-                <SectionKicker label="Cover Story · Vol. I — 04" />
-
-                <TypesetHeadline
-                  words={['Will', 'your']}
-                  style={{ fontSize: 'clamp(56px, 7.4vw, 104px)' }}
-                />
-                <div
-                  className="font-serif"
-                  style={{
-                    fontSize: 'clamp(56px, 7.4vw, 104px)',
-                    fontWeight: 900,
-                    letterSpacing: '-0.035em',
-                    lineHeight: 0.95,
-                    color: 'var(--ink)',
-                  }}
-                >
-                  <PaperFlipWord />
-                  <br />
-                  <motion.span
-                    initial={{ opacity: 0, y: 14 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.7, delay: 0.6 }}
-                    style={{ color: 'var(--ink-tertiary)', fontStyle: 'italic' }}
-                  >
-                    actually work?
-                  </motion.span>
-                </div>
-
-                <div style={{ height: 0.5, background: 'var(--border-color)', margin: '28px 0' }} />
-
-                <motion.p
-                  className="lead-para"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.7, delay: 0.85 }}
-                  style={{
-                    fontSize: 17,
-                    color: 'var(--ink-secondary)',
-                    lineHeight: 1.85,
-                    maxWidth: 540,
-                    fontWeight: 300,
-                    marginBottom: 36,
-                  }}
-                >
-                  TheCee stress-tests your idea against thousands of real-world
-                  scenarios before you commit — clarity that no amount of
-                  planning, advice, or gut feeling can ever match. Filed in
-                  under two minutes.
-                </motion.p>
-
-                <motion.div
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: 1 }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}
-                >
-                  <MagneticCTA
-                    onClick={() => openAuth('signup')}
-                    style={{
-                      background: 'var(--ink)',
-                      color: 'var(--paper)',
-                      padding: '14px 28px',
-                      fontSize: 11,
-                      letterSpacing: '0.16em',
-                      textTransform: 'uppercase',
-                      fontWeight: 600,
-                    }}
-                  >
-                    Validate your idea <ArrowRight size={12} />
-                  </MagneticCTA>
-
-                  <a
-                    href="#how"
-                    style={{
-                      fontSize: 11,
-                      color: 'var(--ink-secondary)',
-                      letterSpacing: '0.12em',
-                      textTransform: 'uppercase',
-                      textDecoration: 'none',
-                      borderBottom: '0.5px solid var(--border-color)',
-                      paddingBottom: 2,
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--ink)')}
-                    onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-secondary)')}
-                  >
-                    Read how it works →
-                  </a>
-                </motion.div>
-              </div>
-
-              {/* Pull quote */}
-              <div
-                style={{
-                  borderTop: '0.5px solid var(--border-color)',
-                  paddingTop: 28,
-                  marginTop: 40,
-                  display: 'grid',
-                  gridTemplateColumns: '1.4fr 1fr',
-                  gap: 32,
-                  alignItems: 'center',
-                }}
-              >
-                <p
-                  className="font-serif"
-                  style={{
-                    fontSize: 16,
-                    fontStyle: 'italic',
-                    fontWeight: 700,
-                    color: 'var(--ink)',
-                    lineHeight: 1.5,
-                  }}
-                >
-                  &ldquo;Know before you build. Not after you have spent six
-                  months on something that will not work.&rdquo;
-                </p>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 28 }}>
-                  {[{ v: '243+', l: 'Founders' }, { v: '1.4M+', l: 'Scenarios' }].map(({ v, l }) => (
-                    <div key={l} style={{ textAlign: 'right' }}>
-                      <div
-                        className="font-serif numeral"
-                        style={{ fontSize: 28, color: 'var(--ink)', letterSpacing: '-0.02em', lineHeight: 1 }}
-                      >
-                        {v}
-                      </div>
-                      <div style={{ fontSize: 9, color: 'var(--ink-tertiary)', letterSpacing: '0.16em', textTransform: 'uppercase', marginTop: 4 }}>
-                        {l}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* RIGHT — live counters + CTA */}
-            <div
-              style={{
-                padding: '40px 30px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                gap: 20,
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    fontSize: 9,
-                    letterSpacing: '0.22em',
-                    textTransform: 'uppercase',
-                    color: 'var(--ink-secondary)',
-                    marginBottom: 14,
-                  }}
-                >
-                  At the press
-                </div>
-                <LiveCounters />
-              </div>
-
-              <div
-                style={{
-                  border: '1.5px solid var(--ink)',
-                  padding: 22,
-                  background: 'var(--paper-dark)',
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 9,
-                    letterSpacing: '0.22em',
-                    textTransform: 'uppercase',
-                    color: 'var(--red)',
-                    marginBottom: 12,
-                    fontWeight: 600,
-                  }}
-                >
-                  Free to start
-                </div>
-                <p
-                  className="font-serif"
-                  style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)', lineHeight: 1.3, marginBottom: 16, fontStyle: 'italic' }}
-                >
-                  Run your first simulation at no cost.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => openAuth('signup')}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    textAlign: 'center',
-                    background: 'var(--red)',
-                    color: '#fff',
-                    border: 'none',
-                    padding: 10,
-                    fontSize: 10,
-                    letterSpacing: '0.16em',
-                    textTransform: 'uppercase',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    fontFamily: 'inherit',
-                    transition: 'opacity 0.2s',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
-                  onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
-                >
-                  Begin issue 01 →
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* ━━━ HERO — a quiet cover ━━━ */}
+      <HeroCover onSignup={() => openAuth('signup')} onHowItWorks={scrollToHow} />
 
       {/* ━━━ PRESS TICKER ━━━ */}
       <PressTicker />
 
-      {/* ━━━ HOW IT WORKS — letterpress plates ━━━ */}
-      <section id="how" style={{ borderBottom: '0.5px solid var(--border-color)' }}>
-        <div style={{ maxWidth: 1280, margin: '0 auto', padding: '96px 48px 80px' }}>
-          <Reveal>
-            <SectionKicker label="The Process" />
-            <h2
-              className="font-serif"
-              style={{
-                fontSize: 'clamp(40px, 4.4vw, 68px)',
-                fontWeight: 900,
-                fontStyle: 'italic',
-                color: 'var(--ink)',
-                lineHeight: 1.02,
-                letterSpacing: '-0.035em',
-                marginBottom: 64,
-                maxWidth: 820,
-              }}
-            >
-              Three plates, three impressions, <span style={{ color: 'var(--red)' }}>one</span> certainty.
-            </h2>
-          </Reveal>
+      {/* ━━━ AT-A-GLANCE STRIP — count-up figures ━━━ */}
+      <AtAGlance />
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)' }}>
-            {PLATES.map((p, i) => (
-              <Reveal key={p.n} delay={i * 0.1}>
-                <Plate
-                  index={i}
-                  total={PLATES.length}
-                  numeral={p.n}
-                  kicker={p.kicker}
-                  title={p.title}
-                  body={p.body}
-                />
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* ━━━ HOW IT WORKS — scroll-pinned plates ━━━ */}
+      <ProcessReel plates={PLATES} />
 
-      {/* ━━━ THE DISTRIBUTION — one long proportional rule ━━━ */}
+      {/* ━━━ THE DISTRIBUTION ━━━ */}
       <DistributionStrip />
 
-
       {/* ━━━ DOSSIER SPECIMEN ━━━ */}
-      <section id="dossier" style={{ borderBottom: '0.5px solid var(--border-color)', background: 'var(--paper)' }}>
-        <div style={{ maxWidth: 1280, margin: '0 auto', padding: '96px 48px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 72, alignItems: 'flex-start' }}>
+      <section
+        id="dossier"
+        style={{ borderBottom: '0.5px solid var(--border-color)', background: 'var(--paper)' }}
+      >
+        <div style={{ maxWidth: 1280, margin: '0 auto', padding: '120px 48px' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '220px 1fr',
+              gap: 72,
+              alignItems: 'flex-start',
+            }}
+          >
             <div style={{ position: 'sticky', top: 130 }}>
-              <span className="font-serif numeral" style={{ fontSize: 38, color: 'var(--ink-tertiary)' }}>
+              <span
+                className="font-serif numeral"
+                style={{ fontSize: 44, color: 'var(--ink-tertiary)', fontStyle: 'italic' }}
+              >
                 IV
               </span>
-              <div style={{ marginTop: 18, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--ink-secondary)' }}>
+              <div
+                style={{
+                  marginTop: 18,
+                  fontSize: 10,
+                  letterSpacing: '0.3em',
+                  textTransform: 'uppercase',
+                  color: 'var(--ink-secondary)',
+                  fontWeight: 600,
+                }}
+              >
                 The Index
               </div>
               <div style={{ width: 24, height: 2, background: 'var(--red)', margin: '14px 0' }} />
-              <p className="font-serif" style={{ fontSize: 14, fontStyle: 'italic', fontWeight: 600, color: 'var(--ink-secondary)', lineHeight: 1.55, maxWidth: 200 }}>
-                Every dossier you file is stamped, dated, and put on the
-                ledger — exactly like the four below.
+              <p
+                className="font-serif"
+                style={{
+                  fontSize: 14,
+                  fontStyle: 'italic',
+                  fontWeight: 600,
+                  color: 'var(--ink-secondary)',
+                  lineHeight: 1.55,
+                  maxWidth: 200,
+                }}
+              >
+                Every dossier you file is stamped, dated, and put on the ledger — exactly like the
+                four below.
               </p>
             </div>
 
@@ -1053,13 +723,13 @@ export default function LandingPage() {
                 <h2
                   className="font-serif"
                   style={{
-                    fontSize: 'clamp(34px, 3.8vw, 56px)',
+                    fontSize: 'clamp(36px, 4vw, 60px)',
                     fontWeight: 900,
                     fontStyle: 'italic',
                     color: 'var(--ink)',
                     lineHeight: 1.02,
                     letterSpacing: '-0.03em',
-                    marginBottom: 44,
+                    marginBottom: 48,
                   }}
                 >
                   Your <span style={{ color: 'var(--red)' }}>ideas</span>, under review.
@@ -1081,335 +751,17 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ━━━ FROM THE EDITOR — a typographic note ━━━ */}
+      {/* ━━━ FROM THE EDITOR ━━━ */}
       <EditorsNote />
 
       {/* ━━━ LETTERS TO THE EDITOR ━━━ */}
-      <section id="letters" style={{ borderBottom: '0.5px solid var(--border-color)', background: 'var(--paper-dark)' }}>
-        <div style={{ maxWidth: 1280, margin: '0 auto', padding: '96px 48px' }}>
-          <Reveal>
-            <SectionKicker label="Letters to the Editor" />
-            <h2
-              className="font-serif"
-              style={{
-                fontSize: 'clamp(36px, 3.8vw, 56px)',
-                fontWeight: 900,
-                fontStyle: 'italic',
-                color: 'var(--ink)',
-                lineHeight: 1.02,
-                letterSpacing: '-0.03em',
-                marginBottom: 64,
-                maxWidth: 720,
-              }}
-            >
-              Built for people who <span style={{ color: 'var(--red)' }}>cannot</span> afford to guess.
-            </h2>
-          </Reveal>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)' }}>
-            {LETTERS.map((l, i) => (
-              <Reveal key={l.title} delay={i * 0.08}>
-                <article
-                  style={{
-                    padding: 40,
-                    borderTop: '0.5px solid var(--border-color)',
-                    borderRight: i % 2 === 0 ? '0.5px solid var(--border-color)' : 'none',
-                    background: 'var(--paper-dark)',
-                    transition: 'background 0.3s',
-                    position: 'relative',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--paper)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'var(--paper-dark)')}
-                >
-                  <div
-                    style={{
-                      display: 'inline-block',
-                      fontSize: 9,
-                      color: 'var(--red)',
-                      letterSpacing: '0.18em',
-                      textTransform: 'uppercase',
-                      fontWeight: 600,
-                      borderLeft: '2px solid var(--red)',
-                      paddingLeft: 8,
-                      marginBottom: 22,
-                    }}
-                  >
-                    {l.tag}
-                  </div>
-                  <h3
-                    className="font-serif"
-                    style={{
-                      fontSize: 24,
-                      fontWeight: 800,
-                      fontStyle: 'italic',
-                      color: 'var(--ink)',
-                      lineHeight: 1.2,
-                      marginBottom: 14,
-                    }}
-                  >
-                    {l.title}
-                  </h3>
-                  <p
-                    className="font-serif"
-                    style={{
-                      fontSize: 16,
-                      color: 'var(--ink)',
-                      lineHeight: 1.7,
-                      fontWeight: 300,
-                      letterSpacing: '-0.005em',
-                    }}
-                  >
-                    {l.body}
-                  </p>
-                  <div
-                    style={{
-                      marginTop: 22,
-                      paddingTop: 14,
-                      borderTop: '0.5px solid var(--border-color)',
-                      fontSize: 10,
-                      letterSpacing: '0.18em',
-                      textTransform: 'uppercase',
-                      color: 'var(--ink-tertiary)',
-                    }}
-                  >
-                    — {l.sig}
-                  </div>
-                </article>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
+      <LettersSection />
 
       {/* ━━━ SUBSCRIPTIONS ━━━ */}
-      <section id="pricing" style={{ borderBottom: '0.5px solid var(--border-color)' }}>
-        <div style={{ maxWidth: 1280, margin: '0 auto', padding: '96px 48px' }}>
-          <Reveal>
-            <SectionKicker label="Subscriptions · The Press Tiers" />
-            <h2
-              className="font-serif"
-              style={{
-                fontSize: 'clamp(36px, 3.8vw, 56px)',
-                fontWeight: 900,
-                fontStyle: 'italic',
-                color: 'var(--ink)',
-                lineHeight: 1.02,
-                letterSpacing: '-0.03em',
-                marginBottom: 64,
-                maxWidth: 720,
-              }}
-            >
-              Subscribe to the <span style={{ color: 'var(--red)' }}>broadsheet</span>.
-            </h2>
-          </Reveal>
+      <SubscriptionsSection onSignup={() => openAuth('signup')} />
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', border: '0.5px solid var(--ink)' }}>
-            {TIERS.map((t, i) => (
-              <Reveal key={t.name} delay={i * 0.1}>
-                <div
-                  style={{
-                    padding: 36,
-                    borderRight: i < TIERS.length - 1 ? '0.5px solid var(--border-color)' : 'none',
-                    background: t.accent ? 'var(--ink)' : 'var(--paper)',
-                    color: t.accent ? 'var(--paper)' : 'var(--ink)',
-                    minHeight: 460,
-                    display: 'flex',
-                    flexDirection: 'column',
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 10,
-                      letterSpacing: '0.22em',
-                      textTransform: 'uppercase',
-                      color: t.accent ? 'var(--red)' : 'var(--red)',
-                      fontWeight: 600,
-                      marginBottom: 12,
-                    }}
-                  >
-                    {t.note}
-                  </div>
-                  <h3
-                    className="font-serif"
-                    style={{
-                      fontSize: 30,
-                      fontWeight: 900,
-                      fontStyle: 'italic',
-                      letterSpacing: '-0.03em',
-                      marginBottom: 18,
-                      color: t.accent ? 'var(--paper)' : 'var(--ink)',
-                    }}
-                  >
-                    {t.name}
-                  </h3>
-                  <div
-                    className="font-serif numeral"
-                    style={{
-                      fontSize: 56,
-                      letterSpacing: '-0.04em',
-                      lineHeight: 1,
-                      color: t.accent ? 'var(--paper)' : 'var(--ink)',
-                    }}
-                  >
-                    {t.price}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      letterSpacing: '0.18em',
-                      textTransform: 'uppercase',
-                      color: t.accent ? 'rgba(242,236,224,0.5)' : 'var(--ink-tertiary)',
-                      marginTop: 6,
-                      marginBottom: 30,
-                    }}
-                  >
-                    {t.sub}
-                  </div>
-
-                  <ul style={{ listStyle: 'none', padding: 0, margin: 0, flex: 1 }}>
-                    {t.bullets.map(b => (
-                      <li
-                        key={b}
-                        style={{
-                          padding: '10px 0',
-                          borderBottom: t.accent
-                            ? '0.5px solid rgba(242,236,224,0.1)'
-                            : '0.5px solid var(--border-color)',
-                          fontSize: 13,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 12,
-                          color: t.accent ? 'rgba(242,236,224,0.85)' : 'var(--ink-secondary)',
-                        }}
-                      >
-                        <span style={{ width: 6, height: 6, background: 'var(--red)', display: 'inline-block', flexShrink: 0 }} />
-                        {b}
-                      </li>
-                    ))}
-                  </ul>
-
-                  <button
-                    type="button"
-                    onClick={() => openAuth('signup')}
-                    style={{
-                      marginTop: 28,
-                      background: t.accent ? 'var(--red)' : 'var(--ink)',
-                      color: 'var(--paper)',
-                      border: 'none',
-                      padding: '14px 22px',
-                      fontSize: 11,
-                      letterSpacing: '0.16em',
-                      textTransform: 'uppercase',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      fontFamily: 'inherit',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 10,
-                      transition: 'background 0.2s',
-                    }}
-                    onMouseEnter={e => {
-                      ;(e.currentTarget as HTMLButtonElement).style.background = t.accent ? '#a93226' : 'var(--red)'
-                    }}
-                    onMouseLeave={e => {
-                      ;(e.currentTarget as HTMLButtonElement).style.background = t.accent ? 'var(--red)' : 'var(--ink)'
-                    }}
-                  >
-                    {t.cta} <ArrowRight size={12} />
-                  </button>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ━━━ FINAL CTA — The Press Room ━━━ */}
-      <section style={{ background: 'var(--ink)', borderBottom: '3px solid var(--ink)' }}>
-        <div
-          style={{
-            maxWidth: 1280,
-            margin: '0 auto',
-            padding: '120px 48px',
-            display: 'grid',
-            gridTemplateColumns: '1.5fr 1fr',
-            gap: 80,
-            alignItems: 'center',
-          }}
-        >
-          <Reveal>
-            <div style={{ height: 2, width: 24, background: 'var(--red)', marginBottom: 24 }} />
-            <h2
-              className="font-serif"
-              style={{
-                fontSize: 'clamp(40px, 4.6vw, 72px)',
-                fontWeight: 900,
-                fontStyle: 'italic',
-                color: 'var(--paper)',
-                lineHeight: 1.02,
-                letterSpacing: '-0.035em',
-                marginBottom: 28,
-              }}
-            >
-              Your next decision
-              <br />
-              <span style={{ color: 'rgba(242,236,224,0.3)' }}>deserves certainty.</span>
-            </h2>
-            <p
-              style={{
-                fontSize: 15,
-                color: 'rgba(242,236,224,0.55)',
-                lineHeight: 1.85,
-                marginBottom: 38,
-                maxWidth: 460,
-                fontWeight: 300,
-              }}
-            >
-              Stop planning. Stop guessing. Start simulating — and know before
-              you build. The press is open. Walk into the room.
-            </p>
-            <MagneticCTA
-              onClick={() => openAuth('signup')}
-              style={{
-                background: 'var(--red)',
-                color: '#fff',
-                padding: '16px 34px',
-                fontSize: 11,
-                letterSpacing: '0.16em',
-                textTransform: 'uppercase',
-                fontWeight: 700,
-              }}
-            >
-              Validate your idea, free <ArrowRight size={14} />
-            </MagneticCTA>
-          </Reveal>
-
-          <Reveal delay={0.15}>
-            <div style={{ borderLeft: '0.5px solid rgba(242,236,224,0.1)', paddingLeft: 60 }}>
-              <div style={{ height: 2, width: 20, background: 'var(--red)', marginBottom: 16 }} />
-              <p
-                className="font-serif"
-                style={{
-                  fontSize: 22,
-                  fontStyle: 'italic',
-                  fontWeight: 700,
-                  color: 'var(--paper)',
-                  lineHeight: 1.5,
-                  marginBottom: 22,
-                  opacity: 0.9,
-                }}
-              >
-                &ldquo;Every decision made without simulation is a decision
-                made blind.&rdquo;
-              </p>
-              <p style={{ fontSize: 10, color: 'rgba(242,236,224,0.4)', letterSpacing: '0.18em', textTransform: 'uppercase' }}>
-                — TheCee, 2026
-              </p>
-            </div>
-          </Reveal>
-        </div>
-      </section>
+      {/* ━━━ FINAL CTA ━━━ */}
+      <FinalCTA onSignup={() => openAuth('signup')} />
 
       {/* ━━━ COLOPHON FOOTER ━━━ */}
       <footer style={{ background: 'var(--ink)', borderTop: '0.5px solid rgba(242,236,224,0.08)' }}>
@@ -1417,7 +769,7 @@ export default function LandingPage() {
           style={{
             maxWidth: 1280,
             margin: '0 auto',
-            padding: '56px 48px 28px',
+            padding: '64px 48px 28px',
             display: 'grid',
             gridTemplateColumns: '1.6fr 1fr 1fr 1fr',
             gap: 40,
@@ -1426,7 +778,13 @@ export default function LandingPage() {
           <div>
             <div
               className="font-serif"
-              style={{ fontSize: 26, fontWeight: 900, fontStyle: 'italic', color: 'var(--paper)', letterSpacing: '-0.03em' }}
+              style={{
+                fontSize: 30,
+                fontWeight: 900,
+                fontStyle: 'italic',
+                color: 'var(--paper)',
+                letterSpacing: '-0.03em',
+              }}
             >
               TheCee
             </div>
@@ -1447,12 +805,21 @@ export default function LandingPage() {
             { h: 'Pages', items: ['Cover', 'How it works', 'Dossier', 'Letters', 'Subscriptions'] },
             { h: 'Press room', items: ['About', 'Editor', 'Methodology', 'Press kit'] },
             { h: 'Colophon', items: ['Privacy', 'Terms', 'Status', 'Contact'] },
-          ].map(col => (
+          ].map((col) => (
             <div key={col.h}>
-              <div style={{ fontSize: 9, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(242,236,224,0.45)', marginBottom: 16 }}>
+              <div
+                style={{
+                  fontSize: 9,
+                  letterSpacing: '0.3em',
+                  textTransform: 'uppercase',
+                  color: 'rgba(242,236,224,0.45)',
+                  marginBottom: 16,
+                  fontWeight: 600,
+                }}
+              >
                 {col.h}
               </div>
-              {col.items.map(it => (
+              {col.items.map((it) => (
                 <a
                   key={it}
                   href="#"
@@ -1464,8 +831,8 @@ export default function LandingPage() {
                     textDecoration: 'none',
                     transition: 'color 0.2s',
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--red)')}
-                  onMouseLeave={e => (e.currentTarget.style.color = 'rgba(242,236,224,0.65)')}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--red)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(242,236,224,0.65)')}
                 >
                   {it}
                 </a>
@@ -1482,7 +849,7 @@ export default function LandingPage() {
             justifyContent: 'space-between',
             alignItems: 'center',
             fontSize: 10,
-            letterSpacing: '0.16em',
+            letterSpacing: '0.2em',
             textTransform: 'uppercase',
             color: 'rgba(242,236,224,0.35)',
           }}
@@ -1498,32 +865,154 @@ export default function LandingPage() {
   )
 }
 
-/* ─── THE DISTRIBUTION — proportional rule, no motion ─ */
+/* ─────────────────────────────────────────────────────────────── */
+/*                         AT-A-GLANCE                              */
+/* ─────────────────────────────────────────────────────────────── */
+const GLANCE = [
+  { kicker: 'Press · Live', to: 1420812, tail: 'scenarios at press' },
+  { kicker: 'Today · Filed', to: 113, tail: 'dossiers archived' },
+  { kicker: 'Cohort', to: 10000, tail: 'synthetic readers per run' },
+  { kicker: 'Filed', to: 2, tail: 'minutes from idea to report', suffix: ' min' },
+] as const
+
+function AtAGlance() {
+  return (
+    <section style={{ borderBottom: '0.5px solid var(--border-color)', background: 'var(--paper)' }}>
+      <div
+        style={{
+          maxWidth: 1280,
+          margin: '0 auto',
+          padding: '64px 48px',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          borderTop: '0.5px solid var(--border-color)',
+          borderBottom: '0.5px solid var(--border-color)',
+        }}
+      >
+        {GLANCE.map((g, i) => (
+          <Reveal key={g.kicker} delay={i * 0.08} y={18}>
+            <div
+              style={{
+                padding: '36px 32px',
+                borderRight:
+                  i < GLANCE.length - 1 ? '0.5px solid var(--border-color)' : 'none',
+                minHeight: 180,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 9,
+                  letterSpacing: '0.3em',
+                  textTransform: 'uppercase',
+                  color: 'var(--red)',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{ width: 18, height: 1, background: 'var(--red)', display: 'inline-block' }}
+                />
+                {g.kicker}
+              </div>
+
+              <div
+                className="font-serif numeral"
+                style={{
+                  fontSize: 'clamp(44px, 4.6vw, 72px)',
+                  color: 'var(--ink)',
+                  letterSpacing: '-0.035em',
+                  lineHeight: 1,
+                  fontStyle: 'italic',
+                  fontWeight: 900,
+                }}
+              >
+                <CountUp to={g.to} suffix={'suffix' in g ? (g as { suffix: string }).suffix : ''} />
+              </div>
+
+              <div
+                style={{
+                  fontSize: 11,
+                  color: 'var(--ink-secondary)',
+                  letterSpacing: '0.14em',
+                  textTransform: 'uppercase',
+                  fontWeight: 500,
+                }}
+              >
+                {g.tail}
+              </div>
+            </div>
+          </Reveal>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────── */
+/*                        DISTRIBUTION STRIP                        */
+/* ─────────────────────────────────────────────────────────────── */
 const DISTRIBUTION = [
-  { label: 'Dies fast',    sub: 'runway gone inside 90 days',              pct: 14 },
-  { label: 'Quiet death',  sub: 'grows, then stalls without recovering',   pct: 23 },
-  { label: 'Pivots',       sub: 'the idea survives; the shape changes',    pct: 31, accent: true },
-  { label: 'Survives',     sub: 'modest, durable, compounding',            pct: 22 },
-  { label: 'Scales',       sub: 'the distribution you are betting on',     pct: 10 },
+  { label: 'Dies fast', sub: 'runway gone inside 90 days', pct: 14 },
+  { label: 'Quiet death', sub: 'grows, then stalls without recovering', pct: 23 },
+  { label: 'Pivots', sub: 'the idea survives; the shape changes', pct: 31, accent: true },
+  { label: 'Survives', sub: 'modest, durable, compounding', pct: 22 },
+  { label: 'Scales', sub: 'the distribution you are betting on', pct: 10 },
 ] as const
 
 function DistributionStrip() {
   const [hover, setHover] = useState<number | null>(null)
   return (
-    <section style={{ borderBottom: '0.5px solid var(--border-color)', background: 'var(--paper)' }}>
+    <section style={{ borderBottom: '0.5px solid var(--border-color)', background: 'var(--paper-dark)' }}>
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: '120px 48px 104px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 72, alignItems: 'flex-start' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '220px 1fr',
+            gap: 72,
+            alignItems: 'flex-start',
+          }}
+        >
           <div style={{ position: 'sticky', top: 130 }}>
-            <span className="font-serif numeral" style={{ fontSize: 38, color: 'var(--ink-tertiary)' }}>V</span>
-            <div style={{ marginTop: 18, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--ink-secondary)' }}>
+            <span
+              className="font-serif numeral"
+              style={{ fontSize: 44, color: 'var(--ink-tertiary)', fontStyle: 'italic' }}
+            >
+              V
+            </span>
+            <div
+              style={{
+                marginTop: 18,
+                fontSize: 10,
+                letterSpacing: '0.3em',
+                textTransform: 'uppercase',
+                color: 'var(--ink-secondary)',
+                fontWeight: 600,
+              }}
+            >
               The Distribution
             </div>
             <div style={{ width: 24, height: 2, background: 'var(--red)', margin: '14px 0' }} />
             <p
               className="font-serif"
-              style={{ fontSize: 14, fontStyle: 'italic', fontWeight: 600, color: 'var(--ink-secondary)', lineHeight: 1.55, maxWidth: 200 }}
+              style={{
+                fontSize: 14,
+                fontStyle: 'italic',
+                fontWeight: 600,
+                color: 'var(--ink-secondary)',
+                lineHeight: 1.55,
+                maxWidth: 200,
+              }}
             >
-              We do not hand you a verdict. We hand you the shape of every future your idea could walk into.
+              We do not hand you a verdict. We hand you the shape of every future your idea could
+              walk into.
             </p>
           </div>
 
@@ -1533,7 +1022,7 @@ function DistributionStrip() {
               <h2
                 className="font-serif"
                 style={{
-                  fontSize: 'clamp(34px, 3.8vw, 56px)',
+                  fontSize: 'clamp(36px, 4vw, 60px)',
                   fontWeight: 900,
                   fontStyle: 'italic',
                   color: 'var(--ink)',
@@ -1543,16 +1032,16 @@ function DistributionStrip() {
                   maxWidth: 680,
                 }}
               >
-                Every idea has a shape. <span style={{ color: 'var(--red)' }}>We show you yours.</span>
+                Every idea has a shape.{' '}
+                <span style={{ color: 'var(--red)' }}>We show you yours.</span>
               </h2>
             </Reveal>
 
-            {/* The bar itself — one continuous rule, segmented */}
             <Reveal delay={0.1}>
               <div
                 style={{
                   position: 'relative',
-                  height: 56,
+                  height: 64,
                   border: '0.5px solid var(--ink)',
                   display: 'flex',
                   background: 'var(--paper)',
@@ -1568,21 +1057,27 @@ function DistributionStrip() {
                       initial={{ width: 0 }}
                       whileInView={{ width: `${row.pct}%` }}
                       viewport={{ once: true, margin: '-40px' }}
-                      transition={{ duration: 1, delay: 0.15 + i * 0.1, ease: [0.2, 0.7, 0.2, 1] }}
+                      transition={{
+                        duration: 1,
+                        delay: 0.15 + i * 0.1,
+                        ease: [0.2, 0.7, 0.2, 1],
+                      }}
                       onMouseEnter={() => setHover(i)}
                       style={{
                         position: 'relative',
-                        borderRight: i < DISTRIBUTION.length - 1 ? '0.5px solid var(--ink)' : 'none',
+                        borderRight:
+                          i < DISTRIBUTION.length - 1 ? '0.5px solid var(--ink)' : 'none',
                         background: isHover
-                          ? (isAccent ? 'var(--red)' : 'var(--ink)')
+                          ? isAccent
+                            ? 'var(--red)'
+                            : 'var(--ink)'
                           : isAccent
-                            ? 'rgba(192,57,43,0.14)'
-                            : `rgba(26,23,20,${0.04 + i * 0.02})`,
+                          ? 'rgba(192,57,43,0.14)'
+                          : `rgba(26,23,20,${0.04 + i * 0.02})`,
                         transition: 'background 260ms ease',
                         cursor: 'default',
                       }}
                     >
-                      {/* the percent floats at the top of the hovered segment */}
                       <AnimatePresence>
                         {isHover && (
                           <motion.div
@@ -1593,15 +1088,16 @@ function DistributionStrip() {
                             transition={{ duration: 0.22 }}
                             style={{
                               position: 'absolute',
-                              top: -42,
+                              top: -46,
                               left: '50%',
                               transform: 'translateX(-50%)',
                               whiteSpace: 'nowrap',
                               textAlign: 'center',
-                              fontFamily: "var(--font-serif, 'Playfair Display', Georgia, serif)",
+                              fontFamily:
+                                "var(--font-serif, 'Playfair Display', Georgia, serif)",
                               fontStyle: 'italic',
                               fontWeight: 800,
-                              fontSize: 26,
+                              fontSize: 28,
                               letterSpacing: '-0.02em',
                               color: isAccent ? 'var(--red)' : 'var(--ink)',
                             }}
@@ -1617,7 +1113,6 @@ function DistributionStrip() {
               </div>
             </Reveal>
 
-            {/* legend — aligned under the bar, proportional widths */}
             <div style={{ display: 'flex', marginTop: 20 }}>
               {DISTRIBUTION.map((row, i) => {
                 const isHover = hover === i
@@ -1643,7 +1138,11 @@ function DistributionStrip() {
                         letterSpacing: '0.14em',
                         textTransform: 'uppercase',
                         fontWeight: 600,
-                        color: isAccent ? 'var(--red)' : (isHover ? 'var(--ink)' : 'var(--ink-secondary)'),
+                        color: isAccent
+                          ? 'var(--red)'
+                          : isHover
+                          ? 'var(--ink)'
+                          : 'var(--ink-secondary)',
                         transition: 'color 220ms ease',
                         marginBottom: 6,
                         whiteSpace: 'nowrap',
@@ -1671,10 +1170,11 @@ function DistributionStrip() {
               style={{
                 marginTop: 40,
                 fontSize: 10,
-                letterSpacing: '0.22em',
+                letterSpacing: '0.3em',
                 textTransform: 'uppercase',
                 color: 'var(--ink-tertiary)',
                 fontVariantNumeric: 'tabular-nums',
+                fontWeight: 600,
               }}
             >
               Specimen · Urban D2C cohort · 10,000 agents · 2,430 paths
@@ -1686,10 +1186,12 @@ function DistributionStrip() {
   )
 }
 
-/* ─── FROM THE EDITOR — a restrained note ────────────── */
+/* ─────────────────────────────────────────────────────────────── */
+/*                         EDITOR'S NOTE                           */
+/* ─────────────────────────────────────────────────────────────── */
 function EditorsNote() {
   return (
-    <section style={{ borderBottom: '0.5px solid var(--border-color)', background: 'var(--paper-dark)' }}>
+    <section style={{ borderBottom: '0.5px solid var(--border-color)', background: 'var(--paper)' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '120px 48px 104px' }}>
         <Reveal>
           <div style={{ textAlign: 'center', marginBottom: 56 }}>
@@ -1708,17 +1210,18 @@ function EditorsNote() {
             <h2
               className="font-serif"
               style={{
-                fontSize: 'clamp(32px, 3.4vw, 48px)',
+                fontSize: 'clamp(32px, 3.6vw, 54px)',
                 fontStyle: 'italic',
                 fontWeight: 800,
                 color: 'var(--ink)',
-                lineHeight: 1.15,
+                lineHeight: 1.12,
                 letterSpacing: '-0.025em',
-                maxWidth: 820,
+                maxWidth: 840,
                 margin: '0 auto',
               }}
             >
-              Why we are printing a simulation <br /> instead of a <span style={{ color: 'var(--red)' }}>startup advice column</span>.
+              Why we are printing a simulation <br />
+              instead of a <span style={{ color: 'var(--red)' }}>startup advice column</span>.
             </h2>
           </div>
         </Reveal>
@@ -1742,39 +1245,68 @@ function EditorsNote() {
             }}
           >
             <p style={{ marginBottom: 16 }}>
-              The honest founder does not need another piece of advice. They have enough. They have a friend who built a SaaS tool in 2019, an uncle with an opinion about packaging, a newsletter with eleven frameworks, and a podcast that told them to just ship.
+              The honest founder does not need another piece of advice. They have enough. They have
+              a friend who built a SaaS tool in 2019, an uncle with an opinion about packaging, a
+              newsletter with eleven frameworks, and a podcast that told them to just ship.
             </p>
             <p style={{ marginBottom: 16 }}>
-              What they do not have is a room full of a thousand quiet strangers who will look at their idea and, without flattery, tell them where it will break. That room is expensive. It takes twelve months to build and a lot of money to keep in the dark.
+              What they do not have is a room full of a thousand quiet strangers who will look at
+              their idea and, without flattery, tell them where it will break. That room is
+              expensive. It takes twelve months to build and a lot of money to keep in the dark.
             </p>
             <p style={{ marginBottom: 16 }}>
-              We built the room and put a door on it. The door is the simulation. On the other side, a cohort of synthetic readers — priced, placed, suspicious, bored, loyal, or bored-and-loyal — vote on your pricing, your channel, your timing, and your story. They do not flatter you.
+              We built the room and put a door on it. The door is the simulation. On the other
+              side, a cohort of synthetic readers — priced, placed, suspicious, bored, loyal, or
+              bored-and-loyal — vote on your pricing, your channel, your timing, and your story.
+              They do not flatter you.
             </p>
             <p>
-              We print what they said. You read the autopsy before the burial. Then you decide whether to build. That is the whole magazine, in a sentence.
+              We print what they said. You read the autopsy before the burial. Then you decide
+              whether to build. That is the whole magazine, in a sentence.
             </p>
           </div>
         </Reveal>
 
+        {/* Signature rule — draws in on view */}
         <Reveal delay={0.12}>
           <div
             style={{
               maxWidth: 860,
-              margin: '40px auto 0',
+              margin: '48px auto 0',
               display: 'flex',
               alignItems: 'center',
               gap: 18,
               justifyContent: 'flex-end',
               fontSize: 10,
-              letterSpacing: '0.22em',
+              letterSpacing: '0.3em',
               textTransform: 'uppercase',
               color: 'var(--ink-tertiary)',
+              fontWeight: 600,
             }}
           >
-            <div style={{ width: 36, height: 0.5, background: 'var(--border-strong)' }} />
+            <motion.span
+              initial={{ scaleX: 0 }}
+              whileInView={{ scaleX: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.9, ease: [0.2, 0.7, 0.2, 1] }}
+              style={{
+                display: 'inline-block',
+                width: 72,
+                height: 0.5,
+                background: 'var(--border-strong)',
+                transformOrigin: 'left',
+              }}
+            />
             <span
               className="font-serif"
-              style={{ fontStyle: 'italic', fontSize: 16, letterSpacing: 0, textTransform: 'none', color: 'var(--ink)', fontWeight: 700 }}
+              style={{
+                fontStyle: 'italic',
+                fontSize: 18,
+                letterSpacing: 0,
+                textTransform: 'none',
+                color: 'var(--ink)',
+                fontWeight: 700,
+              }}
             >
               The Editor
             </span>
@@ -1786,113 +1318,541 @@ function EditorsNote() {
   )
 }
 
-/* ─── PROCESS PLATE — ink-stamp on hover ────────────── */
-function Plate({
-  index,
-  total,
-  numeral,
-  kicker,
-  title,
-  body,
+/* ─────────────────────────────────────────────────────────────── */
+/*                        LETTERS SECTION                           */
+/* ─────────────────────────────────────────────────────────────── */
+function LettersSection() {
+  return (
+    <section
+      id="letters"
+      style={{ borderBottom: '0.5px solid var(--border-color)', background: 'var(--paper-dark)' }}
+    >
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '120px 48px' }}>
+        <Reveal>
+          <SectionKicker label="Letters to the Editor" />
+          <h2
+            className="font-serif"
+            style={{
+              fontSize: 'clamp(36px, 4vw, 60px)',
+              fontWeight: 900,
+              fontStyle: 'italic',
+              color: 'var(--ink)',
+              lineHeight: 1.02,
+              letterSpacing: '-0.03em',
+              marginBottom: 64,
+              maxWidth: 760,
+            }}
+          >
+            Built for people who <span style={{ color: 'var(--red)' }}>cannot</span> afford to guess.
+          </h2>
+        </Reveal>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)' }}>
+          {LETTERS.map((l, i) => (
+            <Reveal key={l.title} delay={i * 0.08} y={36}>
+              <LetterCard letter={l} edgeRight={i % 2 === 0} />
+            </Reveal>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function LetterCard({
+  letter,
+  edgeRight,
 }: {
-  index: number
-  total: number
-  numeral: string
-  kicker: string
-  title: string
-  body: string
+  letter: (typeof LETTERS)[number]
+  edgeRight: boolean
 }) {
+  const rx = useMotionValue(0)
+  const ry = useMotionValue(0)
+  const onMove = (e: React.MouseEvent<HTMLElement>) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    const px = (e.clientX - r.left) / r.width - 0.5
+    const py = (e.clientY - r.top) / r.height - 0.5
+    rx.set(-py * 4)
+    ry.set(px * 4)
+  }
+  const reset = () => {
+    rx.set(0)
+    ry.set(0)
+  }
+  return (
+    <motion.article
+      onMouseMove={onMove}
+      onMouseLeave={reset}
+      style={{
+        padding: 44,
+        borderTop: '0.5px solid var(--border-color)',
+        borderRight: edgeRight ? '0.5px solid var(--border-color)' : 'none',
+        background: 'var(--paper-dark)',
+        transformStyle: 'preserve-3d',
+        rotateX: rx,
+        rotateY: ry,
+        transition: 'background 0.3s',
+        position: 'relative',
+      }}
+      whileHover={{ background: 'var(--paper)' }}
+    >
+      <div
+        style={{
+          display: 'inline-block',
+          fontSize: 9,
+          color: 'var(--red)',
+          letterSpacing: '0.24em',
+          textTransform: 'uppercase',
+          fontWeight: 600,
+          borderLeft: '2px solid var(--red)',
+          paddingLeft: 10,
+          marginBottom: 24,
+        }}
+      >
+        {letter.tag}
+      </div>
+      <h3
+        className="font-serif"
+        style={{
+          fontSize: 26,
+          fontWeight: 800,
+          fontStyle: 'italic',
+          color: 'var(--ink)',
+          lineHeight: 1.2,
+          marginBottom: 14,
+          letterSpacing: '-0.01em',
+        }}
+      >
+        {letter.title}
+      </h3>
+      <p
+        className="font-serif"
+        style={{
+          fontSize: 16,
+          color: 'var(--ink)',
+          lineHeight: 1.7,
+          fontWeight: 300,
+          letterSpacing: '-0.005em',
+        }}
+      >
+        {letter.body}
+      </p>
+      <div
+        style={{
+          marginTop: 24,
+          paddingTop: 14,
+          borderTop: '0.5px solid var(--border-color)',
+          fontSize: 10,
+          letterSpacing: '0.2em',
+          textTransform: 'uppercase',
+          color: 'var(--ink-tertiary)',
+          fontWeight: 600,
+        }}
+      >
+        — {letter.sig}
+      </div>
+    </motion.article>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────── */
+/*                     SUBSCRIPTIONS                                */
+/* ─────────────────────────────────────────────────────────────── */
+function SubscriptionsSection({ onSignup }: { onSignup: () => void }) {
+  return (
+    <section id="pricing" style={{ borderBottom: '0.5px solid var(--border-color)' }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '120px 48px' }}>
+        <Reveal>
+          <SectionKicker label="Subscriptions · The Press Tiers" />
+          <h2
+            className="font-serif"
+            style={{
+              fontSize: 'clamp(36px, 4vw, 60px)',
+              fontWeight: 900,
+              fontStyle: 'italic',
+              color: 'var(--ink)',
+              lineHeight: 1.02,
+              letterSpacing: '-0.03em',
+              marginBottom: 64,
+              maxWidth: 760,
+            }}
+          >
+            Subscribe to the <span style={{ color: 'var(--red)' }}>broadsheet</span>.
+          </h2>
+        </Reveal>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            border: '0.5px solid var(--ink)',
+          }}
+        >
+          {TIERS.map((t, i) => (
+            <Reveal key={t.name} delay={i * 0.1}>
+              <TierCard tier={t} edgeRight={i < TIERS.length - 1} onSignup={onSignup} />
+            </Reveal>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function TierCard({
+  tier,
+  edgeRight,
+  onSignup,
+}: {
+  tier: (typeof TIERS)[number]
+  edgeRight: boolean
+  onSignup: () => void
+}) {
+  const [hover, setHover] = useState(false)
+  const ink: CSSProperties = {
+    background: tier.accent ? 'var(--ink)' : 'var(--paper)',
+    color: tier.accent ? 'var(--paper)' : 'var(--ink)',
+  }
   return (
     <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       style={{
-        position: 'relative',
-        padding: '40px 36px 44px',
-        paddingLeft: index === 0 ? 0 : 36,
-        paddingRight: index === total - 1 ? 0 : 36,
-        borderRight: index < total - 1 ? '0.5px solid var(--border-color)' : 'none',
-        minHeight: 360,
+        ...ink,
+        padding: 40,
+        borderRight: edgeRight ? '0.5px solid var(--border-color)' : 'none',
+        minHeight: 480,
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'space-between',
+        position: 'relative',
         overflow: 'hidden',
-        cursor: 'default',
-      }}
-      onMouseEnter={e => {
-        const stamp = e.currentTarget.querySelector<HTMLElement>('[data-ink-stamp]')
-        if (stamp) {
-          stamp.style.transform = 'translateY(0%)'
-          stamp.style.opacity = '1'
-        }
-      }}
-      onMouseLeave={e => {
-        const stamp = e.currentTarget.querySelector<HTMLElement>('[data-ink-stamp]')
-        if (stamp) {
-          stamp.style.transform = 'translateY(102%)'
-          stamp.style.opacity = '0.0'
-        }
       }}
     >
-      {/* Sliding ink stamp behind content */}
-      <div
-        data-ink-stamp
+      {/* Ink-fill wipe on hover (for non-accent tiers only) */}
+      {!tier.accent && (
+        <motion.span
+          aria-hidden
+          initial={false}
+          animate={{ scaleY: hover ? 1 : 0 }}
+          transition={{ duration: 0.5, ease: [0.2, 0.7, 0.2, 1] }}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'var(--ink)',
+            transformOrigin: 'bottom',
+            zIndex: 0,
+          }}
+        />
+      )}
+
+      {/* "Editor's pick" press stamp on the featured tier */}
+      {tier.accent && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 24,
+            right: 24,
+            width: 92,
+            height: 92,
+            border: '1px solid var(--red)',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transform: 'rotate(-8deg)',
+            color: 'var(--red)',
+            opacity: 0.9,
+          }}
+        >
+          <div style={{ textAlign: 'center', lineHeight: 1.1 }}>
+            <div
+              className="font-serif"
+              style={{ fontStyle: 'italic', fontWeight: 800, fontSize: 16 }}
+            >
+              Editor&rsquo;s
+            </div>
+            <div
+              style={{
+                fontSize: 8,
+                letterSpacing: '0.24em',
+                textTransform: 'uppercase',
+                fontWeight: 600,
+                marginTop: 2,
+              }}
+            >
+              Pick
+            </div>
+          </div>
+        </div>
+      )}
+
+      <motion.div
+        animate={{ color: !tier.accent && hover ? 'var(--paper)' : undefined }}
+        transition={{ duration: 0.3 }}
+        style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', flex: 1 }}
+      >
+        <div
+          style={{
+            fontSize: 10,
+            letterSpacing: '0.3em',
+            textTransform: 'uppercase',
+            color: 'var(--red)',
+            fontWeight: 600,
+            marginBottom: 14,
+          }}
+        >
+          {tier.note}
+        </div>
+        <h3
+          className="font-serif"
+          style={{
+            fontSize: 32,
+            fontWeight: 900,
+            fontStyle: 'italic',
+            letterSpacing: '-0.03em',
+            marginBottom: 20,
+          }}
+        >
+          {tier.name}
+        </h3>
+        <div
+          className="font-serif numeral"
+          style={{
+            fontSize: 60,
+            letterSpacing: '-0.04em',
+            lineHeight: 1,
+            fontStyle: 'italic',
+            fontWeight: 900,
+          }}
+        >
+          {tier.price}
+        </div>
+        <div
+          style={{
+            fontSize: 10,
+            letterSpacing: '0.22em',
+            textTransform: 'uppercase',
+            opacity: 0.6,
+            marginTop: 6,
+            marginBottom: 30,
+            fontWeight: 600,
+          }}
+        >
+          {tier.sub}
+        </div>
+
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0, flex: 1 }}>
+          {tier.bullets.map((b) => (
+            <li
+              key={b}
+              style={{
+                padding: '10px 0',
+                borderBottom: tier.accent
+                  ? '0.5px solid rgba(242,236,224,0.1)'
+                  : !tier.accent && hover
+                  ? '0.5px solid rgba(242,236,224,0.15)'
+                  : '0.5px solid var(--border-color)',
+                fontSize: 13,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                opacity: 0.85,
+              }}
+            >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  background: 'var(--red)',
+                  display: 'inline-block',
+                  flexShrink: 0,
+                }}
+              />
+              {b}
+            </li>
+          ))}
+        </ul>
+
+        <button
+          type="button"
+          onClick={onSignup}
+          style={{
+            marginTop: 28,
+            background: tier.accent ? 'var(--red)' : 'var(--ink)',
+            color: 'var(--paper)',
+            border: 'none',
+            padding: '14px 22px',
+            fontSize: 11,
+            letterSpacing: '0.18em',
+            textTransform: 'uppercase',
+            fontWeight: 700,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 10,
+            transition: 'background 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            ;(e.currentTarget as HTMLButtonElement).style.background = tier.accent
+              ? '#a93226'
+              : 'var(--red)'
+          }}
+          onMouseLeave={(e) => {
+            ;(e.currentTarget as HTMLButtonElement).style.background = tier.accent
+              ? 'var(--red)'
+              : 'var(--ink)'
+          }}
+        >
+          {tier.cta} <ArrowRight size={12} />
+        </button>
+      </motion.div>
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────── */
+/*                          FINAL CTA                               */
+/* ─────────────────────────────────────────────────────────────── */
+function FinalCTA({ onSignup }: { onSignup: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ['start end', 'end start'],
+  })
+  const y = useTransform(scrollYProgress, [0, 1], [40, -40])
+
+  return (
+    <section
+      ref={ref}
+      style={{
+        background: 'var(--ink)',
+        borderBottom: '3px solid var(--ink)',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Giant faint serif watermark */}
+      <motion.div
         aria-hidden
         style={{
           position: 'absolute',
           inset: 0,
-          background: 'rgba(192,57,43,0.04)',
-          borderTop: '2px solid var(--red)',
-          transform: 'translateY(102%)',
-          opacity: 0,
-          transition: 'transform 380ms cubic-bezier(.2,.7,.2,1), opacity 280ms ease',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           pointerEvents: 'none',
-          zIndex: 0,
+          y,
         }}
-      />
-
-      <div style={{ position: 'relative', zIndex: 1 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
-          <span
-            style={{
-              fontSize: 9,
-              color: 'var(--red)',
-              letterSpacing: '0.22em',
-              textTransform: 'uppercase',
-              fontWeight: 600,
-            }}
-          >
-            {kicker}
-          </span>
-          <span
-            className="font-serif numeral"
-            style={{
-              fontSize: 64,
-              color: 'var(--paper-dark)',
-              lineHeight: 1,
-              letterSpacing: '-0.04em',
-            }}
-          >
-            {numeral}
-          </span>
-        </div>
-        <div style={{ height: 2, background: 'var(--ink)', width: 24, marginBottom: 22 }} />
-        <h3
+      >
+        <span
           className="font-serif"
           style={{
-            fontSize: 26,
-            fontWeight: 800,
+            fontSize: 'clamp(200px, 30vw, 460px)',
             fontStyle: 'italic',
-            color: 'var(--ink)',
-            lineHeight: 1.2,
-            letterSpacing: '-0.015em',
-            marginBottom: 14,
+            fontWeight: 900,
+            color: 'rgba(242,236,224,0.035)',
+            letterSpacing: '-0.06em',
+            lineHeight: 1,
+            whiteSpace: 'nowrap',
           }}
         >
-          {title}
-        </h3>
-        <p style={{ fontSize: 14, color: 'var(--ink-secondary)', lineHeight: 1.85, fontWeight: 300 }}>
-          {body}
-        </p>
+          TheCee
+        </span>
+      </motion.div>
+
+      <div
+        style={{
+          maxWidth: 1280,
+          margin: '0 auto',
+          padding: '140px 48px',
+          display: 'grid',
+          gridTemplateColumns: '1.5fr 1fr',
+          gap: 80,
+          alignItems: 'center',
+          position: 'relative',
+          zIndex: 1,
+        }}
+      >
+        <Reveal>
+          <div style={{ height: 2, width: 28, background: 'var(--red)', marginBottom: 26 }} />
+          <h2
+            className="font-serif"
+            style={{
+              fontSize: 'clamp(42px, 5vw, 78px)',
+              fontWeight: 900,
+              fontStyle: 'italic',
+              color: 'var(--paper)',
+              lineHeight: 1.02,
+              letterSpacing: '-0.035em',
+              marginBottom: 28,
+            }}
+          >
+            Your next decision
+            <br />
+            <span style={{ color: 'rgba(242,236,224,0.3)' }}>deserves certainty.</span>
+          </h2>
+          <p
+            style={{
+              fontSize: 16,
+              color: 'rgba(242,236,224,0.55)',
+              lineHeight: 1.85,
+              marginBottom: 38,
+              maxWidth: 500,
+              fontWeight: 300,
+            }}
+          >
+            Stop planning. Stop guessing. Start simulating — and know before you build. The press is
+            open. Walk into the room.
+          </p>
+          <MagneticCTA
+            onClick={onSignup}
+            style={{
+              background: 'var(--red)',
+              color: '#fff',
+              padding: '18px 36px',
+              fontSize: 12,
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase',
+              fontWeight: 700,
+            }}
+          >
+            Validate your idea, free <ArrowRight size={14} />
+          </MagneticCTA>
+        </Reveal>
+
+        <Reveal delay={0.15}>
+          <div style={{ borderLeft: '0.5px solid rgba(242,236,224,0.1)', paddingLeft: 60 }}>
+            <div style={{ height: 2, width: 20, background: 'var(--red)', marginBottom: 16 }} />
+            <p
+              className="font-serif"
+              style={{
+                fontSize: 24,
+                fontStyle: 'italic',
+                fontWeight: 700,
+                color: 'var(--paper)',
+                lineHeight: 1.45,
+                marginBottom: 22,
+                opacity: 0.9,
+              }}
+            >
+              &ldquo;Every decision made without simulation is a decision made blind.&rdquo;
+            </p>
+            <p
+              style={{
+                fontSize: 10,
+                color: 'rgba(242,236,224,0.4)',
+                letterSpacing: '0.22em',
+                textTransform: 'uppercase',
+                fontWeight: 600,
+              }}
+            >
+              — TheCee, 2026
+            </p>
+          </div>
+        </Reveal>
       </div>
-    </div>
+    </section>
   )
 }
