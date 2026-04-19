@@ -32,6 +32,23 @@ const signupSchema = z
 type LoginData = z.infer<typeof loginSchema>
 type SignupData = z.infer<typeof signupSchema>
 
+/** Circle origin + radius so a button-centered fill can cover the viewport. */
+function measureButtonFill(button: HTMLButtonElement | null) {
+  if (!button || typeof window === 'undefined') return null
+  const rect = button.getBoundingClientRect()
+  const originX = rect.left + rect.width / 2
+  const originY = rect.top + rect.height / 2
+  const w = window.innerWidth
+  const h = window.innerHeight
+  const radius = Math.max(
+    Math.hypot(originX, originY),
+    Math.hypot(w - originX, originY),
+    Math.hypot(originX, h - originY),
+    Math.hypot(w - originX, h - originY),
+  )
+  return { origin: { x: originX, y: originY }, radius }
+}
+
 /* ─── SPRING CONFIG ─────────────────────────────── */
 const SPRING = {
   type: 'spring' as const,
@@ -141,7 +158,9 @@ function AuthPage() {
   const [filling, setFilling] = useState(false)
   const [fillOrigin, setFillOrigin] = useState({ x: 0, y: 0 })
   const [fillRadius, setFillRadius] = useState(0)
+  const [fillColor, setFillColor] = useState('#c0392b')
   const signupBtnRef = useRef<HTMLButtonElement>(null)
+  const loginBtnRef = useRef<HTMLButtonElement>(null)
 
   const loginForm  = useForm<LoginData>({ resolver: zodResolver(loginSchema) })
   const signupForm  = useForm<SignupData>({ resolver: zodResolver(signupSchema) })
@@ -152,8 +171,17 @@ function AuthPage() {
   const onLogin = async (data: LoginData) => {
     setApiErr('')
     try {
+      const fill = measureButtonFill(loginBtnRef.current)
+      if (fill) {
+        setFillColor('#1a1714')
+        setFillOrigin(fill.origin)
+        setFillRadius(fill.radius)
+        setFilling(true)
+        await new Promise(r => setTimeout(r, 400))
+      }
       await loginMutation.mutateAsync({ email: data.email, password: data.password })
     } catch (err) {
+      setFilling(false)
       setApiErr(apiError(err))
     }
   }
@@ -161,17 +189,11 @@ function AuthPage() {
   const onSignup = async (data: SignupData) => {
     setApiErr('')
     try {
-      if (signupBtnRef.current) {
-        const rect = signupBtnRef.current.getBoundingClientRect()
-        const originX = rect.left + rect.width / 2
-        const originY = rect.top + rect.height / 2
-        const distToTopLeft     = Math.sqrt(originX ** 2 + originY ** 2)
-        const distToTopRight    = Math.sqrt((window.innerWidth - originX) ** 2 + originY ** 2)
-        const distToBottomLeft  = Math.sqrt(originX ** 2 + (window.innerHeight - originY) ** 2)
-        const distToBottomRight = Math.sqrt((window.innerWidth - originX) ** 2 + (window.innerHeight - originY) ** 2)
-        const maxRadius = Math.max(distToTopLeft, distToTopRight, distToBottomLeft, distToBottomRight)
-        setFillOrigin({ x: originX, y: originY })
-        setFillRadius(maxRadius)
+      const fill = measureButtonFill(signupBtnRef.current)
+      if (fill) {
+        setFillColor('#c0392b')
+        setFillOrigin(fill.origin)
+        setFillRadius(fill.radius)
         setFilling(true)
         await new Promise(r => setTimeout(r, 400))
       }
@@ -626,6 +648,7 @@ function AuthPage() {
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SPRING, delay: 0.22 }}>
                   <div style={{ width: '24px', height: '2px', background: '#c0392b', marginBottom: '22px' }} />
                   <button
+                    ref={loginBtnRef}
                     type="submit"
                     disabled={loginForm.formState.isSubmitting}
                     style={{
@@ -879,7 +902,7 @@ function AuthPage() {
               width: fillRadius * 2,
               height: fillRadius * 2,
               borderRadius: '50%',
-              background: '#c0392b',
+              background: fillColor,
               zIndex: 9999,
               pointerEvents: 'none',
             }}
