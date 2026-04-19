@@ -378,32 +378,72 @@ export default function PrototypePage() {
               <label htmlFor="prototype-prompt" className="sr-only">
                 Describe the site or page you want the presses to pull
               </label>
-              <input
-                id="prototype-prompt"
-                type="text"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    handlePullProof()
-                  }
-                }}
-                placeholder="Describe the site you want pulled — product, audience, what must be true on the page…"
-                disabled={generateMutation.isPending}
+              <div
                 style={{
                   flex: 1,
                   minWidth: 0,
+                  display: 'flex',
+                  alignItems: 'stretch',
                   border: '0.5px solid var(--border-color)',
-                  padding: '8px 12px',
                   background: 'rgba(26,23,20,0.03)',
-                  fontFamily: 'var(--font-body)',
-                  fontSize: 12,
-                  letterSpacing: '0.04em',
-                  color: 'var(--ink)',
-                  outline: 'none',
+                  overflow: 'hidden',
                 }}
-              />
+              >
+                <input
+                  id="prototype-prompt"
+                  type="text"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handlePullProof()
+                    }
+                  }}
+                  placeholder="Describe the site you want pulled — product, audience, what must be true on the page…"
+                  disabled={generateMutation.isPending}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    border: 'none',
+                    padding: '8px 12px',
+                    background: 'transparent',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 12,
+                    letterSpacing: '0.04em',
+                    color: 'var(--ink)',
+                    outline: 'none',
+                  }}
+                />
+                <select
+                  value={productType}
+                  onChange={(e) => setProductType(e.target.value)}
+                  disabled={generateMutation.isPending}
+                  aria-label="Product type"
+                  style={{
+                    flexShrink: 0,
+                    alignSelf: 'stretch',
+                    width: 'auto',
+                    minWidth: 112,
+                    maxWidth: 200,
+                    padding: '6px 8px',
+                    border: 'none',
+                    borderLeft: '0.5px solid var(--border-color)',
+                    borderRadius: 0,
+                    background: 'var(--paper)',
+                    fontSize: 10,
+                    fontFamily: 'var(--font-body)',
+                    color: 'var(--ink-secondary)',
+                    cursor: generateMutation.isPending ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {PRODUCT_TYPES.map((pt) => (
+                    <option key={pt} value={pt}>
+                      {formatProductTypeLabel(pt)}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <button
                 type="button"
                 onClick={handlePullProof}
@@ -442,28 +482,6 @@ export default function PrototypePage() {
               <span style={{ fontSize: 10, color: 'var(--ink-secondary)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {project.title}
               </span>
-              <select
-                value={productType}
-                onChange={(e) => setProductType(e.target.value)}
-                disabled={generateMutation.isPending}
-                aria-label="Product type"
-                style={{
-                  marginLeft: 'auto',
-                  padding: '4px 8px',
-                  border: '0.5px solid var(--border-color)',
-                  background: 'var(--paper)',
-                  fontSize: 10,
-                  fontFamily: 'var(--font-body)',
-                  color: 'var(--ink-secondary)',
-                  maxWidth: 200,
-                }}
-              >
-                {PRODUCT_TYPES.map((pt) => (
-                  <option key={pt} value={pt}>
-                    {formatProductTypeLabel(pt)}
-                  </option>
-                ))}
-              </select>
             </div>
             {generateMutation.isError && (
               <p style={{ padding: '0 14px 10px', margin: 0, fontSize: 11, color: 'var(--red)' }}>
