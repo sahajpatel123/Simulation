@@ -358,7 +358,7 @@ export default function PrototypePage() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: 12,
-                padding: '10px 14px',
+                padding: '10px 14px 12px',
               }}
             >
               <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
@@ -465,23 +465,6 @@ export default function PrototypePage() {
               >
                 {generateMutation.isPending ? 'Pulling…' : 'Pull proof'}
               </button>
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: '0 14px 10px',
-                flexWrap: 'wrap',
-              }}
-            >
-              <span className="kicker" style={{ color: 'var(--ink-tertiary)', letterSpacing: '0.2em' }}>
-                proof.thecee.app
-              </span>
-              <span style={{ color: 'var(--ink-tertiary)', fontSize: 10 }}>·</span>
-              <span style={{ fontSize: 10, color: 'var(--ink-secondary)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {project.title}
-              </span>
             </div>
             {generateMutation.isError && (
               <p style={{ padding: '0 14px 10px', margin: 0, fontSize: 11, color: 'var(--red)' }}>
