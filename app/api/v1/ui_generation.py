@@ -469,3 +469,79 @@ async def get_funnel_analytics(
     engine = FunnelAnalyticsEngine()
     result = engine.generate(run.generated_ui_id, sessions)
     return engine.to_dict(result)
+
+
+@router.get("/projects/{project_id}/ui-simulation-runs/{run_id}/channel-attribution")
+async def get_channel_attribution(
+    project_id: int,
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.simulation.channel_attribution import ChannelAttributionEngine
+    from app.simulation.clusters.registry import ClusterRegistry
+    from app.simulation.conductor import Conductor
+    from app.simulation.product_type import ProductType
+
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    run = (
+        db.query(UISimulationRun)
+        .filter(
+            UISimulationRun.id == run_id,
+            UISimulationRun.project_id == project_id,
+        )
+        .first()
+    )
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if run.status != "COMPLETED":
+        return {"status": run.status, "message": "Simulation not yet complete"}
+
+    if not run.generated_ui_id:
+        raise HTTPException(status_code=400, detail="Run has no generated UI")
+
+    product_type_str = (run.results_json or {}).get("product_type", "saas")
+    try:
+        pt = ProductType(product_type_str)
+    except Exception:
+        pt = ProductType.SAAS
+
+    registry = ClusterRegistry()
+    conductor = Conductor()
+    cond_result = conductor.run(
+        agents=[],
+        env_params={"product_type": pt.value},
+        assumptions=[],
+        product_type=pt,
+    )
+    conductor_results = {
+        cid: {
+            name: {"metrics": out.metrics, "flags": out.flags}
+            for name, out in arch.items()
+        }
+        for cid, arch in cond_result.cluster_results.items()
+    }
+    cluster_list = [
+        {
+            "cluster_id": c.cluster_id,
+            "name": c.name,
+            "population_weight": c.population_weight,
+        }
+        for c in registry.all_clusters()
+    ]
+
+    engine = ChannelAttributionEngine()
+    result = engine.generate(
+        generated_ui_id=run.generated_ui_id,
+        conductor_results=conductor_results,
+        cluster_registry=cluster_list,
+        product_type=product_type_str,
+    )
+    return engine.to_dict(result)
