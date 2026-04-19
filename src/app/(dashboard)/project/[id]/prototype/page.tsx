@@ -302,10 +302,12 @@ export default function PrototypePage() {
     <div
       className="rise"
       style={{
-        padding: '12px 48px 48px',
+        padding: '12px 48px 16px',
         maxWidth: 1200,
         margin: '0 auto',
-        minHeight: 'calc(100vh - 120px)',
+        width: '100%',
+        boxSizing: 'border-box',
+        minHeight: 'calc(100dvh - 120px)',
         display: 'flex',
         flexDirection: 'column',
       }}
@@ -327,7 +329,8 @@ export default function PrototypePage() {
             minHeight: 0,
             display: 'flex',
             flexDirection: 'column',
-            alignItems: 'center',
+            alignItems: view === 'desktop' ? 'stretch' : 'center',
+            width: '100%',
           }}
         >
         <div
@@ -335,7 +338,7 @@ export default function PrototypePage() {
             width: view === 'desktop' ? '100%' : 390,
             maxWidth: '100%',
             flex: 1,
-            minHeight: 420,
+            minHeight: 0,
             display: 'flex',
             flexDirection: 'column',
             border: '0.5px solid var(--ink)',
@@ -473,7 +476,7 @@ export default function PrototypePage() {
             )}
           </div>
 
-          <div style={{ position: 'relative', flex: 1, minHeight: 360, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             {generateMutation.isPending && (
               <div
                 style={{
@@ -504,7 +507,7 @@ export default function PrototypePage() {
                   flex: 1,
                   width: '100%',
                   border: 'none',
-                  minHeight: 360,
+                  minHeight: 0,
                   background: 'var(--paper)',
                 }}
               />
@@ -517,7 +520,7 @@ export default function PrototypePage() {
                   flex: 1,
                   width: '100%',
                   border: 'none',
-                  minHeight: 360,
+                  minHeight: 0,
                   background: 'var(--paper)',
                 }}
               />
@@ -578,8 +581,9 @@ export default function PrototypePage() {
           display: 'flex',
           alignItems: 'center',
           gap: 16,
-          marginTop: 28,
-          paddingTop: 20,
+          marginTop: 'auto',
+          paddingTop: 16,
+          paddingBottom: 4,
           borderTop: '0.5px solid var(--border-color)',
           flexShrink: 0,
           flexWrap: 'wrap',
