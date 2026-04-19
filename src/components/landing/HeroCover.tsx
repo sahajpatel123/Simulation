@@ -102,7 +102,7 @@ export default function HeroCover({
           willChange: 'transform, opacity',
         }}
       >
-        {/* First screen = air → kicker → headline; folio lives in sticky masthead (no ink bar below) */}
+        {/* First screen = air → headline; folio lives in sticky masthead */}
         <div
           style={{
             minHeight: 'calc(100svh - 96px)',
@@ -118,36 +118,9 @@ export default function HeroCover({
               margin: '0 auto',
               width: '100%',
               flex: '0 0 auto',
-              /* Generous air under the broadsheet folio before the red kicker */
-              padding: 'clamp(40px, 10vh, 104px) 48px 0',
+              padding: 'clamp(28px, 8vh, 80px) 48px 0',
             }}
           >
-            {/* Red kicker */}
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.15 }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 14,
-                marginBottom: 28,
-              }}
-            >
-              <span style={{ width: 32, height: 0.5, background: 'var(--red)' }} />
-              <span
-                style={{
-                  fontSize: 10,
-                  letterSpacing: '0.3em',
-                  textTransform: 'uppercase',
-                  color: 'var(--red)',
-                  fontWeight: 600,
-                }}
-              >
-                Cover Story · The Simulation, on paper
-              </span>
-            </motion.div>
-
             {/* Headline */}
             <h1
               className="font-serif"
