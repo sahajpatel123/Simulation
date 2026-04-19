@@ -310,18 +310,8 @@ export default function PrototypePage() {
         flexDirection: 'column',
       }}
     >
-        <header style={{ flexShrink: 0, marginBottom: 8 }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'flex-end',
-              gap: 16,
-              flexWrap: 'wrap',
-            }}
-          >
-            {viewToggle}
-          </div>
+        {/* Rules only — toggles live in the footer so spacing here (rule → press) stays consistent */}
+        <header style={{ flexShrink: 0, marginBottom: 8, paddingTop: 12 }}>
           <motion.div
             initial={{ scaleX: 0, transformOrigin: 'left' }}
             animate={{ scaleX: 1 }}
@@ -329,7 +319,7 @@ export default function PrototypePage() {
             style={{
               height: 2,
               background: 'var(--red)',
-              marginTop: 10,
+              marginTop: 0,
             }}
           />
           <div style={{ height: 0.5, background: 'var(--border-color)', marginTop: 4 }} />
@@ -592,26 +582,32 @@ export default function PrototypePage() {
         </div>
       </motion.div>
 
-      {/* Footer */}
+      {/* Footer — Broadsheet / Folio centered between nav actions */}
       <footer
         style={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
           gap: 16,
           marginTop: 28,
           paddingTop: 20,
           borderTop: '0.5px solid var(--border-color)',
           flexShrink: 0,
           flexWrap: 'wrap',
+          rowGap: 14,
+          minWidth: 0,
         }}
       >
-        <Link href={`/project/${idStr}`} className="btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-          <ArrowLeft style={{ width: 14, height: 14 }} /> Back to dossier
-        </Link>
-        <Link href={`/project/${idStr}/environment`} className="btn-ink" style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-          Cast the room <ArrowRight style={{ width: 14, height: 14 }} />
-        </Link>
+        <div style={{ flex: '1 1 140px', minWidth: 0, display: 'flex', justifyContent: 'flex-start' }}>
+          <Link href={`/project/${idStr}`} className="btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            <ArrowLeft style={{ width: 14, height: 14 }} /> Back to dossier
+          </Link>
+        </div>
+        <div style={{ flex: '0 0 auto', display: 'flex', justifyContent: 'center' }}>{viewToggle}</div>
+        <div style={{ flex: '1 1 140px', minWidth: 0, display: 'flex', justifyContent: 'flex-end' }}>
+          <Link href={`/project/${idStr}/environment`} className="btn-ink" style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            Cast the room <ArrowRight style={{ width: 14, height: 14 }} />
+          </Link>
+        </div>
       </footer>
     </div>
   )
