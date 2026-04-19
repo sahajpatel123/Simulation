@@ -102,17 +102,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </span>
             </div>
 
-            {/* Centre — wordmark */}
+            {/* Centre — wordmark (match landing masthead TheCee) */}
             <a
               href="/projects"
+              className="font-serif"
               style={{
-                fontFamily: 'var(--font-serif)',
-                fontSize: 34,
+                fontSize: 26,
                 fontWeight: 900,
-                letterSpacing: '-0.03em',
+                letterSpacing: '-0.04em',
                 color: 'var(--ink)',
                 textDecoration: 'none',
                 lineHeight: 1,
+                fontStyle: 'italic',
               }}
             >
               TheCee<span style={{ color: 'var(--red)' }}>.</span>
