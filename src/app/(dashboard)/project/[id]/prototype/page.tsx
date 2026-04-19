@@ -331,6 +331,7 @@ export default function PrototypePage() {
             flexDirection: 'column',
             alignItems: view === 'desktop' ? 'stretch' : 'center',
             width: '100%',
+            marginBottom: 28,
           }}
         >
         <div
@@ -582,7 +583,7 @@ export default function PrototypePage() {
           alignItems: 'center',
           gap: 16,
           marginTop: 'auto',
-          paddingTop: 16,
+          paddingTop: 22,
           paddingBottom: 4,
           borderTop: '0.5px solid var(--border-color)',
           flexShrink: 0,
