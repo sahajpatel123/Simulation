@@ -302,7 +302,7 @@ export default function PrototypePage() {
     <div
       className="rise"
       style={{
-        padding: '18px 48px 48px',
+        padding: '12px 48px 48px',
         maxWidth: 1200,
         margin: '0 auto',
         minHeight: 'calc(100vh - 120px)',
@@ -310,19 +310,8 @@ export default function PrototypePage() {
         flexDirection: 'column',
       }}
     >
-        {/* Rules only — toggles live in the footer so spacing here (rule → press) stays consistent */}
-        <header style={{ flexShrink: 0, marginBottom: 8, paddingTop: 12 }}>
-          <motion.div
-            initial={{ scaleX: 0, transformOrigin: 'left' }}
-            animate={{ scaleX: 1 }}
-            transition={{ duration: 0.35, ease: [0.2, 0.7, 0.2, 1] }}
-            style={{
-              height: 2,
-              background: 'var(--red)',
-              marginTop: 0,
-            }}
-          />
-          <div style={{ height: 0.5, background: 'var(--border-color)', marginTop: 4 }} />
+        <header style={{ flexShrink: 0, marginBottom: 6, paddingTop: 4 }}>
+          <div style={{ height: 0.5, background: 'var(--border-color)', marginTop: 0 }} />
         </header>
 
         {/* Press window */}
