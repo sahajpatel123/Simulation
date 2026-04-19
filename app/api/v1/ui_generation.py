@@ -3,6 +3,7 @@ import re
 from anthropic import Anthropic
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -351,3 +352,62 @@ async def get_ui_simulation_run(
         "created_at": run.created_at.isoformat() if run.created_at else None,
         "completed_at": run.completed_at.isoformat() if run.completed_at else None,
     }
+
+
+@router.get("/projects/{project_id}/ui-simulation-runs/{run_id}/heatmap")
+async def get_heatmap(
+    project_id: int,
+    run_id: int,
+    cluster_id: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.simulation.heatmap import HeatmapEngine
+
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    run = (
+        db.query(UISimulationRun)
+        .filter(
+            UISimulationRun.id == run_id,
+            UISimulationRun.project_id == project_id,
+        )
+        .first()
+    )
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if run.status != "COMPLETED":
+        return {"status": run.status, "message": "Simulation not yet complete"}
+
+    if not run.generated_ui_id:
+        raise HTTPException(status_code=400, detail="Run has no generated UI")
+
+    query = """
+        SELECT agent_cluster_id, events_json, converted
+        FROM ui_simulation_sessions
+        WHERE generated_ui_id = :ui_id
+    """
+    params: dict = {"ui_id": run.generated_ui_id}
+    if cluster_id:
+        query += " AND agent_cluster_id = :cid"
+        params["cid"] = cluster_id
+
+    rows = db.execute(text(query), params).mappings().all()
+    sessions = [
+        {
+            "agent_cluster_id": r["agent_cluster_id"],
+            "events_json": r["events_json"],
+            "converted": r["converted"],
+        }
+        for r in rows
+    ]
+
+    engine = HeatmapEngine()
+    result = engine.generate(run.generated_ui_id, sessions)
+    return engine.to_dict(result)
