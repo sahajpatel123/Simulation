@@ -648,7 +648,8 @@ function AuthPage() {
                       transition: 'background 0.2s ease',
                     }}
                     onMouseEnter={e => {
-                      if (!loginForm.formState.isSubmitting) (e.currentTarget as HTMLButtonElement).style.background = '#c0392b'
+                      if (!loginForm.formState.isSubmitting)
+                        (e.currentTarget as HTMLButtonElement).style.background = '#12100e'
                     }}
                     onMouseLeave={e => {
                       (e.currentTarget as HTMLButtonElement).style.background = '#1a1714'

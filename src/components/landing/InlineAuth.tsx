@@ -441,7 +441,7 @@ export default function InlineAuth({
                       transition: 'background 0.2s ease',
                     }}
                     onMouseEnter={e => {
-                      if (!submitting) (e.currentTarget as HTMLButtonElement).style.background = 'var(--red)'
+                      if (!submitting) (e.currentTarget as HTMLButtonElement).style.background = '#12100e'
                     }}
                     onMouseLeave={e => {
                       (e.currentTarget as HTMLButtonElement).style.background = 'var(--ink)'
