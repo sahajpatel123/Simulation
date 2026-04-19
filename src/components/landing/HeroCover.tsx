@@ -102,8 +102,7 @@ export default function HeroCover({
           willChange: 'transform, opacity',
         }}
       >
-        {/* Animated rules — folio (vol / broadsheet / clock) lives in sticky page masthead */}
-        {/* First screen = rules → air → kicker → headline; lede sits below the fold */}
+        {/* First screen = air → kicker → headline; folio lives in sticky masthead (no ink bar below) */}
         <div
           style={{
             minHeight: 'calc(100svh - 96px)',
@@ -112,24 +111,6 @@ export default function HeroCover({
             boxSizing: 'border-box',
           }}
         >
-          <motion.div
-            initial={{ scaleX: 0 }}
-            animate={{ scaleX: 1 }}
-            transition={{ duration: 0.7, ease: [0.2, 0.7, 0.2, 1] }}
-            style={{ height: 3, background: 'var(--ink)', transformOrigin: 'left', flexShrink: 0 }}
-          />
-          <motion.div
-            initial={{ scaleX: 0 }}
-            animate={{ scaleX: 1 }}
-            transition={{ duration: 0.9, ease: [0.2, 0.7, 0.2, 1], delay: 0.1 }}
-            style={{
-              height: 0.5,
-              background: 'var(--border-color)',
-              transformOrigin: 'left',
-              flexShrink: 0,
-            }}
-          />
-
           <div
             style={{
               position: 'relative',

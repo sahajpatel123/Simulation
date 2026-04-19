@@ -201,19 +201,17 @@ function BroadsheetFolio() {
     ? now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
     : '—'
 
+  const inset = 'clamp(16px, 4vw, 40px)'
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.45, delay: 0.08 }}
       style={{
+        position: 'relative',
         borderTop: '0.5px solid var(--border-color)',
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
-        alignItems: 'center',
-        columnGap: 16,
-        rowGap: 2,
-        padding: '5px 40px 5px',
+        minHeight: 30,
         fontSize: 9,
         letterSpacing: '0.22em',
         textTransform: 'uppercase',
@@ -223,8 +221,11 @@ function BroadsheetFolio() {
     >
       <span
         style={{
-          justifySelf: 'start',
-          minWidth: 0,
+          position: 'absolute',
+          left: inset,
+          top: '50%',
+          transform: 'translateY(-50%)',
+          maxWidth: 'min(42%, calc(100% - 120px))',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
@@ -233,27 +234,16 @@ function BroadsheetFolio() {
         Vol. I — Issue 04
       </span>
       <span
-        className="font-serif"
         style={{
-          justifySelf: 'center',
-          fontSize: 12,
-          letterSpacing: '0.02em',
-          fontStyle: 'italic',
-          fontWeight: 700,
-          color: 'var(--ink)',
-          textTransform: 'none',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        The Simulation Broadsheet
-      </span>
-      <span
-        style={{
-          justifySelf: 'end',
-          minWidth: 0,
+          position: 'absolute',
+          right: inset,
+          top: '50%',
+          transform: 'translateY(-50%)',
+          maxWidth: 'min(48%, calc(100% - 120px))',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
+          textAlign: 'right',
           fontVariantNumeric: 'tabular-nums',
           color: 'var(--ink-tertiary)',
         }}
