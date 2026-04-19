@@ -287,3 +287,71 @@ Additional context (use if available):
 Target market: {target_market}
 Known assumptions: {assumptions_text}
 """
+
+# ══════════════════════════════════════════
+# STEP 54 — UI GENERATION
+# ══════════════════════════════════════════
+
+UI_GENERATION_PROMPT = """\
+You are a world-class UI/UX designer and senior frontend engineer.
+Generate a single, complete, self-contained HTML file for the product below.
+
+ALL of the following are mandatory — do not omit any:
+
+TECHNICAL:
+- Tailwind CSS CDN: <script src="https://cdn.tailwindcss.com"></script>
+- Alpine.js CDN: <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+- All pages as <section> blocks with JS-based navigation (no iframes, no separate files)
+- All buttons clickable and wired to page transitions
+- All forms submittable with fake success states
+
+CONTENT:
+- Realistic fake data: product names, INR prices, reviews, testimonials
+- SVG placeholders or descriptive image URLs
+- Full checkout flow: Product → Cart → Payment → Confirmation
+
+ACCESSIBILITY & MOBILE:
+- Mobile-first responsive layout (79% of agents are on mobile)
+- ARIA labels on every interactive element
+
+THECEE TRACKING (exact attribute strings required):
+- data-thecee-id="cta-primary"       on main CTA button
+- data-thecee-id="pricing-section"   on pricing display
+- data-thecee-id="checkout-form"     on checkout form
+- data-thecee-id="nav-home"          on home nav link
+- data-thecee-id="nav-products"      on products nav link
+- data-thecee-id="nav-cart"          on cart button
+- data-thecee-id="add-to-cart"       on add-to-cart buttons
+
+Return ONLY valid HTML. No markdown, no explanation, no text outside the HTML tags.
+
+Product description: {description}
+Product type: {product_type}
+Target segment: {target_segment}
+Price point: {price_point}
+"""
+
+
+def validate_generated_html(html: str) -> tuple[bool, str]:
+    if not html or len(html.strip()) < 500:
+        return False, "HTML too short or empty"
+    h = html.lower()
+    if "<html" not in h or "</html>" not in h:
+        return False, "Missing HTML structure"
+    if "tailwindcss" not in h:
+        return False, "Missing Tailwind CDN"
+    if "alpinejs" not in h:
+        return False, "Missing Alpine.js CDN"
+    if "<form" not in h or "<button" not in h:
+        return False, "Missing form or button"
+    required = [
+        'data-thecee-id="cta-primary"',
+        'data-thecee-id="pricing-section"',
+        'data-thecee-id="checkout-form"',
+    ]
+    missing = [a for a in required if a not in html]
+    if missing:
+        return False, f"Missing tracking attributes: {missing}"
+    if len(html.split()) < 200:
+        return False, "Insufficient content — HTML too sparse"
+    return True, "OK"
