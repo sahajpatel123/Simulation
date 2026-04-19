@@ -181,7 +181,7 @@ function PressProgress() {
   )
 }
 
-/** Live folio line — lives in the sticky masthead so the hero cover can start at the rules. */
+/** Live folio line — top strip of the sticky masthead (above logo / nav row). */
 function BroadsheetFolio() {
   const [now, setNow] = useState<Date | null>(null)
   useEffect(() => {
@@ -210,7 +210,7 @@ function BroadsheetFolio() {
       transition={{ duration: 0.45, delay: 0.08 }}
       style={{
         position: 'relative',
-        borderTop: '0.5px solid var(--border-color)',
+        borderBottom: '0.5px solid var(--border-color)',
         minHeight: 30,
         fontSize: 9,
         letterSpacing: '0.22em',
@@ -303,6 +303,7 @@ export default function LandingPage() {
           WebkitBackdropFilter: 'blur(10px)',
         }}
       >
+        <BroadsheetFolio />
         <div
           style={{
             padding: '14px 40px',
@@ -437,7 +438,6 @@ export default function LandingPage() {
             ) : null}
           </div>
         </div>
-        <BroadsheetFolio />
       </motion.header>
 
       {/* ━━━ DRAWER MENU ━━━ */}
