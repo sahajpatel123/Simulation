@@ -2,7 +2,6 @@
 
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { LayoutGrid } from 'lucide-react'
 import { usePathname, useSearchParams } from 'next/navigation'
 
 type Item = { num: string; label: string; href: string; hint?: string }
@@ -50,11 +49,6 @@ function SidebarInner({ collapsed, onCollapse, onExpand }: SidebarProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const activeFilter = (searchParams.get('filter') || '').toLowerCase()
-  const projectRouteMatch = pathname.match(/^\/project\/(\d+)/)
-  const projectIdFromPath = projectRouteMatch?.[1]
-  const uiBuilderHref = projectIdFromPath ? `/project/${projectIdFromPath}/ui-builder` : ''
-  const uiBuilderActive = Boolean(uiBuilderHref && pathname === uiBuilderHref)
-
   const isActive = (href: string) => {
     const [base, query] = href.split('?')
     if (base === '#') return false
@@ -171,65 +165,6 @@ function SidebarInner({ collapsed, onCollapse, onExpand }: SidebarProps) {
           </div>
 
           <div id="sidebar-toc-nav">
-            {projectIdFromPath && (
-              <nav aria-label="Dossier tools" style={{ marginBottom: 36 }}>
-                <div
-                  style={{
-                    fontSize: 9,
-                    letterSpacing: '0.3em',
-                    textTransform: 'uppercase',
-                    color: 'var(--ink-secondary)',
-                    fontWeight: 600,
-                    marginBottom: 14,
-                    paddingBottom: 10,
-                    borderBottom: '0.5px solid var(--border-color)',
-                  }}
-                >
-                  This dossier
-                </div>
-                <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <li>
-                    <Link
-                      href={uiBuilderHref}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        padding: '8px 0',
-                        textDecoration: 'none',
-                        color: uiBuilderActive ? 'var(--red)' : 'var(--ink)',
-                        borderLeft: uiBuilderActive ? '2px solid var(--red)' : '2px solid transparent',
-                        paddingLeft: uiBuilderActive ? 10 : 0,
-                        transition: 'all 220ms ease',
-                      }}
-                    >
-                      <LayoutGrid
-                        aria-hidden
-                        style={{
-                          width: 16,
-                          height: 16,
-                          flexShrink: 0,
-                          opacity: uiBuilderActive ? 1 : 0.65,
-                        }}
-                      />
-                      <span
-                        style={{
-                          fontFamily: 'var(--font-serif)',
-                          fontSize: 17,
-                          fontWeight: uiBuilderActive ? 800 : 700,
-                          fontStyle: uiBuilderActive ? 'italic' : 'normal',
-                          lineHeight: 1.15,
-                          letterSpacing: '-0.01em',
-                        }}
-                      >
-                        UI Builder
-                      </span>
-                    </Link>
-                  </li>
-                </ul>
-              </nav>
-            )}
-
             {sections.map((section) => (
               <nav key={section.title}>
                 <div

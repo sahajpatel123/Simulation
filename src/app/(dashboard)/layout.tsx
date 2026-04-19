@@ -1,13 +1,22 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
 
 import Sidebar from '@/components/layout/Sidebar'
 import ProtectedRoute from '@/components/layout/ProtectedRoute'
 import UserMenu from '@/components/layout/UserMenu'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+
+  useEffect(() => {
+    if (pathname?.match(/^\/project\/\d+\/prototype\/?$/)) {
+      setSidebarCollapsed(true)
+    }
+  }, [pathname])
+
   const today = new Date().toLocaleDateString('en-GB', {
     weekday: 'long',
     day: 'numeric',

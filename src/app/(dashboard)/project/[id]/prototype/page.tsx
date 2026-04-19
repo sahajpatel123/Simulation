@@ -1,12 +1,25 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Monitor, Smartphone, ArrowRight, ArrowLeft, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 
+import { formatProductTypeLabel, PRODUCT_TYPES } from '@/components/ui-builder/constants'
+import type { GeneratedUI, UIGenerateRequest } from '@/components/ui-builder/types'
+import { previewAbsoluteUrl } from '@/components/ui-builder/preview-absolute-url'
 import { useProject } from '@/hooks/useProjects'
+import { getApiV1Base } from '@/lib/api-v1-base'
+
+function authHeaders(): HeadersInit {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
+}
 
 /**
  * Editorial fallback when the API has not yet typeset a prototype HTML.
@@ -129,11 +142,60 @@ const MOCK_HTML = `<!DOCTYPE html>
 export default function PrototypePage() {
   const params = useParams()
   const projectId = Number(params.id)
+  const idStr = String(projectId)
 
   const { data: project, isLoading, isError } = useProject(Number.isFinite(projectId) ? projectId : null)
+  const qc = useQueryClient()
   const [view, setView] = useState<'desktop' | 'mobile'>('desktop')
+  const [prompt, setPrompt] = useState('')
+  const [productType, setProductType] = useState('saas')
+  const [uiPreviewPath, setUiPreviewPath] = useState<string | null>(null)
+  const [generatedUiId, setGeneratedUiId] = useState<number | null>(null)
+  const [simStatus, setSimStatus] = useState<string | null>(null)
+  const promptSeededRef = useRef(false)
 
-  const idStr = String(projectId)
+  useEffect(() => {
+    promptSeededRef.current = false
+    setPrompt('')
+  }, [projectId])
+
+  const generateMutation = useMutation({
+    mutationFn: async (body: UIGenerateRequest) => {
+      const res = await fetch(`${getApiV1Base()}/projects/${projectId}/generate-ui`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      return (await res.json()) as GeneratedUI & { project_id?: number }
+    },
+    onSuccess: (data) => {
+      setUiPreviewPath(data.html_preview_url)
+      setGeneratedUiId(data.id)
+      setSimStatus(null)
+      void qc.invalidateQueries({ queryKey: ['project', projectId] })
+    },
+  })
+
+  const simulateMutation = useMutation({
+    mutationFn: async (uiId: number) => {
+      const res = await fetch(`${getApiV1Base()}/projects/${projectId}/generated-uis/${uiId}/simulate`, {
+        method: 'POST',
+        headers: authHeaders(),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      return (await res.json()) as { ui_simulation_run_id: number }
+    },
+    onSuccess: (data) => {
+      setSimStatus(`Simulation queued — run #${data.ui_simulation_run_id}`)
+    },
+  })
+
+  useEffect(() => {
+    if (!project?.description?.trim() || promptSeededRef.current) return
+    setPrompt(project.description.trim().slice(0, 500))
+    promptSeededRef.current = true
+  }, [project?.description])
 
   if (!Number.isFinite(projectId)) {
     return (
@@ -173,6 +235,19 @@ export default function PrototypePage() {
         </Link>
       </div>
     )
+  }
+
+  const legacyPrototypeHtml = project.prototypeHtml?.trim() ?? ''
+  const hasBuiltOnce = Boolean(legacyPrototypeHtml) || Boolean(uiPreviewPath)
+  const iframeServeUrl = uiPreviewPath ? previewAbsoluteUrl(uiPreviewPath) : null
+
+  const handlePullProof = () => {
+    if (!prompt.trim() || !Number.isFinite(projectId)) return
+    generateMutation.mutate({
+      prompt: prompt.trim(),
+      product_type: productType,
+      pages_required: ['home', 'product', 'checkout'],
+    })
   }
 
   return (
@@ -323,61 +398,229 @@ export default function PrototypePage() {
             transition: 'width 420ms cubic-bezier(0.2, 0.7, 0.2, 1)',
           }}
         >
-          {/* Chrome bar — editorial, not macOS glass */}
+          {/* Chrome — prompt as the compositor’s line; not a browser URL bar */}
           <div
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              padding: '10px 14px',
               borderBottom: '0.5px solid var(--border-strong)',
               background: 'var(--paper-dark)',
               flexShrink: 0,
             }}
           >
-            <div style={{ display: 'flex', gap: 6 }}>
-              {['var(--red)', '#b88a3a', '#3d7a4a'].map((c) => (
-                <span
-                  key={c}
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    background: c,
-                    opacity: 0.85,
-                  }}
-                />
-              ))}
-            </div>
             <div
-              className="kicker"
               style={{
-                flex: 1,
-                textAlign: 'center',
-                color: 'var(--ink-tertiary)',
-                letterSpacing: '0.14em',
-                border: '0.5px solid var(--border-color)',
-                padding: '6px 10px',
-                background: 'rgba(26,23,20,0.03)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '10px 14px',
               }}
             >
-              proof.thecee.app · {project.title.slice(0, 42)}
-              {project.title.length > 42 ? '…' : ''}
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                {['var(--red)', '#b88a3a', '#3d7a4a'].map((c) => (
+                  <span
+                    key={c}
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: c,
+                      opacity: 0.85,
+                    }}
+                  />
+                ))}
+              </div>
+              <label htmlFor="prototype-prompt" className="sr-only">
+                Describe the site or page you want the presses to pull
+              </label>
+              <input
+                id="prototype-prompt"
+                type="text"
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handlePullProof()
+                  }
+                }}
+                placeholder="Describe the site you want pulled — product, audience, what must be true on the page…"
+                disabled={generateMutation.isPending}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  border: '0.5px solid var(--border-color)',
+                  padding: '8px 12px',
+                  background: 'rgba(26,23,20,0.03)',
+                  fontFamily: 'var(--font-body)',
+                  fontSize: 12,
+                  letterSpacing: '0.04em',
+                  color: 'var(--ink)',
+                  outline: 'none',
+                }}
+              />
+              <button
+                type="button"
+                onClick={handlePullProof}
+                disabled={!prompt.trim() || generateMutation.isPending}
+                style={{
+                  flexShrink: 0,
+                  padding: '8px 14px',
+                  border: '0.5px solid var(--ink)',
+                  background: !prompt.trim() || generateMutation.isPending ? 'transparent' : 'var(--ink)',
+                  color: !prompt.trim() || generateMutation.isPending ? 'var(--ink-tertiary)' : 'var(--paper)',
+                  fontFamily: 'var(--font-body)',
+                  fontSize: 9,
+                  fontWeight: 700,
+                  letterSpacing: '0.2em',
+                  textTransform: 'uppercase',
+                  cursor: !prompt.trim() || generateMutation.isPending ? 'not-allowed' : 'pointer',
+                  opacity: !prompt.trim() || generateMutation.isPending ? 0.45 : 1,
+                }}
+              >
+                {generateMutation.isPending ? 'Pulling…' : 'Pull proof'}
+              </button>
             </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '0 14px 10px',
+                flexWrap: 'wrap',
+              }}
+            >
+              <span className="kicker" style={{ color: 'var(--ink-tertiary)', letterSpacing: '0.2em' }}>
+                proof.thecee.app
+              </span>
+              <span style={{ color: 'var(--ink-tertiary)', fontSize: 10 }}>·</span>
+              <span style={{ fontSize: 10, color: 'var(--ink-secondary)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {project.title}
+              </span>
+              <select
+                value={productType}
+                onChange={(e) => setProductType(e.target.value)}
+                disabled={generateMutation.isPending}
+                aria-label="Product type"
+                style={{
+                  marginLeft: 'auto',
+                  padding: '4px 8px',
+                  border: '0.5px solid var(--border-color)',
+                  background: 'var(--paper)',
+                  fontSize: 10,
+                  fontFamily: 'var(--font-body)',
+                  color: 'var(--ink-secondary)',
+                  maxWidth: 200,
+                }}
+              >
+                {PRODUCT_TYPES.map((pt) => (
+                  <option key={pt} value={pt}>
+                    {formatProductTypeLabel(pt)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {generateMutation.isError && (
+              <p style={{ padding: '0 14px 10px', margin: 0, fontSize: 11, color: 'var(--red)' }}>
+                The presses jammed — check your connection and try again.
+              </p>
+            )}
           </div>
 
-          <iframe
-            srcDoc={project.prototypeHtml || MOCK_HTML}
-            title="Prototype preview"
-            sandbox="allow-scripts"
-            style={{
-              flex: 1,
-              width: '100%',
-              border: 'none',
-              minHeight: 360,
-              background: 'var(--paper)',
-            }}
-          />
+          <div style={{ position: 'relative', flex: 1, minHeight: 360, display: 'flex', flexDirection: 'column' }}>
+            {generateMutation.isPending && (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  zIndex: 2,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 12,
+                  background: 'rgba(242,236,224,0.92)',
+                }}
+              >
+                <Loader2 className="animate-spin" style={{ width: 22, height: 22, color: 'var(--red)' }} />
+                <span className="kicker" style={{ color: 'var(--ink-secondary)' }}>
+                  Compositor is setting your line…
+                </span>
+              </div>
+            )}
+            {iframeServeUrl ? (
+              <iframe
+                key={iframeServeUrl}
+                src={iframeServeUrl}
+                title="Generated prototype preview"
+                sandbox="allow-scripts allow-same-origin"
+                style={{
+                  flex: 1,
+                  width: '100%',
+                  border: 'none',
+                  minHeight: 360,
+                  background: 'var(--paper)',
+                }}
+              />
+            ) : (
+              <iframe
+                srcDoc={legacyPrototypeHtml || MOCK_HTML}
+                title="Prototype preview"
+                sandbox="allow-scripts"
+                style={{
+                  flex: 1,
+                  width: '100%',
+                  border: 'none',
+                  minHeight: 360,
+                  background: 'var(--paper)',
+                }}
+              />
+            )}
+          </div>
+
+          {hasBuiltOnce && (
+            <div
+              style={{
+                borderTop: '0.5px solid var(--border-color)',
+                padding: '12px 14px',
+                background: 'rgba(26,23,20,0.02)',
+                flexShrink: 0,
+              }}
+            >
+              <div className="kicker" style={{ color: 'var(--red)', marginBottom: 8, letterSpacing: '0.22em' }}>
+                Press tools
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
+                {generatedUiId != null ? (
+                  <button
+                    type="button"
+                    onClick={() => simulateMutation.mutate(generatedUiId)}
+                    disabled={simulateMutation.isPending}
+                    className="btn-ink"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '8px 14px',
+                      fontSize: 10,
+                      letterSpacing: '0.16em',
+                      textTransform: 'uppercase',
+                      opacity: simulateMutation.isPending ? 0.6 : 1,
+                    }}
+                  >
+                    {simulateMutation.isPending ? 'Queuing…' : 'Run 52-cluster simulation'}
+                  </button>
+                ) : (
+                  <p style={{ margin: 0, fontSize: 12, color: 'var(--ink-secondary)', maxWidth: 520 }}>
+                    Pull a fresh proof from the line above to enable cluster simulation on this sheet.
+                  </p>
+                )}
+                {simStatus && (
+                  <span className="kicker" style={{ color: 'var(--ink)', letterSpacing: '0.12em' }}>
+                    {simStatus}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </motion.div>
 
