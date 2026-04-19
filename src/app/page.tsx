@@ -362,7 +362,6 @@ export default function LandingPage() {
                 padding: 0,
                 margin: 0,
                 cursor: 'pointer',
-                fontFamily: 'inherit',
                 fontSize: 26,
                 fontWeight: 900,
                 color: 'var(--ink)',
