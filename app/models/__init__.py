@@ -11,6 +11,9 @@ from app.models.decision import Decision
 from app.models.outcome import Outcome
 from app.models.outcome_tracker import OutcomeTracker
 from app.models.prototype import Prototype
+from app.models.generated_ui import GeneratedUI
+from app.models.ui_simulation_session import UISimulationSession
+from app.models.ui_simulation_run import UISimulationRun
 
 __all__ = [
     "Base",
@@ -29,4 +32,7 @@ __all__ = [
     "Outcome",
     "OutcomeTracker",
     "Prototype",
+    "GeneratedUI",
+    "UISimulationSession",
+    "UISimulationRun",
 ]

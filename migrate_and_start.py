@@ -11,6 +11,9 @@ from app.models import (
     Decision,
     Outcome,
     OutcomeTracker,
+    GeneratedUI,
+    UISimulationSession,
+    UISimulationRun,
 )
 
 
@@ -285,6 +288,87 @@ def run_migrations():
         except Exception as e:
             conn.rollback()
             print(f"⚠️ user_simulation_accuracy_history skip: {e}")
+
+        # Step 53: UI generation schema (additive)
+        try:
+            conn.execute(
+                text("""
+                    CREATE TABLE IF NOT EXISTS generated_uis (
+                        id               SERIAL PRIMARY KEY,
+                        project_id       INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+                        prompt           TEXT NOT NULL,
+                        html_content     TEXT NOT NULL,
+                        version          INTEGER DEFAULT 1,
+                        product_type     VARCHAR(100),
+                        pages_generated  INTEGER DEFAULT 1,
+                        created_at       TIMESTAMP DEFAULT NOW(),
+                        updated_at       TIMESTAMP DEFAULT NOW()
+                    );
+                """)
+            )
+            conn.commit()
+            print("✅ generated_uis ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ generated_uis skip: {e}")
+
+        try:
+            conn.execute(
+                text("""
+                    CREATE TABLE IF NOT EXISTS ui_simulation_sessions (
+                        id                 SERIAL PRIMARY KEY,
+                        generated_ui_id    INTEGER REFERENCES generated_uis(id) ON DELETE CASCADE,
+                        agent_cluster_id   VARCHAR(100) NOT NULL,
+                        agent_profile_json JSONB NOT NULL,
+                        events_json        JSONB,
+                        outcome            VARCHAR(50),
+                        duration_seconds   INTEGER,
+                        pages_visited      INTEGER DEFAULT 1,
+                        converted          BOOLEAN DEFAULT FALSE,
+                        created_at         TIMESTAMP DEFAULT NOW()
+                    );
+                """)
+            )
+            conn.commit()
+            print("✅ ui_simulation_sessions ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ ui_simulation_sessions skip: {e}")
+
+        try:
+            conn.execute(
+                text("""
+                    CREATE TABLE IF NOT EXISTS ui_simulation_runs (
+                        id                    SERIAL PRIMARY KEY,
+                        project_id            INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+                        generated_ui_id       INTEGER REFERENCES generated_uis(id) ON DELETE CASCADE,
+                        status                VARCHAR(50) DEFAULT 'QUEUED',
+                        agent_count           INTEGER NOT NULL,
+                        results_json          JSONB,
+                        conductor_result_json JSONB,
+                        created_at            TIMESTAMP DEFAULT NOW(),
+                        completed_at          TIMESTAMP
+                    );
+                """)
+            )
+            conn.commit()
+            print("✅ ui_simulation_runs ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ ui_simulation_runs skip: {e}")
+
+        for idx_sql in [
+            "CREATE INDEX IF NOT EXISTS idx_generated_uis_project_id ON generated_uis(project_id);",
+            "CREATE INDEX IF NOT EXISTS idx_ui_sessions_generated_ui_id ON ui_simulation_sessions(generated_ui_id);",
+            "CREATE INDEX IF NOT EXISTS idx_ui_sessions_cluster_id ON ui_simulation_sessions(agent_cluster_id);",
+            "CREATE INDEX IF NOT EXISTS idx_ui_runs_project_id ON ui_simulation_runs(project_id);",
+            "CREATE INDEX IF NOT EXISTS idx_ui_runs_status ON ui_simulation_runs(status);",
+        ]:
+            try:
+                conn.execute(text(idx_sql))
+                conn.commit()
+            except Exception:
+                conn.rollback()
 
     # Seed cluster_parameters with 416 placeholder rows (52 clusters × 8 traits)
     _seed_cluster_parameters()
