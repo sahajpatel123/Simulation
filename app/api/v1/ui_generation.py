@@ -2,7 +2,7 @@ import re
 
 from anthropic import Anthropic
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -712,3 +712,155 @@ async def get_infra_scaling(
         overall_conversion=float(overall_cr),
     )
     return engine.to_dict(result)
+
+
+@router.get("/projects/{project_id}/ui-simulation-runs/{run_id}/report.pdf")
+async def get_simulation_report_pdf(
+    project_id: int,
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.reports.simulation_report import SimulationReportGenerator
+    from app.simulation.channel_attribution import ChannelAttributionEngine
+    from app.simulation.clusters.registry import ClusterRegistry
+    from app.simulation.conductor import Conductor
+    from app.simulation.funnel_analytics import FunnelAnalyticsEngine
+    from app.simulation.heatmap import HeatmapEngine
+    from app.simulation.infra_scaling import InfraScalingEngine
+    from app.simulation.pricing_sensitivity import PricingSensitivityEngine
+    from app.simulation.product_type import ProductType
+    from app.simulation.retention_churn import RetentionChurnEngine
+
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    run = (
+        db.query(UISimulationRun)
+        .filter(
+            UISimulationRun.id == run_id,
+            UISimulationRun.project_id == project_id,
+        )
+        .first()
+    )
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if run.status != "COMPLETED":
+        raise HTTPException(status_code=400, detail="Simulation not yet complete")
+
+    if not run.generated_ui_id:
+        raise HTTPException(status_code=400, detail="Run has no generated UI")
+
+    project_name = project.title if project else f"Project {project_id}"
+
+    results_json = run.results_json or {}
+    product_type_str = results_json.get("product_type", "saas")
+    aov = float(results_json.get("aov", 999))
+    overall_cr = float(results_json.get("overall_conversion_rate", 0.05))
+
+    try:
+        pt = ProductType(product_type_str)
+    except Exception:
+        pt = ProductType.SAAS
+
+    registry = ClusterRegistry()
+    conductor = Conductor()
+    cond_result = conductor.run(
+        agents=[],
+        env_params={"average_order_value": aov, "product_type": pt.value},
+        assumptions=[],
+        product_type=pt,
+    )
+    conductor_results = {
+        cid: {
+            name: {"metrics": out.metrics, "flags": out.flags}
+            for name, out in arch.items()
+        }
+        for cid, arch in cond_result.cluster_results.items()
+    }
+    cluster_list = [
+        {
+            "cluster_id": c.cluster_id,
+            "name": c.name,
+            "population_weight": c.population_weight,
+        }
+        for c in registry.all_clusters()
+    ]
+
+    rows = db.execute(
+        text(
+            "SELECT agent_cluster_id, events_json, converted FROM ui_simulation_sessions "
+            "WHERE generated_ui_id=:uid"
+        ),
+        {"uid": run.generated_ui_id},
+    ).mappings().all()
+    sessions = [
+        {
+            "agent_cluster_id": r["agent_cluster_id"],
+            "events_json": r["events_json"],
+            "converted": r["converted"],
+        }
+        for r in rows
+    ]
+
+    funnel_eng = FunnelAnalyticsEngine()
+    funnel_r = funnel_eng.generate(run.generated_ui_id, sessions)
+    funnel_d = funnel_eng.to_dict(funnel_r)
+
+    heatmap_eng = HeatmapEngine()
+    heatmap_r = heatmap_eng.generate(run.generated_ui_id, sessions)
+    heatmap_d = heatmap_eng.to_dict(heatmap_r)
+
+    pricing_eng = PricingSensitivityEngine()
+    pricing_r = pricing_eng.generate(run.generated_ui_id, conductor_results, cluster_list, aov=aov)
+    pricing_d = pricing_eng.to_dict(pricing_r)
+
+    retention_eng = RetentionChurnEngine()
+    retention_r = retention_eng.generate(
+        run.generated_ui_id,
+        conductor_results,
+        cluster_list,
+        aov=aov,
+        product_type=product_type_str,
+    )
+    retention_d = retention_eng.to_dict(retention_r)
+
+    channel_eng = ChannelAttributionEngine()
+    channel_r = channel_eng.generate(
+        run.generated_ui_id, conductor_results, cluster_list, product_type=product_type_str
+    )
+    channel_d = channel_eng.to_dict(channel_r)
+
+    infra_eng = InfraScalingEngine()
+    infra_r = infra_eng.generate(
+        run.generated_ui_id,
+        product_type_str,
+        retention_d["cluster_profiles"],
+        overall_conversion=overall_cr,
+    )
+    infra_d = infra_eng.to_dict(infra_r)
+
+    simulation_data = {**results_json, **(run.conductor_result_json or {})}
+    gen = SimulationReportGenerator()
+    pdf_b = gen.generate(
+        simulation_data=simulation_data,
+        conductor_data=run.conductor_result_json or {},
+        funnel_data=funnel_d,
+        heatmap_data=heatmap_d,
+        pricing_data=pricing_d,
+        retention_data=retention_d,
+        channel_data=channel_d,
+        infra_data=infra_d,
+        project_name=project_name,
+    )
+
+    return Response(
+        content=pdf_b,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="thecee-report-{run_id}.pdf"'},
+    )
