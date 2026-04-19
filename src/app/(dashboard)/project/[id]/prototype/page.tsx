@@ -463,7 +463,7 @@ export default function PrototypePage() {
                   opacity: !prompt.trim() || generateMutation.isPending ? 0.45 : 1,
                 }}
               >
-                {generateMutation.isPending ? 'Pulling…' : 'Pull proof'}
+                {generateMutation.isPending ? 'Building…' : 'Build'}
               </button>
             </div>
             {generateMutation.isError && (
