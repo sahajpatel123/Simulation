@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Playfair_Display, DM_Sans } from 'next/font/google'
+import { DM_Sans, DM_Serif_Display, Playfair_Display } from 'next/font/google'
 import { Toaster } from 'sonner'
 import Providers from './providers'
 import HydrateAuth from '@/components/layout/HydrateAuth'
@@ -19,6 +19,12 @@ const dmSans = DM_Sans({
   weight: ['300', '400', '500'],
 })
 
+const dmSerifDisplay = DM_Serif_Display({
+  subsets: ['latin'],
+  variable: '--font-keyperson',
+  weight: '400',
+})
+
 export const metadata: Metadata = {
   title: 'TheCee — Know Before You Build',
   description: 'Simulate your startup before you commit to it.',
@@ -26,7 +32,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-scroll-behavior="smooth" className={`${playfair.variable} ${dmSans.variable}`}>
+    <html
+      lang="en"
+      data-scroll-behavior="smooth"
+      className={`${playfair.variable} ${dmSans.variable} ${dmSerifDisplay.variable}`}
+    >
       <body>
         <ScrollChrome />
         <div className="thecee-root-wrap">

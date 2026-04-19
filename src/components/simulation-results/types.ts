@@ -36,6 +36,8 @@ export interface DomainFindingRow {
   recommended_action?: string
   severity?: string
   conversion_impact?: number
+  metric_affected?: string
+  population_fraction?: number
 }
 
 export interface MeBlindspotRow {
