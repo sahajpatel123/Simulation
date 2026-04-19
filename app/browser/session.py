@@ -3,9 +3,12 @@ from __future__ import annotations
 import asyncio
 import json
 import random
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any
+
+from app.browser.agent_behaviour import AgentBehaviour
 
 
 @dataclass
@@ -70,27 +73,40 @@ class BrowserSession:
         except Exception as e:
             return self._result(events, False, pages_visited, time.time() - start, str(e))
 
-        # Cluster-driven interaction loop
-        trust = float(self.agent_profile.get("trust", 0.5))
-        motivation = float(self.agent_profile.get("motivation", 0.5))
-        price_s = float(self.agent_profile.get("price_sensitivity", 0.5))
-
-        # Pricing architect override if available
-        will_pay = float(
-            self.architect_outputs.get("PricingArchitect", {})
-            .get("metrics", {})
-            .get("will_pay_probability", motivation * (1 - price_s))
-        )
-        brand_ok = float(
-            self.architect_outputs.get("TrustArchitect", {})
-            .get("metrics", {})
-            .get("brand_deficit_multiplier", trust)
+        behaviour = AgentBehaviour(
+            cluster_id=self.cluster_id,
+            agent_profile=self.agent_profile,
+            architect_outputs=self.architect_outputs,
         )
 
-        # Abandon immediately if trust too low
-        if brand_ok < 0.30:
-            events.append({"action": "abandon", "reason": "brand_deficit", "target": "ARRIVE"})
+        if not behaviour.trust_gate():
+            events.append({"action": "abandon", "reason": "trust_gate", "target": "ARRIVE"})
             return self._result(events, False, pages_visited, time.time() - start)
+
+        async def page_price_visible() -> bool:
+            try:
+                if await self._page.locator('[data-thecee-id="price"], .price, [itemprop="price"]').count() > 0:
+                    return True
+                body = await self._page.inner_text("body", timeout=3000)
+                return "₹" in body or "$" in body or bool(
+                    re.search(r"\d{3,}\s*(?:INR|rs\.?)", body, re.I)
+                )
+            except Exception:
+                return False
+
+        async def guess_cart_price() -> float:
+            for sel in ('[data-thecee-id="price"]', "[data-price]", ".price"):
+                try:
+                    loc = self._page.locator(sel)
+                    if await loc.count() == 0:
+                        continue
+                    txt = await loc.first.inner_text(timeout=500)
+                    m = re.search(r"[\d,]+(?:\.\d+)?", txt.replace(",", "").replace("₹", "").strip())
+                    if m:
+                        return float(m.group(0).replace(",", ""))
+                except Exception:
+                    continue
+            return 999.0
 
         for _ in range(self.max_actions):
             try:
@@ -100,12 +116,28 @@ class BrowserSession:
                     break
 
                 el = random.choice(elements)
-                thecee_id = await el.get_attribute("data-thecee-id")
+                thecee_id = await el.get_attribute("data-thecee-id") or ""
 
-                # Pricing gate
-                if thecee_id in ["add-to-cart", "cta-primary", "checkout-form"]:
-                    if random.random() > will_pay:
+                if thecee_id == "checkout-form":
+                    field_count = await self._page.locator("input, select, textarea").count()
+                    if behaviour.should_abandon_form(field_count):
+                        events.append(
+                            {"action": "abandon", "reason": "form_friction", "target": thecee_id}
+                        )
+                        break
+
+                elif thecee_id == "add-to-cart":
+                    price_guess = await guess_cart_price()
+                    if not behaviour.should_add_to_cart(price_guess):
                         events.append({"action": "abandon", "reason": "price", "target": thecee_id})
+                        break
+
+                elif thecee_id == "cta-primary":
+                    pv = await page_price_visible()
+                    if not behaviour.should_click_cta(price_visible=pv):
+                        events.append(
+                            {"action": "abandon", "reason": "cta_decline", "target": thecee_id}
+                        )
                         break
 
                 await el.scroll_into_view_if_needed()
@@ -119,8 +151,7 @@ class BrowserSession:
                     events.append({"action": "converted", "target": thecee_id})
                     break
 
-                # Patience-driven delay
-                await asyncio.sleep(0.5 + (1 - self.patience_score) * 1.5)
+                await asyncio.sleep(behaviour.get_interaction_delay())
 
             except Exception:
                 break
