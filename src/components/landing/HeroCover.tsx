@@ -103,169 +103,197 @@ export default function HeroCover({
         }}
       >
         {/* Animated rules — folio (vol / broadsheet / clock) lives in sticky page masthead */}
-        <motion.div
-          initial={{ scaleX: 0 }}
-          animate={{ scaleX: 1 }}
-          transition={{ duration: 0.7, ease: [0.2, 0.7, 0.2, 1] }}
-          style={{ height: 3, background: 'var(--ink)', transformOrigin: 'left' }}
-        />
-        <motion.div
-          initial={{ scaleX: 0 }}
-          animate={{ scaleX: 1 }}
-          transition={{ duration: 0.9, ease: [0.2, 0.7, 0.2, 1], delay: 0.1 }}
-          style={{ height: 0.5, background: 'var(--border-color)', transformOrigin: 'left' }}
-        />
+        {/* First screen = rules → air → kicker → headline; lede sits below the fold */}
+        <div
+          style={{
+            minHeight: 'calc(100svh - 96px)',
+            display: 'flex',
+            flexDirection: 'column',
+            boxSizing: 'border-box',
+          }}
+        >
+          <motion.div
+            initial={{ scaleX: 0 }}
+            animate={{ scaleX: 1 }}
+            transition={{ duration: 0.7, ease: [0.2, 0.7, 0.2, 1] }}
+            style={{ height: 3, background: 'var(--ink)', transformOrigin: 'left', flexShrink: 0 }}
+          />
+          <motion.div
+            initial={{ scaleX: 0 }}
+            animate={{ scaleX: 1 }}
+            transition={{ duration: 0.9, ease: [0.2, 0.7, 0.2, 1], delay: 0.1 }}
+            style={{
+              height: 0.5,
+              background: 'var(--border-color)',
+              transformOrigin: 'left',
+              flexShrink: 0,
+            }}
+          />
 
-        {/* ── cover story ────────────────────────────────────── */}
+          <div
+            style={{
+              position: 'relative',
+              maxWidth: 1280,
+              margin: '0 auto',
+              width: '100%',
+              flex: '0 0 auto',
+              /* Generous air under the broadsheet folio before the red kicker */
+              padding: 'clamp(40px, 10vh, 104px) 48px 0',
+            }}
+          >
+            {/* Red kicker */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.15 }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 14,
+                marginBottom: 28,
+              }}
+            >
+              <span style={{ width: 32, height: 0.5, background: 'var(--red)' }} />
+              <span
+                style={{
+                  fontSize: 10,
+                  letterSpacing: '0.3em',
+                  textTransform: 'uppercase',
+                  color: 'var(--red)',
+                  fontWeight: 600,
+                }}
+              >
+                Cover Story · The Simulation, on paper
+              </span>
+            </motion.div>
+
+            {/* Headline */}
+            <h1
+              className="font-serif"
+              style={{
+                fontSize: 'clamp(64px, 11vw, 188px)',
+                fontWeight: 900,
+                lineHeight: 0.88,
+                letterSpacing: '-0.045em',
+                color: 'var(--ink)',
+                margin: 0,
+                maxWidth: '18ch',
+              }}
+            >
+              <motion.span
+                initial={{ y: '0.45em', opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.8, delay: 0.2, ease: [0.2, 0.7, 0.2, 1] }}
+                style={{ display: 'inline-block' }}
+              >
+                Know
+              </motion.span>{' '}
+              <motion.span
+                initial={{ y: '0.45em', opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.8, delay: 0.32, ease: [0.2, 0.7, 0.2, 1] }}
+                style={{ display: 'inline-block' }}
+              >
+                before
+              </motion.span>{' '}
+              <motion.span
+                initial={{ y: '0.45em', opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.8, delay: 0.44, ease: [0.2, 0.7, 0.2, 1] }}
+                style={{ display: 'inline-block' }}
+              >
+                you
+              </motion.span>
+              <br />
+              <motion.span
+                initial={{ y: '0.45em', opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.8, delay: 0.56, ease: [0.2, 0.7, 0.2, 1] }}
+                style={{ display: 'inline-block' }}
+              >
+                build your
+              </motion.span>{' '}
+              {/* Rotating accent word with a soft ink bloom behind it */}
+              <span
+                style={{
+                  position: 'relative',
+                  display: 'inline-block',
+                  perspective: 800,
+                  verticalAlign: 'baseline',
+                }}
+              >
+                <AnimatePresence mode="wait">
+                  <motion.span
+                    key={word}
+                    initial={{ y: '0.5em', opacity: 0, rotateX: 60 }}
+                    animate={{ y: 0, opacity: 1, rotateX: 0 }}
+                    exit={{ y: '-0.45em', opacity: 0, rotateX: -60 }}
+                    transition={{ duration: 0.55, ease: [0.76, 0, 0.24, 1] }}
+                    style={{
+                      display: 'inline-block',
+                      fontStyle: 'italic',
+                      color: 'var(--red)',
+                      position: 'relative',
+                      transformOrigin: 'center bottom',
+                    }}
+                  >
+                    <span
+                      aria-hidden
+                      style={{
+                        position: 'absolute',
+                        inset: '-0.05em -0.08em -0.1em -0.08em',
+                        background:
+                          'radial-gradient(closest-side, rgba(192,57,43,0.12), transparent 70%)',
+                        filter: 'blur(6px)',
+                        zIndex: -1,
+                      }}
+                    />
+                    {word}
+                  </motion.span>
+                </AnimatePresence>
+                <motion.span
+                  initial={{ scaleX: 0, opacity: 0 }}
+                  animate={{ scaleX: 1, opacity: 0.8 }}
+                  transition={{ duration: 0.6, delay: 0.7 }}
+                  style={{
+                    display: 'block',
+                    height: 2,
+                    marginTop: 2,
+                    background: 'var(--red)',
+                    transformOrigin: 'left',
+                  }}
+                />
+              </span>
+              <motion.span
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.6, delay: 0.85 }}
+                style={{ color: 'var(--ink-tertiary)' }}
+              >
+                .
+              </motion.span>
+            </h1>
+          </div>
+
+          {/* Absorbs any slack so the fold lands near the viewport bottom */}
+          <div aria-hidden style={{ flex: '1 1 auto', minHeight: 0 }} />
+        </div>
+
+        {/* ── Below the fold: lede, CTAs, meta ───────────────── */}
         <div
           style={{
             position: 'relative',
             maxWidth: 1280,
             margin: '0 auto',
-            /* Tight band under the masthead rules so the kicker sits closer to “The Simulation Broadsheet”. */
-            padding: 'clamp(12px, 1.75vh, 28px) 48px clamp(48px, 7.5vh, 88px)',
+            padding: 'clamp(32px, 5vh, 56px) 48px clamp(48px, 7.5vh, 88px)',
           }}
         >
-          {/* Red kicker */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.15 }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 14,
-              marginBottom: 28,
-            }}
-          >
-            <span style={{ width: 32, height: 0.5, background: 'var(--red)' }} />
-            <span
-              style={{
-                fontSize: 10,
-                letterSpacing: '0.3em',
-                textTransform: 'uppercase',
-                color: 'var(--red)',
-                fontWeight: 600,
-              }}
-            >
-              Cover Story · The Simulation, on paper
-            </span>
-          </motion.div>
-
-          {/* Headline */}
-          <h1
-            className="font-serif"
-            style={{
-              fontSize: 'clamp(64px, 11vw, 188px)',
-              fontWeight: 900,
-              lineHeight: 0.88,
-              letterSpacing: '-0.045em',
-              color: 'var(--ink)',
-              margin: 0,
-              maxWidth: '18ch',
-            }}
-          >
-            <motion.span
-              initial={{ y: '0.45em', opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ duration: 0.8, delay: 0.2, ease: [0.2, 0.7, 0.2, 1] }}
-              style={{ display: 'inline-block' }}
-            >
-              Know
-            </motion.span>{' '}
-            <motion.span
-              initial={{ y: '0.45em', opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ duration: 0.8, delay: 0.32, ease: [0.2, 0.7, 0.2, 1] }}
-              style={{ display: 'inline-block' }}
-            >
-              before
-            </motion.span>{' '}
-            <motion.span
-              initial={{ y: '0.45em', opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ duration: 0.8, delay: 0.44, ease: [0.2, 0.7, 0.2, 1] }}
-              style={{ display: 'inline-block' }}
-            >
-              you
-            </motion.span>
-            <br />
-            <motion.span
-              initial={{ y: '0.45em', opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ duration: 0.8, delay: 0.56, ease: [0.2, 0.7, 0.2, 1] }}
-              style={{ display: 'inline-block' }}
-            >
-              build your
-            </motion.span>{' '}
-            {/* Rotating accent word with a soft ink bloom behind it */}
-            <span
-              style={{
-                position: 'relative',
-                display: 'inline-block',
-                perspective: 800,
-                verticalAlign: 'baseline',
-              }}
-            >
-              <AnimatePresence mode="wait">
-                <motion.span
-                  key={word}
-                  initial={{ y: '0.5em', opacity: 0, rotateX: 60 }}
-                  animate={{ y: 0, opacity: 1, rotateX: 0 }}
-                  exit={{ y: '-0.45em', opacity: 0, rotateX: -60 }}
-                  transition={{ duration: 0.55, ease: [0.76, 0, 0.24, 1] }}
-                  style={{
-                    display: 'inline-block',
-                    fontStyle: 'italic',
-                    color: 'var(--red)',
-                    position: 'relative',
-                    transformOrigin: 'center bottom',
-                  }}
-                >
-                  <span
-                    aria-hidden
-                    style={{
-                      position: 'absolute',
-                      inset: '-0.05em -0.08em -0.1em -0.08em',
-                      background:
-                        'radial-gradient(closest-side, rgba(192,57,43,0.12), transparent 70%)',
-                      filter: 'blur(6px)',
-                      zIndex: -1,
-                    }}
-                  />
-                  {word}
-                </motion.span>
-              </AnimatePresence>
-              <motion.span
-                initial={{ scaleX: 0, opacity: 0 }}
-                animate={{ scaleX: 1, opacity: 0.8 }}
-                transition={{ duration: 0.6, delay: 0.7 }}
-                style={{
-                  display: 'block',
-                  height: 2,
-                  marginTop: 2,
-                  background: 'var(--red)',
-                  transformOrigin: 'left',
-                }}
-              />
-            </span>
-            <motion.span
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.6, delay: 0.85 }}
-              style={{ color: 'var(--ink-tertiary)' }}
-            >
-              .
-            </motion.span>
-          </h1>
-
-          {/* Lede + actions — one single line of calm */}
+          {/* Lede + actions */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.9 }}
+            transition={{ duration: 0.7, delay: 0.2 }}
             style={{
-              marginTop: 44,
               display: 'grid',
               gridTemplateColumns: 'minmax(0, 1.2fr) auto',
               alignItems: 'end',
@@ -349,7 +377,7 @@ export default function HeroCover({
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 0.7, delay: 1.1 }}
+            transition={{ duration: 0.7, delay: 0.35 }}
             style={{
               marginTop: 56,
               display: 'flex',
