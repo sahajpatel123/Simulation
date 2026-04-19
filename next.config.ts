@@ -14,6 +14,11 @@ const nextConfig: NextConfig = {
         destination: '/project/:id/results',
         permanent: false,
       },
+      {
+        source: '/projects/:id/ui-builder',
+        destination: '/project/:id/ui-builder',
+        permanent: false,
+      },
     ]
   },
 }
