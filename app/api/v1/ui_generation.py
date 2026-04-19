@@ -11,6 +11,7 @@ from app.core.deps import get_current_user
 from app.core.prompts import UI_GENERATION_PROMPT, validate_generated_html
 from app.models.generated_ui import GeneratedUI
 from app.models.project import Project
+from app.models.ui_simulation_run import UISimulationRun
 from app.models.user import User
 from app.schemas.ui_generation import GeneratedUIResponse, UIRefineRequest, UIGenerateRequest
 
@@ -256,3 +257,97 @@ async def serve_generated_ui(
     if not ui:
         raise HTTPException(status_code=404, detail="UI not found")
     return HTMLResponse(content=_inject_tracking(ui.html_content))
+
+
+@router.post("/projects/{project_id}/generated-uis/{ui_id}/simulate")
+async def start_ui_simulation(
+    project_id: int,
+    ui_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.tasks.ui_simulation_tasks import run_ui_simulation
+
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    ui = (
+        db.query(GeneratedUI)
+        .filter(
+            GeneratedUI.id == ui_id,
+            GeneratedUI.project_id == project_id,
+        )
+        .first()
+    )
+    if not ui:
+        raise HTTPException(status_code=404, detail="Generated UI not found")
+
+    run = UISimulationRun(
+        project_id=project_id,
+        generated_ui_id=ui_id,
+        status="QUEUED",
+        agent_count=1040,  # 52 clusters × ~20 agents each
+    )
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+
+    serve_url = (
+        f"https://simulation-production-c81f.up.railway.app/api/v1/generated-uis/{ui_id}/serve"
+    )
+
+    run_ui_simulation.delay(
+        ui_simulation_run_id=run.id,
+        generated_ui_id=ui_id,
+        project_id=project_id,
+        product_type=ui.product_type or "saas",
+        agents_per_cluster=20,
+        serve_url=serve_url,
+    )
+
+    return {
+        "ui_simulation_run_id": run.id,
+        "status": "QUEUED",
+        "message": "UI simulation started — check /ui-simulation-runs/{id} for results",
+    }
+
+
+@router.get("/projects/{project_id}/ui-simulation-runs/{run_id}")
+async def get_ui_simulation_run(
+    project_id: int,
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    run = (
+        db.query(UISimulationRun)
+        .filter(
+            UISimulationRun.id == run_id,
+            UISimulationRun.project_id == project_id,
+        )
+        .first()
+    )
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return {
+        "id": run.id,
+        "status": run.status,
+        "agent_count": run.agent_count,
+        "results": run.results_json,
+        "conductor_result": run.conductor_result_json,
+        "created_at": run.created_at.isoformat() if run.created_at else None,
+        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+    }
