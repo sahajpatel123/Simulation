@@ -6,11 +6,12 @@ import { useParams, useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 
+import { KeyPersonReport } from '@/components/KeyPersonReport'
 import type { ClusterBreakdownRow, DomainFindingRow, MeBlindspotRow, SimulationResultsPayload } from '@/components/simulation-results/types'
 import api, { apiError } from '@/lib/api'
 import { getApiV1Base } from '@/lib/api-v1-base'
 
-type Tab = 'overview' | 'clusters' | 'findings' | 'funnel' | 'blindspots'
+type Tab = 'personas' | 'overview' | 'clusters' | 'findings' | 'funnel' | 'blindspots'
 
 function populationWeightedConversion(
   clusters: ClusterBreakdownRow[],
@@ -27,7 +28,7 @@ function SimulationResultsInner() {
   const { id: projectId } = useParams<{ id: string }>()
   const searchParams = useSearchParams()
   const simulationId = searchParams.get('sim')
-  const [activeTab, setActiveTab] = useState<Tab>('overview')
+  const [activeTab, setActiveTab] = useState<Tab>('personas')
   const [clusterSort, setClusterSort] = useState<'conversion' | 'population'>('conversion')
   const [clusterFilter, setClusterFilter] = useState('')
 
@@ -105,6 +106,31 @@ function SimulationResultsInner() {
   const accountab = results.architect_accountability ?? {}
   const blindList = blindspotsPayload?.blindspots ?? []
 
+  const clusterBreakdownMap = useMemo(() => {
+    const m: Record<string, { conversion_rate: number; population_fraction: number }> = {}
+    for (const row of clusterRows) {
+      m[row.cluster_id] = {
+        conversion_rate: row.conversion_rate ?? 0,
+        population_fraction: row.population_fraction ?? 0,
+      }
+    }
+    return m
+  }, [clusterRows])
+  const clusters = clusterBreakdownMap
+
+  const cascadeFindingsSorted = useMemo(
+    () =>
+      [...findings]
+        .filter((f) => f.architect_name === 'AssumptionCascadeArchitect')
+        .sort((a, b) => (b.conversion_impact ?? 0) - (a.conversion_impact ?? 0)),
+    [findings],
+  )
+
+  const topFindingByImpact = useMemo(() => {
+    if (findings.length === 0) return null
+    return [...findings].sort((a, b) => (b.conversion_impact ?? 0) - (a.conversion_impact ?? 0))[0]
+  }, [findings])
+
   const clusterList = clusterRows.map((row) => ({
     cluster_id: row.cluster_id,
     cluster_name: row.cluster_name ?? row.cluster_id,
@@ -127,6 +153,7 @@ function SimulationResultsInner() {
     )
 
   const TABS: { key: Tab; label: string }[] = [
+    { key: 'personas', label: 'Key People' },
     { key: 'overview', label: 'Overview' },
     { key: 'clusters', label: `Clusters (${clusterList.length})` },
     { key: 'findings', label: `Findings (${findings.length})` },
@@ -209,6 +236,51 @@ function SimulationResultsInner() {
 
       <div className="p-8">
         <AnimatePresence mode="wait">
+          {activeTab === 'personas' && (
+            <motion.div
+              key="personas"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="space-y-8"
+            >
+              <KeyPersonReport
+                findings={findings}
+                clusterBreakdown={clusters}
+                primaryFailure={primaryFailure}
+              />
+
+              {cascadeFindingsSorted.length > 0 && (
+                <div className="space-y-3">
+                  <div>
+                    <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.28em] text-amber-400">
+                      Assumption conflicts
+                    </p>
+                    <p className="text-sm text-slate-400">
+                      These are internal contradictions in your product assumptions. Fix these before optimising anything
+                      else.
+                    </p>
+                  </div>
+                  {cascadeFindingsSorted.slice(0, 3).map((f, i) => (
+                    <div key={i} className="rounded-xl border border-amber-500/25 bg-amber-500/[0.05] p-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-white">{f.finding}</p>
+                          {f.recommended_action && (
+                            <p className="mt-2 font-mono text-xs text-slate-500">{f.recommended_action}</p>
+                          )}
+                        </div>
+                        <span className="shrink-0 font-mono text-xs text-amber-400">
+                          {((f.conversion_impact ?? 0) * 100).toFixed(1)}% impact
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          )}
+
           {activeTab === 'overview' && (
             <motion.div
               key="overview"
@@ -217,35 +289,93 @@ function SimulationResultsInner() {
               exit={{ opacity: 0 }}
               className="space-y-6"
             >
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              {cascadeFindingsSorted.length > 0 && (
+                <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.05] p-5">
+                  <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.28em] text-amber-400">
+                    Assumption cascade
+                  </p>
+                  <p className="text-sm leading-relaxed text-slate-200">{cascadeFindingsSorted[0]?.finding}</p>
+                  {cascadeFindingsSorted[0]?.recommended_action && (
+                    <p className="mt-3 font-mono text-xs text-slate-500">
+                      {cascadeFindingsSorted[0].recommended_action}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {[
                   {
-                    label: 'Conversion Rate',
+                    label: 'Primary conflict',
+                    value:
+                      cascadeFindingsSorted[0]?.finding ??
+                      (findings.length === 0 ? '—' : 'No cascade conflicts flagged'),
+                    sub: 'AssumptionCascade — top signal',
+                    valueClass: 'text-base font-semibold leading-snug text-slate-100 line-clamp-6',
+                  },
+                  {
+                    label: 'Highest impact fix',
+                    value: topFindingByImpact?.recommended_action ?? '—',
+                    sub: topFindingByImpact
+                      ? `${topFindingByImpact.architect_name?.replace(/Architect/g, '') ?? 'Finding'} · top impact`
+                      : 'from highest-impact finding',
+                    valueClass: 'text-base font-semibold leading-snug text-blue-400 line-clamp-6',
+                  },
+                  {
+                    label: 'Conversion rate',
                     value: `${(conversion * 100).toFixed(1)}%`,
                     sub: 'population weighted',
+                    valueClass: 'text-2xl font-bold text-blue-400',
                   },
                   {
-                    label: 'Primary Failure',
-                    value: primaryFailure.replace(/Architect/g, ''),
-                    sub: 'highest impact domain',
-                  },
-                  {
-                    label: 'Clusters Analysed',
-                    value: `${clusterList.length}`,
-                    sub: 'of 52 segments',
-                  },
-                  {
-                    label: 'Critical Findings',
+                    label: 'Critical findings',
                     value: `${findings.filter((f) => f.severity === 'CRITICAL').length}`,
                     sub: 'need action',
+                    valueClass: 'text-2xl font-bold text-blue-400',
                   },
                 ].map((kpi) => (
-                  <div key={kpi.label} className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-                    <p className="text-xs text-slate-500 tracking-widest uppercase mb-2">{kpi.label}</p>
-                    <p className="text-2xl font-bold text-blue-400">{kpi.value}</p>
-                    <p className="text-xs text-slate-600 mt-1">{kpi.sub}</p>
+                  <div key={kpi.label} className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+                    <p className="mb-2 text-xs uppercase tracking-widest text-slate-500">{kpi.label}</p>
+                    <p className={kpi.valueClass}>{kpi.value}</p>
+                    <p className="mt-1 text-xs text-slate-600">{kpi.sub}</p>
                   </div>
                 ))}
+              </div>
+
+              <div>
+                <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.28em] text-slate-500">Drop analysis</p>
+                <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-5">
+                  <p className="text-sm text-slate-300">
+                    Weighted conversion sits at{' '}
+                    <span className="font-semibold text-white">{(conversion * 100).toFixed(1)}%</span>. The strongest
+                    structural drag in this run maps to{' '}
+                    <span className="text-slate-100">{primaryFailure.replace(/Architect/g, '')}</span>
+                    {clusterList.length > 0 ? (
+                      <>
+                        {' '}
+                        across <span className="text-slate-200">{clusterList.length}</span> analysed segments (52
+                        archetypes in the model).
+                      </>
+                    ) : null}
+                  </p>
+                  <ul className="mt-4 space-y-2 border-t border-slate-800 pt-4">
+                    {[...findings]
+                      .sort((a, b) => (b.conversion_impact ?? 0) - (a.conversion_impact ?? 0))
+                      .slice(0, 3)
+                      .map((f, i) => (
+                        <li key={i} className="text-xs leading-relaxed text-slate-500">
+                          <span className="text-slate-400">
+                            {f.architect_name?.replace(/Architect/g, '') ?? 'Finding'}
+                          </span>
+                          {' — '}
+                          {f.finding}
+                        </li>
+                      ))}
+                    {findings.length === 0 && (
+                      <li className="text-xs text-slate-600">No ranked findings for this run.</li>
+                    )}
+                  </ul>
+                </div>
               </div>
 
               {Object.keys(accountab).length > 0 && (
