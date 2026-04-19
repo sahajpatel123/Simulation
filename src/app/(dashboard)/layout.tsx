@@ -53,9 +53,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               fontWeight: 500,
             }}
           >
-            <span>{today}</span>
-            <span style={{ color: 'var(--red)', fontWeight: 600 }}>THE ARCHIVE · WORKSPACE EDITION</span>
             <span>{issue}</span>
+            <span style={{ color: 'var(--red)', fontWeight: 600 }}>THE ARCHIVE · WORKSPACE EDITION</span>
+            <span>{today}</span>
           </div>
 
           {/* Masthead row */}
