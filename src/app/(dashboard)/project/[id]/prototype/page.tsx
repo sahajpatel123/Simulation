@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'framer-motion'
-import { ChevronDown, Monitor, Smartphone, ArrowRight, ArrowLeft, Loader2 } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { Monitor, Smartphone, ArrowRight, ArrowLeft, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -153,26 +153,6 @@ export default function PrototypePage() {
   const [generatedUiId, setGeneratedUiId] = useState<number | null>(null)
   const [simStatus, setSimStatus] = useState<string | null>(null)
   const promptSeededRef = useRef(false)
-  const reduceMotion = useReducedMotion()
-  const [mastheadStage, setMastheadStage] = useState<'full' | 'folding' | 'compact'>('full')
-  const [introDrawerOpen, setIntroDrawerOpen] = useState(false)
-
-  useEffect(() => {
-    if (reduceMotion) {
-      setMastheadStage('compact')
-      return
-    }
-    const t1 = window.setTimeout(() => setMastheadStage('folding'), 680)
-    const t2 = window.setTimeout(() => setMastheadStage('compact'), 680 + 640)
-    return () => {
-      window.clearTimeout(t1)
-      window.clearTimeout(t2)
-    }
-  }, [reduceMotion])
-
-  useEffect(() => {
-    if (mastheadStage === 'compact') setIntroDrawerOpen(false)
-  }, [mastheadStage])
 
   useEffect(() => {
     promptSeededRef.current = false
@@ -333,224 +313,63 @@ export default function PrototypePage() {
         flexDirection: 'column',
       }}
     >
-      <LayoutGroup id="prototype-press-layout">
-        {/* Masthead — folds intro into a compact drawer strip to free vertical space for the plate */}
-        <motion.header
-          layout
-          transition={{ layout: { duration: 0.45, ease: [0.2, 0.75, 0.2, 1] } }}
-          style={{ flexShrink: 0, marginBottom: mastheadStage === 'compact' ? 8 : 14 }}
-        >
+        <header style={{ flexShrink: 0, marginBottom: 14 }}>
           <div
             style={{
               display: 'flex',
-              alignItems: mastheadStage === 'compact' ? 'center' : 'flex-end',
+              alignItems: 'flex-end',
               justifyContent: 'space-between',
               gap: 24,
               flexWrap: 'wrap',
             }}
           >
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <AnimatePresence mode="wait">
-                {mastheadStage !== 'compact' ? (
-                  <motion.div
-                    key="hero-open"
-                    initial={{ opacity: 1 }}
-                    exit={{ opacity: 0, y: -14, transition: { duration: 0.38, ease: [0.4, 0, 0.2, 1] } }}
-                    style={{ maxWidth: 640 }}
-                  >
-                    <motion.h1
-                      layout
-                      className="font-serif"
-                      animate={
-                        mastheadStage === 'folding'
-                          ? { scale: 1.03, letterSpacing: '-0.028em' }
-                          : { scale: 1, letterSpacing: '-0.03em' }
-                      }
-                      transition={{
-                        duration: mastheadStage === 'folding' ? 0.52 : 0.4,
-                        ease: [0.22, 1, 0.36, 1],
-                      }}
-                      style={{
-                        fontSize: 'clamp(32px, 4vw, 48px)',
-                        fontWeight: 900,
-                        fontStyle: 'italic',
-                        lineHeight: 1,
-                        color: 'var(--ink)',
-                        marginBottom: 8,
-                        transformOrigin: 'left center',
-                      }}
-                    >
-                      The <span style={{ color: 'var(--red)' }}>setting</span> in full.
-                    </motion.h1>
-                    <motion.p
-                      layout
-                      style={{
-                        overflow: 'hidden',
-                        maxWidth: 520,
-                        fontWeight: 300,
-                        fontSize: 13,
-                        lineHeight: 1.65,
-                        color: 'var(--ink-secondary)',
-                      }}
-                      animate={
-                        mastheadStage === 'folding'
-                          ? { opacity: 0, maxHeight: 0, y: -26, marginTop: 0, marginBottom: 0 }
-                          : { opacity: 1, maxHeight: 160, y: 0, marginTop: 0, marginBottom: 0 }
-                      }
-                      transition={{
-                        duration: mastheadStage === 'folding' ? 0.58 : 0.4,
-                        ease: [0.45, 0, 0.2, 1],
-                      }}
-                    >
-                      {introSubtext}
-                    </motion.p>
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key="hero-drawer"
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4, ease: [0.2, 0.75, 0.2, 1] }}
-                    style={{ display: 'flex', flexDirection: 'column', gap: 0, width: '100%' }}
-                  >
-                    {/* Red rule + solid red tab (headline lives on the tab, chevron in white) */}
-                    <div style={{ paddingTop: 22, paddingBottom: 2, width: '100%' }}>
-                      <div style={{ position: 'relative', width: '100%' }}>
-                        <div
-                          aria-hidden
-                          style={{
-                            height: 2,
-                            width: '100%',
-                            background: 'var(--red)',
-                          }}
-                        />
-                        <div
-                          style={{
-                            position: 'absolute',
-                            left: '50%',
-                            top: 0,
-                            transform: 'translate(-50%, -50%)',
-                            zIndex: 1,
-                          }}
-                        >
-                          <button
-                            type="button"
-                            id="prototype-intro-drawer-trigger"
-                            aria-expanded={introDrawerOpen}
-                            aria-controls="prototype-intro-drawer-panel"
-                            onClick={() => setIntroDrawerOpen((o) => !o)}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexWrap: 'wrap',
-                              gap: 12,
-                              padding: '11px 22px 12px',
-                              border: 'none',
-                              background: 'var(--red)',
-                              cursor: 'pointer',
-                              borderRadius: 0,
-                              textAlign: 'center',
-                              font: 'inherit',
-                              color: '#fff',
-                              boxShadow: '0 3px 0 rgba(26,23,20,0.14)',
-                              maxWidth: 'min(100%, calc(100vw - 120px))',
-                            }}
-                          >
-                            <motion.span
-                              aria-hidden
-                              style={{ display: 'inline-flex', color: '#fff' }}
-                              animate={{ rotate: introDrawerOpen ? 180 : 0 }}
-                              transition={{ type: 'spring', stiffness: 420, damping: 28 }}
-                            >
-                              <ChevronDown size={20} strokeWidth={2.35} color="#fff" />
-                            </motion.span>
-                            <span
-                              className="font-serif"
-                              style={{
-                                fontSize: 'clamp(16px, 2.4vw, 20px)',
-                                fontWeight: 800,
-                                fontStyle: 'italic',
-                                letterSpacing: '-0.02em',
-                                color: '#fff',
-                                lineHeight: 1.05,
-                              }}
-                            >
-                              The <span style={{ fontStyle: 'italic', fontWeight: 900 }}>setting</span> in full.
-                            </span>
-                          </button>
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>{viewToggle}</div>
-                    </div>
-                    <AnimatePresence initial={false}>
-                      {introDrawerOpen && (
-                        <motion.div
-                          id="prototype-intro-drawer-panel"
-                          role="region"
-                          aria-labelledby="prototype-intro-drawer-trigger"
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.34, ease: [0.2, 0.75, 0.2, 1] }}
-                          style={{
-                            overflow: 'hidden',
-                            marginTop: 10,
-                            paddingLeft: 12,
-                            borderLeft: '2px solid var(--red)',
-                          }}
-                        >
-                          <p
-                            style={{
-                              fontSize: 13,
-                              lineHeight: 1.65,
-                              color: 'var(--ink-secondary)',
-                              maxWidth: 560,
-                              fontWeight: 300,
-                              margin: 0,
-                            }}
-                          >
-                            {introSubtext}
-                          </p>
-                          <p className="kicker" style={{ color: 'var(--ink-tertiary)', marginTop: 10, marginBottom: 0 }}>
-                            Reader&rsquo;s proof · masthead folded for workspace
-                          </p>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {mastheadStage !== 'compact' ? <div style={{ flexShrink: 0 }}>{viewToggle}</div> : null}
-          </div>
-
-          {mastheadStage !== 'compact' ? (
-            <>
-              <motion.div
-                layout
-                initial={{ scaleX: 0, transformOrigin: 'left' }}
-                animate={{ scaleX: 1 }}
-                transition={{ duration: 0.35, ease: [0.2, 0.7, 0.2, 1] }}
+            <div style={{ flex: 1, minWidth: 0, maxWidth: 640 }}>
+              <h1
+                className="font-serif"
                 style={{
-                  height: 2,
-                  background: 'var(--red)',
-                  marginTop: 16,
+                  fontSize: 'clamp(32px, 4vw, 48px)',
+                  fontWeight: 900,
+                  fontStyle: 'italic',
+                  lineHeight: 1,
+                  color: 'var(--ink)',
+                  margin: '0 0 8px',
                 }}
-              />
-              <div style={{ height: 0.5, background: 'var(--border-color)', marginTop: 4 }} />
-            </>
-          ) : null}
-        </motion.header>
+              >
+                The <span style={{ color: 'var(--red)' }}>setting</span> in full.
+              </h1>
+              <p
+                style={{
+                  maxWidth: 520,
+                  fontWeight: 300,
+                  fontSize: 13,
+                  lineHeight: 1.65,
+                  color: 'var(--ink-secondary)',
+                  margin: 0,
+                }}
+              >
+                {introSubtext}
+              </p>
+            </div>
+            <div style={{ flexShrink: 0 }}>{viewToggle}</div>
+          </div>
+          <motion.div
+            initial={{ scaleX: 0, transformOrigin: 'left' }}
+            animate={{ scaleX: 1 }}
+            transition={{ duration: 0.35, ease: [0.2, 0.7, 0.2, 1] }}
+            style={{
+              height: 2,
+              background: 'var(--red)',
+              marginTop: 16,
+            }}
+          />
+          <div style={{ height: 0.5, background: 'var(--border-color)', marginTop: 4 }} />
+        </header>
 
         {/* Press window */}
         <motion.div
-          layout
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{
-            layout: { duration: 0.48, ease: [0.2, 0.75, 0.2, 1] },
             opacity: { duration: 0.45, delay: 0.05 },
             y: { duration: 0.45, delay: 0.05 },
           }}
@@ -802,7 +621,6 @@ export default function PrototypePage() {
           )}
         </div>
       </motion.div>
-      </LayoutGroup>
 
       {/* Footer */}
       <footer
