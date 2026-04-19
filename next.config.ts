@@ -7,6 +7,15 @@ import type { NextConfig } from 'next'
 // .next directory so Vercel's output serving works correctly.
 const nextConfig: NextConfig = {
   distDir: process.env.VERCEL ? '.next' : '.next.nosync',
+  async redirects() {
+    return [
+      {
+        source: '/projects/:id/results',
+        destination: '/project/:id/results',
+        permanent: false,
+      },
+    ]
+  },
 }
 
 export default nextConfig

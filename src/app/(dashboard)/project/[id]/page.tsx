@@ -344,6 +344,64 @@ export default function ProjectPage() {
             <ChaseCounter label="Last pull" value={filedDate ? timeAgo(filedDate) : 'just now'} mono={false} />
           </div>
 
+          {/* Press runs — link completed simulations to results dashboard */}
+          {!sLoading && simulations && simulations.length > 0 && (
+            <div style={{ marginTop: 28 }}>
+              <div
+                className="kicker"
+                style={{ color: 'var(--red)', marginBottom: 12, letterSpacing: '0.22em', textTransform: 'uppercase' }}
+              >
+                Press runs
+              </div>
+              <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {simulations.map((sim, simIdx) => {
+                  const sid = sim.id
+                  const st = sim.status ?? ''
+                  const filed = st === 'COMPLETED'
+                  return (
+                    <li
+                      key={sid ?? `sim-${simIdx}`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        padding: '10px 14px',
+                        border: '0.5px solid var(--border-color)',
+                        background: 'var(--paper)',
+                      }}
+                      className="rise"
+                    >
+                      <span style={{ fontSize: 13, color: 'var(--ink-secondary)' }}>
+                        Run <span style={{ color: 'var(--ink)', fontWeight: 600 }}>#{sid}</span>
+                        <span style={{ marginLeft: 10, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.14em' }}>
+                          {st.replace(/_/g, ' ')}
+                        </span>
+                      </span>
+                      {filed && sid != null ? (
+                        <Link
+                          href={`/project/${projectId}/results?sim=${sid}`}
+                          style={{
+                            fontSize: 11,
+                            letterSpacing: '0.16em',
+                            textTransform: 'uppercase',
+                            color: 'var(--red)',
+                            textDecoration: 'none',
+                            fontWeight: 600,
+                          }}
+                        >
+                          Results →
+                        </Link>
+                      ) : (
+                        <span style={{ fontSize: 11, color: 'var(--ink-tertiary)' }}>—</span>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          )}
+
           {/* ─── Prototype plate ─────────────────────────── */}
           <Link
             href={`/project/${projectId}/prototype`}

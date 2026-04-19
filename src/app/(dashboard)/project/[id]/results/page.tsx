@@ -1,310 +1,510 @@
 'use client'
 
-import { useState } from 'react'
-import { motion } from 'framer-motion'
+import { Suspense, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
-import { ArrowRight, TrendingUp, Users, IndianRupee, Target, ChevronDown, Loader2 } from 'lucide-react'
+import { useParams, useSearchParams } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
+import { motion, AnimatePresence } from 'framer-motion'
 
-import InterventionCard from '@/components/project/InterventionCard'
-import ProbabilityChart from '@/components/project/ProbabilityChart'
-import { useProject } from '@/hooks/useProjects'
-import { getSimulationResultByProjectId } from '@/lib/mock-data'
+import type { ClusterBreakdownRow, DomainFindingRow, MeBlindspotRow, SimulationResultsPayload } from '@/components/simulation-results/types'
+import api, { apiError } from '@/lib/api'
+import { getApiV1Base } from '@/lib/api-v1-base'
 
-export default function ResultsPage() {
-  const params = useParams()
-  const projectId = Number(params.id)
-  const idStr = String(projectId)
+type Tab = 'overview' | 'clusters' | 'findings' | 'funnel' | 'blindspots'
 
-  const { data: project, isLoading, isError } = useProject(Number.isFinite(projectId) ? projectId : null)
-  const result = getSimulationResultByProjectId(idStr)
-  const [volume, setVolume] = useState(result?.consumerVolume || 10000)
+function populationWeightedConversion(
+  clusters: ClusterBreakdownRow[],
+  resultsJson: Record<string, unknown> | null,
+): number {
+  const raw = resultsJson?.population_weighted_conversion
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw
+  const mean = resultsJson?.mean_conversion_rate
+  if (typeof mean === 'number' && Number.isFinite(mean)) return mean
+  return clusters.reduce((acc, c) => acc + c.conversion_rate * c.population_fraction, 0)
+}
 
-  if (!Number.isFinite(projectId) || isError) {
+function SimulationResultsInner() {
+  const { id: projectId } = useParams<{ id: string }>()
+  const searchParams = useSearchParams()
+  const simulationId = searchParams.get('sim')
+  const [activeTab, setActiveTab] = useState<Tab>('overview')
+  const [clusterSort, setClusterSort] = useState<'conversion' | 'population'>('conversion')
+  const [clusterFilter, setClusterFilter] = useState('')
+
+  const { data: results, isLoading, isError, error } = useQuery({
+    queryKey: ['sim-results', simulationId],
+    queryFn: async () =>
+      (await api.get<SimulationResultsPayload>(`/simulations/${simulationId}/results`)).data,
+    enabled: !!simulationId,
+  })
+
+  const { data: blindspotsPayload } = useQuery({
+    queryKey: ['blindspots'],
+    queryFn: async () => (await api.get<{ blindspots: MeBlindspotRow[] }>('/users/me/blindspots')).data,
+  })
+
+  const findingByCluster = useMemo(() => {
+    const list = results?.domain_findings
+    if (!Array.isArray(list)) return new Map<string, string>()
+    const m = new Map<string, string>()
+    for (const f of list) {
+      if (f.cluster_id && f.finding) m.set(f.cluster_id, f.finding)
+    }
+    return m
+  }, [results])
+
+  if (!simulationId) {
     return (
-      <div style={{ padding: '64px 48px', maxWidth: 560 }}>
-        <div className="kicker" style={{ color: 'var(--red)', marginBottom: 10 }}>
-          Errata
-        </div>
-        <h1 className="font-serif" style={{ fontSize: 32, fontWeight: 900, fontStyle: 'italic', color: 'var(--ink)' }}>
-          This dossier could not be opened.
-        </h1>
-        <Link href="/projects" style={{ marginTop: 16, display: 'inline-block', color: 'var(--red)', fontSize: 14 }}>
-          Return to the index.
-        </Link>
-      </div>
-    )
-  }
-
-  if (isLoading || !project) {
-    return (
-      <div style={{ padding: '64px 48px', display: 'flex', gap: 12, alignItems: 'center', color: 'var(--ink-secondary)' }}>
-        <Loader2 className="animate-spin" style={{ width: 14, height: 14 }} />
-        <span className="kicker">Gathering proofs…</span>
-      </div>
-    )
-  }
-
-  if (!result) {
-    return (
-      <div style={{ padding: '48px 48px 64px', maxWidth: 560 }}>
-        <div className="kicker" style={{ color: 'var(--red)', marginBottom: 12 }}>
-          Proofs missing
-        </div>
-        <h1 className="font-serif" style={{ fontSize: 32, fontWeight: 900, fontStyle: 'italic', color: 'var(--ink)', marginBottom: 12 }}>
-          No impression on file.
-        </h1>
-        <p style={{ fontSize: 14, lineHeight: 1.7, color: 'var(--ink-secondary)', marginBottom: 24 }}>
-          Run the press once to generate probability tables and recommended interventions for this dossier.
+      <div className="min-h-[calc(100dvh-120px)] bg-slate-950 flex flex-col items-center justify-center gap-4 px-6">
+        <p className="text-slate-500 font-mono text-sm">No simulation selected.</p>
+        <p className="text-slate-600 font-mono text-xs text-center max-w-md">
+          Open a completed run from your dossier (Press runs) with a results link, or append{' '}
+          <code className="text-blue-400/90">?sim=</code> and the simulation id.
         </p>
-        <Link href={`/project/${idStr}/simulation`} className="btn-ink" style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-          Run the press <ArrowRight style={{ width: 14, height: 14 }} />
+        <Link
+          href={`/project/${projectId}`}
+          className="text-xs text-blue-400 hover:text-blue-300 font-mono tracking-widest uppercase"
+        >
+          ← Back to dossier
         </Link>
       </div>
     )
   }
 
-  const scaledRevenue = Math.round((result.projectedRevenue * volume) / result.consumerVolume)
+  if (isLoading) {
+    return (
+      <div className="min-h-[calc(100dvh-120px)] bg-slate-950 flex flex-col items-center justify-center gap-4">
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-slate-400 font-mono text-sm">Loading results...</p>
+      </div>
+    )
+  }
 
-  const metrics = [
+  if (isError || !results) {
+    const msg = error ? apiError(error) : ''
+    return (
+      <div className="min-h-[calc(100dvh-120px)] bg-slate-950 flex flex-col items-center justify-center gap-3 px-6">
+        <p className="text-red-400 font-mono text-sm text-center max-w-lg">
+          {msg || 'Could not load simulation results.'}
+        </p>
+        <Link href={`/project/${projectId}`} className="text-xs text-blue-400 font-mono">
+          ← Back to dossier
+        </Link>
+      </div>
+    )
+  }
+
+  const resultsJson = results.results
+  const clusterRows = Array.isArray(results.cluster_breakdown) ? results.cluster_breakdown : []
+  const conversion = populationWeightedConversion(clusterRows, resultsJson)
+  const primaryFailure = results.primary_failure_domain ?? '—'
+  const productType = results.product_type_detected?.trim() || '—'
+  const signalQuality = results.signal_quality ?? 0
+  const findings: DomainFindingRow[] = Array.isArray(results.domain_findings) ? results.domain_findings : []
+  const narrative = results.cluster_narrative ?? ''
+  const accountab = results.architect_accountability ?? {}
+  const blindList = blindspotsPayload?.blindspots ?? []
+
+  const clusterList = clusterRows.map((row) => ({
+    cluster_id: row.cluster_id,
+    cluster_name: row.cluster_name ?? row.cluster_id,
+    conversion_rate: row.conversion_rate ?? 0,
+    population_fraction: row.population_fraction ?? 0,
+    top_finding: findingByCluster.get(row.cluster_id) ?? 'No critical findings',
+    segment: row.segment_description ?? '',
+  }))
+
+  const filteredClusters = clusterList
+    .filter(
+      (c) =>
+        c.cluster_name.toLowerCase().includes(clusterFilter.toLowerCase()) ||
+        c.cluster_id.toLowerCase().includes(clusterFilter.toLowerCase()),
+    )
+    .sort((a, b) =>
+      clusterSort === 'conversion'
+        ? b.conversion_rate - a.conversion_rate
+        : b.population_fraction - a.population_fraction,
+    )
+
+  const TABS: { key: Tab; label: string }[] = [
+    { key: 'overview', label: 'Overview' },
+    { key: 'clusters', label: `Clusters (${clusterList.length})` },
+    { key: 'findings', label: `Findings (${findings.length})` },
+    { key: 'funnel', label: 'Funnel' },
     {
-      label: 'Conversion rate',
-      value: `${result.conversionRate}%`,
-      sub: `${result.confidenceInterval.low}–${result.confidenceInterval.high}% CI`,
-      icon: Target,
-    },
-    {
-      label: 'Projected revenue',
-      value: `₹${(scaledRevenue / 1000).toFixed(0)}K`,
-      sub: `at ${volume.toLocaleString()} agents`,
-      icon: IndianRupee,
-    },
-    {
-      label: 'Avg order value',
-      value: `₹${result.averageOrderValue.toLocaleString()}`,
-      sub: 'per conversion',
-      icon: TrendingUp,
-    },
-    {
-      label: 'Consumer volume',
-      value: volume.toLocaleString(),
-      sub: 'simulation agents',
-      icon: Users,
+      key: 'blindspots',
+      label: `Blindspots ${blindList.length > 0 ? `(${blindList.length})` : ''}`,
     },
   ]
 
-  return (
-    <div style={{ padding: '36px 48px 56px', maxWidth: 1000 }}>
-      <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }}>
-        <header
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'space-between',
-            gap: 24,
-            flexWrap: 'wrap',
-            marginBottom: 28,
-          }}
-        >
-          <div>
-            <div
-              className="kicker"
-              style={{ color: 'var(--red)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
-            >
-              <Link href={`/project/${idStr}/simulation`} style={{ color: 'inherit', textDecoration: 'none' }}>
-                At press
-              </Link>
-              <span style={{ color: 'var(--ink-tertiary)' }}>·</span>
-              <span style={{ color: 'var(--ink-secondary)' }}>Proofs</span>
-            </div>
-            <h1
-              className="font-serif"
-              style={{
-                fontSize: 'clamp(28px, 3.5vw, 40px)',
-                fontWeight: 900,
-                fontStyle: 'italic',
-                color: 'var(--ink)',
-                marginBottom: 6,
-              }}
-            >
-              The <span style={{ color: 'var(--red)' }}>numbers</span> in brief.
-            </h1>
-            <p style={{ fontSize: 13, color: 'var(--ink-secondary)', fontWeight: 300 }}>{project.title}</p>
-          </div>
-          <div
-            style={{
-              border: '0.5px solid var(--ink)',
-              background: 'var(--paper)',
-              padding: '18px 28px',
-              textAlign: 'center',
-              minWidth: 140,
-            }}
-            className="rise"
-          >
-            <div className="font-serif" style={{ fontSize: 36, fontWeight: 800, fontStyle: 'italic', color: 'var(--red)', lineHeight: 1 }}>
-              {result.overallConfidence}%
-            </div>
-            <div className="kicker" style={{ marginTop: 8, color: 'var(--ink-tertiary)' }}>
-              Confidence
-            </div>
-          </div>
-        </header>
+  const severityColor = (s: string) =>
+    s === 'CRITICAL' ? 'text-red-400' : s === 'WARNING' ? 'text-amber-400' : 'text-green-400'
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-            gap: 14,
-            marginBottom: 22,
-          }}
-        >
-          {metrics.map(({ label, value, sub, icon: Icon }, i) => (
-            <motion.div
-              key={label}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.06 }}
-              style={{
-                border: '0.5px solid var(--border-strong)',
-                background: 'var(--paper)',
-                padding: 20,
-              }}
-              className="rise"
+  const severityBg = (s: string) =>
+    s === 'CRITICAL'
+      ? 'bg-red-500/10 border-red-500/30'
+      : s === 'WARNING'
+        ? 'bg-amber-500/10 border-amber-500/30'
+        : 'bg-green-500/10 border-green-500/30'
+
+  const apiV1 = getApiV1Base()
+  const pdfHref = `${apiV1}/simulations/${simulationId}/report.pdf`
+
+  return (
+    <div className="min-h-[calc(100dvh-120px)] bg-slate-950 text-slate-100 font-mono">
+      <div className="border-b border-slate-800 px-8 py-5">
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-1">
+          <p className="text-xs text-blue-400 tracking-widest uppercase w-full sm:w-auto">TheCee / Simulation Results</p>
+          <Link
+            href={`/project/${projectId}`}
+            className="text-[10px] text-slate-500 hover:text-slate-300 tracking-widest uppercase"
+          >
+            Dossier #{projectId}
+          </Link>
+        </div>
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <h1 className="text-xl font-bold tracking-tight">Simulation #{simulationId}</h1>
+          <div className="flex items-center gap-4 flex-wrap">
+            <span className="text-xs text-slate-500">{productType.replace(/_/g, ' ').toUpperCase()}</span>
+            <span
+              className={`text-xs px-2 py-1 rounded border ${
+                signalQuality >= 0.5
+                  ? 'border-green-500/40 text-green-400'
+                  : signalQuality >= 0.25
+                    ? 'border-amber-500/40 text-amber-400'
+                    : 'border-red-500/40 text-red-400'
+              }`}
             >
-              <Icon style={{ width: 16, height: 16, color: 'var(--red)', opacity: 0.85, marginBottom: 12 }} />
-              <div className="font-serif" style={{ fontSize: 22, fontWeight: 800, fontStyle: 'italic', color: 'var(--ink)', marginBottom: 4 }}>
-                {value}
-              </div>
-              <div className="kicker" style={{ fontSize: 9, color: 'var(--ink-secondary)', marginBottom: 6 }}>
-                {label}
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--ink-tertiary)', lineHeight: 1.45 }}>{sub}</div>
-            </motion.div>
-          ))}
+              Signal {signalQuality >= 0.5 ? 'FULL' : signalQuality >= 0.25 ? 'PARTIAL' : 'LOW'}{' '}
+              {Math.round(signalQuality * 100)}%
+            </span>
+            <a
+              href={pdfHref}
+              className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 rounded text-white transition-all tracking-widest uppercase"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              ↓ PDF Report
+            </a>
+          </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 18, marginBottom: 22 }}>
-          <div
-            style={{ border: '0.5px solid var(--border-strong)', background: 'var(--paper)', padding: 24 }}
-            className="rise"
-          >
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
-              <h3 className="font-serif" style={{ fontSize: 16, fontWeight: 800, fontStyle: 'italic', color: 'var(--ink)' }}>
-                Probability spread
-              </h3>
-              <span className="kicker" style={{ color: 'var(--ink-tertiary)' }}>
-                3 runs
-              </span>
-            </div>
-            <p style={{ fontSize: 11, color: 'var(--ink-secondary)', marginBottom: 18, lineHeight: 1.5 }}>
-              Interval {result.confidenceInterval.low}% – {result.confidenceInterval.high}%
-            </p>
-            <ProbabilityChart conversionRate={result.conversionRate} confidenceInterval={result.confidenceInterval} />
+        <div className="flex gap-1 mt-4 flex-wrap">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setActiveTab(t.key)}
+              className={`px-4 py-1.5 text-xs rounded-t tracking-wide transition-all ${
+                activeTab === t.key
+                  ? 'bg-slate-800 text-blue-400 border-b-2 border-blue-500'
+                  : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-            <div style={{ marginTop: 22, paddingTop: 20, borderTop: '0.5px solid var(--border-color)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <label className="kicker" style={{ color: 'var(--ink-secondary)' }}>
-                  Adjust reader count
-                </label>
-                <span className="font-serif" style={{ fontSize: 15, fontWeight: 800, fontStyle: 'italic', color: 'var(--red)' }}>
-                  {volume.toLocaleString()}
-                </span>
-              </div>
-              <input
-                type="range"
-                min={1000}
-                max={50000}
-                step={500}
-                value={volume}
-                onChange={(e) => setVolume(Number(e.target.value))}
-                style={{ width: '100%', height: 4, accentColor: 'var(--red)', cursor: 'pointer' }}
-              />
-            </div>
-          </div>
-
-          <div
-            style={{ border: '0.5px solid var(--border-strong)', background: 'var(--paper)', padding: 24 }}
-            className="rise"
-          >
-            <h3 className="font-serif" style={{ fontSize: 16, fontWeight: 800, fontStyle: 'italic', color: 'var(--ink)', marginBottom: 18 }}>
-              Funnel bleed
-            </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {result.funnelDropOff.map(({ stage, dropOffPercentage }) => (
-                <div key={stage}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 6, color: 'var(--ink-secondary)' }}>
-                    <span>{stage}</span>
-                    <span style={{ color: 'var(--red)', fontWeight: 600 }}>−{dropOffPercentage}%</span>
-                  </div>
-                  <div style={{ height: 3, background: 'rgba(26,23,20,0.08)', overflow: 'hidden' }}>
-                    <motion.div
-                      style={{ height: '100%', background: 'rgba(192,57,43,0.45)' }}
-                      initial={{ width: 0 }}
-                      animate={{ width: `${dropOffPercentage}%` }}
-                      transition={{ duration: 0.75, delay: 0.25 }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ marginTop: 22, paddingTop: 20, borderTop: '0.5px solid var(--border-color)' }}>
-              <h4 className="kicker" style={{ marginBottom: 12, color: 'var(--ink-tertiary)' }}>
-                Sensitivity
-              </h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {Object.entries(result.sensitivityAnalysis).map(([key, val]) => (
-                  <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, fontSize: 11 }}>
-                    <span style={{ color: 'var(--ink-secondary)' }}>{key}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 72, height: 3, background: 'rgba(26,23,20,0.08)', overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${val * 100}%`, background: 'var(--ink)' }} />
-                      </div>
-                      <span style={{ color: 'var(--ink-tertiary)', width: 32, textAlign: 'right' }}>{Math.round(val * 100)}%</span>
-                    </div>
+      <div className="p-8">
+        <AnimatePresence mode="wait">
+          {activeTab === 'overview' && (
+            <motion.div
+              key="overview"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="space-y-6"
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                {[
+                  {
+                    label: 'Conversion Rate',
+                    value: `${(conversion * 100).toFixed(1)}%`,
+                    sub: 'population weighted',
+                  },
+                  {
+                    label: 'Primary Failure',
+                    value: primaryFailure.replace(/Architect/g, ''),
+                    sub: 'highest impact domain',
+                  },
+                  {
+                    label: 'Clusters Analysed',
+                    value: `${clusterList.length}`,
+                    sub: 'of 52 segments',
+                  },
+                  {
+                    label: 'Critical Findings',
+                    value: `${findings.filter((f) => f.severity === 'CRITICAL').length}`,
+                    sub: 'need action',
+                  },
+                ].map((kpi) => (
+                  <div key={kpi.label} className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                    <p className="text-xs text-slate-500 tracking-widest uppercase mb-2">{kpi.label}</p>
+                    <p className="text-2xl font-bold text-blue-400">{kpi.value}</p>
+                    <p className="text-xs text-slate-600 mt-1">{kpi.sub}</p>
                   </div>
                 ))}
               </div>
-            </div>
-          </div>
-        </div>
 
-        <section style={{ marginBottom: 28 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14, gap: 12 }}>
-            <h3 className="font-serif" style={{ fontSize: 18, fontWeight: 800, fontStyle: 'italic', color: 'var(--ink)' }}>
-              Marginalia — interventions
-            </h3>
-            <span className="kicker" style={{ color: 'var(--ink-tertiary)' }}>
-              {result.topInterventions.length} actions
-            </span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
-            {result.topInterventions.map((intervention, i) => (
-              <motion.div
-                key={intervention.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.08 }}
-              >
-                <InterventionCard intervention={intervention} rank={i + 1} />
-              </motion.div>
-            ))}
-          </div>
-        </section>
+              {Object.keys(accountab).length > 0 && (
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                  <p className="text-xs text-slate-500 tracking-widest uppercase mb-4">Architect Accountability</p>
+                  <div className="space-y-2">
+                    {Object.entries(accountab as Record<string, number>)
+                      .sort(([, a], [, b]) => b - a)
+                      .slice(0, 6)
+                      .map(([arch, score]) => (
+                        <div key={arch} className="flex items-center gap-3">
+                          <span className="text-xs text-slate-400 w-48 truncate">
+                            {arch.replace(/Architect/g, '')}
+                          </span>
+                          <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-blue-500 rounded-full transition-all"
+                              style={{ width: `${Math.min(100, score * 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-slate-500 w-10 text-right">{(score * 100).toFixed(0)}%</span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            className="btn-ghost"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-          >
-            <ChevronDown style={{ width: 14, height: 14 }} /> Export folio
-          </button>
-          <Link href={`/project/${idStr}/tracker`} className="btn-ink" style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-            Record what happened <ArrowRight style={{ width: 14, height: 14 }} />
-          </Link>
-        </div>
-      </motion.div>
+              {narrative && (
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                  <p className="text-xs text-slate-500 tracking-widest uppercase mb-3">Cluster Narrative</p>
+                  <div className="space-y-1">
+                    {narrative
+                      .split('\n')
+                      .filter(Boolean)
+                      .map((line: string, i: number) => (
+                        <p key={i} className="text-sm text-slate-300 leading-relaxed">
+                          {line}
+                        </p>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {activeTab === 'clusters' && (
+            <motion.div
+              key="clusters"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="space-y-4"
+            >
+              <div className="flex flex-wrap items-center gap-4">
+                <input
+                  value={clusterFilter}
+                  onChange={(e) => setClusterFilter(e.target.value)}
+                  placeholder="Filter clusters..."
+                  className="bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-blue-500 focus:outline-none w-full sm:w-64"
+                />
+                <div className="flex gap-1">
+                  {(['conversion', 'population'] as const).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setClusterSort(s)}
+                      className={`px-3 py-1.5 text-xs rounded transition-all ${
+                        clusterSort === s
+                          ? 'bg-blue-600 text-white'
+                          : 'text-slate-500 border border-slate-800 hover:text-slate-300'
+                      }`}
+                    >
+                      Sort: {s}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-xs text-slate-600 ml-auto">{filteredClusters.length} clusters</span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2">
+                {filteredClusters.length === 0 ? (
+                  <p className="text-slate-600 text-sm">No clusters match this filter.</p>
+                ) : (
+                  filteredClusters.map((c, i) => (
+                    <div
+                      key={c.cluster_id}
+                      className="bg-slate-900 border border-slate-800 rounded-lg px-5 py-4 hover:border-slate-700 transition-all grid grid-cols-12 gap-4 items-center"
+                    >
+                      <span className="col-span-1 text-xs text-slate-600">{i + 1}</span>
+                      <div className="col-span-4 min-w-0">
+                        <p className="text-sm text-slate-200 truncate">{c.cluster_name}</p>
+                        <p className="text-xs text-slate-600 mt-0.5 truncate">{c.cluster_id}</p>
+                      </div>
+                      <div className="col-span-3 flex items-center gap-2 min-w-0">
+                        <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              c.conversion_rate > 0.3
+                                ? 'bg-green-500'
+                                : c.conversion_rate > 0.1
+                                  ? 'bg-blue-500'
+                                  : c.conversion_rate > 0.03
+                                    ? 'bg-amber-500'
+                                    : 'bg-red-500'
+                            }`}
+                            style={{ width: `${Math.min(100, c.conversion_rate * 100)}%` }}
+                          />
+                        </div>
+                        <span className="text-xs font-bold text-slate-300 w-10 text-right shrink-0">
+                          {(c.conversion_rate * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="col-span-2 text-center">
+                        <span className="text-xs text-slate-400">{(c.population_fraction * 100).toFixed(1)}%</span>
+                        <p className="text-xs text-slate-600">of market</p>
+                      </div>
+                      <div className="col-span-2 min-w-0">
+                        <p className="text-xs text-slate-500 truncate" title={c.top_finding}>
+                          {c.top_finding}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'findings' && (
+            <motion.div
+              key="findings"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="space-y-3"
+            >
+              {findings.length === 0 ? (
+                <p className="text-slate-600 text-sm">No findings available.</p>
+              ) : (
+                findings.map((f: DomainFindingRow, i: number) => (
+                  <div key={i} className={`border rounded-xl p-5 ${severityBg(f.severity ?? 'INFO')}`}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-2 flex-wrap">
+                          <span className={`text-xs font-bold tracking-widest ${severityColor(f.severity ?? 'INFO')}`}>
+                            {f.severity ?? 'INFO'}
+                          </span>
+                          <span className="text-xs text-slate-500 truncate">
+                            {f.architect_name?.replace(/Architect/g, '')} · {f.cluster_name}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-200">{f.finding}</p>
+                        {f.recommended_action && (
+                          <p className="text-xs text-slate-500 mt-2">{f.recommended_action}</p>
+                        )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs text-slate-500">Impact</p>
+                        <p className="text-lg font-bold text-blue-400">
+                          {((f.conversion_impact ?? 0) * 100).toFixed(1)}%
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </motion.div>
+          )}
+
+          {activeTab === 'funnel' && (
+            <motion.div
+              key="funnel"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="space-y-4"
+            >
+              <p className="text-xs text-slate-500">
+                Funnel data loads from the UI simulation run. Run a UI simulation first to see stage-level drop-off.
+              </p>
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                <p className="text-xs text-slate-500 tracking-widest uppercase mb-4">Overall Funnel (Markov model)</p>
+                {[
+                  { stage: 'ARRIVE', rate: 1.0 },
+                  { stage: 'BROWSE', rate: Math.min(0.95, conversion * 6) },
+                  { stage: 'CONSIDER', rate: Math.min(0.85, conversion * 4) },
+                  { stage: 'DECIDE', rate: Math.min(0.7, conversion * 2.5) },
+                  { stage: 'PURCHASE', rate: conversion },
+                ].map((s, i, arr) => (
+                  <div key={s.stage} className="flex items-center gap-4 mb-3">
+                    <span className="text-xs text-slate-500 w-20 shrink-0">{s.stage}</span>
+                    <div className="flex-1 h-6 bg-slate-800 rounded relative overflow-hidden min-w-0">
+                      <div
+                        className="h-full bg-blue-600 rounded transition-all"
+                        style={{ width: `${s.rate * 100}%` }}
+                      />
+                      <span className="absolute right-2 top-1 text-xs text-slate-300">{(s.rate * 100).toFixed(1)}%</span>
+                    </div>
+                    {i > 0 && (
+                      <span className="text-xs text-red-400 w-14 text-right shrink-0">
+                        -{((arr[i - 1].rate - s.rate) * 100).toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'blindspots' && (
+            <motion.div
+              key="blindspots"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="space-y-3"
+            >
+              {blindList.length === 0 ? (
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center">
+                  <p className="text-slate-500 text-sm">No blindspots detected yet.</p>
+                  <p className="text-slate-700 text-xs mt-2">Run 3+ simulations to unlock personal pattern detection.</p>
+                </div>
+              ) : (
+                blindList.map((b: MeBlindspotRow, i: number) => (
+                  <div key={i} className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <span className="text-xs text-amber-400 tracking-widest uppercase">
+                          {b.type?.replace(/_/g, ' ')}
+                        </span>
+                        <p className="text-sm text-slate-200 mt-1">{b.value}</p>
+                        {b.description && <p className="text-xs text-slate-500 mt-1">{b.description}</p>}
+                      </div>
+                      <span className="text-xs text-slate-600 shrink-0">seen {b.occurrence_count ?? 0}×</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
+  )
+}
+
+function ResultsFallback() {
+  return (
+    <div className="min-h-[calc(100dvh-120px)] bg-slate-950 flex flex-col items-center justify-center gap-4">
+      <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      <p className="text-slate-400 font-mono text-sm">Loading…</p>
+    </div>
+  )
+}
+
+export default function SimulationResultsPage() {
+  return (
+    <Suspense fallback={<ResultsFallback />}>
+      <SimulationResultsInner />
+    </Suspense>
   )
 }
