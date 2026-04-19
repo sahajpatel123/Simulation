@@ -254,7 +254,7 @@ export default function PrototypePage() {
     <div
       className="rise"
       style={{
-        padding: '36px 48px 48px',
+        padding: '28px 48px 48px',
         maxWidth: 1200,
         margin: '0 auto',
         minHeight: 'calc(100vh - 120px)',
@@ -263,27 +263,7 @@ export default function PrototypePage() {
       }}
     >
       {/* Masthead */}
-      <header style={{ flexShrink: 0, marginBottom: 20 }}>
-        <div
-          className="kicker"
-          style={{
-            color: 'var(--red)',
-            marginBottom: 12,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            flexWrap: 'wrap',
-          }}
-        >
-          <Link href={`/project/${idStr}`} style={{ color: 'inherit', textDecoration: 'none' }}>
-            Dossier
-          </Link>
-          <span style={{ color: 'var(--ink-tertiary)' }}>·</span>
-          <span style={{ color: 'var(--ink-secondary)' }}>Press room</span>
-          <span style={{ color: 'var(--ink-tertiary)' }}>·</span>
-          <span>Reader&rsquo;s proof</span>
-        </div>
-
+      <header style={{ flexShrink: 0, marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap' }}>
           <div>
             <h1
