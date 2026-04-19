@@ -413,49 +413,75 @@ export default function PrototypePage() {
                     transition={{ duration: 0.4, ease: [0.2, 0.75, 0.2, 1] }}
                     style={{ display: 'flex', flexDirection: 'column', gap: 0, width: '100%' }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        id="prototype-intro-drawer-trigger"
-                        aria-expanded={introDrawerOpen}
-                        aria-controls="prototype-intro-drawer-panel"
-                        onClick={() => setIntroDrawerOpen((o) => !o)}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 10,
-                          padding: '8px 12px',
-                          border: '0.5px solid var(--border-strong)',
-                          background: 'var(--paper-dark)',
-                          cursor: 'pointer',
-                          borderRadius: 2,
-                          textAlign: 'left',
-                          font: 'inherit',
-                          color: 'inherit',
-                        }}
-                      >
-                        <motion.span
+                    {/* Red rule + solid red tab (headline lives on the tab, chevron in white) */}
+                    <div style={{ paddingTop: 22, paddingBottom: 2, width: '100%' }}>
+                      <div style={{ position: 'relative', width: '100%' }}>
+                        <div
                           aria-hidden
-                          style={{ display: 'inline-flex', color: 'var(--red)' }}
-                          animate={{ rotate: introDrawerOpen ? 180 : 0 }}
-                          transition={{ type: 'spring', stiffness: 420, damping: 28 }}
-                        >
-                          <ChevronDown size={20} strokeWidth={2.25} />
-                        </motion.span>
-                        <span
-                          className="font-serif"
                           style={{
-                            fontSize: 17,
-                            fontWeight: 800,
-                            fontStyle: 'italic',
-                            letterSpacing: '-0.02em',
-                            color: 'var(--ink)',
+                            height: 2,
+                            width: '100%',
+                            background: 'var(--red)',
+                          }}
+                        />
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: '50%',
+                            top: 0,
+                            transform: 'translate(-50%, -50%)',
+                            zIndex: 1,
                           }}
                         >
-                          The <span style={{ color: 'var(--red)' }}>setting</span> in full.
-                        </span>
-                      </button>
-                      {viewToggle}
+                          <button
+                            type="button"
+                            id="prototype-intro-drawer-trigger"
+                            aria-expanded={introDrawerOpen}
+                            aria-controls="prototype-intro-drawer-panel"
+                            onClick={() => setIntroDrawerOpen((o) => !o)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexWrap: 'wrap',
+                              gap: 12,
+                              padding: '11px 22px 12px',
+                              border: 'none',
+                              background: 'var(--red)',
+                              cursor: 'pointer',
+                              borderRadius: 0,
+                              textAlign: 'center',
+                              font: 'inherit',
+                              color: '#fff',
+                              boxShadow: '0 3px 0 rgba(26,23,20,0.14)',
+                              maxWidth: 'min(100%, calc(100vw - 120px))',
+                            }}
+                          >
+                            <motion.span
+                              aria-hidden
+                              style={{ display: 'inline-flex', color: '#fff' }}
+                              animate={{ rotate: introDrawerOpen ? 180 : 0 }}
+                              transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+                            >
+                              <ChevronDown size={20} strokeWidth={2.35} color="#fff" />
+                            </motion.span>
+                            <span
+                              className="font-serif"
+                              style={{
+                                fontSize: 'clamp(16px, 2.4vw, 20px)',
+                                fontWeight: 800,
+                                fontStyle: 'italic',
+                                letterSpacing: '-0.02em',
+                                color: '#fff',
+                                lineHeight: 1.05,
+                              }}
+                            >
+                              The <span style={{ fontStyle: 'italic', fontWeight: 900 }}>setting</span> in full.
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>{viewToggle}</div>
                     </div>
                     <AnimatePresence initial={false}>
                       {introDrawerOpen && (
@@ -500,18 +526,22 @@ export default function PrototypePage() {
             {mastheadStage !== 'compact' ? <div style={{ flexShrink: 0 }}>{viewToggle}</div> : null}
           </div>
 
-          <motion.div
-            layout
-            initial={{ scaleX: 0, transformOrigin: 'left' }}
-            animate={{ scaleX: 1 }}
-            transition={{ duration: 0.35, ease: [0.2, 0.7, 0.2, 1] }}
-            style={{
-              height: 2,
-              background: 'var(--red)',
-              marginTop: mastheadStage === 'compact' ? 10 : 16,
-            }}
-          />
-          <div style={{ height: 0.5, background: 'var(--border-color)', marginTop: 4 }} />
+          {mastheadStage !== 'compact' ? (
+            <>
+              <motion.div
+                layout
+                initial={{ scaleX: 0, transformOrigin: 'left' }}
+                animate={{ scaleX: 1 }}
+                transition={{ duration: 0.35, ease: [0.2, 0.7, 0.2, 1] }}
+                style={{
+                  height: 2,
+                  background: 'var(--red)',
+                  marginTop: 16,
+                }}
+              />
+              <div style={{ height: 0.5, background: 'var(--border-color)', marginTop: 4 }} />
+            </>
+          ) : null}
         </motion.header>
 
         {/* Press window */}
