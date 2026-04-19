@@ -283,6 +283,7 @@ export default function HeroCover({
               }}
             >
               <MagneticCTA
+                magnetic={false}
                 onClick={onSignup}
                 style={{
                   background: 'var(--ink)',

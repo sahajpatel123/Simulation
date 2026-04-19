@@ -13,26 +13,17 @@ export default function MagneticCTA({
   children,
   style,
   strength = 0.25,
+  magnetic = true,
 }: {
   href?: string
   onClick?: () => void
   children: ReactNode
   style?: CSSProperties
   strength?: number
+  /** When false, render a normal control with no cursor-follow translate. */
+  magnetic?: boolean
 }) {
   const ref = useRef<HTMLDivElement>(null)
-
-  const handle = (e: MouseEvent<HTMLSpanElement>) => {
-    const el = ref.current
-    if (!el) return
-    const r = el.getBoundingClientRect()
-    const x = e.clientX - (r.left + r.width / 2)
-    const y = e.clientY - (r.top + r.height / 2)
-    el.style.transform = `translate(${x * strength}px, ${y * strength}px)`
-  }
-  const reset = () => {
-    if (ref.current) ref.current.style.transform = 'translate(0,0)'
-  }
 
   const inner = (
     <span
@@ -46,6 +37,37 @@ export default function MagneticCTA({
       {children}
     </span>
   )
+
+  if (!magnetic) {
+    if (href) {
+      return (
+        <Link href={href} style={{ textDecoration: 'none' }}>
+          {inner}
+        </Link>
+      )
+    }
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' }}
+      >
+        {inner}
+      </button>
+    )
+  }
+
+  const handle = (e: MouseEvent<HTMLSpanElement>) => {
+    const el = ref.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const x = e.clientX - (r.left + r.width / 2)
+    const y = e.clientY - (r.top + r.height / 2)
+    el.style.transform = `translate(${x * strength}px, ${y * strength}px)`
+  }
+  const reset = () => {
+    if (ref.current) ref.current.style.transform = 'translate(0,0)'
+  }
 
   return (
     <span
