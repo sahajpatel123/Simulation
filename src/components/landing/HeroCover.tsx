@@ -122,7 +122,8 @@ export default function HeroCover({
             position: 'relative',
             maxWidth: 1280,
             margin: '0 auto',
-            padding: 'clamp(72px, 10vh, 120px) 48px clamp(56px, 9vh, 96px)',
+            /* Tight band under the masthead rules so the kicker sits closer to “The Simulation Broadsheet”. */
+            padding: 'clamp(12px, 1.75vh, 28px) 48px clamp(48px, 7.5vh, 88px)',
           }}
         >
           {/* Red kicker */}
@@ -134,7 +135,7 @@ export default function HeroCover({
               display: 'flex',
               alignItems: 'center',
               gap: 14,
-              marginBottom: 36,
+              marginBottom: 28,
             }}
           >
             <span style={{ width: 32, height: 0.5, background: 'var(--red)' }} />
@@ -264,7 +265,7 @@ export default function HeroCover({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.9 }}
             style={{
-              marginTop: 52,
+              marginTop: 44,
               display: 'grid',
               gridTemplateColumns: 'minmax(0, 1.2fr) auto',
               alignItems: 'end',
@@ -350,12 +351,12 @@ export default function HeroCover({
             animate={{ opacity: 1 }}
             transition={{ duration: 0.7, delay: 1.1 }}
             style={{
-              marginTop: 72,
+              marginTop: 56,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: 24,
-              paddingTop: 18,
+              paddingTop: 16,
               borderTop: '0.5px solid var(--border-color)',
               fontSize: 10,
               letterSpacing: '0.22em',
