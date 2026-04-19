@@ -250,9 +250,6 @@ export default function PrototypePage() {
     })
   }
 
-  const introSubtext =
-    'Preview the page as it will appear to synthetic readers — desktop measure or narrow folio. This is not the final edition until the presses run.'
-
   const viewToggle = (
     <div
       role="group"
@@ -305,7 +302,7 @@ export default function PrototypePage() {
     <div
       className="rise"
       style={{
-        padding: '28px 48px 48px',
+        padding: '18px 48px 48px',
         maxWidth: 1200,
         margin: '0 auto',
         minHeight: 'calc(100vh - 120px)',
@@ -313,44 +310,17 @@ export default function PrototypePage() {
         flexDirection: 'column',
       }}
     >
-        <header style={{ flexShrink: 0, marginBottom: 14 }}>
+        <header style={{ flexShrink: 0, marginBottom: 8 }}>
           <div
             style={{
               display: 'flex',
-              alignItems: 'flex-end',
-              justifyContent: 'space-between',
-              gap: 24,
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: 16,
               flexWrap: 'wrap',
             }}
           >
-            <div style={{ flex: 1, minWidth: 0, maxWidth: 640 }}>
-              <h1
-                className="font-serif"
-                style={{
-                  fontSize: 'clamp(32px, 4vw, 48px)',
-                  fontWeight: 900,
-                  fontStyle: 'italic',
-                  lineHeight: 1,
-                  color: 'var(--ink)',
-                  margin: '0 0 8px',
-                }}
-              >
-                The <span style={{ color: 'var(--red)' }}>setting</span> in full.
-              </h1>
-              <p
-                style={{
-                  maxWidth: 520,
-                  fontWeight: 300,
-                  fontSize: 13,
-                  lineHeight: 1.65,
-                  color: 'var(--ink-secondary)',
-                  margin: 0,
-                }}
-              >
-                {introSubtext}
-              </p>
-            </div>
-            <div style={{ flexShrink: 0 }}>{viewToggle}</div>
+            {viewToggle}
           </div>
           <motion.div
             initial={{ scaleX: 0, transformOrigin: 'left' }}
@@ -359,7 +329,7 @@ export default function PrototypePage() {
             style={{
               height: 2,
               background: 'var(--red)',
-              marginTop: 16,
+              marginTop: 10,
             }}
           />
           <div style={{ height: 0.5, background: 'var(--border-color)', marginTop: 4 }} />
