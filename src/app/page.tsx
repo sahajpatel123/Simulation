@@ -349,9 +349,20 @@ export default function LandingPage() {
               textAlign: 'center',
             }}
           >
-            <div
+            <button
+              type="button"
               className="font-serif"
+              aria-label="TheCee — refresh home"
+              onClick={() => {
+                window.location.reload()
+              }}
               style={{
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                margin: 0,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
                 fontSize: 26,
                 fontWeight: 900,
                 color: 'var(--ink)',
@@ -361,7 +372,7 @@ export default function LandingPage() {
               }}
             >
               TheCee
-            </div>
+            </button>
           </div>
 
           <div
