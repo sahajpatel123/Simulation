@@ -210,7 +210,9 @@ Three Railway services, one repo:
 | Service | Build | Start command | Notes |
 |---------|-------|---------------|-------|
 | **simulation** | `Dockerfile` | `python migrate_and_start.py` | API + runs DB migrations on every deploy |
-| **thecee-worker** | `Dockerfile` | `./start_worker.sh` | Celery worker, same image |
+| **thecee-worker** | `Dockerfile` | `./start_worker.sh` | Celery worker, same image; needs `DATABASE_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` (same as API). Start must be from repo root (`WORKDIR /app` in Docker). |
+
+**Worker not starting on Railway:** confirm the worker service **start command** is exactly `./start_worker.sh` (not the web `migrate_and_start.py`). The script invokes `celery -A app.worker:celery_app` (module `app/worker.py`, app object `celery_app`).
 | **Redis** | managed | — | Railway Redis plugin |
 
 Set all environment variables in each Railway service's settings panel. The `DATABASE_URL` and all `CELERY_*` / `REDIS_URL` vars must point at your Supabase and Railway Redis instances.
