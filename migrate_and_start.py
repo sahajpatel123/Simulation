@@ -370,6 +370,162 @@ def run_migrations():
             except Exception:
                 conn.rollback()
 
+        # Step 69: hardware module schema (additive, CREATE TABLE IF NOT EXISTS)
+        try:
+            conn.execute(
+                text("""
+                    CREATE TABLE IF NOT EXISTS hardware_products (
+                        id SERIAL PRIMARY KEY,
+                        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                        name VARCHAR(500) NOT NULL,
+                        description TEXT,
+                        category VARCHAR(200),
+                        product_type VARCHAR(50) NOT NULL,
+                        target_price_inr DOUBLE PRECISION,
+                        material_spec TEXT,
+                        dimensions_json JSONB,
+                        weight_grams DOUBLE PRECISION,
+                        created_at TIMESTAMP DEFAULT NOW()
+                    );
+                """)
+            )
+            conn.commit()
+            print("✅ hardware_products ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ hardware_products skip: {e}")
+
+        try:
+            conn.execute(
+                text("""
+                    CREATE TABLE IF NOT EXISTS hardware_3d_models (
+                        id SERIAL PRIMARY KEY,
+                        hardware_product_id INTEGER NOT NULL
+                            REFERENCES hardware_products(id) ON DELETE CASCADE,
+                        model_type VARCHAR(20) NOT NULL,
+                        model_data_json JSONB,
+                        polygon_count INTEGER,
+                        generation_prompt TEXT,
+                        created_at TIMESTAMP DEFAULT NOW()
+                    );
+                """)
+            )
+            conn.commit()
+            print("✅ hardware_3d_models ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ hardware_3d_models skip: {e}")
+
+        try:
+            conn.execute(
+                text("""
+                    CREATE TABLE IF NOT EXISTS hardware_test_configs (
+                        id SERIAL PRIMARY KEY,
+                        hardware_product_id INTEGER NOT NULL
+                            REFERENCES hardware_products(id) ON DELETE CASCADE,
+                        test_type VARCHAR(100) NOT NULL,
+                        parameters_json JSONB,
+                        environment_conditions_json JSONB,
+                        created_at TIMESTAMP DEFAULT NOW()
+                    );
+                """)
+            )
+            conn.commit()
+            print("✅ hardware_test_configs ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ hardware_test_configs skip: {e}")
+
+        try:
+            conn.execute(
+                text("""
+                    CREATE TABLE IF NOT EXISTS hardware_test_results (
+                        id SERIAL PRIMARY KEY,
+                        hardware_product_id INTEGER NOT NULL
+                            REFERENCES hardware_products(id) ON DELETE CASCADE,
+                        test_config_id INTEGER NOT NULL
+                            REFERENCES hardware_test_configs(id) ON DELETE CASCADE,
+                        test_type VARCHAR(100) NOT NULL,
+                        status VARCHAR(50) NOT NULL,
+                        results_json JSONB,
+                        failure_points_json JSONB,
+                        pass_rate DOUBLE PRECISION,
+                        created_at TIMESTAMP DEFAULT NOW()
+                    );
+                """)
+            )
+            conn.commit()
+            print("✅ hardware_test_results ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ hardware_test_results skip: {e}")
+
+        try:
+            conn.execute(
+                text("""
+                    CREATE TABLE IF NOT EXISTS hardware_manufacturing_estimates (
+                        id SERIAL PRIMARY KEY,
+                        hardware_product_id INTEGER NOT NULL
+                            REFERENCES hardware_products(id) ON DELETE CASCADE,
+                        bom_json JSONB,
+                        unit_cost_inr DOUBLE PRECISION,
+                        tooling_cost_inr DOUBLE PRECISION,
+                        moq INTEGER,
+                        lead_time_days INTEGER,
+                        margin_at_target_price DOUBLE PRECISION,
+                        created_at TIMESTAMP DEFAULT NOW()
+                    );
+                """)
+            )
+            conn.commit()
+            print("✅ hardware_manufacturing_estimates ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ hardware_manufacturing_estimates skip: {e}")
+
+        try:
+            conn.execute(
+                text("""
+                    CREATE TABLE IF NOT EXISTS hardware_consumer_simulation_runs (
+                        id SERIAL PRIMARY KEY,
+                        hardware_product_id INTEGER NOT NULL
+                            REFERENCES hardware_products(id) ON DELETE CASCADE,
+                        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                        status VARCHAR(50) DEFAULT 'QUEUED',
+                        agent_count INTEGER NOT NULL,
+                        product_type VARCHAR(50),
+                        results_json JSONB,
+                        conductor_result_json JSONB,
+                        generated_ui_id INTEGER REFERENCES generated_uis(id) ON DELETE SET NULL,
+                        created_at TIMESTAMP DEFAULT NOW(),
+                        completed_at TIMESTAMP
+                    );
+                """)
+            )
+            conn.commit()
+            print("✅ hardware_consumer_simulation_runs ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ hardware_consumer_simulation_runs skip: {e}")
+
+        for hw_idx_sql in [
+            "CREATE INDEX IF NOT EXISTS idx_hw_products_project_id ON hardware_products(project_id);",
+            "CREATE INDEX IF NOT EXISTS idx_hw_products_product_type ON hardware_products(product_type);",
+            "CREATE INDEX IF NOT EXISTS idx_hw_3d_models_product_id ON hardware_3d_models(hardware_product_id);",
+            "CREATE INDEX IF NOT EXISTS idx_hw_test_configs_product_id ON hardware_test_configs(hardware_product_id);",
+            "CREATE INDEX IF NOT EXISTS idx_hw_test_results_product_id ON hardware_test_results(hardware_product_id);",
+            "CREATE INDEX IF NOT EXISTS idx_hw_test_results_config_id ON hardware_test_results(test_config_id);",
+            "CREATE INDEX IF NOT EXISTS idx_hw_mfg_estimates_product_id ON hardware_manufacturing_estimates(hardware_product_id);",
+            "CREATE INDEX IF NOT EXISTS idx_hw_consumer_runs_product_id ON hardware_consumer_simulation_runs(hardware_product_id);",
+            "CREATE INDEX IF NOT EXISTS idx_hw_consumer_runs_project_id ON hardware_consumer_simulation_runs(project_id);",
+            "CREATE INDEX IF NOT EXISTS idx_hw_consumer_runs_status ON hardware_consumer_simulation_runs(status);",
+        ]:
+            try:
+                conn.execute(text(hw_idx_sql))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
     # Seed cluster_parameters with 416 placeholder rows (52 clusters × 8 traits)
     _seed_cluster_parameters()
 
