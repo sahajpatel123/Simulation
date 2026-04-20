@@ -6,13 +6,14 @@ for the learning system.
 from __future__ import annotations
 
 import traceback
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from sqlalchemy import delete
 
 from app.simulation.architects.base import ArchitectOutput, DomainReport
 from app.simulation.cluster_reweighting import ClusterReweightingEngine
+from app.simulation.cognitive_state import CognitiveStateMutator
 from app.simulation.clusters.definitions import ClusterDefinition
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.product_type import ProductType
@@ -275,6 +276,7 @@ class Conductor:
     def __init__(self) -> None:
         self._registry   = ClusterRegistry()
         self._architects = _ARCHITECTS
+        self._mutator    = CognitiveStateMutator()
 
     def detect_product_type(
         self,
@@ -377,9 +379,12 @@ class Conductor:
         cluster_results: dict[str, dict[str, ArchitectOutput]] = {}
         cluster_breakdown: dict[str, float] = {}
         per_cluster_matrices: dict[str, dict[tuple[str, str], float]] = {}
+        cluster_mutation_logs: dict[str, dict[str, float]] = {}
 
         for cluster in all_clusters:
             cluster_outputs: dict[str, ArchitectOutput] = {}
+            _mutation_log: dict[str, float] = {}
+            cluster_working = cluster
 
             for arch_name in stack:
                 architect = self._architects.get(arch_name)
@@ -393,10 +398,39 @@ class Conductor:
                     continue
 
                 deps = self._resolve_deps(arch_name, cluster_outputs)
+                agent_profile: dict[str, Any] = {
+                    **cluster_working.base_traits,
+                    **deps,
+                }
+
+                # Step 68d: MarketTiming + CompetitiveDynamics are in cluster_outputs;
+                # mutator runs before TrustArchitect.compute (and before transition overrides).
+                if arch_name == "TrustArchitect":
+                    mutation_result = self._mutator.apply(
+                        cluster_id=cluster.cluster_id,
+                        agent_profile=agent_profile,
+                        architect_outputs=dict(cluster_outputs),
+                        assumptions=assumptions,
+                    )
+                    if mutation_result.any_mutation_fired:
+                        for m in mutation_result.mutations_applied:
+                            _mutation_log[m.trigger_name] = abs(m.delta)
+                        new_traits = dict(cluster_working.base_traits)
+                        for k, v in mutation_result.mutated_profile.items():
+                            if k in cluster_working.base_traits:
+                                new_traits[k] = float(v)
+                        cluster_working = replace(
+                            cluster_working, base_traits=new_traits
+                        )
+                        agent_profile = {
+                            **cluster_working.base_traits,
+                            **deps,
+                        }
+
                 try:
                     output = architect.compute(
-                        cluster=cluster,
-                        agent_profile=deps,
+                        cluster=cluster_working,
+                        agent_profile=agent_profile,
                         assumptions=assumptions,
                         env_params=env_params,
                     )
@@ -405,6 +439,7 @@ class Conductor:
                     print(f"WARN: {arch_name} failed for {cluster.cluster_id}: {e}")
                     traceback.print_exc()
 
+            cluster_mutation_logs[cluster.cluster_id] = _mutation_log
             cluster_results[cluster.cluster_id] = cluster_outputs
 
             conversion = self._estimate_cluster_conversion(cluster_outputs)
@@ -463,6 +498,7 @@ class Conductor:
                 sq,
                 product_type.value,
                 claim_confidence_distribution=claim_conf_dist,
+                cluster_mutation_logs=cluster_mutation_logs,
             )
 
         if db is not None and user_id is not None:
@@ -548,6 +584,7 @@ class Conductor:
         signal_quality: float,
         product_type: str,
         claim_confidence_distribution: dict | None = None,
+        cluster_mutation_logs: dict[str, dict[str, float]] | None = None,
     ) -> None:
         from app.models.cluster_run_summary import ClusterRunSummary
 
@@ -582,6 +619,12 @@ class Conductor:
             architect_scores = {
                 name: _mean_metric(o) for name, o in arch_outputs.items()
             }
+            mlog = (cluster_mutation_logs or {}).get(cluster_id, {})
+            architect_scores["CognitiveState_trust_delta"] = mlog.get("trust_delta", 0.0)
+            architect_scores["CognitiveState_frustration"] = mlog.get("frustration", 0.0)
+            architect_scores["CognitiveState_intent_clarity"] = mlog.get(
+                "intent_clarity", 0.0
+            )
             primary_trigger = (
                 min(architect_scores, key=architect_scores.get) if architect_scores else None
             )
