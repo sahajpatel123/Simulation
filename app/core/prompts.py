@@ -1,3 +1,5 @@
+import re
+
 ASSUMPTION_EXTRACTION_PROMPT = """
 You are a brutally honest startup advisor and assumption hunter.
 
@@ -331,6 +333,75 @@ Target segment: {target_segment}
 Price point: {price_point}
 """
 
+# ══════════════════════════════════════════
+# STEP 70 — HARDWARE SEMANTIC 3D SPEC (JSON)
+# ══════════════════════════════════════════
+# Locked schema consumed by Steps 72 (viewer), 75 (physics), 77 (failure overlay),
+# 78 (cost). No mesh generation — structured spec only.
+
+HARDWARE_SPEC_PROMPT = """\
+You are a senior mechanical / hardware product engineer and DFM specialist.
+
+The founder is NOT asking for 3D mesh files, GLB, or CAD exports. Generate a single
+semantic hardware specification JSON that acts as the canonical "3D model" for this
+product: envelope dimensions, material zones, assembly components, stress topology,
+and failure thinking. This JSON will drive physics tests and a simple grid viewer.
+
+Rules:
+- Return ONLY valid JSON. No markdown. No backticks. No commentary before or after.
+- Be physically plausible for the category and target price (INR).
+- Use 2–8 components; each needs a stable string `id` (snake_case) referenced by stress_point_map.
+- `material` on each component must be a short machine key in UPPER_SNAKE_CASE
+  (e.g. ABS_SHELL, ALUMINUM_6061, POLYCARBONATE_LENS, SILICONE_GASKET, LITHIUM_CELL,
+  PCB_FR4, STAINLESS_304, TPU_GRIP) so a material database can resolve properties later.
+- `stress_rating` on each component is 0.0–1.0 (higher = more structural load / risk).
+- `stress_point_map` entries link `component_id` to existing component `id` values.
+- `render_hints` are symbolic only (no GPU); they guide a primitive 3D grid viewer.
+
+Return a JSON object with EXACTLY this structure and key names (types as shown):
+
+{{
+  "product_name": "string",
+  "category": "string",
+  "dimensions": {{
+    "length_mm": 0.0,
+    "width_mm": 0.0,
+    "height_mm": 0.0,
+    "weight_grams": 0.0
+  }},
+  "components": [
+    {{
+      "id": "string",
+      "name": "string",
+      "material": "string",
+      "zone": "top|bottom|left|right|core|shell",
+      "volume_cm3": 0.0,
+      "stress_rating": 0.0
+    }}
+  ],
+  "stress_point_map": [
+    {{ "component_id": "string", "stress_type": "string", "severity": 0.0 }}
+  ],
+  "render_hints": {{
+    "primary_shape": "box|cylinder|L-shape|flat",
+    "dominant_material": "string",
+    "color_hex": "#RRGGBB",
+    "highlight_zones": ["component_id", "..."]
+  }},
+  "known_failure_modes": ["string", "..."],
+  "assembly_complexity": "simple|moderate|complex"
+}}
+
+Product description:
+{description}
+
+Category:
+{category}
+
+Target price (INR):
+{price}
+"""
+
 
 def validate_generated_html(html: str) -> tuple[bool, str]:
     if not html or len(html.strip()) < 500:
@@ -354,4 +425,130 @@ def validate_generated_html(html: str) -> tuple[bool, str]:
         return False, f"Missing tracking attributes: {missing}"
     if len(html.split()) < 200:
         return False, "Insufficient content — HTML too sparse"
+    return True, "OK"
+
+
+# Step 70 — hardware semantic spec (locked schema; see HARDWARE_SPEC_PROMPT)
+_REQUIRED_HW_SPEC_KEYS = frozenset({
+    "product_name",
+    "category",
+    "dimensions",
+    "components",
+    "stress_point_map",
+    "render_hints",
+    "known_failure_modes",
+    "assembly_complexity",
+})
+_REQUIRED_COMPONENT_FIELDS = frozenset(
+    {"id", "name", "material", "zone", "volume_cm3", "stress_rating"}
+)
+_VALID_ZONES = frozenset({"top", "bottom", "left", "right", "core", "shell"})
+_VALID_SHAPES = frozenset({"box", "cylinder", "L-shape", "flat"})
+_VALID_ASSEMBLY = frozenset({"simple", "moderate", "complex"})
+_RENDER_HINT_REQUIRED = frozenset(
+    {"primary_shape", "dominant_material", "color_hex", "highlight_zones"}
+)
+
+
+def validate_hardware_spec(spec: dict) -> tuple[bool, str]:
+    """
+    Validate semantic hardware spec JSON after Claude generation (before DB save).
+    Mirrors validate_generated_html for the hardware pipeline.
+    """
+    if not isinstance(spec, dict):
+        return False, "Spec must be a JSON object (dict)"
+
+    missing = sorted(_REQUIRED_HW_SPEC_KEYS - spec.keys())
+    if missing:
+        return False, f"Missing required keys: {', '.join(missing)}"
+
+    dims = spec.get("dimensions")
+    if not isinstance(dims, dict):
+        return False, "dimensions must be an object"
+    for dk in ("length_mm", "width_mm", "height_mm", "weight_grams"):
+        if dk not in dims:
+            return False, f"dimensions missing key: {dk}"
+        if not isinstance(dims[dk], (int, float)):
+            return False, f"dimensions.{dk} must be a number"
+
+    components = spec.get("components")
+    if not isinstance(components, list):
+        return False, "components must be a list"
+    if len(components) < 2:
+        return False, "components must have at least 2 items"
+
+    comp_ids: set[str] = set()
+    for i, c in enumerate(components):
+        if not isinstance(c, dict):
+            return False, f"components[{i}] must be an object"
+        cf = _REQUIRED_COMPONENT_FIELDS - c.keys()
+        if cf:
+            return False, f"components[{i}] missing keys: {', '.join(sorted(cf))}"
+        cid = c.get("id")
+        if not isinstance(cid, str) or not cid.strip():
+            return False, f"components[{i}].id must be a non-empty string"
+        if cid in comp_ids:
+            return False, f"duplicate component id: {cid}"
+        comp_ids.add(cid)
+        zone = c.get("zone")
+        if zone not in _VALID_ZONES:
+            return False, f"components[{i}].zone invalid: {zone!r}"
+        sr = c.get("stress_rating")
+        if not isinstance(sr, (int, float)) or not (0.0 <= float(sr) <= 1.0):
+            return False, f"components[{i}].stress_rating must be a number in [0, 1]"
+        vol = c.get("volume_cm3")
+        if not isinstance(vol, (int, float)) or float(vol) < 0:
+            return False, f"components[{i}].volume_cm3 must be a non-negative number"
+
+    spm = spec.get("stress_point_map")
+    if not isinstance(spm, list):
+        return False, "stress_point_map must be a list"
+    for j, entry in enumerate(spm):
+        if not isinstance(entry, dict):
+            return False, f"stress_point_map[{j}] must be an object"
+        for ek in ("component_id", "stress_type", "severity"):
+            if ek not in entry:
+                return False, f"stress_point_map[{j}] missing key: {ek}"
+        ref = entry.get("component_id")
+        if ref not in comp_ids:
+            return False, f"stress_point_map[{j}].component_id not found in components: {ref!r}"
+        if not isinstance(entry.get("stress_type"), str) or not str(entry["stress_type"]).strip():
+            return False, f"stress_point_map[{j}].stress_type must be a non-empty string"
+        sev = entry.get("severity")
+        if not isinstance(sev, (int, float)) or not (0.0 <= float(sev) <= 1.0):
+            return False, f"stress_point_map[{j}].severity must be a number in [0, 1]"
+
+    rh = spec.get("render_hints")
+    if not isinstance(rh, dict):
+        return False, "render_hints must be an object"
+    mh = _RENDER_HINT_REQUIRED - rh.keys()
+    if mh:
+        return False, f"render_hints missing keys: {', '.join(sorted(mh))}"
+    ps = rh.get("primary_shape")
+    if ps not in _VALID_SHAPES:
+        return False, f"render_hints.primary_shape invalid: {ps!r}"
+    ch = rh.get("color_hex")
+    if not isinstance(ch, str) or not re.fullmatch(r"#[0-9A-Fa-f]{6}", ch.strip()):
+        return False, "render_hints.color_hex must be #RRGGBB (six hex digits)"
+    dm = rh.get("dominant_material")
+    if not isinstance(dm, str) or not dm.strip():
+        return False, "render_hints.dominant_material must be a non-empty string"
+    hz = rh.get("highlight_zones")
+    if not isinstance(hz, list):
+        return False, "render_hints.highlight_zones must be a list of component ids"
+    for z in hz:
+        if z not in comp_ids:
+            return False, f"render_hints.highlight_zones references unknown id: {z!r}"
+
+    kfm = spec.get("known_failure_modes")
+    if not isinstance(kfm, list) or len(kfm) == 0:
+        return False, "known_failure_modes must be a non-empty list of strings"
+    for k, item in enumerate(kfm):
+        if not isinstance(item, str) or not item.strip():
+            return False, f"known_failure_modes[{k}] must be a non-empty string"
+
+    ac = spec.get("assembly_complexity")
+    if ac not in _VALID_ASSEMBLY:
+        return False, f"assembly_complexity invalid: {ac!r}"
+
     return True, "OK"
