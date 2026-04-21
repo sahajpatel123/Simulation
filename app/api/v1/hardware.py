@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-from typing import Any
+import json
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import desc
+from fastapi import APIRouter, Body, Depends, HTTPException, status
+from sqlalchemy import desc, text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.hardware.model_generator import HardwareModelGenerator
+from app.hardware.test_configs import TEST_DEFAULTS, TestConfigBuilder
 from app.models.project import Project
 from app.models.project_hardware import Hardware3DModel, HardwareProduct
 from app.models.user import User
@@ -25,6 +27,7 @@ from app.schemas.hardware import (
 )
 
 router = APIRouter(tags=["hardware"])
+_test_config_builder = TestConfigBuilder()
 
 
 def _get_owned_project(
@@ -351,4 +354,167 @@ def queue_hardware_run_tests(
         "hardware_product_id": hw_id,
         "project_id": project_id,
         "message": "Hardware test orchestration (Step 76) will attach to this endpoint.",
+    }
+
+
+@router.post("/projects/{project_id}/hardware/{hw_id}/test-configs")
+def create_test_configs(
+    project_id: int,
+    hw_id: int,
+    body: Annotated[dict[str, Any], Body(...)],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Body options:
+      {"use_defaults": true}          → category defaults from product_type
+      {"configs": [{test_type, ...}]} → custom configs
+    """
+    _get_owned_project(db, project_id, current_user.id)
+    product = (
+        db.query(HardwareProduct)
+        .filter(
+            HardwareProduct.id == hw_id,
+            HardwareProduct.project_id == project_id,
+        )
+        .first()
+    )
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hardware product not found",
+        )
+
+    if body.get("use_defaults"):
+        ptype = (product.product_type or "consumer_hardware").strip().lower()
+        configs = _test_config_builder.defaults_for_category(ptype)
+    elif isinstance(body.get("configs"), list):
+        configs = []
+        for c in body["configs"]:
+            if not isinstance(c, dict) or "test_type" not in c:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Each config must be an object with test_type",
+                )
+            try:
+                cfg = _test_config_builder.custom_config(
+                    test_type=str(c["test_type"]),
+                    params=dict(c.get("parameters") or {}),
+                    severity_weight=float(c.get("severity_weight", 0.5)),
+                )
+            except (ValueError, TypeError) as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=str(e),
+                ) from e
+            ok, err = _test_config_builder.validate_config(cfg)
+            if not ok:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid config: {err}",
+                )
+            configs.append(cfg)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Body must include use_defaults: true or configs: [...]",
+        )
+
+    saved: list[dict[str, Any]] = []
+    for cfg in configs:
+        params_out = dict(cfg.parameters)
+        params_out["severity_weight"] = cfg.severity_weight
+        db.execute(
+            text(
+                """
+                INSERT INTO hardware_test_configs
+                    (hardware_product_id, test_type, parameters_json,
+                     environment_conditions_json, created_at)
+                VALUES
+                    (:hw_id, :test_type, CAST(:params AS jsonb),
+                     CAST(:env AS jsonb), NOW())
+                """
+            ),
+            {
+                "hw_id": hw_id,
+                "test_type": cfg.test_type,
+                "params": json.dumps(params_out),
+                "env": json.dumps(cfg.environment),
+            },
+        )
+        saved.append(_test_config_builder.to_dict(cfg))
+
+    db.commit()
+    return {"saved": len(saved), "configs": saved}
+
+
+@router.get("/projects/{project_id}/hardware/{hw_id}/test-configs")
+def get_test_configs(
+    project_id: int,
+    hw_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _get_owned_project(db, project_id, current_user.id)
+    exists = (
+        db.query(HardwareProduct)
+        .filter(
+            HardwareProduct.id == hw_id,
+            HardwareProduct.project_id == project_id,
+        )
+        .first()
+    )
+    if not exists:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hardware product not found",
+        )
+
+    rows = (
+        db.execute(
+            text(
+                """
+                SELECT id, test_type, parameters_json,
+                       environment_conditions_json, created_at
+                FROM hardware_test_configs
+                WHERE hardware_product_id = :hw_id
+                ORDER BY created_at ASC
+                """
+            ),
+            {"hw_id": hw_id},
+        )
+        .mappings()
+        .all()
+    )
+
+    configs_out: list[dict[str, Any]] = []
+    for r in rows:
+        defaults = TEST_DEFAULTS.get(r["test_type"], {})
+        pjson = r["parameters_json"]
+        if isinstance(pjson, str):
+            pjson = json.loads(pjson or "{}")
+        elif pjson is None:
+            pjson = {}
+        ejson = r["environment_conditions_json"]
+        if isinstance(ejson, str):
+            ejson = json.loads(ejson or "{}")
+        elif ejson is None:
+            ejson = {}
+        created = r["created_at"]
+        configs_out.append(
+            {
+                "id": r["id"],
+                "test_type": r["test_type"],
+                "display_name": defaults.get("display_name", r["test_type"]),
+                "description": defaults.get("description", ""),
+                "parameters": pjson,
+                "environment": ejson,
+                "created_at": created.isoformat() if created is not None else None,
+            }
+        )
+
+    return {
+        "hardware_product_id": hw_id,
+        "configs": configs_out,
+        "total": len(configs_out),
     }
