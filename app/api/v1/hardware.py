@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.hardware.manufacturing_cost import ManufacturingCostAnalyser
 from app.hardware.model_generator import HardwareModelGenerator
 from app.hardware.test_configs import TEST_DEFAULTS, TestConfigBuilder
 from app.models.project import Project
@@ -29,6 +30,7 @@ from app.schemas.hardware import (
 
 router = APIRouter(tags=["hardware"])
 _test_config_builder = TestConfigBuilder()
+_cost_analyser = ManufacturingCostAnalyser()
 
 
 def _get_owned_project(
@@ -630,4 +632,130 @@ def get_test_configs(
         "hardware_product_id": hw_id,
         "configs": configs_out,
         "total": len(configs_out),
+    }
+
+
+@router.post("/projects/{project_id}/hardware/{hw_id}/cost-analysis")
+def run_cost_analysis(
+    project_id: int,
+    hw_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    body: dict[str, Any] = Body(default_factory=dict),
+):
+    """
+    Body: ``target_price_inr`` (optional), ``moq`` (optional, default 500).
+    """
+    _get_owned_project(db, project_id, current_user.id)
+    hw = db.execute(
+        text("""
+        SELECT hp.id, hp.name, hp.category, hp.target_price_inr,
+               hm.model_data_json
+        FROM hardware_products hp
+        LEFT JOIN hardware_3d_models hm
+          ON hm.hardware_product_id = hp.id
+        WHERE hp.id = :hw_id AND hp.project_id = :pid
+        ORDER BY hm.created_at DESC LIMIT 1
+    """),
+        {"hw_id": hw_id, "pid": project_id},
+    ).fetchone()
+
+    if not hw:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hardware product not found",
+        )
+    if not hw.model_data_json:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Generate a hardware spec first",
+        )
+
+    spec = (
+        hw.model_data_json
+        if isinstance(hw.model_data_json, dict)
+        else json.loads(hw.model_data_json)
+    )
+
+    spec = dict(spec)
+    spec["category"] = (hw.category or "consumer_hardware").strip().lower() or "consumer_hardware"
+
+    target_price = float(body.get("target_price_inr", hw.target_price_inr or 1999))
+    moq = int(body.get("moq", 500))
+
+    estimate = _cost_analyser.estimate(spec, target_price, moq)
+    result = estimate.to_dict()
+
+    db.execute(
+        text("""
+        INSERT INTO hardware_manufacturing_estimates
+        (hardware_product_id, bom_json, unit_cost_inr, tooling_cost_inr,
+         moq, lead_time_days, margin_at_target_price, created_at)
+        VALUES (:hw_id, CAST(:bom AS jsonb), :unit_cost, :tooling,
+                :moq, :lead_time, :margin, NOW())
+    """),
+        {
+            "hw_id": hw_id,
+            "bom": json.dumps(result["bom"]),
+            "unit_cost": result["landed_cost_inr"],
+            "tooling": result["tooling_cost_inr"],
+            "moq": moq,
+            "lead_time": 45,
+            "margin": result["margin_pct"],
+        },
+    )
+    db.commit()
+
+    return result
+
+
+@router.get("/projects/{project_id}/hardware/{hw_id}/cost-analysis")
+def get_cost_analysis(
+    project_id: int,
+    hw_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _get_owned_project(db, project_id, current_user.id)
+    hw = db.execute(
+        text("SELECT id FROM hardware_products WHERE id=:id AND project_id=:pid"),
+        {"id": hw_id, "pid": project_id},
+    ).fetchone()
+    if not hw:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hardware product not found",
+        )
+
+    row = db.execute(
+        text("""
+        SELECT bom_json, unit_cost_inr, tooling_cost_inr,
+               moq, lead_time_days, margin_at_target_price, created_at
+        FROM hardware_manufacturing_estimates
+        WHERE hardware_product_id = :hw_id
+        ORDER BY created_at DESC LIMIT 1
+    """),
+        {"hw_id": hw_id},
+    ).fetchone()
+
+    if not row:
+        return {
+            "message": "No cost analysis run yet. POST to /cost-analysis first.",
+        }
+
+    bom = row.bom_json
+    if isinstance(bom, str):
+        bom = json.loads(bom or "[]")
+    elif bom is None:
+        bom = []
+
+    return {
+        "hardware_product_id": hw_id,
+        "bom": bom,
+        "landed_cost_inr": row.unit_cost_inr,
+        "tooling_cost_inr": row.tooling_cost_inr,
+        "moq": row.moq,
+        "lead_time_days": row.lead_time_days,
+        "margin_pct": row.margin_at_target_price,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
     }
