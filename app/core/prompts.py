@@ -402,6 +402,32 @@ Target price (INR):
 {price}
 """
 
+# Step 71 — refine existing semantic spec (JSON appended in code; no .format on spec body).
+HARDWARE_SPEC_REFINE_HEAD = """\
+You are a senior mechanical / hardware product engineer and DFM specialist.
+
+Revise the semantic hardware specification JSON shown below. Return ONLY valid JSON
+with the EXACT same top-level keys and nested structure as the Step 70 hardware spec:
+product_name, category, dimensions, components, stress_point_map, render_hints,
+known_failure_modes, assembly_complexity.
+
+Rules:
+- No markdown, no backticks, no commentary outside the JSON object.
+- Preserve stable component `id` values where the same physical part remains; rename or
+  add/remove components if the refinement requires it. stress_point_map must reference
+  valid component ids from the revised `components` list.
+- Stay physically plausible for the category and target envelope.
+
+--- EXISTING SPEC JSON ---
+"""
+
+HARDWARE_SPEC_REFINE_TAIL = """
+--- REFINEMENT REQUEST ---
+{refinement_prompt}
+
+Return ONLY the complete revised JSON object.
+"""
+
 
 def validate_generated_html(html: str) -> tuple[bool, str]:
     if not html or len(html.strip()) < 500:

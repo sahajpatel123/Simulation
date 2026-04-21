@@ -14,6 +14,7 @@ from app.models.prototype import Prototype
 from app.models.generated_ui import GeneratedUI
 from app.models.ui_simulation_session import UISimulationSession
 from app.models.ui_simulation_run import UISimulationRun
+from app.models.project_hardware import Hardware3DModel, HardwareProduct
 
 __all__ = [
     "Base",
@@ -35,4 +36,6 @@ __all__ = [
     "GeneratedUI",
     "UISimulationSession",
     "UISimulationRun",
+    "HardwareProduct",
+    "Hardware3DModel",
 ]

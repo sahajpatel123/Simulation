@@ -8,6 +8,7 @@ from app.api.v1.projects import router as projects_router
 from app.api.v1.reports import router as reports_router
 from app.api.v1.simulations import router as simulations_router
 from app.api.v1.users import router as users_router
+from app.api.v1.hardware import router as hardware_router
 from app.api.v1.ui_generation import router as ui_generation_router
 from app.api.v1.websocket import router as ws_router
 
@@ -21,4 +22,5 @@ api_router.include_router(reports_router)
 api_router.include_router(simulations_router)
 api_router.include_router(users_router)
 api_router.include_router(ui_generation_router)
+api_router.include_router(hardware_router)
 api_router.include_router(ws_router)

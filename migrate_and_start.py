@@ -14,6 +14,8 @@ from app.models import (
     GeneratedUI,
     UISimulationSession,
     UISimulationRun,
+    HardwareProduct,
+    Hardware3DModel,
 )
 
 
