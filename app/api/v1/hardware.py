@@ -317,3 +317,38 @@ def get_hardware_product(
         spec=spec,
         render_hints=rh,
     )
+
+
+@router.post(
+    "/projects/{project_id}/hardware/{hw_id}/run-tests",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def queue_hardware_run_tests(
+    project_id: int,
+    hw_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Step 72 UI — queue hardware test orchestration (Step 76 will wire Celery + DB).
+    """
+    _get_owned_project(db, project_id, current_user.id)
+    product = (
+        db.query(HardwareProduct)
+        .filter(
+            HardwareProduct.id == hw_id,
+            HardwareProduct.project_id == project_id,
+        )
+        .first()
+    )
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hardware product not found",
+        )
+    return {
+        "status": "QUEUED",
+        "hardware_product_id": hw_id,
+        "project_id": project_id,
+        "message": "Hardware test orchestration (Step 76) will attach to this endpoint.",
+    }

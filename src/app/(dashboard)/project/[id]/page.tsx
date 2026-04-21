@@ -467,6 +467,40 @@ export default function ProjectPage() {
               </div>
             </div>
           </Link>
+
+          <Link
+            href={`/project/${projectId}/hardware`}
+            style={{ textDecoration: 'none', color: 'var(--ink)', display: 'block' }}
+          >
+            <div
+              className="rise rise-1"
+              style={{
+                marginTop: 20,
+                position: 'relative',
+                padding: '22px 28px',
+                border: '0.5px solid var(--border-strong)',
+                background: 'linear-gradient(165deg, #0a0a0f 0%, #111827 100%)',
+                color: '#94a3b8',
+                display: 'grid',
+                gridTemplateColumns: '1fr auto',
+                alignItems: 'center',
+                gap: 20,
+              }}
+            >
+              <div>
+                <div className="kicker" style={{ color: '#38bdf8', marginBottom: 8 }}>
+                  Hardware · Blueprint viewer
+                </div>
+                <div className="font-serif" style={{ fontSize: 22, fontWeight: 800, fontStyle: 'italic', color: '#e2e8f0' }}>
+                  Semantic 3D spec
+                </div>
+                <p style={{ marginTop: 8, fontSize: 12, lineHeight: 1.55, maxWidth: 480, fontFamily: 'ui-monospace, monospace' }}>
+                  Grid, stress map, and render hints — generate a spec or open an existing hardware product.
+                </p>
+              </div>
+              <ArrowUpRight style={{ width: 20, height: 20, color: '#38bdf8' }} />
+            </div>
+          </Link>
         </div>
       </section>
 
