@@ -1,12 +1,20 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import type { MouseEvent } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Loader2, RotateCcw, Cpu, Ruler, AlertTriangle } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { AnimatePresence, motion } from 'framer-motion'
 
-import { HardwareFailureMap, type HardwareSpec, type TestResult } from '@/components/HardwareFailureMap'
+import {
+  HardwareFailureMap,
+  type FailurePoint,
+  type HardwareSpec,
+  type TestResult,
+} from '@/components/HardwareFailureMap'
+import { KeyPersonReport } from '@/components/KeyPersonReport'
+import type { DomainFindingRow } from '@/components/simulation-results/types'
 import { getApiV1Base } from '@/lib/api-v1-base'
 
 function authHeaders(): HeadersInit {
@@ -17,18 +25,7 @@ function authHeaders(): HeadersInit {
   }
 }
 
-const BG = '#0a0a0f'
-const GRID_A = '#1e3a5f'
-const GRID_B = '#1a3a6e'
-const ACCENT = '#38bdf8'
-
-const HARDWARE_PRODUCT_TYPES = [
-  { value: 'consumer_hardware', label: 'Consumer hardware' },
-  { value: 'health_hardware', label: 'Health hardware' },
-  { value: 'iot_hardware', label: 'IoT hardware' },
-  { value: 'wearable', label: 'Wearable' },
-  { value: 'b2b_hardware', label: 'B2B hardware' },
-] as const
+type Tab = 'spec' | 'tests' | 'cost' | 'simulation' | 'competitive' | 'report'
 
 type HwListItem = {
   id: number
@@ -39,13 +36,6 @@ type HwListItem = {
   created_at: string
 }
 
-type RenderHints = {
-  primary_shape: string
-  dominant_material: string
-  color_hex: string
-  highlight_zones: string[]
-}
-
 type HwDetail = {
   id: number
   project_id: number
@@ -54,268 +44,391 @@ type HwDetail = {
   category: string | null
   product_type: string
   target_price_inr: number | null
-  material_spec: string | null
-  dimensions_json: Record<string, unknown> | null
   weight_grams: number | null
-  created_at: string
   spec: Record<string, unknown>
-  render_hints: RenderHints
-}
-
-function stressColor(severity: number): string {
-  const s = Math.max(0, Math.min(1, severity))
-  const hue = 125 - s * 125
-  return `hsl(${hue}, 72%, ${48 + s * 12}%)`
-}
-
-function ProductDiagramSvg(props: {
-  shape: string
-  fill: string
-  highlightIds: Set<string>
-  dominantMaterial: string
-  rotX: number
-  rotY: number
-  dragging: boolean
-  components: Array<{ id: string; name: string; zone: string }>
-}) {
-  const { shape, fill, highlightIds, dominantMaterial, rotX, rotY, dragging, components } = props
-  const safeFill = /^#[0-9A-Fa-f]{6}$/i.test(fill) ? fill : '#2d4a6e'
-  const sh = (shape || 'box').toLowerCase().replace(/_/g, '-')
-
-  let body: ReactNode
-  if (sh === 'cylinder') {
-    body = (
-      <g>
-        <ellipse cx="100" cy="58" rx="44" ry="14" fill="url(#hw-metal)" stroke={GRID_A} strokeWidth={1} />
-        <rect x="56" y="58" width="88" height="92" fill="url(#hw-metal)" stroke={GRID_A} strokeWidth={1} />
-        <ellipse cx="100" cy="150" rx="44" ry="14" fill="#0b1220" stroke={GRID_A} strokeWidth={1} />
-      </g>
-    )
-  } else if (sh === 'flat') {
-    body = (
-      <rect x="28" y="88" width="144" height="36" rx="4" fill="url(#hw-metal)" stroke={GRID_A} strokeWidth={1} />
-    )
-  } else if (sh === 'l-shape') {
-    body = (
-      <path
-        d="M 52 52 L 52 148 L 100 148 L 100 100 L 148 100 L 148 52 Z"
-        fill="url(#hw-metal)"
-        stroke={GRID_A}
-        strokeWidth={1.2}
-      />
-    )
-  } else {
-    body = (
-      <g>
-        <rect x="48" y="48" width="104" height="104" rx="10" fill="url(#hw-metal)" stroke={GRID_A} strokeWidth={1.2} />
-        <line x1="48" y1="88" x2="152" y2="88" stroke={GRID_B} strokeWidth={0.5} opacity={0.5} />
-        <line x1="88" y1="48" x2="88" y2="152" stroke={GRID_B} strokeWidth={0.5} opacity={0.5} />
-      </g>
-    )
+  render_hints: {
+    primary_shape: string
+    dominant_material: string
+    color_hex: string
+    highlight_zones: string[]
   }
-
-  const transition = dragging ? 'none' : 'transform 0.1s ease-out'
-
-  return (
-    <svg
-      viewBox="0 0 200 200"
-      className="mx-auto h-[min(52vw,420px)] w-full max-w-[480px] select-none"
-      style={{
-        transform: `rotateX(${rotX}deg) rotateY(${rotY}deg)`,
-        transformStyle: 'preserve-3d' as const,
-        transition,
-        filter: 'drop-shadow(0 28px 48px rgba(0,0,0,0.65)) drop-shadow(0 12px 24px rgba(30,58,95,0.35))',
-      }}
-    >
-      <defs>
-        <linearGradient id="hw-metal" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor={safeFill} stopOpacity={0.95} />
-          <stop offset="100%" stopColor="#0f172a" stopOpacity={0.9} />
-        </linearGradient>
-      </defs>
-      <rect x="4" y="4" width="192" height="192" fill="none" stroke={GRID_A} strokeWidth={0.4} strokeDasharray="3 4" opacity={0.45} />
-      <text x="100" y="22" textAnchor="middle" fill={GRID_B} fontSize="8" letterSpacing="0.14em">
-        {dominantMaterial.toUpperCase()}
-      </text>
-      {body}
-      {components.slice(0, 6).map((c, i) => {
-        const px = 58 + (i % 3) * 42
-        const py = 118 + Math.floor(i / 3) * 22
-        const hi = highlightIds.has(c.id)
-        return (
-          <g key={c.id} style={hi ? { filter: `drop-shadow(0 0 8px ${ACCENT})` } : undefined}>
-            <circle cx={px} cy={py} r={7} fill={hi ? ACCENT : '#132337'} stroke={GRID_A} strokeWidth={0.8} opacity={0.95} />
-            <text x={px + 12} y={py + 4} fill="#94a3b8" fontSize="7">
-              {c.id}
-            </text>
-          </g>
-        )
-      })}
-    </svg>
-  )
 }
 
-function PerspectiveGrid() {
+type CompetitiveReport = {
+  price_position?: string
+  overall_differentiation?: number
+  whitespace_clusters?: string[]
+  recommended_positioning?: string
+  top_threats?: string[]
+  top_opportunities?: string[]
+}
+
+function verdictFromMargin(marginPct: number): 'VIABLE' | 'MARGINAL' | 'NOT_VIABLE' {
+  if (marginPct >= 35) return 'VIABLE'
+  if (marginPct >= 20) return 'MARGINAL'
+  return 'NOT_VIABLE'
+}
+
+function normalizeCostView(
+  raw: Record<string, unknown> | undefined,
+  targetPriceInr: number,
+): {
+  hasData: boolean
+  message?: string
+  verdict: string
+  verdict_reason: string
+  landed_cost_inr: number
+  target_price_inr: number
+  margin_pct: number
+  margin_inr: number
+  break_even_moq: number | null
+  bom: Array<Record<string, unknown>>
+  bom_total_inr: number
+} {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      hasData: false,
+      verdict: '—',
+      verdict_reason: '',
+      landed_cost_inr: 0,
+      target_price_inr: targetPriceInr,
+      margin_pct: 0,
+      margin_inr: 0,
+      break_even_moq: null,
+      bom: [],
+      bom_total_inr: 0,
+    }
+  }
+  if ('message' in raw && raw.message && !raw.bom) {
+    return {
+      hasData: false,
+      message: String(raw.message),
+      verdict: '—',
+      verdict_reason: '',
+      landed_cost_inr: 0,
+      target_price_inr: targetPriceInr,
+      margin_pct: 0,
+      margin_inr: 0,
+      break_even_moq: null,
+      bom: [],
+      bom_total_inr: 0,
+    }
+  }
+  const bom = Array.isArray(raw.bom) ? (raw.bom as Array<Record<string, unknown>>) : []
+  const bomTotal = bom.reduce((acc, b) => acc + Number(b.unit_cost_inr ?? 0), 0)
+  const landed = Number(raw.landed_cost_inr ?? 0)
+  const marginPct =
+    typeof raw.margin_pct === 'number'
+      ? raw.margin_pct
+      : Number(raw.margin_pct ?? 0)
+  const target = Number(raw.target_price_inr ?? targetPriceInr)
+  const marginInr =
+    typeof raw.margin_inr === 'number'
+      ? raw.margin_inr
+      : Math.max(0, target - landed)
+  const verdict =
+    typeof raw.verdict === 'string' && raw.verdict.length > 0
+      ? raw.verdict
+      : verdictFromMargin(marginPct)
+  const verdictReason =
+    typeof raw.verdict_reason === 'string'
+      ? raw.verdict_reason
+      : `Margin ${marginPct.toFixed(1)}% (from manufacturing estimate)`
+  const be =
+    raw.break_even_moq === undefined || raw.break_even_moq === null
+      ? null
+      : Number(raw.break_even_moq)
+
+  return {
+    hasData: true,
+    verdict,
+    verdict_reason: verdictReason,
+    landed_cost_inr: landed,
+    target_price_inr: target,
+    margin_pct: marginPct,
+    margin_inr: marginInr,
+    break_even_moq: Number.isFinite(be) ? be : null,
+    bom,
+    bom_total_inr: typeof raw.bom_total_inr === 'number' ? raw.bom_total_inr : bomTotal,
+  }
+}
+
+// ── Perspective Grid Background ──
+function GridBackground() {
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
       <div
-        className="absolute"
+        className="absolute inset-0"
         style={{
-          inset: '-45% -25% -35% -25%',
-          transform: 'perspective(500px) rotateX(60deg)',
-          transformOrigin: '50% 40%',
-          background: `
-            repeating-linear-gradient(90deg, transparent 0, transparent 39px, ${GRID_A} 39px, ${GRID_A} 40px),
-            repeating-linear-gradient(0deg, transparent 0, transparent 39px, ${GRID_B} 39px, ${GRID_B} 40px)
+          background: '#050810',
+          backgroundImage: `
+            linear-gradient(rgba(30,58,94,0.4) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(30,58,94,0.4) 1px, transparent 1px)
           `,
-          opacity: 0.55,
-          maskImage: 'radial-gradient(ellipse 68% 58% at 50% 42%, black 18%, transparent 72%)',
-          WebkitMaskImage: 'radial-gradient(ellipse 68% 58% at 50% 42%, black 18%, transparent 72%)',
+          backgroundSize: '40px 40px',
+          transform: 'perspective(600px) rotateX(55deg) scaleX(1.8)',
+          transformOrigin: 'center 70%',
+          top: '30%',
+          height: '120%',
         }}
       />
       <div
-        className="absolute"
+        className="absolute inset-0"
         style={{
-          inset: '-40% -20% -30% -20%',
-          transform: 'perspective(500px) rotateX(60deg) translateZ(-24px)',
-          transformOrigin: '50% 40%',
           background: `
-            repeating-linear-gradient(90deg, transparent 0, transparent 79px, ${GRID_B} 79px, ${GRID_B} 80px),
-            repeating-linear-gradient(0deg, transparent 0, transparent 79px, ${GRID_A} 79px, ${GRID_A} 80px)
+            radial-gradient(ellipse 80% 60% at 50% 40%, transparent 30%, #050810 100%),
+            linear-gradient(to bottom, #050810 0%, transparent 35%, transparent 70%, #050810 100%)
           `,
-          opacity: 0.22,
-          maskImage: 'radial-gradient(ellipse 72% 62% at 50% 44%, black 12%, transparent 78%)',
-          WebkitMaskImage: 'radial-gradient(ellipse 72% 62% at 50% 44%, black 12%, transparent 78%)',
+        }}
+      />
+      <div
+        className="absolute inset-0"
+        style={{
+          background: 'radial-gradient(ellipse 100% 100% at 50% 50%, transparent 50%, #050810aa 100%)',
         }}
       />
     </div>
   )
 }
 
-export default function HardwareViewerPage() {
-  const params = useParams()
-  const projectId = Number(params.id)
-
-  const [list, setList] = useState<HwListItem[]>([])
-  const [selectedId, setSelectedId] = useState<number | null>(null)
-  const [detail, setDetail] = useState<HwDetail | null>(null)
-  const [loadingList, setLoadingList] = useState(true)
-  const [loadingDetail, setLoadingDetail] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [testsMsg, setTestsMsg] = useState<string | null>(null)
-  const [testResults, setTestResults] = useState<TestResult[]>([])
-
-  const [showGenerate, setShowGenerate] = useState(false)
-  const [genBusy, setGenBusy] = useState(false)
-  const [genName, setGenName] = useState('')
-  const [genDesc, setGenDesc] = useState('')
-  const [genCategory, setGenCategory] = useState('')
-  const [genProductType, setGenProductType] = useState('consumer_hardware')
-  const [genPrice, setGenPrice] = useState('4999')
-  const [genMaterial, setGenMaterial] = useState('')
-  const [genDimsRough, setGenDimsRough] = useState('')
-
-  const [rotX, setRotX] = useState(-8)
-  const [rotY, setRotY] = useState(22)
+// ── 3D Product Spec Viewer ──
+function SpecViewer({ spec, hwProduct }: { spec: Record<string, unknown>; hwProduct: HwListItem | null }) {
+  const [rotateY, setRotateY] = useState(-25)
+  const [rotateX, setRotateX] = useState(15)
   const [dragging, setDragging] = useState(false)
-  const dragRef = useRef({ active: false, lx: 0, ly: 0 })
+  const lastPos = useRef({ x: 0, y: 0 })
 
-  const loadList = useCallback(async () => {
-    if (!Number.isFinite(projectId)) return
-    setLoadingList(true)
-    setError(null)
-    try {
-      const res = await fetch(`${getApiV1Base()}/projects/${projectId}/hardware`, {
-        headers: authHeaders(),
-      })
-      if (!res.ok) throw new Error(await res.text())
-      const data = (await res.json()) as HwListItem[]
-      setList(data)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load hardware')
-    } finally {
-      setLoadingList(false)
-    }
-  }, [projectId])
+  const hints = (spec?.render_hints ?? {}) as Record<string, unknown>
+  const shape = String(hints.primary_shape ?? 'box')
+  const color = String(hints.color_hex ?? '#1e293b')
+  const material = String(hints.dominant_material ?? 'ABS')
+  const components = Array.isArray(spec?.components) ? (spec.components as Array<Record<string, unknown>>) : []
+  const dims = (spec?.dimensions ?? {}) as Record<string, unknown>
 
-  const loadDetail = useCallback(async () => {
-    if (!Number.isFinite(projectId) || selectedId === null) {
-      setDetail(null)
+  const onMouseDown = (e: MouseEvent) => {
+    setDragging(true)
+    lastPos.current = { x: e.clientX, y: e.clientY }
+  }
+  const onMouseMove = (e: MouseEvent) => {
+    if (!dragging) return
+    const dx = e.clientX - lastPos.current.x
+    const dy = e.clientY - lastPos.current.y
+    setRotateY((prev) => prev + dx * 0.5)
+    setRotateX((prev) => Math.max(-30, Math.min(30, prev - dy * 0.3)))
+    lastPos.current = { x: e.clientX, y: e.clientY }
+  }
+  const onMouseUp = () => setDragging(false)
+  const onReset = () => {
+    setRotateY(-25)
+    setRotateX(15)
+  }
+
+  const ZONE_COLORS: Record<string, string> = {
+    shell: '#1e3a5f',
+    core: '#1e4d3f',
+    top: '#2d3b55',
+    bottom: '#1a2d3f',
+    left: '#2a3f5f',
+    right: '#2a3f5f',
+  }
+
+  return (
+    <div
+      className="relative flex min-h-96 flex-1 select-none flex-col items-center justify-center"
+      style={{ perspective: '900px' }}
+      onMouseMove={onMouseMove}
+      onMouseUp={onMouseUp}
+      onMouseLeave={onMouseUp}
+    >
+      <GridBackground />
+
+      <div
+        className="relative z-10 cursor-grab active:cursor-grabbing"
+        style={{
+          transform: `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`,
+          transformStyle: 'preserve-3d',
+          transition: dragging ? 'none' : 'transform 0.3s ease-out',
+          filter: 'drop-shadow(0 40px 60px rgba(0,0,0,0.8))',
+        }}
+        onMouseDown={onMouseDown}
+        onDoubleClick={onReset}
+        role="presentation"
+      >
+        <svg viewBox="0 0 360 280" width={420} xmlns="http://www.w3.org/2000/svg" className="max-w-full">
+          <ellipse cx="180" cy="270" rx="120" ry="12" fill="#3b82f6" opacity="0.12" />
+
+          {shape === 'flat' ? (
+            <>
+              <rect x="40" y="100" width="280" height="80" rx="8" fill={color} stroke="#3b82f620" strokeWidth="1" />
+              <rect x="50" y="104" width="100" height="6" rx="3" fill="white" opacity="0.08" />
+            </>
+          ) : shape === 'cylinder' ? (
+            <>
+              <ellipse cx="180" cy="80" rx="120" ry="30" fill={color} stroke="#3b82f630" strokeWidth="1" />
+              <rect x="60" y="80" width="240" height="140" fill={color} stroke="#3b82f620" strokeWidth="1" />
+              <ellipse cx="180" cy="220" rx="120" ry="30" fill={color} stroke="#3b82f630" strokeWidth="1" />
+            </>
+          ) : (
+            <>
+              <rect x="30" y="70" width="240" height="170" rx="6" fill={color} stroke="#3b82f625" strokeWidth="1.5" />
+              <polygon
+                points="30,70 100,30 340,30 270,70"
+                fill={color}
+                style={{ filter: 'brightness(1.3)' }}
+                stroke="#3b82f625"
+                strokeWidth="1.5"
+              />
+              <polygon
+                points="270,70 340,30 340,200 270,240"
+                fill={color}
+                style={{ filter: 'brightness(0.7)' }}
+                stroke="#3b82f620"
+                strokeWidth="1.5"
+              />
+              <polygon points="35,68 85,35 200,35 150,68" fill="white" opacity="0.04" />
+              <line x1="30" y1="70" x2="270" y2="70" stroke="#3b82f6" strokeWidth="0.8" opacity="0.6" />
+              <line x1="30" y1="70" x2="100" y2="30" stroke="#3b82f6" strokeWidth="0.8" opacity="0.4" />
+            </>
+          )}
+
+          {components.slice(0, 4).map((comp, i) => {
+            const offsets = [
+              { x: 45, y: 85 },
+              { x: 45, y: 125 },
+              { x: 45, y: 165 },
+              { x: 45, y: 205 },
+            ]
+            const pos = offsets[i] ?? { x: 45, y: 85 + i * 40 }
+            const zone = String(comp.zone ?? 'core')
+            const zoneColor = ZONE_COLORS[zone] ?? '#1e293b'
+            const cid = String(comp.id ?? i)
+            return (
+              <g key={cid}>
+                <rect
+                  x={pos.x}
+                  y={pos.y}
+                  width={220}
+                  height={28}
+                  rx="3"
+                  fill={zoneColor}
+                  stroke="#3b82f630"
+                  strokeWidth="0.8"
+                  strokeDasharray="4 2"
+                />
+                <text x={pos.x + 8} y={pos.y + 17} fontSize="8" fontFamily="monospace" fill="#94a3b8">
+                  {String(comp.name ?? '')} · {String(comp.material ?? '')}
+                </text>
+                <circle cx={pos.x + 212} cy={pos.y + 14} r="3" fill="#3b82f6" opacity="0.6" />
+              </g>
+            )
+          })}
+
+          {dims.length_mm != null && (
+            <>
+              <line x1="30" y1="255" x2="270" y2="255" stroke="#3b82f650" strokeWidth="0.7" />
+              <text x="150" y="268" textAnchor="middle" fontSize="7" fontFamily="monospace" fill="#475569">
+                {String(dims.length_mm)}mm × {String(dims.width_mm ?? '—')}mm
+                {dims.weight_grams != null ? ` · ${String(dims.weight_grams)}g` : ''}
+              </text>
+            </>
+          )}
+        </svg>
+      </div>
+
+      <p className="relative z-10 mt-3 font-mono text-xs text-slate-600">
+        drag to rotate · double-click to reset
+      </p>
+
+      <div className="relative z-10 mt-2 flex items-center gap-2">
+        <div className="h-2 w-2 rounded-full bg-blue-500" />
+        <span className="font-mono text-xs text-slate-500">
+          {material} · {components.length} components
+          {hwProduct?.name ? ` · ${hwProduct.name}` : ''}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+const CATEGORIES = [
+  { value: 'consumer_hardware', label: 'Consumer Hardware' },
+  { value: 'health_hardware', label: 'Health Hardware' },
+  { value: 'wearable', label: 'Wearable' },
+  { value: 'iot_hardware', label: 'IoT Hardware' },
+  { value: 'b2b_hardware', label: 'B2B Hardware' },
+] as const
+
+export default function HardwareBuilderPage() {
+  const params = useParams()
+  const projectId = String(params.id ?? '')
+  const queryClient = useQueryClient()
+
+  const [activeTab, setActiveTab] = useState<Tab>('spec')
+  const [selectedHwId, setSelectedHwId] = useState<number | null>(null)
+  const [generating, setGenerating] = useState(false)
+  const [runningTests, setRunningTests] = useState(false)
+  const [runningSim, setRunningSim] = useState(false)
+  const [competitiveReport, setCompetitiveReport] = useState<CompetitiveReport | null>(null)
+  const [pdfBusy, setPdfBusy] = useState(false)
+
+  const [genForm, setGenForm] = useState({
+    name: '',
+    description: '',
+    category: 'wearable',
+    target_price_inr: 4999,
+    product_type: 'wearable',
+  })
+
+  const api = getApiV1Base()
+
+  const { data: hwList = [], refetch: refetchHw } = useQuery<HwListItem[]>({
+    queryKey: ['hardware', projectId],
+    queryFn: async (): Promise<HwListItem[]> => {
+      const r = await fetch(`${api}/projects/${projectId}/hardware`, { headers: authHeaders() })
+      if (!r.ok) throw new Error(await r.text())
+      return (await r.json()) as HwListItem[]
+    },
+    enabled: Boolean(projectId),
+  })
+
+  useEffect(() => {
+    if (hwList.length === 0) {
+      setSelectedHwId(null)
       return
     }
-    setLoadingDetail(true)
-    setError(null)
-    try {
-      const res = await fetch(`${getApiV1Base()}/projects/${projectId}/hardware/${selectedId}`, {
-        headers: authHeaders(),
-      })
-      if (!res.ok) throw new Error(await res.text())
-      setDetail((await res.json()) as HwDetail)
-    } catch (e) {
-      setDetail(null)
-      setError(e instanceof Error ? e.message : 'Failed to load product')
-    } finally {
-      setLoadingDetail(false)
-    }
-  }, [projectId, selectedId])
-
-  const loadTestResults = useCallback(async () => {
-    if (!Number.isFinite(projectId) || selectedId === null) {
-      setTestResults([])
-      return
-    }
-    try {
-      const res = await fetch(
-        `${getApiV1Base()}/projects/${projectId}/hardware/${selectedId}/test-results`,
-        { headers: authHeaders() },
-      )
-      if (!res.ok) {
-        setTestResults([])
-        return
-      }
-      const data = (await res.json()) as { results?: TestResult[] }
-      setTestResults(Array.isArray(data.results) ? data.results : [])
-    } catch {
-      setTestResults([])
-    }
-  }, [projectId, selectedId])
+    setSelectedHwId((prev) => {
+      if (prev != null && hwList.some((h) => h.id === prev)) return prev
+      return hwList[0].id
+    })
+  }, [hwList])
 
   useEffect(() => {
-    void loadList()
-  }, [loadList])
+    setCompetitiveReport(null)
+  }, [selectedHwId])
 
-  useEffect(() => {
-    if (list.length === 0) return
-    setSelectedId((prev) => (prev === null ? list[0].id : prev))
-  }, [list])
+  const hwId = selectedHwId
 
-  useEffect(() => {
-    void loadDetail()
-  }, [loadDetail])
+  const { data: specData } = useQuery<HwDetail | null>({
+    queryKey: ['hw-spec', projectId, hwId],
+    queryFn: async (): Promise<HwDetail | null> => {
+      const r = await fetch(`${api}/projects/${projectId}/hardware/${hwId}`, { headers: authHeaders() })
+      if (!r.ok) throw new Error(await r.text())
+      return (await r.json()) as HwDetail
+    },
+    enabled: Boolean(projectId && hwId),
+  })
 
-  useEffect(() => {
-    void loadTestResults()
-  }, [loadTestResults])
-
-  const spec = detail?.spec as Record<string, unknown> | undefined
-  const dims = spec?.dimensions as Record<string, number> | undefined
-  const components = useMemo(() => {
-    const raw = spec?.components
-    if (!Array.isArray(raw)) return [] as Array<{ id: string; name: string; material: string; zone: string; stress_rating: number }>
-    return raw as Array<{ id: string; name: string; material: string; zone: string; stress_rating: number }>
-  }, [spec])
-  const stressMap = useMemo(() => {
-    const raw = spec?.stress_point_map
-    if (!Array.isArray(raw)) return [] as Array<{ component_id: string; stress_type: string; severity: number }>
-    return raw as Array<{ component_id: string; stress_type: string; severity: number }>
-  }, [spec])
-  const rh = detail?.render_hints
-
-  const highlightSet = useMemo(() => new Set(rh?.highlight_zones ?? []), [rh])
+  const mergedSpec = useMemo(() => {
+    if (!specData) return {}
+    return {
+      ...(specData.spec ?? {}),
+      render_hints: specData.render_hints,
+    } as Record<string, unknown>
+  }, [specData])
 
   const hardwareSpec: HardwareSpec | null = useMemo(() => {
-    if (!detail) return null
-    const s = detail.spec as Record<string, unknown>
+    if (!specData) return null
+    const s = specData.spec ?? {}
     const raw = s.components
     if (!Array.isArray(raw)) return null
     const components = raw.map((c: Record<string, unknown>) => {
@@ -327,9 +440,7 @@ export default function HardwareViewerPage() {
         zone: String(c.zone ?? 'core'),
         volume_cm3: Number(c.volume_cm3 ?? 0),
         stress_rating: Number(c.stress_rating ?? 0),
-        ...(cluster != null && cluster !== ''
-          ? { cluster_id: String(cluster) }
-          : {}),
+        ...(cluster != null && cluster !== '' ? { cluster_id: String(cluster) } : {}),
       }
     })
     const d = s.dimensions as Record<string, unknown> | undefined
@@ -339,437 +450,840 @@ export default function HardwareViewerPage() {
             length_mm: Number(d.length_mm ?? 0),
             width_mm: Number(d.width_mm ?? 0),
             height_mm: Number(d.height_mm ?? 0),
-            weight_grams: Number(
-              d.weight_grams ?? detail.weight_grams ?? 0,
-            ),
+            weight_grams: Number(d.weight_grams ?? specData.weight_grams ?? 0),
           }
-        : detail.weight_grams != null
-          ? {
-              length_mm: 0,
-              width_mm: 0,
-              height_mm: 0,
-              weight_grams: detail.weight_grams,
-            }
-          : undefined
+        : undefined
     return {
-      product_name: (s.product_name as string) || detail.name,
+      product_name: (s.product_name as string) || specData.name,
       dimensions,
       components,
-      render_hints: detail.render_hints,
+      render_hints: specData.render_hints,
     }
-  }, [detail])
+  }, [specData])
 
-  const onPointerDown = (e: React.MouseEvent) => {
-    dragRef.current = { active: true, lx: e.clientX, ly: e.clientY }
-    setDragging(true)
-  }
-  const onPointerMove = (e: React.MouseEvent) => {
-    if (!dragRef.current.active) return
-    const dx = e.clientX - dragRef.current.lx
-    const dy = e.clientY - dragRef.current.ly
-    dragRef.current.lx = e.clientX
-    dragRef.current.ly = e.clientY
-    setRotY((y) => y + dx * 0.35)
-    setRotX((x) => Math.max(-30, Math.min(30, x - dy * 0.35)))
-  }
-  const endDrag = () => {
-    dragRef.current.active = false
-    setDragging(false)
+  type TestResultsPayload = {
+    results: TestResult[]
+    total_tests: number
+    passed: number
+    failed: number
+    overall_pass_rate: number
   }
 
-  const resetView = () => {
-    setRotX(-8)
-    setRotY(22)
-  }
-
-  const runTests = async () => {
-    if (!Number.isFinite(projectId) || selectedId === null) return
-    setTestsMsg(null)
-    try {
-      const res = await fetch(`${getApiV1Base()}/projects/${projectId}/hardware/${selectedId}/run-tests`, {
-        method: 'POST',
+  const { data: testResultsPayload, refetch: refetchTests } = useQuery<TestResultsPayload>({
+    queryKey: ['hw-tests', projectId, hwId],
+    queryFn: async (): Promise<TestResultsPayload> => {
+      const r = await fetch(`${api}/projects/${projectId}/hardware/${hwId}/test-results`, {
         headers: authHeaders(),
       })
-      const text = await res.text()
-      let body: { detail?: string; message?: string } = {}
-      try {
-        body = JSON.parse(text) as { detail?: string; message?: string }
-      } catch {
-        /* non-JSON error body */
-      }
-      if (!res.ok) throw new Error(body.detail || text.slice(0, 280))
-      setTestsMsg(body.message || 'Tests queued.')
-      window.setTimeout(() => void loadTestResults(), 3000)
-    } catch (e) {
-      setTestsMsg(e instanceof Error ? e.message : 'Could not queue tests')
-    }
-  }
+      if (!r.ok) throw new Error(await r.text())
+      return (await r.json()) as TestResultsPayload
+    },
+    enabled: Boolean(projectId && hwId && activeTab === 'tests'),
+  })
 
-  const generateSpec = async () => {
-    if (!Number.isFinite(projectId)) return
-    setGenBusy(true)
-    setError(null)
-    let dimsRough: string | Record<string, unknown> | null = genDimsRough.trim() || null
-    if (dimsRough && typeof dimsRough === 'string' && dimsRough.startsWith('{')) {
-      try {
-        dimsRough = JSON.parse(dimsRough) as Record<string, unknown>
-      } catch {
-        /* keep string */
-      }
-    }
-    try {
-      const res = await fetch(`${getApiV1Base()}/projects/${projectId}/hardware/generate-spec`, {
+  const { data: costRaw } = useQuery<Record<string, unknown>>({
+    queryKey: ['hw-cost', projectId, hwId],
+    queryFn: async (): Promise<Record<string, unknown>> => {
+      const r = await fetch(`${api}/projects/${projectId}/hardware/${hwId}/cost-analysis`, {
+        headers: authHeaders(),
+      })
+      return (await r.json()) as Record<string, unknown>
+    },
+    enabled: Boolean(projectId && hwId),
+  })
+
+  const selectedHw = hwList.find((h) => h.id === hwId) ?? null
+  const targetFromProduct = Number(selectedHw?.target_price_inr ?? specData?.target_price_inr ?? 1999)
+
+  const costView = useMemo(
+    () => normalizeCostView(costRaw, targetFromProduct),
+    [costRaw, targetFromProduct],
+  )
+
+  const { data: simData, refetch: refetchSim } = useQuery<Record<string, unknown>>({
+    queryKey: ['hw-sim', projectId, hwId],
+    queryFn: async (): Promise<Record<string, unknown>> => {
+      const r = await fetch(`${api}/projects/${projectId}/hardware/${hwId}/consumer-simulation`, {
+        headers: authHeaders(),
+      })
+      return (await r.json()) as Record<string, unknown>
+    },
+    enabled: Boolean(projectId && hwId && activeTab === 'simulation'),
+  })
+
+  const hasSimulation = Boolean(simData && 'hardware_product_id' in simData)
+
+  const runCostMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`${api}/projects/${projectId}/hardware/${hwId}/cost-analysis`, {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({
-          name: genName.trim(),
-          description: genDesc.trim(),
-          category: genCategory.trim(),
-          product_type: genProductType,
-          target_price_inr: Number(genPrice),
-          material_preference: genMaterial.trim() || null,
-          dimensions_rough: dimsRough,
+          target_price_inr: selectedHw?.target_price_inr ?? 1999,
+          moq: 500,
         }),
       })
-      if (!res.ok) throw new Error(await res.text())
-      const created = (await res.json()) as { id: number }
-      setShowGenerate(false)
-      setSelectedId(created.id)
-      await loadList()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Generate failed')
+      if (!r.ok) throw new Error(await r.text())
+      return (await r.json()) as Record<string, unknown>
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['hw-cost', projectId, hwId] })
+    },
+  })
+
+  const headerCostVerdict = costView.hasData ? costView.verdict : null
+
+  const runCompetitiveMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`${api}/projects/${projectId}/hardware/${hwId}/competitive-analysis`, {
+        method: 'POST',
+        headers: authHeaders(),
+      })
+      if (!r.ok) throw new Error(await r.text())
+      return (await r.json()) as CompetitiveReport
+    },
+    onSuccess: (data: CompetitiveReport) => {
+      setCompetitiveReport(data)
+    },
+  })
+
+  const handleGenerate = async () => {
+    setGenerating(true)
+    try {
+      const r = await fetch(`${api}/projects/${projectId}/hardware/generate-spec`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          name: genForm.name.trim(),
+          description: genForm.description.trim(),
+          category: genForm.category,
+          product_type: genForm.product_type,
+          target_price_inr: genForm.target_price_inr,
+        }),
+      })
+      if (!r.ok) throw new Error(await r.text())
+      const created = (await r.json()) as { id: number }
+      await refetchHw()
+      setSelectedHwId(created.id)
+      void queryClient.invalidateQueries({ queryKey: ['hw-spec', projectId, created.id] })
+      setActiveTab('spec')
     } finally {
-      setGenBusy(false)
+      setGenerating(false)
     }
   }
 
-  if (!Number.isFinite(projectId)) {
-    return (
-      <div className="p-10 font-mono text-sm" style={{ background: BG, color: '#94a3b8' }}>
-        Invalid project id.
-      </div>
-    )
+  const handleRunTests = useCallback(async () => {
+    if (!hwId) return
+    setRunningTests(true)
+    try {
+      const r = await fetch(`${api}/projects/${projectId}/hardware/${hwId}/run-tests`, {
+        method: 'POST',
+        headers: authHeaders(),
+      })
+      if (!r.ok) throw new Error(await r.text())
+      window.setTimeout(() => {
+        void refetchTests()
+        void queryClient.invalidateQueries({ queryKey: ['hw-tests', projectId, hwId] })
+        setRunningTests(false)
+      }, 3000)
+    } catch {
+      setRunningTests(false)
+    }
+  }, [api, hwId, projectId, queryClient, refetchTests])
+
+  const handleRunSim = async () => {
+    if (!hwId) return
+    setRunningSim(true)
+    try {
+      const r = await fetch(`${api}/projects/${projectId}/hardware/${hwId}/consumer-simulation`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({}),
+      })
+      if (!r.ok) throw new Error(await r.text())
+      window.setTimeout(() => {
+        void refetchSim()
+        void queryClient.invalidateQueries({ queryKey: ['hw-sim', projectId, hwId] })
+        setRunningSim(false)
+      }, 2500)
+    } catch {
+      setRunningSim(false)
+    }
   }
+
+  const downloadPdf = async () => {
+    if (!hwId) return
+    setPdfBusy(true)
+    try {
+      const r = await fetch(`${api}/projects/${projectId}/hardware/${hwId}/report.pdf`, {
+        headers: authHeaders(),
+      })
+      if (!r.ok) throw new Error(await r.text())
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `thecee-hardware-${hwId}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setPdfBusy(false)
+    }
+  }
+
+  const TABS: { key: Tab; label: string }[] = [
+    { key: 'spec', label: 'Spec' },
+    { key: 'tests', label: 'Tests' },
+    { key: 'cost', label: 'Cost' },
+    { key: 'simulation', label: 'Simulation' },
+    { key: 'competitive', label: 'Competitive' },
+    { key: 'report', label: 'Report' },
+  ]
+
+  const verdictColor = (v: string) =>
+    v === 'VIABLE'
+      ? 'text-green-400 border-green-500/30'
+      : v === 'MARGINAL'
+        ? 'text-amber-400 border-amber-500/30'
+        : v === 'NOT_VIABLE'
+          ? 'text-red-400 border-red-500/30'
+          : 'text-slate-400 border-slate-700'
+
+  const verdictBorderBg = (v: string) =>
+    v === 'VIABLE'
+      ? 'border-green-500/20 bg-green-500/5'
+      : v === 'MARGINAL'
+        ? 'border-amber-500/20 bg-amber-500/5'
+        : 'border-red-500/20 bg-red-500/5'
+
+  const statusColor = (s: string) =>
+    s === 'PASS' ? 'text-green-400' : s === 'PARTIAL' ? 'text-amber-400' : s === 'FAIL' ? 'text-red-400' : 'text-slate-400'
+
+  const testResults = testResultsPayload?.results ?? []
+  const compDisplay = competitiveReport
+
+  const simFindings = (simData?.domain_findings ?? []) as DomainFindingRow[]
+  const simClusters = (simData?.cluster_results ?? {}) as Record<
+    string,
+    { conversion_rate?: number; population_fraction?: number }
+  >
 
   return (
     <div
-      className="relative min-h-[calc(100dvh-72px)] overflow-x-hidden font-mono text-[13px] leading-relaxed"
-      style={{ background: BG, color: '#b8c5db' }}
-      onMouseMove={onPointerMove}
-      onMouseUp={endDrag}
-      onMouseLeave={endDrag}
+      className="min-h-screen bg-[#050810] text-slate-100"
+      style={{ fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, monospace" }}
     >
-      <PerspectiveGrid />
-
-      <div className="relative z-10 mx-auto max-w-7xl px-4 py-6 pb-24 sm:px-6">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-[#1e3a5f]/60 pb-4">
+      {/* ── HEADER ── */}
+      <div className="relative z-20 flex items-center justify-between border-b border-slate-800/60 bg-[#050810]/80 px-8 py-5 backdrop-blur-sm">
+        <div className="flex flex-wrap items-end gap-4">
           <div>
-            <div className="mb-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: ACCENT }}>
-              Prototype plate · Hardware
-            </div>
-            <h1 className="text-lg font-semibold tracking-tight text-slate-100 sm:text-xl">Semantic 3D viewer</h1>
-            <p className="mt-1 max-w-xl text-[12px] text-slate-500">
-              Blueprint view of the locked spec JSON — grid, stress map, and render hints from Step 70. Drag the assembly
-              to orbit; double-click to reset.
-            </p>
+            <p className="mb-1 text-xs tracking-widest text-blue-500 uppercase">TheCee / Hardware Lab</p>
+            <h1 className="text-xl font-bold tracking-tight text-white">
+              {selectedHw?.name ?? 'Hardware Builder'}
+            </h1>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href={`/project/${projectId}`}
-              className="rounded border border-[#1e3a5f] bg-[#0f1629] px-3 py-1.5 text-[11px] uppercase tracking-wider text-slate-400 hover:border-[#38bdf8]/50 hover:text-slate-200"
-            >
-              ← Dossier
-            </Link>
-            <button
-              type="button"
-              onClick={() => setShowGenerate((s) => !s)}
-              className="rounded border border-[#38bdf8]/40 bg-[#0c4a6e]/40 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-sky-200 hover:bg-[#0c4a6e]/70"
-            >
-              Generate spec
-            </button>
-            <button
-              type="button"
-              disabled={selectedId === null}
-              onClick={() => void runTests()}
-              className="rounded border border-[#1e3a5f] bg-[#111827] px-3 py-1.5 text-[11px] uppercase tracking-wider text-slate-300 hover:border-amber-500/50 disabled:opacity-40"
-            >
-              Run tests
-            </button>
-          </div>
-        </div>
-
-        {error ? (
-          <div className="mb-4 rounded border border-red-900/60 bg-red-950/30 px-3 py-2 text-[12px] text-red-200">{error}</div>
-        ) : null}
-        {testsMsg ? (
-          <div className="mb-4 rounded border border-amber-900/50 bg-amber-950/20 px-3 py-2 text-[12px] text-amber-100">{testsMsg}</div>
-        ) : null}
-
-        {showGenerate ? (
-          <div
-            className="mb-8 rounded-lg border border-[#1e3a5f] bg-[#0c101c]/95 p-4 shadow-xl backdrop-blur-sm sm:p-6"
-            style={{ boxShadow: '0 0 0 1px rgba(56,189,248,0.06)' }}
+          {hwList.length > 1 ? (
+            <label className="font-mono text-[10px] tracking-widest text-slate-500 uppercase">
+              Product
+              <select
+                value={hwId ?? ''}
+                onChange={(e) => setSelectedHwId(Number(e.target.value))}
+                className="ml-2 rounded border border-slate-800 bg-slate-900/80 px-2 py-1 text-xs text-slate-200"
+              >
+                {hwList.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <Link
+            href={`/project/${projectId}`}
+            className="rounded border border-slate-800 px-3 py-1.5 font-mono text-[10px] tracking-widest text-slate-500 uppercase hover:border-blue-500/40 hover:text-blue-300"
           >
-            <div className="mb-3 text-[10px] uppercase tracking-[0.18em] text-sky-400/90">Generate semantic spec (Step 71)</div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block sm:col-span-2">
-                <span className="mb-1 block text-[10px] uppercase tracking-wider text-slate-500">Name</span>
-                <input
-                  value={genName}
-                  onChange={(e) => setGenName(e.target.value)}
-                  className="w-full rounded border border-[#1e3a5f] bg-[#0a0f18] px-2 py-1.5 text-slate-200 outline-none focus:border-sky-500/50"
-                />
-              </label>
-              <label className="block sm:col-span-2">
-                <span className="mb-1 block text-[10px] uppercase tracking-wider text-slate-500">Description</span>
-                <textarea
-                  value={genDesc}
-                  onChange={(e) => setGenDesc(e.target.value)}
-                  rows={3}
-                  className="w-full rounded border border-[#1e3a5f] bg-[#0a0f18] px-2 py-1.5 text-slate-200 outline-none focus:border-sky-500/50"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-[10px] uppercase tracking-wider text-slate-500">Category</span>
-                <input
-                  value={genCategory}
-                  onChange={(e) => setGenCategory(e.target.value)}
-                  className="w-full rounded border border-[#1e3a5f] bg-[#0a0f18] px-2 py-1.5 text-slate-200 outline-none focus:border-sky-500/50"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-[10px] uppercase tracking-wider text-slate-500">Product type</span>
-                <select
-                  value={genProductType}
-                  onChange={(e) => setGenProductType(e.target.value)}
-                  className="w-full rounded border border-[#1e3a5f] bg-[#0a0f18] px-2 py-1.5 text-slate-200 outline-none focus:border-sky-500/50"
-                >
-                  {HARDWARE_PRODUCT_TYPES.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-[10px] uppercase tracking-wider text-slate-500">Target price (INR)</span>
-                <input
-                  value={genPrice}
-                  onChange={(e) => setGenPrice(e.target.value)}
-                  className="w-full rounded border border-[#1e3a5f] bg-[#0a0f18] px-2 py-1.5 text-slate-200 outline-none focus:border-sky-500/50"
-                />
-              </label>
-              <label className="block sm:col-span-2">
-                <span className="mb-1 block text-[10px] uppercase tracking-wider text-slate-500">Material preference (optional)</span>
-                <input
-                  value={genMaterial}
-                  onChange={(e) => setGenMaterial(e.target.value)}
-                  className="w-full rounded border border-[#1e3a5f] bg-[#0a0f18] px-2 py-1.5 text-slate-200 outline-none focus:border-sky-500/50"
-                />
-              </label>
-              <label className="block sm:col-span-2">
-                <span className="mb-1 block text-[10px] uppercase tracking-wider text-slate-500">Dimensions rough (text or JSON)</span>
-                <textarea
-                  value={genDimsRough}
-                  onChange={(e) => setGenDimsRough(e.target.value)}
-                  rows={2}
-                  className="w-full rounded border border-[#1e3a5f] bg-[#0a0f18] px-2 py-1.5 text-slate-200 outline-none focus:border-sky-500/50"
-                />
-              </label>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={genBusy}
-                onClick={() => void generateSpec()}
-                className="inline-flex items-center gap-2 rounded bg-sky-600 px-4 py-2 text-[12px] font-medium text-white hover:bg-sky-500 disabled:opacity-50"
-              >
-                {genBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Cpu className="h-4 w-4" />}
-                Submit to Claude
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowGenerate(false)}
-                className="rounded border border-[#1e3a5f] px-3 py-2 text-[12px] text-slate-400 hover:text-slate-200"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(260px,0.45fr)]">
-          <div>
-            <div
-              className="relative flex min-h-[420px] flex-col items-center justify-center rounded-xl border border-[#1e3a5f]/70 bg-[#060910]/80 px-4 py-10"
-              style={{ perspective: '800px' }}
-              onDoubleClick={resetView}
-            >
-              <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2 text-[10px] uppercase tracking-widest text-slate-500">
-                <RotateCcw className="h-3 w-3" />
-                Double-click reset
-              </div>
-              {loadingDetail ? (
-                <div className="flex items-center gap-2 text-slate-500">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  Loading spec…
-                </div>
-              ) : detail && rh ? (
-                <div
-                  className="cursor-grab active:cursor-grabbing"
-                  style={{ transformStyle: 'preserve-3d' }}
-                  onMouseDown={onPointerDown}
-                >
-                  <ProductDiagramSvg
-                    shape={rh.primary_shape}
-                    fill={rh.color_hex}
-                    highlightIds={highlightSet}
-                    dominantMaterial={rh.dominant_material}
-                    rotX={rotX}
-                    rotY={rotY}
-                    dragging={dragging}
-                    components={components}
-                  />
-                </div>
-              ) : (
-                <div className="max-w-sm text-center text-[13px] text-slate-500">
-                  Select a hardware product or generate a new spec. The diagram uses{' '}
-                  <code className="text-sky-300/90">render_hints</code> from the API.
-                </div>
-              )}
-            </div>
-
-            {detail && dims ? (
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div className="flex items-start gap-2 rounded border border-[#1e3a5f]/60 bg-[#0a0f18]/80 p-3">
-                  <Ruler className="mt-0.5 h-4 w-4 shrink-0 text-sky-400/80" />
-                  <div>
-                    <div className="text-[10px] uppercase tracking-wider text-slate-500">Envelope</div>
-                    <div className="text-[12px] text-slate-200">
-                      {dims.length_mm} × {dims.width_mm} × {dims.height_mm} mm
-                    </div>
-                    <div className="text-[11px] text-slate-500">{dims.weight_grams} g (spec)</div>
-                  </div>
-                </div>
-                <div className="rounded border border-[#1e3a5f]/60 bg-[#0a0f18]/80 p-3">
-                  <div className="text-[10px] uppercase tracking-wider text-slate-500">Render hints</div>
-                  <div className="mt-1 space-y-0.5 text-[11px] text-slate-400">
-                    <div>
-                      <span className="text-slate-600">shape</span> {rh?.primary_shape}
-                    </div>
-                    <div>
-                      <span className="text-slate-600">material</span> {rh?.dominant_material}
-                    </div>
-                    <div>
-                      <span className="text-slate-600">highlight</span> {(rh?.highlight_zones ?? []).join(', ') || '—'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {hardwareSpec && testResults.length > 0 ? (
-              <HardwareFailureMap
-                spec={hardwareSpec}
-                testResults={testResults}
-                className="mt-6"
-              />
-            ) : null}
-          </div>
-
-          <aside className="space-y-4">
-            <div className="rounded-lg border border-[#1e3a5f]/70 bg-[#060910]/85 p-3">
-              <div className="mb-2 text-[10px] uppercase tracking-[0.2em] text-sky-400/80">Products</div>
-              {loadingList ? (
-                <div className="flex items-center gap-2 text-slate-500">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading…
-                </div>
-              ) : list.length === 0 ? (
-                <p className="text-[12px] text-slate-500">No hardware rows yet. Generate a spec to populate this list.</p>
-              ) : (
-                <ul className="max-h-[220px] space-y-1 overflow-y-auto pr-1">
-                  {list.map((p) => (
-                    <li key={p.id}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedId(p.id)}
-                        className={`w-full rounded border px-2 py-2 text-left text-[12px] transition ${
-                          selectedId === p.id
-                            ? 'border-sky-500/50 bg-sky-950/40 text-sky-100'
-                            : 'border-transparent bg-transparent text-slate-400 hover:border-[#1e3a5f] hover:bg-[#0a0f18]'
-                        }`}
-                      >
-                        <div className="font-medium text-slate-200">{p.name}</div>
-                        <div className="text-[10px] text-slate-500">
-                          {p.product_type} · ₹{p.target_price_inr ?? '—'}
-                        </div>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            {detail ? (
-              <>
-                <div className="rounded-lg border border-[#1e3a5f]/70 bg-[#060910]/85 p-3">
-                  <div className="text-[10px] uppercase tracking-[0.2em] text-sky-400/80">Title block</div>
-                  <div className="mt-2 text-[15px] font-semibold tracking-tight text-slate-100">
-                    {(spec?.product_name as string) || detail.name}
-                  </div>
-                  <div className="mt-1 text-[11px] text-slate-500">
-                    {(spec?.category as string) || detail.category || '—'} · {detail.product_type}
-                  </div>
-                  <div className="mt-2 text-[12px] text-sky-200/90">
-                    Target ₹{detail.target_price_inr ?? '—'} <span className="text-slate-600">·</span> sheet #{detail.id}
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-[#1e3a5f]/70 bg-[#060910]/85 p-3">
-                  <div className="mb-2 text-[10px] uppercase tracking-[0.2em] text-sky-400/80">Components</div>
-                  <ul className="max-h-[240px] space-y-2 overflow-y-auto pr-1 text-[11px]">
-                    {components.map((c) => (
-                      <li
-                        key={c.id}
-                        className={`rounded border px-2 py-1.5 ${
-                          highlightSet.has(c.id) ? 'border-sky-500/40 bg-sky-950/25' : 'border-[#1e3a5f]/40 bg-[#0a0f18]/60'
-                        }`}
-                      >
-                        <div className="font-medium text-slate-200">{c.name}</div>
-                        <div className="text-slate-500">
-                          <span className="text-sky-300/70">{c.material}</span> · {c.zone} · stress {c.stress_rating?.toFixed?.(2) ?? c.stress_rating}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className="rounded-lg border border-[#1e3a5f]/70 bg-[#060910]/85 p-3">
-                  <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-sky-400/80">
-                    <AlertTriangle className="h-3 w-3" />
-                    Stress map
-                  </div>
-                  <ul className="max-h-[200px] space-y-1.5 overflow-y-auto text-[11px]">
-                    {stressMap.map((s, i) => (
-                      <li
-                        key={`${s.component_id}-${i}`}
-                        className="flex items-center justify-between gap-2 rounded border border-[#1e3a5f]/35 px-2 py-1"
-                        style={{ borderLeftColor: stressColor(s.severity), borderLeftWidth: 3 }}
-                      >
-                        <span className="truncate text-slate-300">{s.component_id}</span>
-                        <span className="shrink-0 text-slate-500">{s.stress_type}</span>
-                        <span className="shrink-0 font-mono text-[10px]" style={{ color: stressColor(s.severity) }}>
-                          {(s.severity * 100).toFixed(0)}%
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </>
-            ) : null}
-          </aside>
+            ← Dossier
+          </Link>
         </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {selectedHw ? (
+            <span className="rounded border border-blue-500/30 px-3 py-1 text-xs tracking-widest text-blue-400 uppercase">
+              {(selectedHw.category ?? 'hardware').replace(/_/g, ' ')}
+            </span>
+          ) : null}
+          {headerCostVerdict && headerCostVerdict !== '—' ? (
+            <span
+              className={`rounded border px-3 py-1 text-xs tracking-widest uppercase ${verdictColor(headerCostVerdict)}`}
+            >
+              {headerCostVerdict}
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      {/* ── TABS ── */}
+      <div className="relative z-20 flex gap-1 border-b border-slate-800/60 bg-[#050810]/60 px-8 backdrop-blur-sm">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setActiveTab(t.key)}
+            className={`px-4 py-3 text-xs tracking-widest uppercase transition-all ${
+              activeTab === t.key
+                ? 'border-b-2 border-blue-500 text-blue-400'
+                : 'text-slate-600 hover:text-slate-400'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── CONTENT ── */}
+      <div className="relative">
+        <AnimatePresence mode="wait">
+          {activeTab === 'spec' && (
+            <motion.div
+              key="spec"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex h-[calc(100vh-130px)]"
+            >
+              <div className="relative z-10 flex w-80 flex-col border-r border-slate-800/60 bg-[#050810]/80 backdrop-blur-sm">
+                <div className="flex-1 space-y-4 overflow-y-auto p-6">
+                  <p className="text-xs tracking-widest text-slate-600 uppercase">Hardware Configuration</p>
+
+                  {(
+                    [
+                      { label: 'Product Name', key: 'name' as const, type: 'text', placeholder: 'e.g. SmartWatch Pro' },
+                      {
+                        label: 'Target Price (₹)',
+                        key: 'target_price_inr' as const,
+                        type: 'number',
+                        placeholder: 'e.g. 4999',
+                      },
+                    ] as const
+                  ).map((field) => (
+                    <div key={field.key}>
+                      <label className="mb-1.5 block text-xs tracking-widest text-slate-600 uppercase">
+                        {field.label}
+                      </label>
+                      <input
+                        type={field.type}
+                        placeholder={field.placeholder}
+                        value={field.key === 'target_price_inr' ? genForm.target_price_inr : genForm[field.key]}
+                        onChange={(e) =>
+                          setGenForm((f) => ({
+                            ...f,
+                            [field.key]:
+                              field.key === 'target_price_inr' ? Number(e.target.value) || 0 : e.target.value,
+                          }))
+                        }
+                        className="w-full rounded border border-slate-800 bg-slate-900/80 px-3 py-2 font-mono text-sm text-slate-200 placeholder-slate-700 focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  ))}
+
+                  <div>
+                    <label className="mb-1.5 block text-xs tracking-widest text-slate-600 uppercase">Category</label>
+                    <select
+                      value={genForm.category}
+                      onChange={(e) =>
+                        setGenForm((f) => ({
+                          ...f,
+                          category: e.target.value,
+                          product_type: e.target.value,
+                        }))
+                      }
+                      className="w-full rounded border border-slate-800 bg-slate-900/80 px-3 py-2 font-mono text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+                    >
+                      {CATEGORIES.map((c) => (
+                        <option key={c.value} value={c.value}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs tracking-widest text-slate-600 uppercase">
+                      Description
+                    </label>
+                    <textarea
+                      rows={4}
+                      placeholder="Describe materials, key features, form factor..."
+                      value={genForm.description}
+                      onChange={(e) => setGenForm((f) => ({ ...f, description: e.target.value }))}
+                      className="w-full resize-none rounded border border-slate-800 bg-slate-900/80 px-3 py-2 font-mono text-sm text-slate-200 placeholder-slate-700 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2 border-t border-slate-800/60 p-6">
+                  <button
+                    type="button"
+                    onClick={() => void handleGenerate()}
+                    disabled={!genForm.name || !genForm.description || generating}
+                    className="w-full rounded bg-blue-600 py-3 text-sm font-bold tracking-widest text-white uppercase transition-all hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {generating ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                        Generating Spec...
+                      </span>
+                    ) : (
+                      'Generate Spec'
+                    )}
+                  </button>
+                  {hwId ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleRunTests()}
+                      disabled={runningTests}
+                      className="w-full rounded border border-blue-600/50 py-2.5 text-sm font-bold tracking-widest text-blue-400 uppercase transition-all hover:bg-blue-600 hover:text-white disabled:opacity-40"
+                    >
+                      {runningTests ? 'Running Tests...' : '▶ Run Physics Tests'}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              {mergedSpec && Object.keys(mergedSpec).length > 0 ? (
+                <SpecViewer spec={mergedSpec} hwProduct={selectedHw} />
+              ) : (
+                <div className="relative flex flex-1 flex-col items-center justify-center">
+                  <GridBackground />
+                  <div className="relative z-10 space-y-3 text-center">
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-800 text-3xl">
+                      ⬡
+                    </div>
+                    <p className="text-sm text-slate-600">Configure your hardware and generate the spec</p>
+                    <p className="text-xs text-slate-800">A 3D component diagram will appear here</p>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {activeTab === 'tests' && (
+            <motion.div
+              key="tests"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="space-y-6 p-8"
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-xs tracking-widest text-slate-600 uppercase">Physics Test Results</p>
+                <button
+                  type="button"
+                  onClick={() => void handleRunTests()}
+                  disabled={!hwId || runningTests}
+                  className="rounded bg-blue-600 px-4 py-2 text-xs font-bold tracking-widest text-white uppercase transition-all hover:bg-blue-500 disabled:opacity-40"
+                >
+                  {runningTests ? 'Running...' : 'Re-run Tests'}
+                </button>
+              </div>
+
+              {testResults.length > 0 ? (
+                <>
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    {(
+                      [
+                        { label: 'Tests Run', value: testResultsPayload?.total_tests, color: undefined },
+                        { label: 'Passed', value: testResultsPayload?.passed, color: 'text-green-400' },
+                        { label: 'Failed', value: testResultsPayload?.failed, color: 'text-red-400' },
+                        {
+                          label: 'Pass Rate',
+                          value: `${((testResultsPayload?.overall_pass_rate ?? 0) * 100).toFixed(0)}%`,
+                          color: undefined,
+                        },
+                      ] as const
+                    ).map((k) => (
+                      <div key={k.label} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                        <p className="mb-1 text-xs tracking-widest text-slate-600 uppercase">{k.label}</p>
+                        <p className={`text-2xl font-bold ${k.color ?? 'text-blue-400'}`}>{k.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="space-y-3">
+                    {testResults.map((r) => (
+                      <div key={r.test_type} className="rounded-xl border border-slate-800 bg-slate-900/40 p-5">
+                        <div className="mb-3 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className={`text-sm font-bold ${statusColor(r.status)}`}>
+                              {r.status === 'PASS' ? '✓' : r.status === 'FAIL' ? '✗' : '~'}
+                            </span>
+                            <span className="text-sm text-white">{r.test_type?.replace(/_/g, ' ')}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="h-1.5 w-32 overflow-hidden rounded-full bg-slate-800">
+                              <div
+                                className={`h-full rounded-full ${
+                                  r.pass_rate > 0.7 ? 'bg-green-500' : r.pass_rate > 0.4 ? 'bg-amber-500' : 'bg-red-500'
+                                }`}
+                                style={{ width: `${Math.min(100, r.pass_rate * 100)}%` }}
+                              />
+                            </div>
+                            <span className="w-10 font-mono text-xs text-slate-400">
+                              {(r.pass_rate * 100).toFixed(0)}%
+                            </span>
+                          </div>
+                        </div>
+                        {r.failure_points?.length ? (
+                          <div className="space-y-1">
+                            {r.failure_points.slice(0, 2).map((fp: FailurePoint, i: number) => (
+                              <p key={i} className="font-mono text-xs text-red-400">
+                                → {fp.reason}
+                              </p>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+
+                  {hardwareSpec ? (
+                    <HardwareFailureMap spec={hardwareSpec} testResults={testResults} />
+                  ) : null}
+                </>
+              ) : (
+                <div className="py-20 text-center text-slate-600">
+                  <p className="text-sm">No test results yet.</p>
+                  <p className="mt-1 text-xs">Generate a spec first, then run physics tests.</p>
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {activeTab === 'cost' && (
+            <motion.div
+              key="cost"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="space-y-6 p-8"
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-xs tracking-widest text-slate-600 uppercase">Manufacturing Cost Analysis</p>
+                {hwId ? (
+                  <button
+                    type="button"
+                    onClick={() => runCostMutation.mutate()}
+                    disabled={runCostMutation.isPending}
+                    className="rounded border border-slate-700 px-4 py-2 text-xs font-bold tracking-widest uppercase transition-all hover:border-blue-500 hover:text-blue-400 disabled:opacity-40"
+                  >
+                    {runCostMutation.isPending ? 'Running…' : 'Re-run Analysis'}
+                  </button>
+                ) : null}
+              </div>
+
+              {costView.hasData ? (
+                <>
+                  <div className={`rounded-2xl border p-6 ${verdictBorderBg(costView.verdict)}`}>
+                    <p className={`mb-1 text-lg font-bold ${verdictColor(costView.verdict).split(' ')[0]}`}>
+                      {costView.verdict}
+                    </p>
+                    <p className="text-sm text-slate-300">{costView.verdict_reason}</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                    {(
+                      [
+                        {
+                          label: 'Landed Cost',
+                          value: `₹${costView.landed_cost_inr.toLocaleString('en-IN')}`,
+                        },
+                        {
+                          label: 'Target Price',
+                          value: `₹${costView.target_price_inr.toLocaleString('en-IN')}`,
+                        },
+                        { label: 'Gross Margin', value: `${costView.margin_pct.toFixed(1)}%` },
+                        {
+                          label: 'Break-even',
+                          value:
+                            costView.break_even_moq != null
+                              ? `${costView.break_even_moq.toLocaleString('en-IN')} units`
+                              : '—',
+                        },
+                      ] as const
+                    ).map((k) => (
+                      <div key={k.label} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                        <p className="mb-1 text-xs tracking-widest text-slate-600 uppercase">{k.label}</p>
+                        <p className="text-xl font-bold text-blue-400">{k.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {costView.bom.length > 0 ? (
+                    <div>
+                      <p className="mb-3 text-xs tracking-widest text-slate-600 uppercase">Bill of Materials</p>
+                      <div className="overflow-hidden rounded-xl border border-slate-800">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-slate-800 bg-slate-900/80">
+                              {(['Component', 'Material', 'Volume (cm³)', 'Unit Cost'] as const).map((h) => (
+                                <th
+                                  key={h}
+                                  className="px-4 py-3 text-left text-xs font-normal tracking-widest text-slate-500 uppercase"
+                                >
+                                  {h}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {costView.bom.map((item, idx) => (
+                              <tr
+                                key={String(item.component_id ?? item.component_name ?? idx)}
+                                className="border-b border-slate-800/50 hover:bg-slate-900/40"
+                              >
+                                <td className="px-4 py-3 text-slate-200">{String(item.component_name ?? '—')}</td>
+                                <td className="px-4 py-3 text-slate-400">{String(item.material ?? '—')}</td>
+                                <td className="px-4 py-3 font-mono text-slate-400">
+                                  {item.volume_cm3 != null ? Number(item.volume_cm3).toFixed(1) : '—'}
+                                </td>
+                                <td className="px-4 py-3 font-mono text-blue-400">
+                                  ₹{Number(item.unit_cost_inr ?? 0).toFixed(2)}
+                                </td>
+                              </tr>
+                            ))}
+                            <tr className="bg-slate-900/80">
+                              <td colSpan={3} className="px-4 py-3 text-xs tracking-widest text-slate-500 uppercase">
+                                Total BOM
+                              </td>
+                              <td className="px-4 py-3 font-mono font-bold text-blue-400">
+                                ₹{costView.bom_total_inr.toFixed(2)}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="py-20 text-center text-slate-600">
+                  <p className="text-sm">{costView.message ?? 'No cost analysis yet.'}</p>
+                  {hwId ? (
+                    <button
+                      type="button"
+                      onClick={() => runCostMutation.mutate()}
+                      className="mt-3 rounded bg-blue-600 px-4 py-2 text-xs text-white"
+                    >
+                      Run Cost Analysis
+                    </button>
+                  ) : null}
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {activeTab === 'simulation' && (
+            <motion.div
+              key="simulation"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="space-y-6 p-8"
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-xs tracking-widest text-slate-600 uppercase">Consumer Simulation — 52 Clusters</p>
+                <button
+                  type="button"
+                  onClick={() => void handleRunSim()}
+                  disabled={!hwId || runningSim}
+                  className="rounded bg-blue-600 px-4 py-2 text-xs font-bold tracking-widest text-white uppercase transition-all hover:bg-blue-500 disabled:opacity-40"
+                >
+                  {runningSim ? 'Queuing...' : '▶ Run Simulation'}
+                </button>
+              </div>
+
+              {hasSimulation ? (
+                <>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    {(
+                      [
+                        {
+                          label: 'Overall Conversion',
+                          value: `${((Number(simData?.overall_conversion_rate) || 0) * 100).toFixed(1)}%`,
+                        },
+                        {
+                          label: 'Total Agents',
+                          value: (Number(simData?.agent_count ?? simData?.total_agents) || 0).toLocaleString('en-IN'),
+                        },
+                        {
+                          label: 'Prototype Wired',
+                          value: simData?.prototype_wired ? 'Yes' : 'No',
+                        },
+                      ] as const
+                    ).map((k) => (
+                      <div key={k.label} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                        <p className="mb-1 text-xs tracking-widest text-slate-600 uppercase">{k.label}</p>
+                        <p className="text-2xl font-bold text-blue-400">{k.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {Object.keys(simClusters).length > 0 && simFindings.length > 0 ? (
+                    <KeyPersonReport
+                      findings={simFindings}
+                      clusterBreakdown={simClusters}
+                      primaryFailure={String(simData?.primary_failure_domain ?? 'unknown')}
+                    />
+                  ) : (
+                    <p className="text-sm text-slate-600">
+                      Simulation is running or results are still sparse — check back when `cluster_results` and findings
+                      are populated.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <div className="py-20 text-center text-slate-600">
+                  <p className="text-sm">No simulation run yet.</p>
+                  <p className="mt-1 text-xs">Run physics tests first, then simulate consumer behaviour.</p>
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {activeTab === 'competitive' && (
+            <motion.div
+              key="competitive"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="space-y-6 p-8"
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-xs tracking-widest text-slate-600 uppercase">Competitive Analysis</p>
+                {hwId ? (
+                  <button
+                    type="button"
+                    onClick={() => runCompetitiveMutation.mutate()}
+                    disabled={runCompetitiveMutation.isPending}
+                    className="rounded bg-blue-600 px-4 py-2 text-xs font-bold tracking-widest text-white uppercase transition-all hover:bg-blue-500 disabled:opacity-40"
+                  >
+                    {runCompetitiveMutation.isPending ? 'Running…' : 'Run Analysis'}
+                  </button>
+                ) : null}
+              </div>
+
+              {compDisplay?.price_position ? (
+                <>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    {(
+                      [
+                        { label: 'Price Position', value: compDisplay.price_position },
+                        {
+                          label: 'Differentiation Score',
+                          value: `${((compDisplay.overall_differentiation ?? 0) * 100).toFixed(0)}%`,
+                        },
+                        {
+                          label: 'Whitespace Clusters',
+                          value: compDisplay.whitespace_clusters?.length ?? 0,
+                        },
+                      ] as const
+                    ).map((k) => (
+                      <div key={k.label} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                        <p className="mb-1 text-xs tracking-widest text-slate-600 uppercase">{k.label}</p>
+                        <p className="text-xl font-bold text-blue-400">{k.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="rounded-xl border border-blue-500/20 bg-slate-900/40 p-5">
+                    <p className="mb-2 text-xs tracking-widest text-blue-400 uppercase">Recommended Positioning</p>
+                    <p className="text-sm text-slate-200">{compDisplay.recommended_positioning}</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <p className="text-xs tracking-widest text-red-400 uppercase">Top Threats</p>
+                      {compDisplay.top_threats?.map((t, i) => (
+                        <p key={i} className="font-mono text-xs text-slate-400">
+                          → {t}
+                        </p>
+                      ))}
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-xs tracking-widest text-green-400 uppercase">Opportunities</p>
+                      {compDisplay.top_opportunities?.map((o, i) => (
+                        <p key={i} className="font-mono text-xs text-slate-400">
+                          → {o}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="py-20 text-center text-slate-600">
+                  <p className="text-sm">
+                    Run consumer simulation first, then press <span className="text-blue-400">Run Analysis</span> to
+                    generate positioning, threats, and opportunities (results are returned from the POST endpoint).
+                  </p>
+                  {runCompetitiveMutation.isError ? (
+                    <p className="mt-2 font-mono text-xs text-red-400">
+                      {(runCompetitiveMutation.error as Error).message}
+                    </p>
+                  ) : null}
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {activeTab === 'report' && (
+            <motion.div
+              key="report"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="p-8"
+            >
+              <div className="mx-auto max-w-lg space-y-8 pt-16 text-center">
+                <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl border border-blue-500/30 bg-blue-500/5 text-4xl">
+                  📋
+                </div>
+                <div>
+                  <h2 className="mb-2 text-xl font-bold text-white">Hardware Intelligence Report</h2>
+                  <p className="text-sm text-slate-500">
+                    7-section PDF covering product viability, physics tests, manufacturing cost, cluster behavioral
+                    analysis, and competitive positioning.
+                  </p>
+                </div>
+                {hwId ? (
+                  <button
+                    type="button"
+                    onClick={() => void downloadPdf()}
+                    disabled={pdfBusy}
+                    className="inline-block rounded-xl bg-blue-600 px-8 py-4 text-sm font-bold tracking-widest text-white uppercase transition-all hover:bg-blue-500 disabled:opacity-50"
+                  >
+                    {pdfBusy ? 'Preparing…' : '↓ Download PDF Report'}
+                  </button>
+                ) : (
+                  <p className="text-sm text-slate-600">Generate a hardware spec first to unlock the report.</p>
+                )}
+                <div className="space-y-2 rounded-xl border border-slate-800 p-5 text-left">
+                  {[
+                    'Executive Summary — viability verdict',
+                    'Key Person Report — blocker and champion personas',
+                    'Physics Test Results — all 8 test types',
+                    'Manufacturing Cost — BOM, margin, break-even',
+                    'Cluster Behavioral Analysis — 52-segment breakdown',
+                    'Competitive Analysis — positioning and displacement',
+                    'Recommended Actions — ranked by impact',
+                  ].map((s, i) => (
+                    <p key={s} className="font-mono text-xs text-slate-400">
+                      {i + 1}. {s}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   )
