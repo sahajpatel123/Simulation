@@ -14,6 +14,7 @@ from app.hardware.manufacturing_cost import ManufacturingCostAnalyser
 from app.hardware.model_generator import HardwareModelGenerator
 from app.hardware.test_configs import TEST_DEFAULTS, TestConfigBuilder
 from app.models.project import Project
+from app.tasks.hardware_consumer_simulation import run_hardware_consumer_simulation
 from app.tasks.hardware_tasks import run_hardware_tests
 from app.models.project_hardware import Hardware3DModel, HardwareProduct
 from app.models.user import User
@@ -758,4 +759,118 @@ def get_cost_analysis(
         "lead_time_days": row.lead_time_days,
         "margin_pct": row.margin_at_target_price,
         "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+@router.post(
+    "/projects/{project_id}/hardware/{hw_id}/consumer-simulation",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def trigger_consumer_simulation(
+    project_id: int,
+    hw_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    body: dict[str, Any] = Body(default_factory=dict),
+):
+    _get_owned_project(db, project_id, current_user.id)
+    hw = db.execute(
+        text(
+            "SELECT id, name FROM hardware_products WHERE id=:id AND project_id=:pid"
+        ),
+        {"id": hw_id, "pid": project_id},
+    ).fetchone()
+    if not hw:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hardware product not found",
+        )
+
+    model = db.execute(
+        text(
+            "SELECT id FROM hardware_3d_models WHERE hardware_product_id=:hw_id LIMIT 1"
+        ),
+        {"hw_id": hw_id},
+    ).fetchone()
+    if not model:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Generate a hardware spec first",
+        )
+
+    generated_ui_id = body.get("generated_ui_id")
+    if generated_ui_id is not None:
+        generated_ui_id = int(generated_ui_id)
+
+    task = run_hardware_consumer_simulation.delay(
+        hardware_product_id=hw_id,
+        project_id=project_id,
+        generated_ui_id=generated_ui_id,
+    )
+
+    return {
+        "task_id": task.id,
+        "status": "QUEUED",
+        "prototype_wired": generated_ui_id is not None,
+        "message": (
+            f"Consumer simulation queued for {hw.name} "
+            f"{'with prototype loop' if generated_ui_id else 'without prototype'}."
+        ),
+    }
+
+
+@router.get("/projects/{project_id}/hardware/{hw_id}/consumer-simulation")
+def get_consumer_simulation_results(
+    project_id: int,
+    hw_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _get_owned_project(db, project_id, current_user.id)
+    hw = db.execute(
+        text("SELECT id FROM hardware_products WHERE id=:id AND project_id=:pid"),
+        {"id": hw_id, "pid": project_id},
+    ).fetchone()
+    if not hw:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hardware product not found",
+        )
+
+    row = db.execute(
+        text("""
+        SELECT status, agent_count, product_type,
+               results_json, conductor_result_json,
+               generated_ui_id, created_at, completed_at
+        FROM hardware_consumer_simulation_runs
+        WHERE hardware_product_id = :hw_id
+        ORDER BY created_at DESC LIMIT 1
+    """),
+        {"hw_id": hw_id},
+    ).fetchone()
+
+    if not row:
+        return {
+            "message": "No consumer simulation run yet. POST to /consumer-simulation first.",
+        }
+
+    results = row.results_json
+    if isinstance(results, str):
+        results = json.loads(results or "{}")
+    elif results is None:
+        results = {}
+
+    return {
+        "hardware_product_id": hw_id,
+        "status": row.status,
+        "agent_count": row.agent_count,
+        "product_type": row.product_type,
+        "prototype_wired": row.generated_ui_id is not None,
+        "overall_conversion_rate": results.get("overall_conversion_rate", 0),
+        "champion_clusters": results.get("champion_clusters", []),
+        "blocker_clusters": results.get("blocker_clusters", []),
+        "primary_failure_domain": results.get("primary_failure_domain", "unknown"),
+        "domain_findings": (results.get("domain_findings") or [])[:5],
+        "cluster_results": results.get("cluster_results", {}),
+        "completed_at": row.completed_at.isoformat() if row.completed_at else None,
     }
