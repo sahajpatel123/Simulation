@@ -13,6 +13,7 @@ celery_app = Celery(
         "app.tasks.decision_tasks",
         "app.tasks.calibration_tasks",
         "app.tasks.ui_simulation_tasks",
+        "app.tasks.hardware_tasks",
     ],
 )
 

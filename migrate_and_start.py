@@ -462,6 +462,33 @@ def run_migrations():
             conn.rollback()
             print(f"⚠️ hardware_test_results skip: {e}")
 
+        # Step 76: runs may use auto-generated configs (no persisted row) — FK optional
+        try:
+            conn.execute(
+                text(
+                    "ALTER TABLE hardware_test_results "
+                    "ALTER COLUMN test_config_id DROP NOT NULL"
+                )
+            )
+            conn.commit()
+            print("✅ hardware_test_results.test_config_id nullable (Step 76)")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ hardware_test_results nullable alter skip: {e}")
+
+        try:
+            conn.execute(
+                text(
+                    "ALTER TABLE hardware_products "
+                    "ADD COLUMN IF NOT EXISTS last_test_summary_json JSONB"
+                )
+            )
+            conn.commit()
+            print("✅ hardware_products.last_test_summary_json ready (Step 76)")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ hardware_products last_test_summary_json skip: {e}")
+
         try:
             conn.execute(
                 text("""

@@ -13,6 +13,7 @@ from app.core.deps import get_current_user
 from app.hardware.model_generator import HardwareModelGenerator
 from app.hardware.test_configs import TEST_DEFAULTS, TestConfigBuilder
 from app.models.project import Project
+from app.tasks.hardware_tasks import run_hardware_tests
 from app.models.project_hardware import Hardware3DModel, HardwareProduct
 from app.models.user import User
 from app.schemas.hardware import (
@@ -326,34 +327,146 @@ def get_hardware_product(
     "/projects/{project_id}/hardware/{hw_id}/run-tests",
     status_code=status.HTTP_202_ACCEPTED,
 )
-def queue_hardware_run_tests(
+def trigger_hardware_tests(
     project_id: int,
     hw_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Step 72 UI — queue hardware test orchestration (Step 76 will wire Celery + DB).
-    """
     _get_owned_project(db, project_id, current_user.id)
-    product = (
-        db.query(HardwareProduct)
-        .filter(
-            HardwareProduct.id == hw_id,
-            HardwareProduct.project_id == project_id,
-        )
-        .first()
-    )
-    if not product:
+    hw = db.execute(
+        text(
+            "SELECT id, name FROM hardware_products WHERE id=:id AND project_id=:pid"
+        ),
+        {"id": hw_id, "pid": project_id},
+    ).fetchone()
+    if not hw:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Hardware product not found",
         )
+
+    model = db.execute(
+        text(
+            "SELECT id FROM hardware_3d_models WHERE hardware_product_id=:hw_id LIMIT 1"
+        ),
+        {"hw_id": hw_id},
+    ).fetchone()
+    if not model:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Generate a hardware spec first before running tests",
+        )
+
+    task = run_hardware_tests.delay(
+        hardware_product_id=hw_id,
+        project_id=project_id,
+    )
+
     return {
+        "task_id": task.id,
         "status": "QUEUED",
-        "hardware_product_id": hw_id,
+        "message": f"Tests queued for {hw.name}. Check /test-results for output.",
+        "hw_id": hw_id,
         "project_id": project_id,
-        "message": "Hardware test orchestration (Step 76) will attach to this endpoint.",
+    }
+
+
+@router.get("/projects/{project_id}/hardware/{hw_id}/test-results")
+def get_test_results(
+    project_id: int,
+    hw_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _get_owned_project(db, project_id, current_user.id)
+    hw = db.execute(
+        text(
+            "SELECT id, name, category FROM hardware_products "
+            "WHERE id=:id AND project_id=:pid"
+        ),
+        {"id": hw_id, "pid": project_id},
+    ).fetchone()
+    if not hw:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hardware product not found",
+        )
+
+    rows = db.execute(
+        text("""
+        SELECT id, test_type, status, results_json,
+               failure_points_json, pass_rate, created_at
+        FROM hardware_test_results
+        WHERE hardware_product_id = :hw_id
+        ORDER BY
+          CASE status
+            WHEN 'FAIL'    THEN 0
+            WHEN 'PARTIAL' THEN 1
+            WHEN 'PASS'    THEN 2
+          END ASC,
+          pass_rate ASC
+    """),
+        {"hw_id": hw_id},
+    ).fetchall()
+
+    results: list[dict[str, Any]] = []
+    all_fp: list[dict] = []
+    for r in rows:
+        fp = (
+            r.failure_points_json
+            if isinstance(r.failure_points_json, list)
+            else json.loads(r.failure_points_json or "[]")
+        )
+        metrics = (
+            r.results_json
+            if isinstance(r.results_json, dict)
+            else json.loads(r.results_json or "{}")
+        )
+
+        severity = (
+            "CRITICAL"
+            if r.status == "FAIL"
+            else ("WARNING" if r.status == "PARTIAL" else "INFO")
+        )
+        results.append(
+            {
+                "id": r.id,
+                "test_type": r.test_type,
+                "status": r.status,
+                "pass_rate": r.pass_rate,
+                "severity": severity,
+                "metrics": metrics,
+                "failure_points": fp,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+        )
+        all_fp.extend(fp)
+
+    SEVERITY_ORDER = {"CRITICAL": 0, "WARNING": 1, "INFO": 2}
+    all_fp.sort(key=lambda x: SEVERITY_ORDER.get(x.get("severity", "INFO"), 2))
+    seen: set[str] = set()
+    top3: list[dict] = []
+    for fp in all_fp:
+        cid = str(fp.get("component_id", ""))
+        if cid not in seen:
+            seen.add(cid)
+            top3.append(fp)
+        if len(top3) >= 3:
+            break
+
+    overall_pass = sum(r["pass_rate"] for r in results) / max(len(results), 1)
+
+    return {
+        "hardware_product_id": hw_id,
+        "hardware_name": hw.name,
+        "category": hw.category,
+        "total_tests": len(results),
+        "passed": sum(1 for r in results if r["status"] == "PASS"),
+        "failed": sum(1 for r in results if r["status"] == "FAIL"),
+        "overall_pass_rate": round(overall_pass, 4),
+        "top_failure_points": top3,
+        "results": results,
     }
 
 
