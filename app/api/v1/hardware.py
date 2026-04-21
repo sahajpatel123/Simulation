@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.hardware.competitive_analysis import HardwareCompetitiveAnalyser
 from app.hardware.manufacturing_cost import ManufacturingCostAnalyser
 from app.hardware.model_generator import HardwareModelGenerator
 from app.hardware.test_configs import TEST_DEFAULTS, TestConfigBuilder
@@ -32,6 +33,7 @@ from app.schemas.hardware import (
 router = APIRouter(tags=["hardware"])
 _test_config_builder = TestConfigBuilder()
 _cost_analyser = ManufacturingCostAnalyser()
+_competitive_analyser = HardwareCompetitiveAnalyser()
 
 
 def _get_owned_project(
@@ -873,4 +875,140 @@ def get_consumer_simulation_results(
         "domain_findings": (results.get("domain_findings") or [])[:5],
         "cluster_results": results.get("cluster_results", {}),
         "completed_at": row.completed_at.isoformat() if row.completed_at else None,
+    }
+
+
+@router.post("/projects/{project_id}/hardware/{hw_id}/competitive-analysis")
+def run_competitive_analysis(
+    project_id: int,
+    hw_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _get_owned_project(db, project_id, current_user.id)
+    hw = db.execute(
+        text("""
+        SELECT hp.id, hp.name, hp.category, hp.target_price_inr,
+               hm.model_data_json
+        FROM hardware_products hp
+        LEFT JOIN hardware_3d_models hm
+          ON hm.hardware_product_id = hp.id
+        WHERE hp.id = :hw_id AND hp.project_id = :pid
+        ORDER BY hm.created_at DESC LIMIT 1
+    """),
+        {"hw_id": hw_id, "pid": project_id},
+    ).fetchone()
+
+    if not hw:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hardware product not found",
+        )
+    if not hw.model_data_json:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Generate a hardware spec first",
+        )
+
+    spec = (
+        hw.model_data_json
+        if isinstance(hw.model_data_json, dict)
+        else json.loads(hw.model_data_json)
+    )
+    spec = dict(spec)
+    spec["category"] = (hw.category or "consumer_hardware").strip().lower() or "consumer_hardware"
+
+    cost_row = db.execute(
+        text("""
+        SELECT bom_json, unit_cost_inr, tooling_cost_inr, moq,
+               margin_at_target_price
+        FROM hardware_manufacturing_estimates
+        WHERE hardware_product_id = :hw_id
+        ORDER BY created_at DESC LIMIT 1
+    """),
+        {"hw_id": hw_id},
+    ).fetchone()
+
+    cost_estimate: dict[str, Any] = {
+        "target_price_inr": float(hw.target_price_inr or 1999),
+        "landed_cost_inr": float(cost_row.unit_cost_inr) if cost_row else 0.0,
+        "margin_pct": float(cost_row.margin_at_target_price) if cost_row else 0.0,
+    }
+
+    sim_row = db.execute(
+        text("""
+        SELECT results_json FROM hardware_consumer_simulation_runs
+        WHERE hardware_product_id = :hw_id
+        ORDER BY created_at DESC LIMIT 1
+    """),
+        {"hw_id": hw_id},
+    ).fetchone()
+
+    cluster_results: dict[str, Any] = {}
+    if sim_row:
+        sim_data = sim_row.results_json
+        if isinstance(sim_data, str):
+            sim_data = json.loads(sim_data or "{}")
+        elif sim_data is None:
+            sim_data = {}
+        cluster_results = sim_data.get("cluster_results") or {}
+
+    if not cluster_results:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Run consumer simulation first — competitive analysis needs cluster results",
+        )
+
+    report = _competitive_analyser.analyse(spec, cost_estimate, cluster_results)
+    return report.to_dict()
+
+
+@router.get("/projects/{project_id}/hardware/{hw_id}/competitive-analysis")
+def get_competitive_analysis(
+    project_id: int,
+    hw_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _get_owned_project(db, project_id, current_user.id)
+    hw = db.execute(
+        text("SELECT id FROM hardware_products WHERE id=:id AND project_id=:pid"),
+        {"id": hw_id, "pid": project_id},
+    ).fetchone()
+    if not hw:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hardware product not found",
+        )
+
+    sim_row = db.execute(
+        text("""
+        SELECT results_json FROM hardware_consumer_simulation_runs
+        WHERE hardware_product_id = :hw_id
+        ORDER BY created_at DESC LIMIT 1
+    """),
+        {"hw_id": hw_id},
+    ).fetchone()
+
+    if not sim_row:
+        return {
+            "message": (
+                "No consumer simulation run yet. "
+                "POST to /consumer-simulation then /competitive-analysis."
+            ),
+        }
+
+    sim_data = sim_row.results_json
+    if isinstance(sim_data, str):
+        sim_data = json.loads(sim_data or "{}")
+    elif sim_data is None:
+        sim_data = {}
+
+    cr = sim_data.get("cluster_results") or {}
+    return {
+        "message": "Re-run POST /competitive-analysis for fresh analysis",
+        "cluster_count": len(cr),
+        "overall_conv": sim_data.get("overall_conversion_rate", 0),
+        "champion_clusters": sim_data.get("champion_clusters", []),
+        "blocker_clusters": sim_data.get("blocker_clusters", []),
     }
