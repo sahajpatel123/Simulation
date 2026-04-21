@@ -4,6 +4,7 @@ import json
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi.responses import Response as FastAPIResponse
 from sqlalchemy import desc, text
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,7 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.hardware.competitive_analysis import HardwareCompetitiveAnalyser
 from app.hardware.manufacturing_cost import ManufacturingCostAnalyser
+from app.reports.hardware_report import HardwareReportGenerator
 from app.hardware.model_generator import HardwareModelGenerator
 from app.hardware.test_configs import TEST_DEFAULTS, TestConfigBuilder
 from app.models.project import Project
@@ -1012,3 +1014,175 @@ def get_competitive_analysis(
         "champion_clusters": sim_data.get("champion_clusters", []),
         "blocker_clusters": sim_data.get("blocker_clusters", []),
     }
+
+
+@router.get("/projects/{project_id}/hardware/{hw_id}/report.pdf")
+def get_hardware_report_pdf(
+    project_id: int,
+    hw_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _get_owned_project(db, project_id, current_user.id)
+
+    hw = db.execute(
+        text(
+            """
+        SELECT hp.id, hp.name, hp.category, hp.product_type,
+               hp.target_price_inr,
+               hm.model_data_json
+        FROM hardware_products hp
+        LEFT JOIN hardware_3d_models hm
+          ON hm.hardware_product_id = hp.id
+        WHERE hp.id = :hw_id AND hp.project_id = :pid
+        ORDER BY hm.created_at DESC NULLS LAST LIMIT 1
+    """
+        ),
+        {"hw_id": hw_id, "pid": project_id},
+    ).fetchone()
+    if not hw:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hardware product not found",
+        )
+
+    spec = (
+        hw.model_data_json
+        if isinstance(hw.model_data_json, dict)
+        else json.loads(hw.model_data_json or "{}")
+    )
+    spec = dict(spec)
+    spec["category"] = (hw.category or "consumer_hardware").strip().lower() or "consumer_hardware"
+
+    test_rows_all = db.execute(
+        text(
+            """
+        SELECT test_type, status, results_json, failure_points_json, pass_rate, created_at
+        FROM hardware_test_results
+        WHERE hardware_product_id = :hw_id
+        ORDER BY created_at DESC
+    """
+        ),
+        {"hw_id": hw_id},
+    ).fetchall()
+
+    by_type: dict[str, Any] = {}
+    for r in test_rows_all:
+        tt = r.test_type
+        if tt not in by_type:
+            by_type[tt] = r
+
+    test_results: list[dict[str, Any]] = []
+    for r in by_type.values():
+        test_results.append(
+            {
+                "test_type": r.test_type,
+                "status": r.status,
+                "pass_rate": r.pass_rate,
+                "metrics": r.results_json
+                if isinstance(r.results_json, dict)
+                else json.loads(r.results_json or "{}"),
+                "failure_points": r.failure_points_json
+                if isinstance(r.failure_points_json, list)
+                else json.loads(r.failure_points_json or "[]"),
+            }
+        )
+
+    cost_row = db.execute(
+        text(
+            """
+        SELECT bom_json, unit_cost_inr, tooling_cost_inr, moq,
+               lead_time_days, margin_at_target_price
+        FROM hardware_manufacturing_estimates
+        WHERE hardware_product_id = :hw_id
+        ORDER BY created_at DESC LIMIT 1
+    """
+        ),
+        {"hw_id": hw_id},
+    ).fetchone()
+
+    target_price = float(hw.target_price_inr or 1999)
+    moq = int(cost_row.moq) if cost_row and cost_row.moq else 500
+    estimate = _cost_analyser.estimate(spec, target_price, moq)
+    cost_estimate = estimate.to_dict()
+
+    if cost_row:
+        landed = float(cost_row.unit_cost_inr or 0)
+        m = float(cost_row.margin_at_target_price or 0)
+        cost_estimate["landed_cost_inr"] = landed
+        cost_estimate["margin_pct"] = m
+        cost_estimate["margin_inr"] = max(0.0, target_price - landed)
+        bom_raw = cost_row.bom_json
+        if isinstance(bom_raw, str):
+            bom_list = json.loads(bom_raw or "[]")
+        elif isinstance(bom_raw, list):
+            bom_list = bom_raw
+        else:
+            bom_list = []
+        if bom_list:
+            cost_estimate["bom"] = bom_list
+            cost_estimate["bom_total_inr"] = sum(
+                float(b.get("unit_cost_inr", 0) or 0) for b in bom_list
+            )
+        tc = float(cost_row.tooling_cost_inr or 0)
+        cost_estimate["tooling_cost_inr"] = tc
+        cost_estimate["tooling_per_unit_inr"] = tc / max(moq, 1)
+        cost_estimate["verdict"] = (
+            "VIABLE" if m >= 35 else "MARGINAL" if m >= 20 else "NOT_VIABLE"
+        )
+        cost_estimate["verdict_reason"] = f"Margin {m:.1f}% (persisted manufacturing estimate)"
+
+    sim_row = db.execute(
+        text(
+            """
+        SELECT status, agent_count, results_json, generated_ui_id
+        FROM hardware_consumer_simulation_runs
+        WHERE hardware_product_id = :hw_id
+        ORDER BY created_at DESC LIMIT 1
+    """
+        ),
+        {"hw_id": hw_id},
+    ).fetchone()
+
+    consumer_sim: dict[str, Any] = {}
+    if sim_row:
+        consumer_sim = (
+            sim_row.results_json
+            if isinstance(sim_row.results_json, dict)
+            else json.loads(sim_row.results_json or "{}")
+        )
+        consumer_sim["prototype_wired"] = sim_row.generated_ui_id is not None
+
+    competitive: dict[str, Any] = {}
+    try:
+        cr = consumer_sim.get("cluster_results")
+        if isinstance(cr, dict) and cr and cost_estimate:
+            competitive = _competitive_analyser.analyse(spec, cost_estimate, cr).to_dict()
+    except Exception:
+        competitive = {}
+
+    hardware_product_dict = {
+        "name": hw.name,
+        "category": hw.category,
+        "product_type": hw.product_type,
+        "target_price_inr": hw.target_price_inr,
+    }
+
+    gen = HardwareReportGenerator()
+    pdf_bytes = gen.generate(
+        hardware_product=hardware_product_dict,
+        spec=spec,
+        test_results=test_results,
+        cost_estimate=cost_estimate,
+        consumer_sim=consumer_sim,
+        competitive=competitive,
+        project_name=hw.name or "Hardware Product",
+    )
+
+    return FastAPIResponse(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=thecee-hardware-{hw_id}.pdf",
+        },
+    )
