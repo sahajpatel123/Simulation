@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2, RotateCcw, Cpu, Ruler, AlertTriangle } from 'lucide-react'
 
+import { HardwareFailureMap, type HardwareSpec, type TestResult } from '@/components/HardwareFailureMap'
 import { getApiV1Base } from '@/lib/api-v1-base'
 
 function authHeaders(): HeadersInit {
@@ -202,6 +203,7 @@ export default function HardwareViewerPage() {
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [testsMsg, setTestsMsg] = useState<string | null>(null)
+  const [testResults, setTestResults] = useState<TestResult[]>([])
 
   const [showGenerate, setShowGenerate] = useState(false)
   const [genBusy, setGenBusy] = useState(false)
@@ -257,6 +259,27 @@ export default function HardwareViewerPage() {
     }
   }, [projectId, selectedId])
 
+  const loadTestResults = useCallback(async () => {
+    if (!Number.isFinite(projectId) || selectedId === null) {
+      setTestResults([])
+      return
+    }
+    try {
+      const res = await fetch(
+        `${getApiV1Base()}/projects/${projectId}/hardware/${selectedId}/test-results`,
+        { headers: authHeaders() },
+      )
+      if (!res.ok) {
+        setTestResults([])
+        return
+      }
+      const data = (await res.json()) as { results?: TestResult[] }
+      setTestResults(Array.isArray(data.results) ? data.results : [])
+    } catch {
+      setTestResults([])
+    }
+  }, [projectId, selectedId])
+
   useEffect(() => {
     void loadList()
   }, [loadList])
@@ -269,6 +292,10 @@ export default function HardwareViewerPage() {
   useEffect(() => {
     void loadDetail()
   }, [loadDetail])
+
+  useEffect(() => {
+    void loadTestResults()
+  }, [loadTestResults])
 
   const spec = detail?.spec as Record<string, unknown> | undefined
   const dims = spec?.dimensions as Record<string, number> | undefined
@@ -285,6 +312,52 @@ export default function HardwareViewerPage() {
   const rh = detail?.render_hints
 
   const highlightSet = useMemo(() => new Set(rh?.highlight_zones ?? []), [rh])
+
+  const hardwareSpec: HardwareSpec | null = useMemo(() => {
+    if (!detail) return null
+    const s = detail.spec as Record<string, unknown>
+    const raw = s.components
+    if (!Array.isArray(raw)) return null
+    const components = raw.map((c: Record<string, unknown>) => {
+      const cluster = c.cluster_id
+      return {
+        id: String(c.id ?? ''),
+        name: String(c.name ?? ''),
+        material: String(c.material ?? ''),
+        zone: String(c.zone ?? 'core'),
+        volume_cm3: Number(c.volume_cm3 ?? 0),
+        stress_rating: Number(c.stress_rating ?? 0),
+        ...(cluster != null && cluster !== ''
+          ? { cluster_id: String(cluster) }
+          : {}),
+      }
+    })
+    const d = s.dimensions as Record<string, unknown> | undefined
+    const dimensions =
+      d && typeof d === 'object'
+        ? {
+            length_mm: Number(d.length_mm ?? 0),
+            width_mm: Number(d.width_mm ?? 0),
+            height_mm: Number(d.height_mm ?? 0),
+            weight_grams: Number(
+              d.weight_grams ?? detail.weight_grams ?? 0,
+            ),
+          }
+        : detail.weight_grams != null
+          ? {
+              length_mm: 0,
+              width_mm: 0,
+              height_mm: 0,
+              weight_grams: detail.weight_grams,
+            }
+          : undefined
+    return {
+      product_name: (s.product_name as string) || detail.name,
+      dimensions,
+      components,
+      render_hints: detail.render_hints,
+    }
+  }, [detail])
 
   const onPointerDown = (e: React.MouseEvent) => {
     dragRef.current = { active: true, lx: e.clientX, ly: e.clientY }
@@ -326,6 +399,7 @@ export default function HardwareViewerPage() {
       }
       if (!res.ok) throw new Error(body.detail || text.slice(0, 280))
       setTestsMsg(body.message || 'Tests queued.')
+      window.setTimeout(() => void loadTestResults(), 3000)
     } catch (e) {
       setTestsMsg(e instanceof Error ? e.message : 'Could not queue tests')
     }
@@ -592,6 +666,14 @@ export default function HardwareViewerPage() {
                   </div>
                 </div>
               </div>
+            ) : null}
+
+            {hardwareSpec && testResults.length > 0 ? (
+              <HardwareFailureMap
+                spec={hardwareSpec}
+                testResults={testResults}
+                className="mt-6"
+              />
             ) : null}
           </div>
 
