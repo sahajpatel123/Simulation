@@ -9,10 +9,31 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    ".next.nosync/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "node_modules/**",
+    "node_modules 2/**",
+    // Python backend + any venv (never lint third-party JS)
+    "thecee-backend/**",
+    "app/**",
+    ".venv/**",
+    "**/venv/**",
+    "**/__pycache__/**",
+    "coverage/**",
   ]),
+  // React Compiler rules from eslint-plugin-react-hooks: many false positives for
+  // react-hook-form, syncing fetched data into local state, and canvas-heavy demos.
+    {
+    rules: {
+      "react-hooks/refs": "off",
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/purity": "off",
+      "react-hooks/unsupported-syntax": "off",
+      "react-hooks/incompatible-library": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

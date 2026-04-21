@@ -22,7 +22,6 @@ import type {
   Project,
   Assumption,
   SimulationResult,
-  Intervention,
   Environment,
   SimulationProgress,
 } from '@/types'

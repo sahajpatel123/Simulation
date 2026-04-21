@@ -28,9 +28,65 @@ const FEATURES = [
 const CRUMBS = ['UI Builder', 'Simulation Engine', 'Decision Studio', 'Pre-mortem Report'] as const
 const DUR = 7000
 
+function SideIcons() {
+  return (
+    <div
+      style={{
+        width: 46,
+        background: '#1a1714',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        padding: '10px 0',
+        gap: 2,
+        flexShrink: 0,
+        borderRight: '0.5px solid rgba(255,255,255,.04)',
+      }}
+    >
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 6,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: i === 0 ? 1 : 0.22,
+            background: i === 0 ? 'rgba(255,255,255,.07)' : 'transparent',
+          }}
+        >
+          {i === 0 && (
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1.5" y="1.5" width="4" height="4" rx="1" stroke="rgba(255,255,255,.7)" strokeWidth=".9" />
+              <rect x="8.5" y="1.5" width="4" height="4" rx="1" stroke="rgba(255,255,255,.7)" strokeWidth=".9" />
+              <rect x="1.5" y="8.5" width="4" height="4" rx="1" stroke="rgba(255,255,255,.7)" strokeWidth=".9" />
+              <rect x="8.5" y="8.5" width="4" height="4" rx="1" stroke="rgba(255,255,255,.7)" strokeWidth=".9" />
+            </svg>
+          )}
+          {i === 1 && (
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1.5" y="1.5" width="11" height="8" rx="1.5" stroke="rgba(255,255,255,.55)" strokeWidth=".9" />
+              <path d="M4 12.5h6M7 9.5v3" stroke="rgba(255,255,255,.55)" strokeWidth=".9" strokeLinecap="round" />
+            </svg>
+          )}
+          {i === 2 && (
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <circle cx="7" cy="7" r="4.5" stroke="rgba(255,255,255,.55)" strokeWidth=".9" />
+              <path d="M7 4v4l2.5 1.5" stroke="rgba(255,255,255,.55)" strokeWidth=".9" strokeLinecap="round" />
+            </svg>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function FeatureShowcase() {
   const [active, setActive] = useState(0)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const tickRef = useRef<(i: number) => void>(() => {})
   const animTimers = useRef<ReturnType<typeof setTimeout>[]>([])
   const rafRefs = useRef<number[]>([])
   const progressRef = useRef<HTMLDivElement>(null)
@@ -332,11 +388,15 @@ export default function FeatureShowcase() {
         )
       }
 
-      timerRef.current = setTimeout(() => go((i + 1) % 4), DUR)
+      timerRef.current = setTimeout(() => tickRef.current((i + 1) % 4), DUR)
       ;[animBuild, animSimulate, animDecide, animKnow][i]()
     },
     [animBuild, animDecide, animKnow, animSimulate, clrTimers, resetAll]
   )
+
+  useEffect(() => {
+    tickRef.current = go
+  }, [go])
 
   useEffect(() => {
     go(0)
@@ -348,59 +408,6 @@ export default function FeatureShowcase() {
 
   const ink = (op: number) => `rgba(26,23,20,${op})`
   const red = '#c0392b'
-
-  const SideIcons = () => (
-    <div
-      style={{
-        width: 46,
-        background: '#1a1714',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        padding: '10px 0',
-        gap: 2,
-        flexShrink: 0,
-        borderRight: '0.5px solid rgba(255,255,255,.04)',
-      }}
-    >
-      {[0, 1, 2].map((i) => (
-        <div
-          key={i}
-          style={{
-            width: 34,
-            height: 34,
-            borderRadius: 6,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: i === 0 ? 1 : 0.22,
-            background: i === 0 ? 'rgba(255,255,255,.07)' : 'transparent',
-          }}
-        >
-          {i === 0 && (
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <rect x="1.5" y="1.5" width="4" height="4" rx="1" stroke="rgba(255,255,255,.7)" strokeWidth=".9" />
-              <rect x="8.5" y="1.5" width="4" height="4" rx="1" stroke="rgba(255,255,255,.7)" strokeWidth=".9" />
-              <rect x="1.5" y="8.5" width="4" height="4" rx="1" stroke="rgba(255,255,255,.7)" strokeWidth=".9" />
-              <rect x="8.5" y="8.5" width="4" height="4" rx="1" stroke="rgba(255,255,255,.7)" strokeWidth=".9" />
-            </svg>
-          )}
-          {i === 1 && (
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <rect x="1.5" y="1.5" width="11" height="8" rx="1.5" stroke="rgba(255,255,255,.55)" strokeWidth=".9" />
-              <path d="M4 12.5h6M7 9.5v3" stroke="rgba(255,255,255,.55)" strokeWidth=".9" strokeLinecap="round" />
-            </svg>
-          )}
-          {i === 2 && (
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <circle cx="7" cy="7" r="4.5" stroke="rgba(255,255,255,.55)" strokeWidth=".9" />
-              <path d="M7 4v4l2.5 1.5" stroke="rgba(255,255,255,.55)" strokeWidth=".9" strokeLinecap="round" />
-            </svg>
-          )}
-        </div>
-      ))}
-    </div>
-  )
 
   return (
     <section
@@ -925,7 +932,7 @@ export default function FeatureShowcase() {
                         TheCee recommends
                       </div>
                       <div style={{ fontSize: 12, fontFamily: 'Georgia,serif', color: '#1a1714', fontStyle: 'italic', lineHeight: 1.4 }}>
-                        "Scenario C survives 74% of all runs across every demographic tested."
+                        &ldquo;Scenario C survives 74% of all runs across every demographic tested.&rdquo;
                       </div>
                     </div>
                   </div>

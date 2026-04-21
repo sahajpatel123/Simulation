@@ -57,7 +57,7 @@ export default function TrackerPage() {
   const watchedConversion = watch('actualConversionRate')
   const watchedRevenue = watch('actualRevenue')
 
-  const onSubmit = async (_data: FormData) => {
+  const onSubmit = async () => {
     await new Promise((r) => setTimeout(r, 1000))
     setSubmitted(true)
   }

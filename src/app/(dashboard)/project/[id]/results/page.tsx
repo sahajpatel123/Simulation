@@ -54,6 +54,30 @@ function SimulationResultsInner() {
     return m
   }, [results])
 
+  const clusterBreakdownMap = useMemo(() => {
+    if (!results || !Array.isArray(results.cluster_breakdown)) return {}
+    const m: Record<string, { conversion_rate: number; population_fraction: number }> = {}
+    for (const row of results.cluster_breakdown) {
+      m[row.cluster_id] = {
+        conversion_rate: row.conversion_rate ?? 0,
+        population_fraction: row.population_fraction ?? 0,
+      }
+    }
+    return m
+  }, [results])
+
+  const cascadeFindingsSorted = useMemo(() => {
+    if (!results || !Array.isArray(results.domain_findings)) return []
+    return [...results.domain_findings]
+      .filter((f) => f.architect_name === 'AssumptionCascadeArchitect')
+      .sort((a, b) => (b.conversion_impact ?? 0) - (a.conversion_impact ?? 0))
+  }, [results])
+
+  const topFindingByImpact = useMemo(() => {
+    if (!results || !Array.isArray(results.domain_findings) || results.domain_findings.length === 0) return null
+    return [...results.domain_findings].sort((a, b) => (b.conversion_impact ?? 0) - (a.conversion_impact ?? 0))[0]
+  }, [results])
+
   if (!simulationId) {
     return (
       <div className="min-h-[calc(100dvh-120px)] bg-slate-950 flex flex-col items-center justify-center gap-4 px-6">
@@ -106,30 +130,7 @@ function SimulationResultsInner() {
   const accountab = results.architect_accountability ?? {}
   const blindList = blindspotsPayload?.blindspots ?? []
 
-  const clusterBreakdownMap = useMemo(() => {
-    const m: Record<string, { conversion_rate: number; population_fraction: number }> = {}
-    for (const row of clusterRows) {
-      m[row.cluster_id] = {
-        conversion_rate: row.conversion_rate ?? 0,
-        population_fraction: row.population_fraction ?? 0,
-      }
-    }
-    return m
-  }, [clusterRows])
   const clusters = clusterBreakdownMap
-
-  const cascadeFindingsSorted = useMemo(
-    () =>
-      [...findings]
-        .filter((f) => f.architect_name === 'AssumptionCascadeArchitect')
-        .sort((a, b) => (b.conversion_impact ?? 0) - (a.conversion_impact ?? 0)),
-    [findings],
-  )
-
-  const topFindingByImpact = useMemo(() => {
-    if (findings.length === 0) return null
-    return [...findings].sort((a, b) => (b.conversion_impact ?? 0) - (a.conversion_impact ?? 0))[0]
-  }, [findings])
 
   const clusterList = clusterRows.map((row) => ({
     cluster_id: row.cluster_id,

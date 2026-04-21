@@ -320,7 +320,11 @@ export default function SimulationTimeline() {
         ctx.beginPath()
         for (let x = PAD; x <= W - PAD; x += 6) {
           const dy = Math.sin(x * 0.008 + time * 0.1 + i) * FH * 0.004
-          x === PAD ? ctx.moveTo(x, y + dy) : ctx.lineTo(x, y + dy)
+          if (x === PAD) {
+            ctx.moveTo(x, y + dy)
+          } else {
+            ctx.lineTo(x, y + dy)
+          }
         }
         ctx.strokeStyle = `rgba(${INK},${op})`; ctx.lineWidth = 0.3; ctx.stroke()
       })
