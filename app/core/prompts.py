@@ -577,4 +577,13 @@ def validate_hardware_spec(spec: dict) -> tuple[bool, str]:
     if ac not in _VALID_ASSEMBLY:
         return False, f"assembly_complexity invalid: {ac!r}"
 
+    # Step 73 — normalise Claude / alias material strings to canonical DB keys (in-place).
+    from app.hardware.materials import resolve_material_name
+
+    for c in components:
+        if isinstance(c.get("material"), str):
+            c["material"] = resolve_material_name(c["material"])
+    if isinstance(rh.get("dominant_material"), str):
+        rh["dominant_material"] = resolve_material_name(rh["dominant_material"])
+
     return True, "OK"
