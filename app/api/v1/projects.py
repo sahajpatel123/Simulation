@@ -54,6 +54,9 @@ from app.schemas.stress_test import (
 )
 from app.simulation.calibration_engine import CalibrationEngine
 from app.simulation.clusters.registry import ClusterRegistry
+from app.simulation.competitive_software import CompetitiveSoftwareAnalyser
+from app.simulation.conductor import Conductor
+from app.simulation.product_type import ProductType
 from app.simulation.scored_assumption import score_assumptions, signal_quality_tier
 from app.tasks.simulation_tasks import run_full_simulation
 from app.tasks.stress_test_tasks import run_assumption_stress_test
@@ -61,6 +64,31 @@ from app.tasks.stress_test_tasks import run_assumption_stress_test
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 claude = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+
+_comp_software_analyser = CompetitiveSoftwareAnalyser()
+_conductor = Conductor()
+
+_SOFTWARE_PRODUCT_TYPES: frozenset[ProductType] = frozenset(
+    {
+        ProductType.SAAS,
+        ProductType.MARKETPLACE,
+        ProductType.MOBILE_APP,
+        ProductType.DEVELOPER_TOOL,
+        ProductType.ENTERPRISE_SOFTWARE,
+    }
+)
+
+
+def _product_type_enum_from_results(raw: str | None) -> ProductType:
+    s = (raw or "saas").strip().lower()
+    for e in ProductType:
+        if e.value == s:
+            return e
+    return ProductType.SAAS
+
+
+def _software_benchmark_key(pt: ProductType) -> str:
+    return pt.value if pt in _SOFTWARE_PRODUCT_TYPES else "saas"
 
 
 @router.post("", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)
@@ -1754,3 +1782,130 @@ def get_simulation_history(
         if history
         else None,
     }
+
+
+@router.post("/{project_id}/competitive-software-analysis")
+def run_competitive_software_analysis(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    sim = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc())
+        .first()
+    )
+    if not sim:
+        raise HTTPException(
+            status_code=400,
+            detail="Run a simulation first before competitive analysis",
+        )
+
+    results = sim.results_json
+    if isinstance(results, str):
+        results = json.loads(results or "{}")
+    if not isinstance(results, dict):
+        results = {}
+
+    product_type_str = str(results.get("product_type_detected", "saas")).strip().lower()
+    pt_enum = _product_type_enum_from_results(product_type_str)
+    pt_for_conductor = pt_enum if pt_enum in _SOFTWARE_PRODUCT_TYPES else ProductType.SAAS
+
+    aov = float(results.get("aov") or results.get("average_order_value") or 999.0)
+
+    assumption_rows = (
+        db.query(Assumption)
+        .filter(Assumption.project_id == project_id)
+        .order_by(Assumption.created_at.desc())
+        .all()
+    )
+    assumptions = [
+        {
+            "assumption": a.text,
+            "text": a.text,
+            "sensitivity": a.sensitivity or "MEDIUM",
+            "claim_confidence": "DESIGN_INTENT",
+        }
+        for a in assumption_rows
+    ]
+
+    env_params = {
+        "average_order_value": aov,
+        "description": project.description or "",
+    }
+    sq = float(sim.signal_quality or 0.0)
+
+    conductor_result = _conductor.run(
+        agents=[],
+        env_params=env_params,
+        assumptions=assumptions,
+        product_type=pt_for_conductor,
+        signal_quality=sq,
+    )
+
+    report = _comp_software_analyser.analyse(
+        assumptions=assumptions,
+        conductor_result=conductor_result,
+        product_type=_software_benchmark_key(pt_enum),
+        aov=aov,
+    )
+
+    merged = {**results, "competitive_analysis": report.to_dict()}
+    sim.results_json = merged
+    db.add(sim)
+    db.commit()
+    return report.to_dict()
+
+
+@router.get("/{project_id}/competitive-software-analysis")
+def get_competitive_software_analysis(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    sim = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc())
+        .first()
+    )
+    if not sim:
+        return {
+            "message": "No completed simulation. POST to /competitive-software-analysis first."
+        }
+
+    results = sim.results_json
+    if isinstance(results, str):
+        results = json.loads(results or "{}")
+    if not isinstance(results, dict):
+        results = {}
+
+    comp = results.get("competitive_analysis")
+    if not comp:
+        return {
+            "message": "No competitive analysis yet. POST to /competitive-software-analysis."
+        }
+    return comp
