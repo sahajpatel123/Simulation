@@ -2,11 +2,12 @@
 
 import { Suspense, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useParams, useSearchParams } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 
 import { KeyPersonReport } from '@/components/KeyPersonReport'
+import { ReSimulateButton } from '@/components/ReSimulateButton'
 import type { ClusterBreakdownRow, DomainFindingRow, MeBlindspotRow, SimulationResultsPayload } from '@/components/simulation-results/types'
 import api, { apiError } from '@/lib/api'
 import { getApiV1Base } from '@/lib/api-v1-base'
@@ -26,6 +27,7 @@ function populationWeightedConversion(
 
 function SimulationResultsInner() {
   const { id: projectId } = useParams<{ id: string }>()
+  const router = useRouter()
   const searchParams = useSearchParams()
   const simulationId = searchParams.get('sim')
   const [activeTab, setActiveTab] = useState<Tab>('personas')
@@ -419,6 +421,18 @@ function SimulationResultsInner() {
                   </div>
                 </div>
               )}
+
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                <p className="text-xs font-mono tracking-widest uppercase text-slate-600 mb-4">
+                  Iterate on This Simulation
+                </p>
+                <ReSimulateButton
+                  projectId={projectId as string}
+                  onComplete={(newSimId) => {
+                    router.push(`/project/${projectId}/results?sim=${newSimId}`)
+                  }}
+                />
+              </div>
             </motion.div>
           )}
 

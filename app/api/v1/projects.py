@@ -55,6 +55,7 @@ from app.schemas.stress_test import (
 from app.simulation.calibration_engine import CalibrationEngine
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.scored_assumption import score_assumptions, signal_quality_tier
+from app.tasks.simulation_tasks import run_full_simulation
 from app.tasks.stress_test_tasks import run_assumption_stress_test
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -1535,3 +1536,221 @@ def get_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return ProjectOut.model_validate(project)
+
+
+@router.post("/{project_id}/re-simulate")
+def re_simulate(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Queues a new simulation for the project.
+    Compares the two most recent completed runs (newest vs prior).
+    Returns delta metrics immediately after queuing.
+    """
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    sims = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc())
+        .limit(2)
+        .all()
+    )
+
+    previous_sim = sims[0] if len(sims) >= 1 else None
+    older_sim = sims[1] if len(sims) >= 2 else None
+
+    delta: dict | None = None
+    if previous_sim and older_sim:
+        prev_results = (
+            previous_sim.results_json
+            if isinstance(previous_sim.results_json, dict)
+            else json.loads(previous_sim.results_json or "{}")
+        )
+        older_results = (
+            older_sim.results_json
+            if isinstance(older_sim.results_json, dict)
+            else json.loads(older_sim.results_json or "{}")
+        )
+
+        prev_cr = float(
+            prev_results.get("population_weighted_conversion")
+            or prev_results.get("conversion_rate")
+            or 0
+        )
+        older_cr = float(
+            older_results.get("population_weighted_conversion")
+            or older_results.get("conversion_rate")
+            or 0
+        )
+        cr_delta = round(prev_cr - older_cr, 4)
+
+        prev_clusters = prev_results.get("cluster_breakdown", {}) or {}
+        older_clusters = older_results.get("cluster_breakdown", {}) or {}
+
+        cluster_deltas: dict[str, float] = {}
+        for cid in prev_clusters:
+            prev_val = float(
+                prev_clusters.get(cid, {}).get("conversion_rate", 0)
+                if isinstance(prev_clusters.get(cid), dict)
+                else prev_clusters.get(cid, 0)
+            )
+            older_val = float(
+                older_clusters.get(cid, {}).get("conversion_rate", 0)
+                if isinstance(older_clusters.get(cid), dict)
+                else older_clusters.get(cid, 0)
+            )
+            cluster_deltas[str(cid)] = round(prev_val - older_val, 4)
+
+        improved = sorted(cluster_deltas.items(), key=lambda x: -x[1])[:3]
+        degraded = sorted(cluster_deltas.items(), key=lambda x: x[1])[:3]
+
+        prev_assumptions = prev_results.get("assumptions_summary", []) or []
+        older_assumptions = older_results.get("assumptions_summary", []) or []
+        changed_count = abs(len(prev_assumptions) - len(older_assumptions))
+
+        direction = "FLAT"
+        if cr_delta > 0:
+            direction = "UP"
+        elif cr_delta < 0:
+            direction = "DOWN"
+
+        delta = {
+            "conversion_delta": cr_delta,
+            "previous_conversion": round(prev_cr, 4),
+            "older_conversion": round(older_cr, 4),
+            "direction": direction,
+            "cluster_deltas": cluster_deltas,
+            "most_improved": [
+                {"cluster_id": cid, "delta": d} for cid, d in improved if d > 0
+            ],
+            "most_degraded": [
+                {"cluster_id": cid, "delta": d} for cid, d in degraded if d < 0
+            ],
+            "assumptions_changed": changed_count,
+            "simulation_count": len(sims),
+        }
+
+    environment = (
+        db.query(Environment).filter(Environment.project_id == project_id).first()
+    )
+    if not environment:
+        raise HTTPException(
+            status_code=400,
+            detail="Environment not configured. POST /api/v1/projects/{id}/environments first.",
+        )
+
+    running = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status.in_(["QUEUED", "RUNNING"]),
+        )
+        .first()
+    )
+    if running:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Simulation {running.id} is already {running.status} for this project.",
+        )
+
+    new_sim = Simulation(
+        project_id=project_id,
+        environment_id=environment.id,
+        status="QUEUED",
+        consumer_volume=environment.consumer_volume,
+    )
+    db.add(new_sim)
+    db.commit()
+    db.refresh(new_sim)
+
+    task = run_full_simulation.delay(new_sim.id)
+    new_sim.task_id = task.id
+    db.commit()
+    db.refresh(new_sim)
+
+    return {
+        "new_simulation_id": new_sim.id,
+        "status": "QUEUED",
+        "delta": delta,
+        "message": (
+            "Re-simulation queued. Delta from previous run included."
+            if delta
+            else "First simulation queued. No previous run to compare."
+        ),
+    }
+
+
+@router.get("/{project_id}/simulation-history")
+def get_simulation_history(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    sims = (
+        db.query(Simulation)
+        .filter(Simulation.project_id == project_id)
+        .order_by(Simulation.created_at.asc())
+        .all()
+    )
+
+    history: list[dict] = []
+    prev_cr: float | None = None
+    for sim in sims:
+        results = (
+            sim.results_json
+            if isinstance(sim.results_json, dict)
+            else json.loads(sim.results_json or "{}")
+        )
+        cr = float(
+            results.get("population_weighted_conversion")
+            or results.get("conversion_rate")
+            or 0
+        )
+        delta_cr = round(cr - prev_cr, 4) if prev_cr is not None else None
+        if delta_cr is not None and delta_cr > 0:
+            direction = "UP"
+        elif delta_cr is not None and delta_cr < 0:
+            direction = "DOWN"
+        else:
+            direction = "FLAT" if delta_cr is not None else None
+        history.append(
+            {
+                "simulation_id": sim.id,
+                "status": sim.status,
+                "signal_quality": sim.signal_quality,
+                "conversion_rate": round(cr, 4),
+                "delta_from_prev": delta_cr,
+                "direction": direction,
+                "created_at": sim.created_at.isoformat() if sim.created_at else None,
+            }
+        )
+        prev_cr = cr
+
+    return {
+        "project_id": project_id,
+        "total_runs": len(history),
+        "history": history,
+        "best_run_id": max(history, key=lambda x: x["conversion_rate"])["simulation_id"]
+        if history
+        else None,
+    }
