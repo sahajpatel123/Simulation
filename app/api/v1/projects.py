@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.intake_processor import adjust_assumption_confidence, build_enriched_description
 from app.core.deps import get_current_user, get_db
+from app.core.rate_limiter import rate_limit
+from app.core.sanitiser import sanitise_assumption, sanitise_description
 from app.core.prompts import (
     ASSUMPTION_EXTRACTION_PROMPT,
     COMPETITIVE_ANALYSIS_PROMPT,
@@ -377,7 +379,11 @@ def get_assumptions(
     )
 
 
-@router.post("/{project_id}/extract-assumptions", response_model=AssumptionListResponse)
+@router.post(
+    "/{project_id}/extract-assumptions",
+    response_model=AssumptionListResponse,
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
+)
 def extract_assumptions(
     project_id: int,
     payload: AssumptionExtractRequest | None = None,
@@ -392,11 +398,12 @@ def extract_assumptions(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    description = (
+    raw_description = (
         payload.description
         if payload and payload.description
         else project.description
-    ) or ""
+    )
+    description = sanitise_description(raw_description or "")
 
     if not description or len(description.strip()) < 20:
         raise HTTPException(
@@ -452,6 +459,10 @@ def extract_assumptions(
         assumptions_data = adjust_assumption_confidence(
             prepped, project.intake_mode or "IDEA"
         )
+        for a in assumptions_data:
+            t = sanitise_assumption(str(a.get("text", a.get("assumption", ""))))
+            a["text"] = t
+            a["assumption"] = t
 
     except json.JSONDecodeError:
         raise HTTPException(

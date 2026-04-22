@@ -8,6 +8,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    ENVIRONMENT: str = "development"
     DATABASE_URL: str
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "postgres"

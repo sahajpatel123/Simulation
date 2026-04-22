@@ -1,3 +1,4 @@
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -25,10 +26,9 @@ def create_access_token(subject: str, expires_delta: Optional[timedelta] = None)
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-def create_refresh_token(subject: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(days=30)
-    payload = {"exp": expire, "sub": str(subject), "type": "refresh"}
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+def create_refresh_token() -> str:
+    """Opaque refresh token; validated via refresh_tokens table hash, not JWT."""
+    return secrets.token_urlsafe(32)
 
 
 def decode_token(token: str, token_type: str = "access") -> Optional[str]:

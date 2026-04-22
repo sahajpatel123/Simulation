@@ -6,12 +6,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.database import init_extensions
+from app.core.logging_config import configure_logging
 from app.core.timing_middleware import TimingMiddleware
 from app.worker import celery_app as _celery_app
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    configure_logging()
     init_extensions()
     print("✅ TheCee backend running — pgvector enabled")
 
@@ -39,14 +41,16 @@ app = FastAPI(
 
 app.add_middleware(TimingMiddleware)
 
-# In production, restrict origins to the configured frontend URL.
-# Bearer-token auth (no cookies) so allow_credentials stays False.
+# CORS: in production, only the configured FRONTEND_URL. Bearer tokens (not cookies).
 _default_origins = ["http://localhost:3000", "http://localhost:3001"]
-_allowed_origins: list[str] = (
-    [settings.FRONTEND_URL, *_default_origins]
-    if settings.FRONTEND_URL not in _default_origins
-    else _default_origins
-)
+if settings.ENVIRONMENT.lower() == "production":
+    _allowed_origins: list[str] = [settings.FRONTEND_URL] if settings.FRONTEND_URL else []
+else:
+    _allowed_origins = (
+        [settings.FRONTEND_URL, *_default_origins]
+        if settings.FRONTEND_URL not in _default_origins
+        else _default_origins
+    )
 
 app.add_middleware(
     CORSMiddleware,

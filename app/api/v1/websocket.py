@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from app.core.database import SessionLocal
+from app.core.deps import user_from_access_sub
 from app.core.security import decode_token
 from app.core.websocket import ws_manager
 from app.models.project import Project
@@ -18,12 +19,12 @@ router = APIRouter(tags=["websocket"])
 async def _get_user_from_token(token: str) -> User | None:
     if not token:
         return None
-    email = decode_token(token, token_type="access")
-    if not email:
+    sub = decode_token(token, token_type="access")
+    if not sub:
         return None
     db = SessionLocal()
     try:
-        return db.query(User).filter(User.email == email).first()
+        return user_from_access_sub(db, sub)
     finally:
         db.close()
 
@@ -73,4 +74,3 @@ async def websocket_simulation_progress(
                 break
     finally:
         ws_manager.disconnect(simulation_id)
-
