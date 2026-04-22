@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.database import init_extensions
+from app.core.timing_middleware import TimingMiddleware
 from app.worker import celery_app as _celery_app
 
 
@@ -36,6 +37,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(TimingMiddleware)
+
 # In production, restrict origins to the configured frontend URL.
 # Bearer-token auth (no cookies) so allow_credentials stays False.
 _default_origins = ["http://localhost:3000", "http://localhost:3001"]
@@ -51,7 +54,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Content-Disposition", "Content-Length"],
+    expose_headers=["Content-Disposition", "Content-Length", "X-Response-Time"],
 )
 
 app.include_router(api_router)

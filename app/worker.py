@@ -30,6 +30,8 @@ celery_app.conf.update(
     task_time_limit=1800,
     task_soft_time_limit=1500,
     worker_prefetch_multiplier=1,
+    # Recycle workers to cap RSS growth on long sim runs (value is KiB; ~400 MB).
+    worker_max_memory_per_child=400_000,
     worker_max_tasks_per_child=10,
     result_expires=86400,
     broker_connection_retry_on_startup=True,

@@ -26,6 +26,9 @@ class Settings(BaseSettings):
 
     VECTOR_DIMENSION: int = 1536
 
+    # In-process fan-out for heavy simulation paths (tunable per deployment).
+    CONDUCTOR_WORKERS: int = 4
+
     RAZORPAY_KEY_ID: str = ""
     RAZORPAY_KEY_SECRET: str = ""
     RAZORPAY_WEBHOOK_SECRET: str = ""
