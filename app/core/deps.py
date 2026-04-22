@@ -4,9 +4,6 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import decode_token
-
-# Re-export for routers that import get_db from deps.
-__all__ = ("get_db", "get_current_user", "get_current_user_optional", "user_from_access_sub", "require_environment")
 from app.models.environment import Environment as EnvironmentModel
 from app.models.user import User
 
