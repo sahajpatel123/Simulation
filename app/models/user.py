@@ -1,4 +1,6 @@
-from sqlalchemy import Boolean, Float, Integer, String
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -12,6 +14,10 @@ class User(Base, TimestampMixin):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str | None] = mapped_column(String(255))
     tier: Mapped[str] = mapped_column(String(50), default="free", nullable=False)
+    subscription_tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    subscription_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    simulations_used_this_month: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    usage_reset_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # ── Press Office: identity ──────────────────────────────
     handle: Mapped[str | None] = mapped_column(String(64), nullable=True)

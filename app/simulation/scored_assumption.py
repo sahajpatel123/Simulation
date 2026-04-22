@@ -31,6 +31,14 @@ CONFIDENCE_MULTIPLIERS: dict[ClaimConfidence, float] = {
     ClaimConfidence.ASPIRATIONAL:       0.40,
 }
 
+# Higher index = higher trust (used to merge heuristics with intake-based claim_confidence)
+_CONFIDENCE_RANK: dict[ClaimConfidence, int] = {
+    ClaimConfidence.ASPIRATIONAL: 0,
+    ClaimConfidence.DESIGN_INTENT: 1,
+    ClaimConfidence.VALIDATED_INTERNAL: 2,
+    ClaimConfidence.VALIDATED_EXTERNAL: 3,
+}
+
 
 # ---------------------------------------------------------------------------
 # Core dataclass
@@ -452,7 +460,17 @@ def score_assumptions(
         # Normalise impact score from 1–10 range to 0–1
         base_score = max(0.0, min(1.0, (raw_score - 1.0) / 9.0))
 
-        confidence   = classify_confidence(claim)
+        confidence = classify_confidence(claim)
+        extra_raw = a.get("claim_confidence")
+        if extra_raw is not None and str(extra_raw).strip() != "":
+            try:
+                c_extra = ClaimConfidence(str(extra_raw).strip().upper().replace(" ", "_"))
+            except ValueError:
+                c_extra = None
+            if c_extra is not None and _CONFIDENCE_RANK.get(c_extra, 0) > _CONFIDENCE_RANK.get(
+                confidence, 0
+            ):
+                confidence = c_extra
         multiplier   = CONFIDENCE_MULTIPLIERS[confidence]
         specificity  = _score_specificity(architect, claim)
         adjusted     = base_score * multiplier

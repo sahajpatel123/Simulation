@@ -10,6 +10,9 @@ from sqlalchemy import text
 
 from app.browser.utils import cluster_to_agent_profile
 from app.core.database import SessionLocal
+from app.core.tier_enforcement import enforce_hardware_access
+from app.models.project import Project
+from app.models.user import User
 from app.simulation.accountability import AccountabilityEngine
 from app.simulation.agent_hierarchy import AgentHierarchyRouter, AgentTier
 from app.simulation.architects.base import ArchitectOutput
@@ -227,6 +230,16 @@ def run_hardware_consumer_simulation(
 
         if not hw:
             raise ValueError(f"Hardware product {hardware_product_id} not found")
+
+        user = (
+            db.query(User)
+            .join(Project, Project.user_id == User.id)
+            .filter(Project.id == project_id)
+            .first()
+        )
+        if not user:
+            raise ValueError("Project owner not found for hardware consumer simulation")
+        enforce_hardware_access(user, db)
 
         spec = hw.model_data_json
         if isinstance(spec, str):

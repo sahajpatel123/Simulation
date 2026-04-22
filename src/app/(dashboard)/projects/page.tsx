@@ -7,6 +7,7 @@ import { ArrowUpRight, Loader2, Plus, X } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 
+import { IntakeModeSelector, type IntakeMode } from '@/components/IntakeModeSelector'
 import { apiError } from '@/lib/api'
 import { useCreateProject, useProjects } from '@/hooks/useProjects'
 import type { Project } from '@/types'
@@ -118,6 +119,10 @@ export default function ProjectsPageRoute() {
 function ProjectsPage() {
   const [showModal, setShowModal] = useState(false)
   const [idea, setIdea] = useState('')
+  const [intakeMode, setIntakeMode] = useState<IntakeMode>('IDEA')
+  const [landingPageUrl, setLandingPageUrl] = useState('')
+  const [mvpFeatures, setMvpFeatures] = useState('')
+  const [existingProductDesc, setExistingProductDesc] = useState('')
 
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -156,9 +161,21 @@ function ProjectsPage() {
   const handleCreate = async () => {
     const description = idea.trim()
     if (!description) return
-    await createProject.mutateAsync({ description })
+    await createProject.mutateAsync({
+      description,
+      intake_mode: intakeMode,
+      landing_page_url: landingPageUrl.trim() || undefined,
+      mvp_feature_list: mvpFeatures
+        ? mvpFeatures.split('\n').map((s) => s.trim()).filter(Boolean)
+        : undefined,
+      existing_product_description: existingProductDesc.trim() || undefined,
+    })
     setShowModal(false)
     setIdea('')
+    setIntakeMode('IDEA')
+    setLandingPageUrl('')
+    setMvpFeatures('')
+    setExistingProductDesc('')
   }
 
   const setFilter = (f: Filter) => {
@@ -321,6 +338,14 @@ function ProjectsPage() {
           <FileDossierModal
             idea={idea}
             setIdea={setIdea}
+            intakeMode={intakeMode}
+            setIntakeMode={setIntakeMode}
+            landingPageUrl={landingPageUrl}
+            setLandingPageUrl={setLandingPageUrl}
+            mvpFeatures={mvpFeatures}
+            setMvpFeatures={setMvpFeatures}
+            existingProductDesc={existingProductDesc}
+            setExistingProductDesc={setExistingProductDesc}
             onClose={() => setShowModal(false)}
             onSubmit={handleCreate}
             pending={createProject.isPending}
@@ -859,12 +884,28 @@ function DossierRow({ project, number }: { project: Project; number: number }) {
 function FileDossierModal({
   idea,
   setIdea,
+  intakeMode,
+  setIntakeMode,
+  landingPageUrl,
+  setLandingPageUrl,
+  mvpFeatures,
+  setMvpFeatures,
+  existingProductDesc,
+  setExistingProductDesc,
   onClose,
   onSubmit,
   pending,
 }: {
   idea: string
   setIdea: (s: string) => void
+  intakeMode: IntakeMode
+  setIntakeMode: (m: IntakeMode) => void
+  landingPageUrl: string
+  setLandingPageUrl: (s: string) => void
+  mvpFeatures: string
+  setMvpFeatures: (s: string) => void
+  existingProductDesc: string
+  setExistingProductDesc: (s: string) => void
   onClose: () => void
   onSubmit: () => void
   pending: boolean
@@ -977,6 +1018,67 @@ function FileDossierModal({
               Describe your idea in plain language — one paragraph. The press will read it as if a
               stranger handed it across a café table.
             </p>
+
+            <IntakeModeSelector value={intakeMode} onChange={setIntakeMode} />
+
+            {intakeMode !== 'IDEA' && (
+              <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <input
+                  value={landingPageUrl}
+                  onChange={(e) => setLandingPageUrl(e.target.value)}
+                  placeholder="Landing page URL (optional — we can read it)"
+                  type="url"
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    background: 'rgba(26,23,20,0.03)',
+                    border: '0.5px solid var(--border-strong)',
+                    fontSize: 13,
+                    fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+                    color: 'var(--ink)',
+                    outline: 'none',
+                  }}
+                />
+                {intakeMode === 'MID_BUILD' && (
+                  <textarea
+                    value={mvpFeatures}
+                    onChange={(e) => setMvpFeatures(e.target.value)}
+                    placeholder="Shipped features (one per line)"
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      background: 'rgba(26,23,20,0.03)',
+                      border: '0.5px solid var(--border-strong)',
+                      fontSize: 13,
+                      fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+                      color: 'var(--ink)',
+                      outline: 'none',
+                      resize: 'none' as const,
+                    }}
+                  />
+                )}
+                {intakeMode === 'PRE_LAUNCH' && (
+                  <textarea
+                    value={existingProductDesc}
+                    onChange={(e) => setExistingProductDesc(e.target.value)}
+                    placeholder="Current product state (optional)"
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      background: 'rgba(26,23,20,0.03)',
+                      border: '0.5px solid var(--border-strong)',
+                      fontSize: 13,
+                      fontFamily: 'var(--font-serif)',
+                      color: 'var(--ink)',
+                      outline: 'none',
+                      resize: 'none' as const,
+                    }}
+                  />
+                )}
+              </div>
+            )}
 
             <label className="kicker" style={{ color: 'var(--ink-secondary)', display: 'block', marginBottom: 8 }}>
               The Idea

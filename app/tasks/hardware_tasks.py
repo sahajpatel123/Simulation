@@ -6,6 +6,9 @@ from datetime import datetime, timezone
 from sqlalchemy import text
 
 from app.core.database import SessionLocal
+from app.models.project import Project
+from app.models.user import User
+from app.core.tier_enforcement import enforce_hardware_access
 from app.hardware.physics_engine import PhysicsSimulationEngine
 from app.hardware.test_configs import TestConfigBuilder
 from app.worker import celery_app
@@ -41,6 +44,16 @@ def run_hardware_tests(self, hardware_product_id: int, project_id: int):
 
         if not hw:
             raise ValueError(f"Hardware product {hardware_product_id} not found")
+
+        user = (
+            db.query(User)
+            .join(Project, Project.user_id == User.id)
+            .filter(Project.id == project_id)
+            .first()
+        )
+        if not user:
+            raise ValueError("Project owner not found for hardware tests")
+        enforce_hardware_access(user, db)
 
         model_data = hw.model_data_json
         if isinstance(model_data, str):

@@ -9,11 +9,13 @@ from celery import Task
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
+from app.core.tier_enforcement import enforce_simulation_limit, increment_simulation_count
 from app.core.websocket import sync_broadcast
 from app.models.assumption import Assumption
 from app.models.environment import Environment
 from app.models.project import Project
 from app.models.simulation import Simulation
+from app.models.user import User
 from app.simulation.accountability import AccountabilityEngine
 from app.simulation.aggregation import ResultsAggregator
 from app.simulation.conductor import Conductor, ConductorResult
@@ -194,6 +196,15 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         if not sim:
             raise ValueError(f"Simulation {simulation_id} not found in DB")
 
+        project = self.db.query(Project).filter(Project.id == sim.project_id).first()
+        if not project:
+            raise ValueError(f"Project {sim.project_id} not found")
+
+        user = self.db.query(User).filter(User.id == project.user_id).first()
+        if not user:
+            raise ValueError(f"User for project {sim.project_id} not found")
+        enforce_simulation_limit(user, self.db)
+
         sim.status = "RUNNING"
         sim.task_id = self.request.id
         sim.updated_at = _utcnow()
@@ -201,10 +212,6 @@ def run_full_simulation(self, simulation_id: int) -> dict:
 
         self.update_state(state="PROGRESS", meta={"stage": "Loading project data", "pct": 5})
         sync_broadcast(simulation_id, "RUNNING", "Loading project data", 5)
-
-        project = self.db.query(Project).filter(Project.id == sim.project_id).first()
-        if not project:
-            raise ValueError(f"Project {sim.project_id} not found")
 
         environment = (
             self.db.query(Environment)
@@ -346,6 +353,7 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         project.updated_at = _utcnow()
 
         self.db.commit()
+        increment_simulation_count(project.user_id, self.db)
         sync_broadcast(
             simulation_id,
             "COMPLETED",

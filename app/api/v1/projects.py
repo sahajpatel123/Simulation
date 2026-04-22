@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.intake_processor import adjust_assumption_confidence, build_enriched_description
 from app.core.deps import get_current_user, get_db
 from app.core.prompts import (
     ASSUMPTION_EXTRACTION_PROMPT,
@@ -97,11 +98,24 @@ def create_project(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    intake_mode = payload.intake_mode or "IDEA"
+    mvp_list = payload.mvp_feature_list or []
+    enriched_description, _ = build_enriched_description(
+        description=payload.description,
+        intake_mode=intake_mode,
+        landing_page_url=payload.landing_page_url,
+        mvp_feature_list=mvp_list if mvp_list else None,
+        existing_product_description=payload.existing_product_description,
+    )
     project = Project(
         user_id=current_user.id,
         title=payload.title,
-        description=payload.description,
+        description=enriched_description,
         status="DRAFT",
+        intake_mode=intake_mode,
+        landing_page_url=payload.landing_page_url,
+        mvp_feature_list=mvp_list if mvp_list else None,
+        existing_product_description=payload.existing_product_description,
     )
     db.add(project)
     db.commit()
@@ -382,7 +396,7 @@ def extract_assumptions(
         payload.description
         if payload and payload.description
         else project.description
-    )
+    ) or ""
 
     if not description or len(description.strip()) < 20:
         raise HTTPException(
@@ -421,6 +435,23 @@ def extract_assumptions(
 
         if not isinstance(assumptions_data, list):
             raise ValueError("Claude returned unexpected format")
+
+        prepped: list[dict] = []
+        for item in assumptions_data:
+            if not isinstance(item, dict):
+                continue
+            t = str(item.get("text", "")).strip()
+            prepped.append(
+                {
+                    **item,
+                    "text": t,
+                    "assumption": t,
+                    "claim_confidence": str(item.get("claim_confidence", "DESIGN_INTENT")),
+                }
+            )
+        assumptions_data = adjust_assumption_confidence(
+            prepped, project.intake_mode or "IDEA"
+        )
 
     except json.JSONDecodeError:
         raise HTTPException(
@@ -467,8 +498,9 @@ def extract_assumptions(
                 "text": a.text,
                 "category": a.category,
                 "impact_score": a.impact_score,
+                "claim_confidence": item.get("claim_confidence"),
             }
-            for a in saved
+            for a, item in zip(saved, assumptions_data, strict=True)
         ]
     )
 
