@@ -477,28 +477,96 @@ export default function ProjectPage() {
               style={{
                 marginTop: 20,
                 position: 'relative',
-                padding: '22px 28px',
-                border: '0.5px solid var(--border-strong)',
-                background: 'linear-gradient(165deg, #0a0a0f 0%, #111827 100%)',
-                color: '#94a3b8',
+                padding: '26px 32px 26px 28px',
+                border: '0.5px solid var(--ink)',
+                borderLeft: '4px solid var(--workshop)',
+                background: 'linear-gradient(120deg, #fbf8f2 0%, var(--paper) 38%, #f0ebe3 100%)',
+                backgroundImage: `
+                  radial-gradient(circle at 12% 88%, var(--workshop-dim) 0%, transparent 42%),
+                  radial-gradient(circle at 88% 8%, rgba(192, 57, 43, 0.04) 0%, transparent 35%)
+                `,
                 display: 'grid',
                 gridTemplateColumns: '1fr auto',
                 alignItems: 'center',
-                gap: 20,
+                gap: 24,
+                boxShadow: '10px 10px 0 var(--workshop-shadow)',
+                transition: 'transform 260ms ease, box-shadow 260ms ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translate(-2px, -2px)'
+                e.currentTarget.style.boxShadow = '14px 14px 0 rgba(45, 69, 86, 0.22)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translate(0, 0)'
+                e.currentTarget.style.boxShadow = '10px 10px 0 var(--workshop-shadow)'
               }}
             >
-              <div>
-                <div className="kicker" style={{ color: '#38bdf8', marginBottom: 8 }}>
-                  Hardware · Blueprint viewer
+              <div style={{ position: 'relative' }}>
+                <div
+                  className="kicker"
+                  style={{
+                    color: 'var(--workshop)',
+                    marginBottom: 8,
+                    letterSpacing: '0.2em',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                  }}
+                >
+                  <span>Hardware · Atelier</span>
+                  <span
+                    style={{
+                      fontSize: 9,
+                      letterSpacing: '0.28em',
+                      color: 'var(--ink-tertiary)',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    folio B
+                  </span>
                 </div>
-                <div className="font-serif" style={{ fontSize: 22, fontWeight: 800, fontStyle: 'italic', color: '#e2e8f0' }}>
-                  Semantic 3D spec
+                <div
+                  className="font-serif"
+                  style={{
+                    fontSize: 28,
+                    fontWeight: 800,
+                    fontStyle: 'italic',
+                    lineHeight: 1.05,
+                    letterSpacing: '-0.02em',
+                    color: 'var(--ink)',
+                  }}
+                >
+                  The dimensional proof.
                 </div>
-                <p style={{ marginTop: 8, fontSize: 12, lineHeight: 1.55, maxWidth: 480, fontFamily: 'ui-monospace, monospace' }}>
-                  Grid, stress map, and render hints — generate a spec or open an existing hardware product.
+                <p
+                  style={{
+                    marginTop: 10,
+                    color: 'var(--ink-secondary)',
+                    fontSize: 13,
+                    lineHeight: 1.65,
+                    maxWidth: 520,
+                  }}
+                >
+                  Stress maps, part zones, and render notes — the same page as the lab, now cut to the magazine’s
+                  light. Open when you are ready to lock geometry before the next press.
                 </p>
               </div>
-              <ArrowUpRight style={{ width: 20, height: 20, color: '#38bdf8' }} />
+              <div
+                style={{
+                  width: 58,
+                  height: 58,
+                  border: '0.5px solid var(--workshop)',
+                  background: 'linear-gradient(145deg, #fff 0%, var(--paper-dark) 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--workshop)',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.85)',
+                }}
+                aria-hidden
+              >
+                <ArrowUpRight style={{ width: 22, height: 22 }} />
+              </div>
             </div>
           </Link>
         </div>

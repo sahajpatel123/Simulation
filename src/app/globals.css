@@ -50,6 +50,12 @@
   --border-color: rgba(26,23,20,0.12);
   --border-strong: rgba(26,23,20,0.25);
 
+  /* Workshop / hardware atelier — steel-blue second ink (distinct from editorial red) */
+  --workshop: #2d4556;
+  --workshop-mid: #3e5a6e;
+  --workshop-dim: rgba(45, 69, 86, 0.1);
+  --workshop-shadow: rgba(45, 69, 86, 0.16);
+
   /* shadcn compat */
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -360,6 +366,12 @@ body.thecee-scroll-reveal::-webkit-scrollbar-thumb:hover {
 .rise-2 { animation-delay: 120ms; }
 .rise-3 { animation-delay: 220ms; }
 .rise-4 { animation-delay: 340ms; }
+
+/* Hardware lab — shares body typography; monospace remains for measurements only */
+.hw-workshop {
+  font-family: var(--font-body, 'DM Sans', sans-serif);
+  font-weight: 300;
+}
 
 /* Modal-open state: blur the whole app shell (header, sidebar, main). */
 .app-shell { transition: filter 220ms ease; }
