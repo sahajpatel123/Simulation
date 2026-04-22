@@ -555,6 +555,184 @@ def run_migrations():
             except Exception:
                 conn.rollback()
 
+        # Step 85: intake_mode + subscription / usage
+        try:
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE projects
+                    ADD COLUMN IF NOT EXISTS intake_mode VARCHAR(20) DEFAULT 'IDEA';
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE projects
+                    ADD COLUMN IF NOT EXISTS landing_page_url TEXT;
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE projects
+                    ADD COLUMN IF NOT EXISTS mvp_feature_list JSONB;
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE projects
+                    ADD COLUMN IF NOT EXISTS existing_product_description TEXT;
+                    """
+                )
+            )
+            print("✅ intake_mode fields added to projects")
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE users
+                    ADD COLUMN IF NOT EXISTS subscription_tier VARCHAR(20) DEFAULT 'free';
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE users
+                    ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMP;
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE users
+                    ADD COLUMN IF NOT EXISTS simulations_used_this_month INTEGER DEFAULT 0;
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE users
+                    ADD COLUMN IF NOT EXISTS usage_reset_at TIMESTAMP DEFAULT NOW();
+                    """
+                )
+            )
+            print("✅ subscription_tier fields added to users")
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ step 85 migration skip: {e}")
+
+        # Step 86: Razorpay (idempotent with Step 85 subscription columns)
+        try:
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE users
+                    ADD COLUMN IF NOT EXISTS subscription_tier VARCHAR(20) DEFAULT 'free';
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE users
+                    ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMP;
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE users
+                    ADD COLUMN IF NOT EXISTS razorpay_customer_id VARCHAR(100);
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE users
+                    ADD COLUMN IF NOT EXISTS razorpay_subscription_id VARCHAR(100);
+                    """
+                )
+            )
+            print("✅ Razorpay columns added to users")
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ step 86 migration skip: {e}")
+
+        # Step 87: performance indexes (hot API / simulation paths)
+        try:
+            for perf_idx_sql in [
+                """
+                CREATE INDEX IF NOT EXISTS idx_simulations_project_status
+                ON simulations (project_id, status);
+                """,
+                """
+                CREATE INDEX IF NOT EXISTS idx_simulations_user_created
+                ON simulations (project_id, created_at DESC);
+                """,
+                """
+                CREATE INDEX IF NOT EXISTS idx_ui_simulation_sessions_ui_id
+                ON ui_simulation_sessions (generated_ui_id);
+                """,
+                """
+                CREATE INDEX IF NOT EXISTS idx_cluster_run_summaries_sim_id
+                ON cluster_run_summaries (simulation_id);
+                """,
+                """
+                CREATE INDEX IF NOT EXISTS idx_hardware_test_results_hw_id
+                ON hardware_test_results (hardware_product_id);
+                """,
+                """
+                CREATE INDEX IF NOT EXISTS idx_hardware_products_project_id
+                ON hardware_products (project_id);
+                """,
+            ]:
+                conn.execute(text(perf_idx_sql.strip()))
+            conn.commit()
+            print("✅ Performance indexes created")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ step 87 performance indexes skip: {e}")
+
+        # Step 88: refresh tokens (opaque, hashed)
+        try:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS refresh_tokens (
+                        id         SERIAL PRIMARY KEY,
+                        user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                        token_hash VARCHAR(64) NOT NULL UNIQUE,
+                        expires_at TIMESTAMP  NOT NULL,
+                        created_at TIMESTAMP  DEFAULT NOW(),
+                        revoked    BOOLEAN    DEFAULT FALSE
+                    );
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash
+                    ON refresh_tokens (token_hash);
+                    """
+                )
+            )
+            conn.commit()
+            print("✅ refresh_tokens table created")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ step 88 refresh_tokens skip: {e}")
+
     # Seed cluster_parameters with 416 placeholder rows (52 clusters × 8 traits)
     _seed_cluster_parameters()
 
