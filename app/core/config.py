@@ -26,5 +26,11 @@ class Settings(BaseSettings):
 
     VECTOR_DIMENSION: int = 1536
 
+    RAZORPAY_KEY_ID: str = ""
+    RAZORPAY_KEY_SECRET: str = ""
+    RAZORPAY_WEBHOOK_SECRET: str = ""
+    RAZORPAY_PRO_PLAN_ID: str = ""
+    RAZORPAY_ENTERPRISE_PLAN_ID: str = ""
+
 
 settings = Settings()

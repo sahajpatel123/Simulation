@@ -18,6 +18,8 @@ class User(Base, TimestampMixin):
     subscription_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     simulations_used_this_month: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     usage_reset_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    razorpay_customer_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    razorpay_subscription_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # ── Press Office: identity ──────────────────────────────
     handle: Mapped[str | None] = mapped_column(String(64), nullable=True)
