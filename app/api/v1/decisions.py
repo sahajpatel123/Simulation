@@ -47,6 +47,7 @@ def _hydrate_result(decision: Decision) -> DecisionOut | None:
     "/{project_id}/decisions",
     response_model=DecisionStatusOut,
     status_code=status.HTTP_201_CREATED,
+    summary="Enqueue a multi-scenario decision comparison",
 )
 def create_decision_comparison(
     project_id: int,
@@ -109,7 +110,11 @@ def create_decision_comparison(
     )
 
 
-@router.get("/{project_id}/decisions/{decision_id}", response_model=DecisionStatusOut)
+@router.get(
+    "/{project_id}/decisions/{decision_id}",
+    response_model=DecisionStatusOut,
+    summary="Get a single decision job and its result if complete",
+)
 def get_decision_comparison(
     project_id: int,
     decision_id: int,
@@ -127,7 +132,11 @@ def get_decision_comparison(
     )
 
 
-@router.get("/{project_id}/decisions", response_model=list[DecisionStatusOut])
+@router.get(
+    "/{project_id}/decisions",
+    response_model=list[DecisionStatusOut],
+    summary="List decision comparisons for a project",
+)
 def list_decisions(
     project_id: int,
     db: Session = Depends(get_db),

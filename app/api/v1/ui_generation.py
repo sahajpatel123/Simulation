@@ -17,6 +17,10 @@ from app.schemas.ui_generation import GeneratedUIResponse, UIRefineRequest, UIGe
 
 router = APIRouter(tags=["ui-generation"])
 
+_JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
+_HTML_200 = {200: {"description": "HTML document", "content": {"text/html": {}}}}
+_PDF_200 = {200: {"description": "PDF file", "content": {"application/pdf": {}}}}
+
 ALLOWED_CDNS = ["tailwindcss", "alpinejs", "cdn.tailwindcss", "jsdelivr.net/npm/alpinejs"]
 
 
@@ -52,7 +56,11 @@ document.addEventListener('click',function(e){
     return html + script
 
 
-@router.post("/projects/{project_id}/generate-ui", response_model=GeneratedUIResponse)
+@router.post(
+    "/projects/{project_id}/generate-ui",
+    response_model=GeneratedUIResponse,
+    summary="Generate a Tailwind HTML UI prototype for a project",
+)
 async def generate_ui(
     project_id: int,
     body: UIGenerateRequest,
@@ -114,7 +122,11 @@ async def generate_ui(
     )
 
 
-@router.post("/projects/{project_id}/generate-ui/refine", response_model=GeneratedUIResponse)
+@router.post(
+    "/projects/{project_id}/generate-ui/refine",
+    response_model=GeneratedUIResponse,
+    summary="Refine an existing generated UI with a new instruction",
+)
 async def refine_ui(
     project_id: int,
     body: UIRefineRequest,
@@ -190,7 +202,11 @@ No markdown, no explanation."""
     )
 
 
-@router.get("/projects/{project_id}/generated-uis")
+@router.get(
+    "/projects/{project_id}/generated-uis",
+    summary="List generated UIs and preview URLs for a project",
+    responses=_JSON_200,
+)
 async def list_generated_uis(
     project_id: int,
     db: Session = Depends(get_db),
@@ -226,7 +242,11 @@ async def list_generated_uis(
     }
 
 
-@router.get("/generated-uis/{ui_id}")
+@router.get(
+    "/generated-uis/{ui_id}",
+    summary="Get metadata for a generated UI",
+    responses=_JSON_200,
+)
 async def get_generated_ui(
     ui_id: int,
     db: Session = Depends(get_db),
@@ -255,7 +275,12 @@ async def get_generated_ui(
     }
 
 
-@router.get("/generated-uis/{ui_id}/serve", response_class=HTMLResponse)
+@router.get(
+    "/generated-uis/{ui_id}/serve",
+    response_class=HTMLResponse,
+    summary="Serve generated HTML in the browser (unauthenticated preview URL)",
+    responses=_HTML_200,
+)
 async def serve_generated_ui(
     ui_id: int,
     db: Session = Depends(get_db),
@@ -266,7 +291,11 @@ async def serve_generated_ui(
     return HTMLResponse(content=_inject_tracking(ui.html_content))
 
 
-@router.post("/projects/{project_id}/generated-uis/{ui_id}/simulate")
+@router.post(
+    "/projects/{project_id}/generated-uis/{ui_id}/simulate",
+    summary="Start a browser-based UI simulation run",
+    responses=_JSON_200,
+)
 async def start_ui_simulation(
     project_id: int,
     ui_id: int,
@@ -324,7 +353,11 @@ async def start_ui_simulation(
     }
 
 
-@router.get("/projects/{project_id}/ui-simulation-runs/{run_id}")
+@router.get(
+    "/projects/{project_id}/ui-simulation-runs/{run_id}",
+    summary="Get a UI simulation run status and results JSON",
+    responses=_JSON_200,
+)
 async def get_ui_simulation_run(
     project_id: int,
     run_id: int,
@@ -360,7 +393,11 @@ async def get_ui_simulation_run(
     }
 
 
-@router.get("/projects/{project_id}/ui-simulation-runs/{run_id}/heatmap")
+@router.get(
+    "/projects/{project_id}/ui-simulation-runs/{run_id}/heatmap",
+    summary="Click heatmap for a completed UI simulation",
+    responses=_JSON_200,
+)
 async def get_heatmap(
     project_id: int,
     run_id: int,
@@ -419,7 +456,11 @@ async def get_heatmap(
     return engine.to_dict(result)
 
 
-@router.get("/projects/{project_id}/ui-simulation-runs/{run_id}/funnel")
+@router.get(
+    "/projects/{project_id}/ui-simulation-runs/{run_id}/funnel",
+    summary="Funnel stage analytics for a UI simulation",
+    responses=_JSON_200,
+)
 async def get_funnel_analytics(
     project_id: int,
     run_id: int,
@@ -477,7 +518,11 @@ async def get_funnel_analytics(
     return engine.to_dict(result)
 
 
-@router.get("/projects/{project_id}/ui-simulation-runs/{run_id}/channel-attribution")
+@router.get(
+    "/projects/{project_id}/ui-simulation-runs/{run_id}/channel-attribution",
+    summary="Channel attribution vs conductor for a UI run",
+    responses=_JSON_200,
+)
 async def get_channel_attribution(
     project_id: int,
     run_id: int,
@@ -553,7 +598,11 @@ async def get_channel_attribution(
     return engine.to_dict(result)
 
 
-@router.get("/projects/{project_id}/ui-simulation-runs/{run_id}/retention")
+@router.get(
+    "/projects/{project_id}/ui-simulation-runs/{run_id}/retention",
+    summary="Retention and churn model for a UI run",
+    responses=_JSON_200,
+)
 async def get_retention_churn(
     project_id: int,
     run_id: int,
@@ -631,7 +680,11 @@ async def get_retention_churn(
     return engine.to_dict(result)
 
 
-@router.get("/projects/{project_id}/ui-simulation-runs/{run_id}/infra-scaling")
+@router.get(
+    "/projects/{project_id}/ui-simulation-runs/{run_id}/infra-scaling",
+    summary="Infra load scaling estimate from UI simulation traffic",
+    responses=_JSON_200,
+)
 async def get_infra_scaling(
     project_id: int,
     run_id: int,
@@ -720,7 +773,11 @@ async def get_infra_scaling(
     return engine.to_dict(result)
 
 
-@router.get("/projects/{project_id}/ui-simulation-runs/{run_id}/report.pdf")
+@router.get(
+    "/projects/{project_id}/ui-simulation-runs/{run_id}/report.pdf",
+    summary="Download combined UI simulation PDF report",
+    responses=_PDF_200,
+)
 async def get_simulation_report_pdf(
     project_id: int,
     run_id: int,

@@ -14,8 +14,14 @@ from app.simulation.calibration import CalibrationEngine
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/calibration", tags=["calibration"])
 
+_JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
-@router.get("/", response_model=dict)
+
+@router.get(
+    "/",
+    response_model=dict,
+    summary="Platform-wide calibration accuracy metrics",
+)
 def get_platform_calibration(
     db: Session = Depends(get_db),
 ):
@@ -36,7 +42,11 @@ def get_platform_calibration(
     }
 
 
-@router.post("/apply-adjustments")
+@router.post(
+    "/apply-adjustments",
+    summary="Apply Markov prior adjustments from latest outcomes",
+    responses=_JSON_200,
+)
 def apply_markov_adjustments(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

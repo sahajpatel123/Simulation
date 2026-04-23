@@ -18,6 +18,8 @@ from app.models.user import User
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
+_JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
+
 
 def get_razorpay_client() -> razorpay.Client:
     return razorpay.Client(
@@ -37,7 +39,11 @@ def _plan_to_tier_map() -> dict[str, str]:
 # ── POST: create subscription ──
 
 
-@router.post("/create-subscription")
+@router.post(
+    "/create-subscription",
+    summary="Create Razorpay subscription checkout payload",
+    responses=_JSON_200,
+)
 async def create_subscription(
     body: dict,
     db: Session = Depends(get_db),
@@ -114,7 +120,11 @@ async def create_subscription(
 # ── POST: webhook handler ──
 
 
-@router.post("/webhook")
+@router.post(
+    "/webhook",
+    summary="Razorpay subscription webhook handler",
+    responses=_JSON_200,
+)
 async def razorpay_webhook(
     request: Request,
     db: Session = Depends(get_db),
@@ -210,7 +220,11 @@ async def razorpay_webhook(
 # ── GET: subscription status ──
 
 
-@router.get("/subscription-status")
+@router.get(
+    "/subscription-status",
+    summary="Current subscription tier and usage limits",
+    responses=_JSON_200,
+)
 async def get_subscription_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -257,7 +271,11 @@ async def get_subscription_status(
 # ── POST: cancel subscription ──
 
 
-@router.post("/cancel-subscription")
+@router.post(
+    "/cancel-subscription",
+    summary="Cancel subscription at end of billing period",
+    responses=_JSON_200,
+)
 async def cancel_subscription(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

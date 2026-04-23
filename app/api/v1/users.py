@@ -13,8 +13,14 @@ from app.schemas.auth import MessageResponse
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+_JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
-@router.post("/me/clear-archive", response_model=MessageResponse)
+
+@router.post(
+    "/me/clear-archive",
+    response_model=MessageResponse,
+    summary="Delete all projects owned by the current user",
+)
 def clear_archive(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -29,7 +35,11 @@ def clear_archive(
     return MessageResponse(message=f"Cleared {deleted} dossiers from your archive")
 
 
-@router.get("/me/export")
+@router.get(
+    "/me/export",
+    summary="Export profile and dossiers as JSON",
+    responses=_JSON_200,
+)
 def export_archive(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -74,7 +84,11 @@ def export_archive(
     }
 
 
-@router.get("/me/accuracy-profile")
+@router.get(
+    "/me/accuracy-profile",
+    summary="Per-user simulation accuracy and architect bias profile",
+    responses=_JSON_200,
+)
 def get_accuracy_profile(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -132,7 +146,11 @@ def get_accuracy_profile(
     }
 
 
-@router.get("/me/blindspots")
+@router.get(
+    "/me/blindspots",
+    summary="Detected market blindspots for the current user",
+    responses=_JSON_200,
+)
 def get_blindspots(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

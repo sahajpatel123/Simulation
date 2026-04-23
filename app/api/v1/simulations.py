@@ -30,6 +30,8 @@ from app.tasks.simulation_tasks import health_check, run_full_simulation
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/simulations", tags=["simulations"])
 
+_JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
+
 _registry = ClusterRegistry()
 _clusters_map = {c.cluster_id: c for c in _registry.all_clusters()}
 
@@ -49,7 +51,12 @@ def _signal_suggestions(sq: float, dist: dict) -> list[str]:
     return tips
 
 
-@router.post("", response_model=SimulationStatusOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=SimulationStatusOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Enqueue a full multi-cluster simulation for a project",
+)
 def create_simulation(
     payload: SimulationCreate,
     db: Session = Depends(get_db),
@@ -108,7 +115,11 @@ def create_simulation(
     return SimulationStatusOut.model_validate(sim)
 
 
-@router.get("/worker/health")
+@router.get(
+    "/worker/health",
+    summary="Probe Celery worker with a test task",
+    responses=_JSON_200,
+)
 def worker_health():
     try:
         result = health_check.delay()
@@ -118,7 +129,11 @@ def worker_health():
         return {"worker_reachable": False, "error": str(exc)}
 
 
-@router.get("/clusters")
+@router.get(
+    "/clusters",
+    summary="List 52 customer clusters and registry metadata",
+    responses=_JSON_200,
+)
 def get_cluster_registry():
     clusters = ClusterRegistry().all_clusters()
     return {
@@ -138,7 +153,11 @@ def get_cluster_registry():
     }
 
 
-@router.get("/{simulation_id}/signal-quality")
+@router.get(
+    "/{simulation_id}/signal-quality",
+    summary="Signal quality tier and improvement suggestions for a run",
+    responses=_JSON_200,
+)
 def get_signal_quality(
     simulation_id: int,
     db: Session = Depends(get_db),
@@ -181,7 +200,11 @@ def get_signal_quality(
     }
 
 
-@router.get("/{simulation_id}/status", response_model=SimulationStatusOut)
+@router.get(
+    "/{simulation_id}/status",
+    response_model=SimulationStatusOut,
+    summary="Simulation row status and errors",
+)
 def get_simulation_status(
     simulation_id: int,
     db: Session = Depends(get_db),
@@ -191,7 +214,11 @@ def get_simulation_status(
     return SimulationStatusOut.model_validate(sim)
 
 
-@router.get("/{simulation_id}/results", response_model=SimulationResultOut)
+@router.get(
+    "/{simulation_id}/results",
+    response_model=SimulationResultOut,
+    summary="Completed simulation results with cluster breakdown",
+)
 def get_simulation_results(
     simulation_id: int,
     db: Session = Depends(get_db),
@@ -278,7 +305,11 @@ def get_simulation_results(
     )
 
 
-@router.get("/{simulation_id}/progress")
+@router.get(
+    "/{simulation_id}/progress",
+    summary="Coarse percent progress while a simulation is running",
+    responses=_JSON_200,
+)
 def get_simulation_progress(
     simulation_id: int,
     db: Session = Depends(get_db),
@@ -321,7 +352,11 @@ def get_simulation_progress(
     }
 
 
-@router.get("/ws/info")
+@router.get(
+    "/ws/info",
+    summary="WebSocket connection metadata for live progress",
+    responses=_JSON_200,
+)
 def websocket_info():
     from app.core.websocket import ws_manager
 
@@ -332,7 +367,11 @@ def websocket_info():
     }
 
 
-@router.get("/project/{project_id}", response_model=list[SimulationStatusOut])
+@router.get(
+    "/project/{project_id}",
+    response_model=list[SimulationStatusOut],
+    summary="List all simulations for a project",
+)
 def list_project_simulations(
     project_id: int,
     db: Session = Depends(get_db),

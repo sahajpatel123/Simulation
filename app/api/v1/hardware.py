@@ -33,6 +33,11 @@ from app.schemas.hardware import (
 )
 
 router = APIRouter(tags=["hardware"])
+
+_JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
+_JSON_202 = {202: {"description": "Accepted", "content": {"application/json": {}}}}
+_PDF_200 = {200: {"description": "PDF file", "content": {"application/pdf": {}}}}
+
 _test_config_builder = TestConfigBuilder()
 _cost_analyser = ManufacturingCostAnalyser()
 _competitive_analyser = HardwareCompetitiveAnalyser()
@@ -89,6 +94,7 @@ def _spec_preview(spec: dict[str, Any]) -> str:
     "/projects/{project_id}/hardware/generate-spec",
     response_model=HardwareGenerateSpecResponse,
     status_code=status.HTTP_201_CREATED,
+    summary="Generate a hardware semantic spec and 3D model JSON (Claude)",
 )
 def generate_hardware_spec(
     project_id: int,
@@ -177,6 +183,7 @@ def generate_hardware_spec(
 @router.post(
     "/projects/{project_id}/hardware/refine-spec",
     response_model=HardwareRefineSpecResponse,
+    summary="Refine an existing hardware spec with a new instruction",
 )
 def refine_hardware_spec(
     project_id: int,
@@ -257,6 +264,7 @@ def refine_hardware_spec(
 @router.get(
     "/projects/{project_id}/hardware",
     response_model=list[HardwareProductListItem],
+    summary="List hardware products for a project",
 )
 def list_hardware_products(
     project_id: int,
@@ -276,6 +284,7 @@ def list_hardware_products(
 @router.get(
     "/projects/{project_id}/hardware/{hw_id}",
     response_model=HardwareProductDetailResponse,
+    summary="Get hardware product and latest spec JSON",
 )
 def get_hardware_product(
     project_id: int,
@@ -333,6 +342,8 @@ def get_hardware_product(
 @router.post(
     "/projects/{project_id}/hardware/{hw_id}/run-tests",
     status_code=status.HTTP_202_ACCEPTED,
+    summary="Queue physics / structural hardware tests (Celery)",
+    responses=_JSON_202,
 )
 def trigger_hardware_tests(
     project_id: int,
@@ -379,7 +390,11 @@ def trigger_hardware_tests(
     }
 
 
-@router.get("/projects/{project_id}/hardware/{hw_id}/test-results")
+@router.get(
+    "/projects/{project_id}/hardware/{hw_id}/test-results",
+    summary="Aggregated hardware test results and top failure points",
+    responses=_JSON_200,
+)
 def get_test_results(
     project_id: int,
     hw_id: int,
@@ -477,7 +492,11 @@ def get_test_results(
     }
 
 
-@router.post("/projects/{project_id}/hardware/{hw_id}/test-configs")
+@router.post(
+    "/projects/{project_id}/hardware/{hw_id}/test-configs",
+    summary="Create test configurations for a hardware product",
+    responses=_JSON_200,
+)
 def create_test_configs(
     project_id: int,
     hw_id: int,
@@ -568,7 +587,11 @@ def create_test_configs(
     return {"saved": len(saved), "configs": saved}
 
 
-@router.get("/projects/{project_id}/hardware/{hw_id}/test-configs")
+@router.get(
+    "/projects/{project_id}/hardware/{hw_id}/test-configs",
+    summary="List saved test configurations",
+    responses=_JSON_200,
+)
 def get_test_configs(
     project_id: int,
     hw_id: int,
@@ -640,7 +663,11 @@ def get_test_configs(
     }
 
 
-@router.post("/projects/{project_id}/hardware/{hw_id}/cost-analysis")
+@router.post(
+    "/projects/{project_id}/hardware/{hw_id}/cost-analysis",
+    summary="Run BOM and manufacturing cost estimate",
+    responses=_JSON_200,
+)
 def run_cost_analysis(
     project_id: int,
     hw_id: int,
@@ -714,7 +741,11 @@ def run_cost_analysis(
     return result
 
 
-@router.get("/projects/{project_id}/hardware/{hw_id}/cost-analysis")
+@router.get(
+    "/projects/{project_id}/hardware/{hw_id}/cost-analysis",
+    summary="Get last manufacturing cost analysis row",
+    responses=_JSON_200,
+)
 def get_cost_analysis(
     project_id: int,
     hw_id: int,
@@ -769,6 +800,8 @@ def get_cost_analysis(
 @router.post(
     "/projects/{project_id}/hardware/{hw_id}/consumer-simulation",
     status_code=status.HTTP_202_ACCEPTED,
+    summary="Queue 52-cluster consumer simulation for hardware (optional UI loop)",
+    responses=_JSON_202,
 )
 def trigger_consumer_simulation(
     project_id: int,
@@ -823,7 +856,11 @@ def trigger_consumer_simulation(
     }
 
 
-@router.get("/projects/{project_id}/hardware/{hw_id}/consumer-simulation")
+@router.get(
+    "/projects/{project_id}/hardware/{hw_id}/consumer-simulation",
+    summary="Get latest consumer simulation status and results",
+    responses=_JSON_200,
+)
 def get_consumer_simulation_results(
     project_id: int,
     hw_id: int,
@@ -880,7 +917,11 @@ def get_consumer_simulation_results(
     }
 
 
-@router.post("/projects/{project_id}/hardware/{hw_id}/competitive-analysis")
+@router.post(
+    "/projects/{project_id}/hardware/{hw_id}/competitive-analysis",
+    summary="Hardware competitive analysis from spec, cost, and sim clusters",
+    responses=_JSON_200,
+)
 def run_competitive_analysis(
     project_id: int,
     hw_id: int,
@@ -965,7 +1006,11 @@ def run_competitive_analysis(
     return report.to_dict()
 
 
-@router.get("/projects/{project_id}/hardware/{hw_id}/competitive-analysis")
+@router.get(
+    "/projects/{project_id}/hardware/{hw_id}/competitive-analysis",
+    summary="Get placeholder / cached competitive analysis hints from last sim",
+    responses=_JSON_200,
+)
 def get_competitive_analysis(
     project_id: int,
     hw_id: int,
@@ -1016,7 +1061,11 @@ def get_competitive_analysis(
     }
 
 
-@router.get("/projects/{project_id}/hardware/{hw_id}/report.pdf")
+@router.get(
+    "/projects/{project_id}/hardware/{hw_id}/report.pdf",
+    summary="Download hardware dossier PDF report",
+    responses=_PDF_200,
+)
 def get_hardware_report_pdf(
     project_id: int,
     hw_id: int,

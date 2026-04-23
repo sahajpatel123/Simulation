@@ -11,6 +11,8 @@ from app.models.user import User
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
+_JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
+
 
 def _require_admin(current_user: User) -> None:
     if getattr(current_user, "is_admin", False):
@@ -22,7 +24,11 @@ def _require_admin(current_user: User) -> None:
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
 
 
-@router.get("/platform")
+@router.get(
+    "/platform",
+    summary="Admin platform analytics aggregates",
+    responses=_JSON_200,
+)
 def platform_analytics(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -105,7 +111,11 @@ def platform_analytics(
     }
 
 
-@router.post("/founder-outcome")
+@router.post(
+    "/founder-outcome",
+    summary="Record founder outcome for a simulation",
+    responses=_JSON_200,
+)
 def submit_founder_outcome(
     body: dict,
     db: Session = Depends(get_db),
@@ -189,7 +199,11 @@ def submit_founder_outcome(
     return {"status": "outcome_recorded"}
 
 
-@router.get("/check-outcome-gate/{project_id}")
+@router.get(
+    "/check-outcome-gate/{project_id}",
+    summary="Check whether outcome gate applies for a project",
+    responses=_JSON_200,
+)
 def check_outcome_gate(
     project_id: int,
     db: Session = Depends(get_db),

@@ -51,6 +51,7 @@ def _store_refresh_token(db: Session, user_id: int, raw_token: str) -> None:
     "/register",
     response_model=Token,
     status_code=status.HTTP_201_CREATED,
+    summary="Register a new user account",
     dependencies=[Depends(rate_limit(limit=5, window_s=60))],
 )
 def register(payload: UserCreate, db: Session = Depends(get_db)):
@@ -88,6 +89,7 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
 @router.post(
     "/login",
     response_model=Token,
+    summary="Sign in with email and password",
     dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 def login(payload: UserLogin, db: Session = Depends(get_db)):
@@ -116,6 +118,7 @@ def login(payload: UserLogin, db: Session = Depends(get_db)):
 @router.post(
     "/refresh",
     response_model=AccessTokenResponse,
+    summary="Refresh access token using a refresh token",
     dependencies=[Depends(rate_limit(limit=20, window_s=60))],
 )
 def refresh_access_token(payload: RefreshRequest, db: Session = Depends(get_db)):
@@ -157,12 +160,20 @@ def refresh_access_token(payload: RefreshRequest, db: Session = Depends(get_db))
     )
 
 
-@router.get("/me", response_model=UserOut)
+@router.get(
+    "/me",
+    response_model=UserOut,
+    summary="Get the authenticated user profile",
+)
 def me(current_user: User = Depends(get_current_user)):
     return UserOut.model_validate(current_user)
 
 
-@router.patch("/me", response_model=UserOut)
+@router.patch(
+    "/me",
+    response_model=UserOut,
+    summary="Update the authenticated user profile",
+)
 def update_me(
     payload: UserUpdate,
     db: Session = Depends(get_db),
@@ -195,7 +206,11 @@ def update_me(
     return UserOut.model_validate(current_user)
 
 
-@router.post("/change-password", response_model=MessageResponse)
+@router.post(
+    "/change-password",
+    response_model=MessageResponse,
+    summary="Change password for the authenticated user",
+)
 def change_password(
     payload: PasswordChange,
     db: Session = Depends(get_db),
@@ -211,7 +226,11 @@ def change_password(
     return MessageResponse(message="Password updated")
 
 
-@router.delete("/me", response_model=MessageResponse)
+@router.delete(
+    "/me",
+    response_model=MessageResponse,
+    summary="Delete the authenticated account (requires password)",
+)
 def delete_me(
     payload: AccountDelete,
     db: Session = Depends(get_db),
@@ -231,6 +250,10 @@ def delete_me(
     return MessageResponse(message="Account deleted")
 
 
-@router.post("/logout", response_model=MessageResponse)
+@router.post(
+    "/logout",
+    response_model=MessageResponse,
+    summary="Log out (client should discard tokens)",
+)
 def logout():
     return MessageResponse(message="Logged out successfully")

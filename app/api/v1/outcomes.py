@@ -21,6 +21,8 @@ from app.schemas.outcome import (
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/projects", tags=["outcomes"])
 
+_JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
+
 PENALTY_RATES = {
     "conversion": 1.8,
     "mrr": 1.2,
@@ -132,7 +134,11 @@ def _predicted_from_results(results: dict) -> float:
     )
 
 
-@router.post("/{project_id}/outcome-feedback")
+@router.post(
+    "/{project_id}/outcome-feedback",
+    summary="Submit founder outcome with calibration pipeline (full flow)",
+    responses=_JSON_200,
+)
 def submit_outcome_feedback(
     project_id: int,
     body: dict,
@@ -329,6 +335,7 @@ def submit_outcome_feedback(
     "/{project_id}/outcomes",
     response_model=OutcomeRecord,
     status_code=status.HTTP_201_CREATED,
+    summary="Record a structured launch outcome against the latest simulation",
 )
 def record_outcome(
     project_id: int,
@@ -416,7 +423,11 @@ def record_outcome(
     return _hydrate_record(outcome)
 
 
-@router.get("/{project_id}/outcomes", response_model=OutcomeHistoryOut)
+@router.get(
+    "/{project_id}/outcomes",
+    response_model=OutcomeHistoryOut,
+    summary="List outcomes and calibration aggregates for a project",
+)
 def get_outcome_history(
     project_id: int,
     db: Session = Depends(get_db),
@@ -461,7 +472,11 @@ def get_outcome_history(
     )
 
 
-@router.get("/{project_id}/outcomes/{outcome_id}", response_model=OutcomeRecord)
+@router.get(
+    "/{project_id}/outcomes/{outcome_id}",
+    response_model=OutcomeRecord,
+    summary="Get a single outcome record",
+)
 def get_single_outcome(
     project_id: int,
     outcome_id: int,
@@ -487,6 +502,8 @@ def get_single_outcome(
 @router.delete(
     "/{project_id}/outcomes/{outcome_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a recorded outcome",
+    responses={204: {"description": "Outcome deleted"}},
 )
 def delete_outcome(
     project_id: int,

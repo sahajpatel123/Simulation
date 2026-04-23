@@ -43,7 +43,10 @@ async def _verify_ownership(simulation_id: int, user_id: int) -> bool:
         db.close()
 
 
-@router.websocket("/ws/simulation/{simulation_id}")
+@router.websocket(
+    "/ws/simulation/{simulation_id}",
+    name="Stream simulation progress (WebSocket)",
+)
 async def websocket_simulation_progress(
     websocket: WebSocket,
     simulation_id: int,

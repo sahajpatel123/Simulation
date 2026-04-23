@@ -19,13 +19,20 @@ from app.reports.generator import ReportGenerator
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/projects", tags=["reports"])
 
+_PDF_200 = {200: {"description": "PDF report", "content": {"application/pdf": {}}}}
+_JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
+
 
 def _safe_filename(title: str) -> str:
     clean = "".join(char if char.isalnum() or char in (" ", "-", "_") else "_" for char in title)
     return clean.strip()[:40] or "project"
 
 
-@router.post("/{project_id}/report")
+@router.post(
+    "/{project_id}/report",
+    summary="Generate a PDF dossier report for a project",
+    responses=_PDF_200,
+)
 def generate_report(
     project_id: int,
     db: Session = Depends(get_db),
@@ -121,7 +128,11 @@ def generate_report(
     )
 
 
-@router.get("/{project_id}/report/preview")
+@router.get(
+    "/{project_id}/report/preview",
+    summary="Report section checklist and recommended action",
+    responses=_JSON_200,
+)
 def report_preview_metadata(
     project_id: int,
     db: Session = Depends(get_db),

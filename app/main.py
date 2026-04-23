@@ -42,9 +42,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="TheCee Simulation Engine",
-    description="Agent-based startup simulation platform",
-    version="0.1.0",
+    title="TheCee API",
+    description="Pre-launch behavioral simulation platform.",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
     lifespan=lifespan,
 )
 
@@ -76,7 +78,12 @@ app.add_middleware(
 app.include_router(api_router)
 
 
-@app.get("/celery/status")
+@app.get(
+    "/celery/status",
+    tags=["system"],
+    summary="Celery worker and broker status",
+    responses={200: {"description": "Broker URL and worker reachability", "content": {"application/json": {}}}},
+)
 async def celery_status():
     try:
         result = _celery_app.control.inspect(timeout=2.0)
@@ -95,15 +102,25 @@ async def celery_status():
         }
 
 
-@app.get("/")
+@app.get(
+    "/",
+    tags=["system"],
+    summary="API service metadata",
+    responses={200: {"description": "Service name and version", "content": {"application/json": {}}}},
+)
 async def root():
     return {
         "status": "running",
-        "product": "TheCee Simulation Engine",
-        "version": "0.1.0",
+        "product": "TheCee API",
+        "version": "1.0.0",
     }
 
 
-@app.get("/health")
+@app.get(
+    "/health",
+    tags=["system"],
+    summary="Liveness probe",
+    responses={200: {"description": "Health status", "content": {"application/json": {}}}},
+)
 async def health():
     return {"status": "healthy"}

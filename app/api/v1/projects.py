@@ -65,6 +65,8 @@ from app.tasks.stress_test_tasks import run_assumption_stress_test
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
+_JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
+
 _comp_software_analyser = CompetitiveSoftwareAnalyser()
 _conductor = Conductor()
 
@@ -91,7 +93,12 @@ def _software_benchmark_key(pt: ProductType) -> str:
     return pt.value if pt in _SOFTWARE_PRODUCT_TYPES else "saas"
 
 
-@router.post("", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=ProjectOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new project (dossier)",
+)
 def create_project(
     payload: ProjectCreate,
     db: Session = Depends(get_db),
@@ -123,7 +130,11 @@ def create_project(
     return ProjectOut.model_validate(project)
 
 
-@router.get("", response_model=ProjectListResponse)
+@router.get(
+    "",
+    response_model=ProjectListResponse,
+    summary="List the current user’s projects",
+)
 def list_projects(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -140,7 +151,11 @@ def list_projects(
     )
 
 
-@router.get("/{project_id}/clusters")
+@router.get(
+    "/{project_id}/clusters",
+    summary="Cluster-level conversion from the latest completed simulation",
+    responses=_JSON_200,
+)
 def get_project_clusters(
     project_id: int,
     db: Session = Depends(get_db),
@@ -184,7 +199,11 @@ def get_project_clusters(
     return {"clusters": clusters_out, "simulation_id": latest_sim.id}
 
 
-@router.get("/{project_id}/domain-findings")
+@router.get(
+    "/{project_id}/domain-findings",
+    summary="Architect domain findings from the latest completed run",
+    responses=_JSON_200,
+)
 def get_domain_findings(
     project_id: int,
     db: Session = Depends(get_db),
@@ -217,7 +236,11 @@ def get_domain_findings(
     }
 
 
-@router.post("/{project_id}/outcome-feedback")
+@router.post(
+    "/{project_id}/outcome-feedback",
+    summary="Record lightweight outcome feedback and calibration (projects router)",
+    responses=_JSON_200,
+)
 def submit_outcome_feedback(
     project_id: int,
     body: dict,
@@ -347,7 +370,11 @@ def submit_outcome_feedback(
     }
 
 
-@router.get("/{project_id}/assumptions", response_model=AssumptionListResponse)
+@router.get(
+    "/{project_id}/assumptions",
+    response_model=AssumptionListResponse,
+    summary="List scored assumptions for a project",
+)
 def get_assumptions(
     project_id: int,
     db: Session = Depends(get_db),
@@ -380,6 +407,7 @@ def get_assumptions(
 @router.post(
     "/{project_id}/extract-assumptions",
     response_model=AssumptionListResponse,
+    summary="Run Claude to extract and score assumptions",
     dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 def extract_assumptions(
@@ -578,7 +606,11 @@ def extract_assumptions(
     )
 
 
-@router.post("/{project_id}/generate-prototype", response_model=PrototypeOut)
+@router.post(
+    "/{project_id}/generate-prototype",
+    response_model=PrototypeOut,
+    summary="Generate a landing-page HTML prototype (Claude)",
+)
 def generate_prototype(
     project_id: int,
     db: Session = Depends(get_db),
@@ -696,7 +728,11 @@ def generate_prototype(
     )
 
 
-@router.get("/{project_id}/prototype", response_model=PrototypeOut)
+@router.get(
+    "/{project_id}/prototype",
+    response_model=PrototypeOut,
+    summary="Get stored HTML prototype and funnel graph",
+)
 def get_prototype(
     project_id: int,
     db: Session = Depends(get_db),
@@ -738,7 +774,11 @@ def get_prototype(
     )
 
 
-@router.post("/{project_id}/premortem", response_model=PremortemOut)
+@router.post(
+    "/{project_id}/premortem",
+    response_model=PremortemOut,
+    summary="Run premortem failure mode analysis (Claude)",
+)
 def run_premortem(
     project_id: int,
     payload: PremortemRequest | None = None,
@@ -918,7 +958,11 @@ def run_premortem(
     )
 
 
-@router.get("/{project_id}/premortem", response_model=PremortemOut)
+@router.get(
+    "/{project_id}/premortem",
+    response_model=PremortemOut,
+    summary="Get stored premortem JSON",
+)
 def get_premortem(
     project_id: int,
     db: Session = Depends(get_db),
@@ -951,7 +995,11 @@ def get_premortem(
     )
 
 
-@router.post("/{project_id}/stress-test", response_model=StressTestStatusOut)
+@router.post(
+    "/{project_id}/stress-test",
+    response_model=StressTestStatusOut,
+    summary="Start or poll assumption stress test job",
+)
 def start_stress_test(
     project_id: int,
     db: Session = Depends(get_db),
@@ -995,7 +1043,11 @@ def start_stress_test(
     )
 
 
-@router.get("/{project_id}/stress-test", response_model=StressTestStatusOut)
+@router.get(
+    "/{project_id}/stress-test",
+    response_model=StressTestStatusOut,
+    summary="Get stress test status and result",
+)
 def get_stress_test(
     project_id: int,
     db: Session = Depends(get_db),
@@ -1049,7 +1101,11 @@ def get_stress_test(
     )
 
 
-@router.delete("/{project_id}/stress-test")
+@router.delete(
+    "/{project_id}/stress-test",
+    summary="Clear stored stress test JSON",
+    responses=_JSON_200,
+)
 def clear_stress_test(
     project_id: int,
     db: Session = Depends(get_db),
@@ -1071,7 +1127,11 @@ def clear_stress_test(
     return {"message": "Stress test result cleared"}
 
 
-@router.post("/{project_id}/interventions", response_model=InterventionOut)
+@router.post(
+    "/{project_id}/interventions",
+    response_model=InterventionOut,
+    summary="Generate ranked interventions (Claude)",
+)
 def generate_interventions(
     project_id: int,
     payload: InterventionRequest | None = None,
@@ -1254,7 +1314,11 @@ def generate_interventions(
     )
 
 
-@router.get("/{project_id}/interventions", response_model=InterventionOut)
+@router.get(
+    "/{project_id}/interventions",
+    response_model=InterventionOut,
+    summary="Get stored interventions JSON",
+)
 def get_interventions(
     project_id: int,
     db: Session = Depends(get_db),
@@ -1288,7 +1352,11 @@ def get_interventions(
     )
 
 
-@router.post("/{project_id}/competitive-analysis", response_model=CompetitiveAnalysisOut)
+@router.post(
+    "/{project_id}/competitive-analysis",
+    response_model=CompetitiveAnalysisOut,
+    summary="Run competitive analysis (Claude)",
+)
 def run_competitive_analysis(
     project_id: int,
     payload: CompetitiveAnalysisRequest | None = None,
@@ -1466,7 +1534,11 @@ def run_competitive_analysis(
     )
 
 
-@router.get("/{project_id}/competitive-analysis", response_model=CompetitiveAnalysisOut)
+@router.get(
+    "/{project_id}/competitive-analysis",
+    response_model=CompetitiveAnalysisOut,
+    summary="Get stored competitive analysis JSON",
+)
 def get_competitive_analysis(
     project_id: int,
     db: Session = Depends(get_db),
@@ -1509,6 +1581,7 @@ def get_competitive_analysis(
     "/{project_id}/environments",
     response_model=EnvironmentOut,
     status_code=200,
+    summary="Create or update market environment parameters for a project",
 )
 def create_or_update_environment(
     project_id: int,
@@ -1574,6 +1647,7 @@ def create_or_update_environment(
 @router.get(
     "/{project_id}/environments",
     response_model=EnvironmentOut,
+    summary="Get the environment row for a project",
 )
 def get_environment(
     project_id: int,
@@ -1600,6 +1674,7 @@ def get_environment(
 @router.get(
     "/{project_id}/environments/presets",
     response_model=dict,
+    summary="List scenario preset parameter bundles",
 )
 def get_scenario_presets(
     project_id: int,
@@ -1621,7 +1696,11 @@ def get_scenario_presets(
     return {name: preset.model_dump() for name, preset in SCENARIO_PRESETS.items()}
 
 
-@router.get("/{project_id}", response_model=ProjectOut)
+@router.get(
+    "/{project_id}",
+    response_model=ProjectOut,
+    summary="Get a single project by id",
+)
 def get_project(
     project_id: int,
     db: Session = Depends(get_db),
@@ -1637,7 +1716,11 @@ def get_project(
     return ProjectOut.model_validate(project)
 
 
-@router.post("/{project_id}/re-simulate")
+@router.post(
+    "/{project_id}/re-simulate",
+    summary="Queue a re-simulation and return delta vs previous run",
+    responses=_JSON_200,
+)
 def re_simulate(
     project_id: int,
     db: Session = Depends(get_db),
@@ -1791,7 +1874,11 @@ def re_simulate(
     }
 
 
-@router.get("/{project_id}/simulation-history")
+@router.get(
+    "/{project_id}/simulation-history",
+    summary="List completed runs with key metrics for charts",
+    responses=_JSON_200,
+)
 def get_simulation_history(
     project_id: int,
     db: Session = Depends(get_db),
@@ -1855,7 +1942,11 @@ def get_simulation_history(
     }
 
 
-@router.post("/{project_id}/competitive-software-analysis")
+@router.post(
+    "/{project_id}/competitive-software-analysis",
+    summary="Run SaaS / software competitive benchmark analysis",
+    responses=_JSON_200,
+)
 def run_competitive_software_analysis(
     project_id: int,
     db: Session = Depends(get_db),
@@ -1940,7 +2031,11 @@ def run_competitive_software_analysis(
     return report.to_dict()
 
 
-@router.get("/{project_id}/competitive-software-analysis")
+@router.get(
+    "/{project_id}/competitive-software-analysis",
+    summary="Get stored software competitive analysis JSON",
+    responses=_JSON_200,
+)
 def get_competitive_software_analysis(
     project_id: int,
     db: Session = Depends(get_db),
