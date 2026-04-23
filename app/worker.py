@@ -15,6 +15,7 @@ celery_app = Celery(
         "app.tasks.ui_simulation_tasks",
         "app.tasks.hardware_tasks",
         "app.tasks.hardware_consumer_simulation",
+        "app.tasks.retention_email_tasks",
     ],
 )
 
@@ -36,6 +37,17 @@ celery_app.conf.update(
     result_expires=86400,
     broker_connection_retry_on_startup=True,
 )
+
+celery_app.conf.beat_schedule = {
+    **getattr(celery_app.conf, "beat_schedule", {}),
+    "week4-retention-emails": {
+        "task": "retention.send_week4_retention_emails",
+        "schedule": crontab(hour=9, minute=0, day_of_week=1),
+    },
+}
+
+# Register beat task modules on import (CLI / assert checks)
+import app.tasks.retention_email_tasks  # noqa: E402, F401
 
 
 @celery_app.on_after_configure.connect

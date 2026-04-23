@@ -246,6 +246,31 @@ def run_migrations():
             conn.rollback()
             print(f"⚠️ founder_outcomes skip: {e}")
 
+        # Step 92: founder_outcomes soft-gate columns + index; user retention + admin
+        for col_sql in [
+            "ALTER TABLE founder_outcomes ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)",
+            "ALTER TABLE founder_outcomes ADD COLUMN IF NOT EXISTS launched BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE founder_outcomes ADD COLUMN IF NOT EXISTS notes TEXT",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS retention_email_sent_at TIMESTAMP WITH TIME ZONE",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE",
+        ]:
+            try:
+                conn.execute(text(col_sql))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+        try:
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_founder_outcomes_sim ON founder_outcomes(simulation_id);"
+                )
+            )
+            conn.commit()
+            print("✅ idx_founder_outcomes_sim ready (Step 92)")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ idx_founder_outcomes_sim skip: {e}")
+
         try:
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS user_claim_accuracy_profiles (

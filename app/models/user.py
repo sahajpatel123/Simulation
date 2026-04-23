@@ -36,6 +36,9 @@ class User(Base, TimestampMixin):
     default_aov: Mapped[float] = mapped_column(Float, default=1000.0, nullable=False)
     keep_past_results: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    retention_email_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     projects: Mapped[list["Project"]] = relationship(
         "Project", back_populates="user", cascade="all, delete-orphan"
     )

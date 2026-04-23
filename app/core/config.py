@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     RAZORPAY_ENTERPRISE_PLAN_ID: str = ""
 
     SENTRY_DSN: str = ""
+    # Comma-separated admin emails; may access GET /api/v1/analytics/platform
+    ADMIN_EMAILS: str = ""
 
 
 settings = Settings()

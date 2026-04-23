@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 
 import { KeyPersonReport } from '@/components/KeyPersonReport'
+import { OutcomeGateModal } from '@/components/OutcomeGateModal'
 import { ReSimulateButton } from '@/components/ReSimulateButton'
 import type { ClusterBreakdownRow, DomainFindingRow, MeBlindspotRow, SimulationResultsPayload } from '@/components/simulation-results/types'
 import api, { apiError } from '@/lib/api'
@@ -179,9 +180,15 @@ function SimulationResultsInner() {
 
   const apiV1 = getApiV1Base()
   const pdfHref = `${apiV1}/simulations/${simulationId}/report.pdf`
+  const hasSubmittedOutcome = searchParams.get('outcome') === 'true'
 
   return (
     <div className="min-h-[calc(100dvh-120px)] bg-slate-950 text-slate-100 font-mono">
+      <OutcomeGateModal
+        projectId={String(projectId)}
+        simulationId={String(simulationId)}
+        isFullReport={hasSubmittedOutcome}
+      />
       <div className="border-b border-slate-800 px-4 py-5 md:px-8">
         <div className="flex flex-wrap items-start justify-between gap-4 mb-1">
           <p className="text-xs text-blue-400 tracking-widest uppercase w-full sm:w-auto">TheCee / Simulation Results</p>
