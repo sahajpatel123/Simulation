@@ -1,0 +1,29 @@
+/* Hide scrollbar but keep scroll functionality */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Safe area for bottom nav on iOS */
+.safe-area-inset-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 8px);
+}
+
+/* Tables: horizontal scroll with sticky first column */
+.table-mobile-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.table-mobile-scroll table {
+  min-width: 500px;
+}
+.table-mobile-scroll td:first-child,
+.table-mobile-scroll th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: inherit;
+}

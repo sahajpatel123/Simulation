@@ -2,7 +2,7 @@
 
 import type { MouseEvent } from 'react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -16,6 +16,8 @@ import {
 import { KeyPersonReport } from '@/components/KeyPersonReport'
 import type { DomainFindingRow } from '@/components/simulation-results/types'
 import { getApiV1Base } from '@/lib/api-v1-base'
+import { useIsMobile } from '@/hooks/useIsMobile'
+import { useProject } from '@/hooks/useProjects'
 
 function authHeaders(): HeadersInit {
   const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
@@ -354,10 +356,23 @@ const CATEGORIES = [
 
 export default function HardwareBuilderPage() {
   const params = useParams()
+  const router = useRouter()
   const projectId = String(params.id ?? '')
+  const projectIdNum = Number(projectId)
+  const { data: project } = useProject(
+    projectId && Number.isFinite(projectIdNum) ? projectIdNum : null
+  )
   const queryClient = useQueryClient()
 
+  useEffect(() => {
+    if (!project) return
+    if (project.dossier_axis === 'software') {
+      router.replace(`/project/${projectId}/prototype`)
+    }
+  }, [project, router, projectId])
+
   const [activeTab, setActiveTab] = useState<Tab>('spec')
+  const isMobile = useIsMobile()
   const [selectedHwId, setSelectedHwId] = useState<number | null>(null)
   const [generating, setGenerating] = useState(false)
   const [runningTests, setRunningTests] = useState(false)
@@ -733,26 +748,28 @@ export default function HardwareBuilderPage() {
         </div>
       </div>
 
-      {/* ── TABS — same rubric as dossier: red = active section ── */}
-      <div className="relative z-20 flex gap-1 border-b border-[var(--border-color)] bg-[var(--paper-dark)]/40 px-8 backdrop-blur-sm">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setActiveTab(t.key)}
-            className={`px-4 py-3.5 text-xs uppercase tracking-[0.2em] transition-all ${
-              activeTab === t.key
-                ? 'border-b-2 border-[var(--red)] text-[var(--ink)]'
-                : 'text-[var(--ink-tertiary)] hover:text-[var(--ink-secondary)]'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {/* ── TABS — desktop: top bar ── */}
+      {!isMobile && (
+        <div className="relative z-20 flex gap-1 border-b border-[var(--border-color)] bg-[var(--paper-dark)]/40 px-8 backdrop-blur-sm">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setActiveTab(t.key)}
+              className={`px-4 py-3.5 text-xs uppercase tracking-[0.2em] transition-all ${
+                activeTab === t.key
+                  ? 'border-b-2 border-[var(--red)] text-[var(--ink)]'
+                  : 'text-[var(--ink-tertiary)] hover:text-[var(--ink-secondary)]'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── CONTENT ── */}
-      <div className="relative">
+      <div className={`relative ${isMobile ? 'pb-24' : ''}`}>
         <AnimatePresence mode="wait">
           {activeTab === 'spec' && (
             <motion.div
@@ -1032,8 +1049,8 @@ export default function HardwareBuilderPage() {
                   {costView.bom.length > 0 ? (
                     <div>
                       <p className="mb-3 text-xs tracking-widest text-[var(--ink-tertiary)] uppercase">Bill of Materials</p>
-                      <div className="overflow-hidden rounded-xl border border-[var(--border-color)]">
-                        <table className="w-full text-sm">
+                      <div className="table-mobile-scroll overflow-hidden rounded-xl border border-[var(--border-color)]">
+                        <table className="w-full min-w-[500px] text-sm">
                           <thead>
                             <tr className="border-b border-[var(--border-color)] bg-white/90">
                               {(['Component', 'Material', 'Volume (cm³)', 'Unit Cost'] as const).map((h) => (
@@ -1298,6 +1315,23 @@ export default function HardwareBuilderPage() {
           )}
         </AnimatePresence>
       </div>
+
+      {isMobile && (
+        <nav className="safe-area-inset-bottom fixed right-0 bottom-0 left-0 z-50 flex items-center justify-around border-t border-slate-800 bg-slate-950/95 px-2 py-2 backdrop-blur-sm">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setActiveTab(t.key)}
+              className={`flex flex-1 flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 transition-all ${
+                activeTab === t.key ? 'bg-blue-500/10 text-blue-400' : 'text-slate-600'
+              }`}
+            >
+              <span className="text-xs tracking-wide">{t.label}</span>
+            </button>
+          ))}
+        </nav>
+      )}
     </div>
   )
 }

@@ -3,6 +3,8 @@
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 
+import { useIsMobile } from "@/hooks/useIsMobile"
+
 export interface FailurePoint {
   component_id: string
   reason: string
@@ -99,6 +101,7 @@ export function HardwareFailureMap({
   testResults,
   className = "",
 }: HardwareFailureMapProps) {
+  const isMobile = useIsMobile()
   const [hoveredComponent, setHoveredComponent] = useState<string | null>(null)
   const [selectedTest, setSelectedTest] = useState<string | null>(null)
 
@@ -131,6 +134,47 @@ export function HardwareFailureMap({
 
   const shape = spec.render_hints?.primary_shape ?? "box"
   const productColor = spec.render_hints?.color_hex ?? "#1e293b"
+
+  const componentListItems = spec.components.map((comp) => {
+    const failure = failureIndex[comp.id]
+    const colors = failure
+      ? SEVERITY_COLORS[failure.severity as keyof typeof SEVERITY_COLORS]
+      : null
+    const isHov = hoveredComponent === comp.id
+    const failBorder =
+      failure?.severity === "CRITICAL"
+        ? "border-red-500/30 bg-red-500/5"
+        : failure
+          ? "border-amber-500/30 bg-amber-500/5"
+          : ""
+
+    return (
+      <div
+        key={comp.id}
+        className={`rounded-lg px-3 py-2.5 cursor-pointer border transition-all ${
+          isHov
+            ? "border-blue-500/50 bg-blue-500/5"
+            : failure
+              ? failBorder
+              : "border-slate-800 hover:border-slate-700"
+        }`}
+        onMouseEnter={() => setHoveredComponent(comp.id)}
+        onMouseLeave={() => setHoveredComponent(null)}
+      >
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-slate-300 truncate max-w-[130px]">{comp.name}</span>
+          {failure ? (
+            <span className={`text-xs font-mono font-bold ${colors!.text}`}>
+              {failure.severity.slice(0, 4)}
+            </span>
+          ) : (
+            <span className="text-xs text-green-500">✓</span>
+          )}
+        </div>
+        <p className="text-xs text-slate-600 mt-0.5">{comp.material}</p>
+      </div>
+    )
+  })
 
   return (
     <div className={`bg-slate-950 rounded-2xl overflow-hidden ${className}`}>
@@ -192,8 +236,8 @@ export function HardwareFailureMap({
         </div>
       )}
 
-      <div className="flex">
-        <div className="flex-1 relative p-6">
+      <div className="flex flex-col md:flex-row">
+        <div className="relative flex-1 p-6">
           <div
             className="absolute inset-0 pointer-events-none"
             style={{
@@ -339,51 +383,20 @@ export function HardwareFailureMap({
           </svg>
         </div>
 
-        <div className="w-64 border-l border-slate-800 p-4 space-y-2 overflow-y-auto max-h-96">
-          <p className="text-xs font-mono tracking-widest uppercase text-slate-600 mb-3">Components</p>
-
-          {spec.components.map((comp) => {
-            const failure = failureIndex[comp.id]
-            const colors = failure
-              ? SEVERITY_COLORS[failure.severity as keyof typeof SEVERITY_COLORS]
-              : null
-            const isHov = hoveredComponent === comp.id
-            const failBorder =
-              failure?.severity === "CRITICAL"
-                ? "border-red-500/30 bg-red-500/5"
-                : failure
-                  ? "border-amber-500/30 bg-amber-500/5"
-                  : ""
-
-            return (
-              <div
-                key={comp.id}
-                className={`rounded-lg px-3 py-2.5 cursor-pointer border transition-all ${
-                  isHov
-                    ? "border-blue-500/50 bg-blue-500/5"
-                    : failure
-                      ? failBorder
-                      : "border-slate-800 hover:border-slate-700"
-                }`}
-                onMouseEnter={() => setHoveredComponent(comp.id)}
-                onMouseLeave={() => setHoveredComponent(null)}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-300 truncate max-w-[130px]">{comp.name}</span>
-                  {failure ? (
-                    <span className={`text-xs font-mono font-bold ${colors!.text}`}>
-                      {failure.severity.slice(0, 4)}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-green-500">✓</span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-600 mt-0.5">{comp.material}</p>
-              </div>
-            )
-          })}
+        <div
+          className={`hidden w-64 flex-shrink-0 space-y-2 overflow-y-auto border-l border-slate-800 p-4 max-h-96 md:block`}
+        >
+          <p className="mb-3 text-xs font-mono tracking-widest text-slate-600 uppercase">Components</p>
+          {componentListItems}
         </div>
       </div>
+
+      {isMobile && (
+        <div className="space-y-2 border-t border-slate-800 p-4 md:hidden">
+          <p className="mb-1 text-xs font-mono tracking-widest text-slate-600 uppercase">Components</p>
+          {componentListItems}
+        </div>
+      )}
 
       <AnimatePresence>
         {hoveredComponent && hoveredFailure && (

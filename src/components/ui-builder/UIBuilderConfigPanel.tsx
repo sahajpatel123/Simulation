@@ -42,7 +42,7 @@ export default function UIBuilderConfigPanel(props: Props) {
   } = props
 
   return (
-    <div className="flex w-96 flex-col border-r border-slate-800/90 bg-[#060a12]">
+    <div className="flex w-full max-w-none flex-col border-slate-800/90 bg-[#060a12] md:w-96 md:max-w-96 md:border-r">
       <div className="flex-1 space-y-5 overflow-y-auto p-6">
         <div>
           <label className="mb-2 block text-[10px] font-medium uppercase tracking-[0.28em] text-slate-500">

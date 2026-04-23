@@ -139,11 +139,14 @@ export function KeyPersonReport({ findings, clusterBreakdown, primaryFailure }: 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.28em] text-blue-400/90">Key person report</p>
-          <h2 className="text-2xl font-normal leading-snug tracking-tight text-white sm:text-[1.65rem]" style={serif}>
+          <h2
+            className="text-xl font-normal leading-snug tracking-tight text-white md:text-[1.65rem]"
+            style={serif}
+          >
             Meet the people who will decide your product&rsquo;s fate.
           </h2>
           {primaryFailure && primaryFailure !== '—' && primaryFailure !== 'unknown' && (
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
+            <p className="mt-2 max-w-2xl text-base leading-relaxed text-slate-500 md:text-lg">
               Strongest signal in this run points to{' '}
               <span className="text-slate-300">{primaryFailure.replace(/Architect/g, '')}</span>
               {' — '}
@@ -179,7 +182,7 @@ export function KeyPersonReport({ findings, clusterBreakdown, primaryFailure }: 
                 i === 0 ? 'border-blue-500/35 bg-slate-900/80' : 'border-slate-800/90 bg-slate-950/60'
               }`}
             >
-              <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start">
                 <div
                   className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-2xl ${
                     i === 0 ? 'bg-blue-500/15' : 'bg-slate-800/80'
@@ -191,7 +194,7 @@ export function KeyPersonReport({ findings, clusterBreakdown, primaryFailure }: 
 
                 <div className="min-w-0 flex-1">
                   <div className="mb-1 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-                    <h3 className="text-lg font-normal text-white sm:text-xl" style={serif}>
+                    <h3 className="text-lg font-normal text-white md:text-xl" style={serif}>
                       {name}
                     </h3>
                     {reach ? (
@@ -205,7 +208,7 @@ export function KeyPersonReport({ findings, clusterBreakdown, primaryFailure }: 
 
                   {desc ? <p className="mb-5 text-sm leading-relaxed text-slate-400">{desc}</p> : null}
 
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="rounded-xl border border-red-500/20 bg-red-500/[0.06] p-4">
                       <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.22em] text-red-400/95">
                         What happened

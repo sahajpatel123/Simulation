@@ -1,8 +1,8 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
 
@@ -15,6 +15,8 @@ import type {
   UIGenerateRequest,
 } from '@/components/ui-builder/types'
 import { getApiV1Base } from '@/lib/api-v1-base'
+import { useIsMobile } from '@/hooks/useIsMobile'
+import { useProject } from '@/hooks/useProjects'
 
 function authHeaders(): HeadersInit {
   const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
@@ -26,9 +28,18 @@ function authHeaders(): HeadersInit {
 
 export default function UIBuilderPage() {
   const params = useParams()
+  const router = useRouter()
   const projectIdRaw = Array.isArray(params?.id) ? params?.id[0] : params?.id
   const projectId = Number(projectIdRaw)
+  const { data: project } = useProject(Number.isFinite(projectId) ? projectId : null)
   const qc = useQueryClient()
+
+  useEffect(() => {
+    if (!project) return
+    if (project.dossier_axis === 'hardware') {
+      router.replace(`/project/${projectId}/hardware`)
+    }
+  }, [project, router, projectId])
 
   const [prompt, setPrompt] = useState('')
   const [productType, setProductType] = useState('saas')
@@ -37,7 +48,9 @@ export default function UIBuilderPage() {
   const [generatedUI, setGeneratedUI] = useState<GeneratedUI | null>(null)
   const [activeTab, setActiveTab] = useState<'builder' | 'history'>('builder')
   const [simStatus, setSimStatus] = useState<string | null>(null)
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const isMobile = useIsMobile()
 
   const generateMutation = useMutation({
     mutationFn: async (body: UIGenerateRequest) => {
@@ -107,6 +120,26 @@ export default function UIBuilderPage() {
     )
   }
 
+  const configPanel = (
+    <UIBuilderConfigPanel
+      productType={productType}
+      setProductType={setProductType}
+      prompt={prompt}
+      setPrompt={setPrompt}
+      pricePoint={pricePoint}
+      setPricePoint={setPricePoint}
+      targetDemo={targetDemo}
+      setTargetDemo={setTargetDemo}
+      onGenerate={handleGenerate}
+      generatePending={generateMutation.isPending}
+      generateError={generateMutation.isError}
+      generatedUI={generatedUI}
+      onSimulate={() => generatedUI && simulateMutation.mutate(generatedUI.id)}
+      simulatePending={simulateMutation.isPending}
+      simStatus={simStatus}
+    />
+  )
+
   return (
     <div
       className="min-h-screen bg-[#04070d] font-mono text-slate-100"
@@ -115,7 +148,7 @@ export default function UIBuilderPage() {
           'radial-gradient(ellipse 120% 80% at 50% -20%, rgba(37,99,235,0.12), transparent 50%)',
       }}
     >
-      <div className="flex items-center justify-between border-b border-slate-800/90 px-8 py-5">
+      <div className="flex items-center justify-between border-b border-slate-800/90 px-4 py-5 md:px-8">
         <div>
           <p className="mb-1 text-[10px] uppercase tracking-[0.35em] text-blue-400/90">TheCee / UI Builder</p>
           <h1 className="text-xl font-semibold tracking-tight text-white">Generate &amp; simulate UI</h1>
@@ -137,26 +170,53 @@ export default function UIBuilderPage() {
         </div>
       </div>
 
-      <div className="flex h-[calc(100dvh-88px)] min-h-[480px]">
-        <UIBuilderConfigPanel
-          productType={productType}
-          setProductType={setProductType}
-          prompt={prompt}
-          setPrompt={setPrompt}
-          pricePoint={pricePoint}
-          setPricePoint={setPricePoint}
-          targetDemo={targetDemo}
-          setTargetDemo={setTargetDemo}
-          onGenerate={handleGenerate}
-          generatePending={generateMutation.isPending}
-          generateError={generateMutation.isError}
-          generatedUI={generatedUI}
-          onSimulate={() => generatedUI && simulateMutation.mutate(generatedUI.id)}
-          simulatePending={simulateMutation.isPending}
-          simStatus={simStatus}
-        />
+      <div className="relative flex h-[calc(100dvh-88px)] min-h-[480px]">
+        {!isMobile && (
+          <div className="flex w-96 flex-shrink-0 flex-col border-r border-slate-800">
+            {configPanel}
+          </div>
+        )}
 
-        <div className="flex flex-1 flex-col">
+        {isMobile && (
+          <>
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              className="fixed bottom-20 right-4 z-40 flex items-center gap-2 rounded-full bg-blue-600 px-4 py-3 text-xs font-bold tracking-widest text-white uppercase shadow-lg"
+            >
+              ⚙ Configure
+            </button>
+            <AnimatePresence>
+              {drawerOpen && (
+                <>
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 z-40 bg-black/60"
+                    onClick={() => setDrawerOpen(false)}
+                  />
+                  <motion.div
+                    initial={{ y: '100%' }}
+                    animate={{ y: 0 }}
+                    exit={{ y: '100%' }}
+                    transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+                    className="fixed right-0 bottom-0 left-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-slate-800 bg-slate-950"
+                  >
+                    <div className="flex justify-center pt-3 pb-2">
+                      <div className="h-1 w-10 rounded-full bg-slate-700" />
+                    </div>
+                    <div className="px-5 pb-8">
+                      {configPanel}
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </>
+        )}
+
+        <div className="flex min-w-0 flex-1 flex-col">
           <AnimatePresence mode="wait">
             {activeTab === 'builder' && (
               <motion.div

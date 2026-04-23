@@ -182,7 +182,7 @@ function SimulationResultsInner() {
 
   return (
     <div className="min-h-[calc(100dvh-120px)] bg-slate-950 text-slate-100 font-mono">
-      <div className="border-b border-slate-800 px-8 py-5">
+      <div className="border-b border-slate-800 px-4 py-5 md:px-8">
         <div className="flex flex-wrap items-start justify-between gap-4 mb-1">
           <p className="text-xs text-blue-400 tracking-widest uppercase w-full sm:w-auto">TheCee / Simulation Results</p>
           <Link
@@ -219,15 +219,17 @@ function SimulationResultsInner() {
           </div>
         </div>
 
-        <div className="flex gap-1 mt-4 flex-wrap">
+        <div
+          className="mt-4 flex gap-1 overflow-x-auto px-0 scrollbar-none [-webkit-overflow-scrolling:touch]"
+        >
           {TABS.map((t) => (
             <button
               key={t.key}
               type="button"
               onClick={() => setActiveTab(t.key)}
-              className={`px-4 py-1.5 text-xs rounded-t tracking-wide transition-all ${
+              className={`flex-shrink-0 rounded-t px-3 py-1.5 text-xs tracking-wide whitespace-nowrap transition-all md:px-4 ${
                 activeTab === t.key
-                  ? 'bg-slate-800 text-blue-400 border-b-2 border-blue-500'
+                  ? 'border-b-2 border-blue-500 bg-slate-800 text-blue-400'
                   : 'text-slate-500 hover:text-slate-300'
               }`}
             >
@@ -237,7 +239,7 @@ function SimulationResultsInner() {
         </div>
       </div>
 
-      <div className="p-8">
+      <div className="p-4 md:p-8">
         <AnimatePresence mode="wait">
           {activeTab === 'personas' && (
             <motion.div
@@ -306,7 +308,7 @@ function SimulationResultsInner() {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 {[
                   {
                     label: 'Primary conflict',
@@ -470,21 +472,22 @@ function SimulationResultsInner() {
                 <span className="text-xs text-slate-600 ml-auto">{filteredClusters.length} clusters</span>
               </div>
 
-              <div className="grid grid-cols-1 gap-2">
+              <div className="overflow-x-auto [-webkit-overflow-scrolling:touch]">
+                <div className="min-w-[600px] space-y-2">
                 {filteredClusters.length === 0 ? (
                   <p className="text-slate-600 text-sm">No clusters match this filter.</p>
                 ) : (
                   filteredClusters.map((c, i) => (
                     <div
                       key={c.cluster_id}
-                      className="bg-slate-900 border border-slate-800 rounded-lg px-5 py-4 hover:border-slate-700 transition-all grid grid-cols-12 gap-4 items-center"
+                      className="grid min-w-[600px] grid-cols-12 items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-4 py-4 transition-all hover:border-slate-700"
                     >
                       <span className="col-span-1 text-xs text-slate-600">{i + 1}</span>
-                      <div className="col-span-4 min-w-0">
-                        <p className="text-sm text-slate-200 truncate">{c.cluster_name}</p>
-                        <p className="text-xs text-slate-600 mt-0.5 truncate">{c.cluster_id}</p>
+                      <div className="sticky left-0 col-span-4 min-w-0 bg-slate-900 pr-2">
+                        <p className="truncate text-sm text-slate-200">{c.cluster_name}</p>
+                        <p className="mt-0.5 truncate text-xs text-slate-600">{c.cluster_id}</p>
                       </div>
-                      <div className="col-span-3 flex items-center gap-2 min-w-0">
+                      <div className="col-span-3 flex min-w-0 items-center gap-2">
                         <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all ${
@@ -515,6 +518,7 @@ function SimulationResultsInner() {
                     </div>
                   ))
                 )}
+                </div>
               </div>
             </motion.div>
           )}
@@ -525,7 +529,7 @@ function SimulationResultsInner() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              className="space-y-3"
+              className="table-mobile-scroll space-y-3"
             >
               {findings.length === 0 ? (
                 <p className="text-slate-600 text-sm">No findings available.</p>
