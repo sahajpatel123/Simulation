@@ -492,7 +492,32 @@ def run_hardware_consumer_simulation(
         }
 
     except Exception as e:
-        db.rollback()
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        try:
+            err_msg = str(e)[:500]
+            db.execute(
+                text("""
+                    INSERT INTO hardware_consumer_simulation_runs
+                    (hardware_product_id, project_id, status, agent_count, product_type,
+                     results_json, conductor_result_json, generated_ui_id, completed_at, created_at)
+                    VALUES (:hw_id, :pid, 'FAILED', 0, 'unknown',
+                            CAST(:results AS jsonb), NULL, :ui_id, NOW(), NOW())
+                """),
+                {
+                    "hw_id": hardware_product_id,
+                    "pid": project_id,
+                    "results": json.dumps(
+                        {"error_message": err_msg, "status": "FAILED"}
+                    ),
+                    "ui_id": generated_ui_id,
+                },
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
         raise self.retry(exc=e, countdown=30)
     finally:
         db.close()

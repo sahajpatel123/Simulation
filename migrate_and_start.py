@@ -92,6 +92,19 @@ def run_migrations():
             except Exception:
                 conn.rollback()
 
+        try:
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE simulations
+                    ADD COLUMN IF NOT EXISTS error_message TEXT;
+                    """
+                )
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
         # Ensure simulations.results_json matches current SQLAlchemy JSONB model.
         try:
             conn.execute(
@@ -586,6 +599,14 @@ def run_migrations():
                     """
                     ALTER TABLE projects
                     ADD COLUMN IF NOT EXISTS existing_product_description TEXT;
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE projects
+                    ADD COLUMN IF NOT EXISTS dossier_axis VARCHAR(20);
                     """
                 )
             )

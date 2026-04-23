@@ -36,5 +36,7 @@ class Settings(BaseSettings):
     RAZORPAY_PRO_PLAN_ID: str = ""
     RAZORPAY_ENTERPRISE_PLAN_ID: str = ""
 
+    SENTRY_DSN: str = ""
+
 
 settings = Settings()

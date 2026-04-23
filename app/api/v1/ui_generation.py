@@ -1,12 +1,11 @@
 import re
 
-from anthropic import Anthropic
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
+from app.core.claude_client import claude_call_with_fallback
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.prompts import UI_GENERATION_PROMPT, validate_generated_html
@@ -17,7 +16,6 @@ from app.models.user import User
 from app.schemas.ui_generation import GeneratedUIResponse, UIRefineRequest, UIGenerateRequest
 
 router = APIRouter(tags=["ui-generation"])
-client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 
 ALLOWED_CDNS = ["tailwindcss", "alpinejs", "cdn.tailwindcss", "jsdelivr.net/npm/alpinejs"]
 
@@ -76,15 +74,19 @@ async def generate_ui(
         price_point=body.price_point or "competitive",
     )
 
-    try:
-        resp = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=6000,
-            messages=[{"role": "user", "content": prompt}],
+    out = claude_call_with_fallback(
+        [{"role": "user", "content": prompt}],
+        model="claude-sonnet-4-6",
+        max_tokens=6000,
+        fallback_key="ui_generation",
+        timeout=120,
+    )
+    if out.get("error"):
+        raise HTTPException(
+            status_code=503,
+            detail=str(out.get("error", "Generation timed out. Please retry.")),
         )
-        raw = resp.content[0].text.strip()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Claude call failed: {e}") from e
+    raw = (out.get("content") or "").strip()
 
     html = _strip_unsafe_scripts(_extract_html(raw))
     ok, err = validate_generated_html(html)
@@ -148,15 +150,19 @@ Return ONLY the complete updated HTML. Keep all data-thecee-id attributes.
 Maintain Tailwind CSS and Alpine.js CDN links.
 No markdown, no explanation."""
 
-    try:
-        resp = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=6000,
-            messages=[{"role": "user", "content": refine_prompt}],
+    out = claude_call_with_fallback(
+        [{"role": "user", "content": refine_prompt}],
+        model="claude-sonnet-4-6",
+        max_tokens=6000,
+        fallback_key="ui_generation",
+        timeout=120,
+    )
+    if out.get("error"):
+        raise HTTPException(
+            status_code=503,
+            detail=str(out.get("error", "Generation timed out. Please retry.")),
         )
-        raw = resp.content[0].text.strip()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Claude call failed: {e}") from e
+    raw = (out.get("content") or "").strip()
 
     html = _strip_unsafe_scripts(_extract_html(raw))
     ok, err = validate_generated_html(html)

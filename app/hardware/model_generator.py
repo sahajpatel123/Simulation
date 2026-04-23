@@ -4,9 +4,7 @@ import json
 import re
 from typing import Any
 
-from anthropic import Anthropic
-
-from app.core.config import settings
+from app.core.claude_client import claude_call_with_fallback
 from app.core.prompts import (
     HARDWARE_SPEC_PROMPT,
     HARDWARE_SPEC_REFINE_HEAD,
@@ -34,17 +32,20 @@ class HardwareModelGenerator:
     viewer, physics, failure overlay, and cost steps downstream.
     """
 
-    def __init__(self, client: Anthropic | None = None) -> None:
-        self._client = client or Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-
     def _complete_spec_from_prompt(self, prompt: str) -> dict[str, Any]:
         try:
-            resp = self._client.messages.create(
+            out = claude_call_with_fallback(
+                [{"role": "user", "content": prompt}],
                 model="claude-sonnet-4-6",
                 max_tokens=4096,
-                messages=[{"role": "user", "content": prompt}],
+                fallback_key="hardware_spec",
+                timeout=120,
             )
-            raw = resp.content[0].text
+            if out.get("error"):
+                raise RuntimeError(str(out.get("error", "Claude unavailable")))
+            raw = out.get("content") or ""
+        except RuntimeError:
+            raise
         except Exception as e:
             raise RuntimeError(f"Claude call failed: {e}") from e
         try:

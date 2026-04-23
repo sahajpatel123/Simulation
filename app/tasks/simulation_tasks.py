@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import logging
 import time
-import traceback
 from datetime import datetime, timezone
 
 from celery import Task
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
@@ -55,12 +55,21 @@ def _utcnow() -> datetime:
 
 
 def _mark_failed(db: Session, sim: Simulation, exc: Exception) -> None:
-    sync_broadcast(sim.id, "FAILED", "Error", 0, extra={"error": str(exc)[:200]})
+    msg = str(exc)[:500]
+    sync_broadcast(sim.id, "FAILED", "Error", 0, extra={"error": msg})
     try:
-        tb = traceback.format_exc()
-        msg = f"{type(exc).__name__}: {str(exc)}\n{tb}"
+        db.execute(
+            text(
+                """
+                UPDATE simulations
+                SET status = 'FAILED', error_message = :msg, updated_at = :u
+                WHERE id = :sid
+                """
+            ),
+            {"msg": msg, "u": _utcnow(), "sid": sim.id},
+        )
         sim.status = "FAILED"
-        sim.error_message = msg[:2000]
+        sim.error_message = msg
         sim.updated_at = _utcnow()
         db.commit()
     except Exception as inner:

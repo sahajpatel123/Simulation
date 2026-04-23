@@ -2,12 +2,11 @@ import json
 import re
 from datetime import datetime, timezone
 
-from anthropic import Anthropic
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
+from app.core.claude_client import claude_call_with_fallback
 from app.core.intake_processor import adjust_assumption_confidence, build_enriched_description
 from app.core.deps import get_current_user, get_db
 from app.core.rate_limiter import rate_limit
@@ -66,8 +65,6 @@ from app.tasks.stress_test_tasks import run_assumption_stress_test
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
-claude = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-
 _comp_software_analyser = CompetitiveSoftwareAnalyser()
 _conductor = Conductor()
 
@@ -118,6 +115,7 @@ def create_project(
         landing_page_url=payload.landing_page_url,
         mvp_feature_list=mvp_list if mvp_list else None,
         existing_product_description=payload.existing_product_description,
+        dossier_axis=payload.dossier_axis,
     )
     db.add(project)
     db.commit()
@@ -412,15 +410,8 @@ def extract_assumptions(
         )
 
     try:
-        response = claude.messages.create(
-            model="claude-sonnet-4-5",
-            max_tokens=2000,
-            system=(
-                "You are a world-class startup mentor specializing in surfacing "
-                "dangerous hidden assumptions that kill products. "
-                "You ALWAYS return valid JSON only, no markdown, no explanation."
-            ),
-            messages=[
+        claude_out = claude_call_with_fallback(
+            [
                 {
                     "role": "user",
                     "content": ASSUMPTION_EXTRACTION_PROMPT.format(
@@ -428,9 +419,22 @@ def extract_assumptions(
                     ),
                 }
             ],
+            system=(
+                "You are a world-class startup mentor specializing in surfacing "
+                "dangerous hidden assumptions that kill products. "
+                "You ALWAYS return valid JSON only, no markdown, no explanation."
+            ),
+            model="claude-sonnet-4-5",
+            max_tokens=2000,
+            fallback_key="assumption_extraction",
+            timeout=90,
         )
-
-        raw = response.content[0].text.strip()
+        if claude_out.get("error"):
+            raise HTTPException(
+                status_code=503,
+                detail=str(claude_out.get("error", "Claude unavailable")),
+            )
+        raw = (claude_out.get("content") or "").strip()
 
         if raw.startswith("```"):
             raw = raw.split("```")[1]
@@ -595,15 +599,8 @@ def generate_prototype(
         )
 
     try:
-        response = claude.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=8000,
-            system=(
-                "You are a world-class product designer and conversion rate expert. "
-                "You ALWAYS return valid JSON only. No markdown. No backticks. No explanation. "
-                "Your HTML prototypes look like real funded startup products."
-            ),
-            messages=[
+        claude_out = claude_call_with_fallback(
+            [
                 {
                     "role": "user",
                     "content": PROTOTYPE_GENERATION_PROMPT.format(
@@ -611,9 +608,22 @@ def generate_prototype(
                     ),
                 }
             ],
+            system=(
+                "You are a world-class product designer and conversion rate expert. "
+                "You ALWAYS return valid JSON only. No markdown. No backticks. No explanation. "
+                "Your HTML prototypes look like real funded startup products."
+            ),
+            model="claude-haiku-4-5-20251001",
+            max_tokens=8000,
+            fallback_key="prototype_generation",
+            timeout=120,
         )
-
-        raw = response.content[0].text.strip()
+        if claude_out.get("error"):
+            raise HTTPException(
+                status_code=503,
+                detail=str(claude_out.get("error", "Claude unavailable")),
+            )
+        raw = (claude_out.get("content") or "").strip()
 
         if raw.startswith("```"):
             lines = raw.split("\n")
@@ -797,14 +807,8 @@ def run_premortem(
     )
 
     try:
-        response = claude.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=2800,
-            system=(
-                "You are an elite startup failure analyst specialising in pre-mortem analysis. "
-                "You ALWAYS return valid JSON only. No markdown. No backticks. No explanation."
-            ),
-            messages=[
+        claude_out = claude_call_with_fallback(
+            [
                 {
                     "role": "user",
                     "content": PREMORTEM_PROMPT.format(
@@ -815,9 +819,21 @@ def run_premortem(
                     ),
                 }
             ],
+            system=(
+                "You are an elite startup failure analyst specialising in pre-mortem analysis. "
+                "You ALWAYS return valid JSON only. No markdown. No backticks. No explanation."
+            ),
+            model="claude-haiku-4-5-20251001",
+            max_tokens=2800,
+            fallback_key="premortem",
+            timeout=90,
         )
-
-        raw = response.content[0].text.strip()
+        if claude_out.get("error"):
+            raise HTTPException(
+                status_code=503,
+                detail=str(claude_out.get("error", "Claude unavailable")),
+            )
+        raw = (claude_out.get("content") or "").strip()
 
         if raw.startswith("```"):
             raw = "\n".join(
@@ -1128,15 +1144,8 @@ def generate_interventions(
     )
 
     try:
-        response = claude.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=3200,
-            system=(
-                "You are an elite startup growth advisor. "
-                "You ALWAYS return valid JSON only. No markdown. No backticks. No explanation. "
-                "Every intervention you suggest is specific, executable, and tied to evidence."
-            ),
-            messages=[
+        claude_out = claude_call_with_fallback(
+            [
                 {
                     "role": "user",
                     "content": INTERVENTION_PROMPT.format(
@@ -1147,9 +1156,22 @@ def generate_interventions(
                     ),
                 }
             ],
+            system=(
+                "You are an elite startup growth advisor. "
+                "You ALWAYS return valid JSON only. No markdown. No backticks. No explanation. "
+                "Every intervention you suggest is specific, executable, and tied to evidence."
+            ),
+            model="claude-haiku-4-5-20251001",
+            max_tokens=3200,
+            fallback_key="interventions",
+            timeout=90,
         )
-
-        raw = response.content[0].text.strip()
+        if claude_out.get("error"):
+            raise HTTPException(
+                status_code=503,
+                detail=str(claude_out.get("error", "Claude unavailable")),
+            )
+        raw = (claude_out.get("content") or "").strip()
         if raw.startswith("```"):
             raw = "\n".join(
                 line for line in raw.split("\n") if not line.strip().startswith("```")
@@ -1308,15 +1330,8 @@ def run_competitive_analysis(
     )
 
     try:
-        response = claude.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=3200,
-            system=(
-                "You are a top-tier competitive strategy consultant with deep knowledge "
-                "of Indian and global markets. "
-                "You ALWAYS return valid JSON only. No markdown. No backticks. No explanation."
-            ),
-            messages=[
+        claude_out = claude_call_with_fallback(
+            [
                 {
                     "role": "user",
                     "content": COMPETITIVE_ANALYSIS_PROMPT.format(
@@ -1326,9 +1341,22 @@ def run_competitive_analysis(
                     ),
                 }
             ],
+            system=(
+                "You are a top-tier competitive strategy consultant with deep knowledge "
+                "of Indian and global markets. "
+                "You ALWAYS return valid JSON only. No markdown. No backticks. No explanation."
+            ),
+            model="claude-haiku-4-5-20251001",
+            max_tokens=3200,
+            fallback_key="competitive",
+            timeout=90,
         )
-
-        raw = response.content[0].text.strip()
+        if claude_out.get("error"):
+            raise HTTPException(
+                status_code=503,
+                detail=str(claude_out.get("error", "Claude unavailable")),
+            )
+        raw = (claude_out.get("content") or "").strip()
         if raw.startswith("```"):
             raw = "\n".join(
                 line for line in raw.split("\n") if not line.strip().startswith("```")

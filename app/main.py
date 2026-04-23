@@ -1,14 +1,23 @@
 from contextlib import asynccontextmanager
 
+import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.database import init_extensions
+from app.core.errors import TheCeeError, generic_error_handler, thecee_error_handler
 from app.core.logging_config import configure_logging
 from app.core.timing_middleware import TimingMiddleware
 from app.worker import celery_app as _celery_app
+
+if settings.SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        traces_sample_rate=0.2,
+        profiles_sample_rate=0.1,
+    )
 
 
 @asynccontextmanager
@@ -38,6 +47,9 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+app.add_exception_handler(TheCeeError, thecee_error_handler)
+app.add_exception_handler(Exception, generic_error_handler)
 
 app.add_middleware(TimingMiddleware)
 

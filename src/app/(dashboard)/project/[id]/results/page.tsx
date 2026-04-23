@@ -240,6 +240,16 @@ function SimulationResultsInner() {
       </div>
 
       <div className="p-4 md:p-8">
+        {results?.status === 'FAILED' && (
+          <div className="mx-8 mt-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
+            <p className="text-sm text-red-400 font-mono">
+              Simulation failed — {results?.error_message ?? 'Unknown error'}
+            </p>
+            <p className="text-xs text-slate-500 mt-1">
+              Check your assumptions and try re-simulating.
+            </p>
+          </div>
+        )}
         <AnimatePresence mode="wait">
           {activeTab === 'personas' && (
             <motion.div

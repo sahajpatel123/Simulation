@@ -3,11 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from anthropic import Anthropic
-
-from app.core.config import settings
-
-client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+from app.core.claude_client import claude_call_with_fallback
 
 # Claim confidence adjustment per intake_mode
 INTAKE_CONFIDENCE_MAP: dict[str, dict[str, Any]] = {
@@ -45,10 +41,8 @@ def fetch_landing_page_summary(url: str) -> str:
         text_body = re.sub(r"<[^>]+>", " ", html)
         text_body = re.sub(r"\s+", " ", text_body).strip()[:3000]
 
-        summary_resp = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=300,
-            messages=[
+        summary_resp = claude_call_with_fallback(
+            [
                 {
                     "role": "user",
                     "content": (
@@ -57,8 +51,17 @@ def fetch_landing_page_summary(url: str) -> str:
                     ),
                 }
             ],
+            model="claude-haiku-4-5-20251001",
+            max_tokens=300,
+            fallback_key="intake_landing",
+            timeout=30,
         )
-        return summary_resp.content[0].text.strip()
+        if summary_resp.get("error"):
+            return (
+                "Landing page summary unavailable — "
+                f"{summary_resp.get('error', 'try again')}"
+            )
+        return (summary_resp.get("content") or "").strip()
     except Exception as e:
         return f"Could not fetch landing page: {e!s}"
 
