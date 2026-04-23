@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import { ArrowUpRight, FileText, Hourglass, Layers, Loader2, Plus, Radio } from 'lucide-react'
 import Link from 'next/link'
 
+import { FolioAxisChip } from '@/components/FolioAxisChip'
 import { useProjects } from '@/hooks/useProjects'
 import { useAuthStore } from '@/store/auth.store'
 import type { Project } from '@/types'
@@ -340,10 +341,13 @@ function FeaturedLead({ project }: { project: Project }) {
         }}
         className="rise rise-1"
       >
-        <div className="kicker" style={{ color: 'var(--red)', marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div className="kicker" style={{ color: 'var(--red)', marginBottom: 10, display: 'flex', gap: 10, alignItems: 'center' }}>
           This Issue
           <span className={`status-dot status-dot--${status.bucket}`} />
           <span>{status.label}</span>
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <FolioAxisChip axis={project.dossier_axis} />
         </div>
         <h3
           className="font-serif"

@@ -7,6 +7,8 @@ import { ArrowUpRight, Loader2, Plus, X } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 
+import { DossierAxisSelector, type DossierAxis } from '@/components/DossierAxisSelector'
+import { FolioAxisChip } from '@/components/FolioAxisChip'
 import { IntakeModeSelector, type IntakeMode } from '@/components/IntakeModeSelector'
 import { apiError } from '@/lib/api'
 import { useCreateProject, useProjects } from '@/hooks/useProjects'
@@ -123,6 +125,7 @@ function ProjectsPage() {
   const [landingPageUrl, setLandingPageUrl] = useState('')
   const [mvpFeatures, setMvpFeatures] = useState('')
   const [existingProductDesc, setExistingProductDesc] = useState('')
+  const [dossierAxis, setDossierAxis] = useState<DossierAxis>('software')
 
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -169,6 +172,7 @@ function ProjectsPage() {
         ? mvpFeatures.split('\n').map((s) => s.trim()).filter(Boolean)
         : undefined,
       existing_product_description: existingProductDesc.trim() || undefined,
+      dossier_axis: dossierAxis,
     })
     setShowModal(false)
     setIdea('')
@@ -176,6 +180,7 @@ function ProjectsPage() {
     setLandingPageUrl('')
     setMvpFeatures('')
     setExistingProductDesc('')
+    setDossierAxis('software')
   }
 
   const setFilter = (f: Filter) => {
@@ -340,6 +345,8 @@ function ProjectsPage() {
             setIdea={setIdea}
             intakeMode={intakeMode}
             setIntakeMode={setIntakeMode}
+            dossierAxis={dossierAxis}
+            setDossierAxis={setDossierAxis}
             landingPageUrl={landingPageUrl}
             setLandingPageUrl={setLandingPageUrl}
             mvpFeatures={mvpFeatures}
@@ -686,10 +693,23 @@ function FeaturedDossier({ project, index }: { project: Project; index: number }
       }}
     >
       <div>
-        <div className="kicker" style={{ color: 'var(--red)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div
+          className="kicker"
+          style={{
+            color: 'var(--red)',
+            marginBottom: 12,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            flexWrap: 'wrap',
+          }}
+        >
           Lead Dossier · This Issue
           <span className={`status-dot status-dot--${status.bucket}`} />
           <span>{status.label}</span>
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <FolioAxisChip axis={project.dossier_axis} />
         </div>
 
         <h2
@@ -818,6 +838,9 @@ function DossierRow({ project, number }: { project: Project; number: number }) {
           >
             {project.title}
           </h3>
+          <div style={{ marginBottom: 6 }}>
+            <FolioAxisChip axis={project.dossier_axis} />
+          </div>
           <p
             style={{
               fontSize: 13.5,
@@ -886,6 +909,8 @@ function FileDossierModal({
   setIdea,
   intakeMode,
   setIntakeMode,
+  dossierAxis,
+  setDossierAxis,
   landingPageUrl,
   setLandingPageUrl,
   mvpFeatures,
@@ -900,6 +925,8 @@ function FileDossierModal({
   setIdea: (s: string) => void
   intakeMode: IntakeMode
   setIntakeMode: (m: IntakeMode) => void
+  dossierAxis: DossierAxis
+  setDossierAxis: (a: DossierAxis) => void
   landingPageUrl: string
   setLandingPageUrl: (s: string) => void
   mvpFeatures: string
@@ -1018,6 +1045,8 @@ function FileDossierModal({
               Describe your idea in plain language — one paragraph. The press will read it as if a
               stranger handed it across a café table.
             </p>
+
+            <DossierAxisSelector value={dossierAxis} onChange={setDossierAxis} />
 
             <IntakeModeSelector value={intakeMode} onChange={setIntakeMode} />
 

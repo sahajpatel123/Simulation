@@ -6,6 +6,7 @@ import { ArrowUpRight, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 
+import { FolioAxisChip, LegacyFolioSlip } from '@/components/FolioAxisChip'
 import { useAssumptions } from '@/hooks/useAssumptions'
 import { useProject } from '@/hooks/useProjects'
 import { useSimulations } from '@/hooks/useSimulation'
@@ -74,6 +75,9 @@ export default function ProjectPage() {
   const status = statusMeta[project.status] ?? { bucket: 'draft' as const, label: project.status?.toLowerCase() ?? 'in notes' }
   const filedDate = project.created_at ? new Date(project.created_at) : null
   const issueNumber = String(Number.isFinite(projectId) ? projectId : 1).padStart(3, '0')
+  const axis = project.dossier_axis
+  const showSoftwarePlate = !axis || axis === 'software'
+  const showHardwareFolio = !axis || axis === 'hardware'
 
   /* ── Page ─────────────────────────────────────────────────────── */
   return (
@@ -97,9 +101,54 @@ export default function ProjectPage() {
         }}
       >
         <div>
-          <div className="kicker" style={{ color: 'var(--red)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div
+            className="kicker"
+            style={{ color: 'var(--red)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}
+          >
             <span style={{ width: 22, height: 0.5, background: 'var(--red)' }} />
             Galley Proof · Reader&rsquo;s Pull
+            {axis === 'software' && (
+              <span
+                style={{
+                  marginLeft: 4,
+                  fontSize: 9,
+                  letterSpacing: '0.2em',
+                  textTransform: 'uppercase',
+                  color: 'var(--ink-tertiary)',
+                  fontWeight: 500,
+                }}
+              >
+                · software folio
+              </span>
+            )}
+            {axis === 'hardware' && (
+              <span
+                style={{
+                  marginLeft: 4,
+                  fontSize: 9,
+                  letterSpacing: '0.2em',
+                  textTransform: 'uppercase',
+                  color: 'var(--workshop)',
+                  fontWeight: 500,
+                }}
+              >
+                · hardware atelier
+              </span>
+            )}
+            {!axis && (
+              <span
+                style={{
+                  marginLeft: 4,
+                  fontSize: 9,
+                  letterSpacing: '0.2em',
+                  textTransform: 'uppercase',
+                  color: 'var(--ink-tertiary)',
+                  fontWeight: 500,
+                }}
+              >
+                · full folio (archive)
+              </span>
+            )}
           </div>
 
           <h1
@@ -235,6 +284,24 @@ export default function ProjectPage() {
               <Meta label="Section" value="Idea Review" accent="var(--red)" />
               <Meta label="Status" value={status.label} />
               <Meta label="Reader&rsquo;s mark" value={`№ ${issueNumber}`} />
+              <dt className="kicker" style={{ color: 'var(--ink-tertiary)', paddingTop: 1 }}>Folio path</dt>
+              <dd style={{ margin: 0, fontSize: 12.5, lineHeight: 1.4, color: 'var(--ink)' }}>
+                <FolioAxisChip axis={axis} />
+                <span
+                  style={{
+                    display: 'block',
+                    marginTop: 6,
+                    fontSize: 11,
+                    color: 'var(--ink-tertiary)',
+                    fontStyle: 'normal',
+                    fontFamily: 'var(--font-body)',
+                  }}
+                >
+                  {!axis && 'Both workshop routes remain open for this entry.'}
+                  {axis === 'software' && 'Only the software prototype plate is in play for this issue.'}
+                  {axis === 'hardware' && 'Only the hardware atelier is in play for this issue.'}
+                </span>
+              </dd>
             </dl>
           </div>
 
@@ -402,173 +469,180 @@ export default function ProjectPage() {
             </div>
           )}
 
-          {/* ─── Prototype plate ─────────────────────────── */}
-          <Link
-            href={`/project/${projectId}/prototype`}
-            style={{ textDecoration: 'none', color: 'var(--ink)', display: 'block' }}
-          >
-            <div
-              className="rise rise-1"
-              style={{
-                marginTop: 44,
-                position: 'relative',
-                padding: '28px 32px',
-                border: '0.5px solid var(--ink)',
-                background: 'var(--paper)',
-                boxShadow: '12px 12px 0 rgba(26,23,20,0.12)',
-                display: 'grid',
-                gridTemplateColumns: '1fr auto',
-                alignItems: 'center',
-                gap: 24,
-                transition: 'transform 260ms ease, box-shadow 260ms ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translate(-3px, -3px)'
-                e.currentTarget.style.boxShadow = '15px 15px 0 var(--ink)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translate(0, 0)'
-                e.currentTarget.style.boxShadow = '12px 12px 0 rgba(26,23,20,0.12)'
-              }}
+          {/* Legacy archive: explain why two plates still appear */}
+          {!axis && <LegacyFolioSlip />}
+
+          {/* ─── Prototype plate (software) / Hardware atelier — gated by dossier_axis for new dossiers ─── */}
+          {showSoftwarePlate && (
+            <Link
+              href={`/project/${projectId}/prototype`}
+              style={{ textDecoration: 'none', color: 'var(--ink)', display: 'block' }}
             >
-              <div>
-                <div className="kicker" style={{ color: 'var(--red)', marginBottom: 10 }}>
-                  Prototype · Plate 01
-                </div>
-                <div
-                  className="font-serif"
-                  style={{
-                    fontSize: 30,
-                    fontWeight: 900,
-                    fontStyle: 'italic',
-                    lineHeight: 1,
-                    letterSpacing: '-0.02em',
-                    color: 'var(--ink)',
-                  }}
-                >
-                  Read the setting in full.
-                </div>
-                <p style={{ marginTop: 10, color: 'var(--ink-secondary)', fontSize: 13, lineHeight: 1.6, maxWidth: 520 }}>
-                  The page as the synthetic reader will see it — typeset, cast, and open for inspection before the presses roll.
-                </p>
-              </div>
               <div
+                className="rise rise-1"
                 style={{
-                  width: 58,
-                  height: 58,
+                  marginTop: 44,
+                  position: 'relative',
+                  padding: '28px 32px',
                   border: '0.5px solid var(--ink)',
-                  display: 'flex',
+                  background: 'var(--paper)',
+                  boxShadow: '12px 12px 0 rgba(26,23,20,0.12)',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr auto',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--red)',
+                  gap: 24,
+                  transition: 'transform 260ms ease, box-shadow 260ms ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translate(-3px, -3px)'
+                  e.currentTarget.style.boxShadow = '15px 15px 0 var(--ink)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translate(0, 0)'
+                  e.currentTarget.style.boxShadow = '12px 12px 0 rgba(26,23,20,0.12)'
                 }}
               >
-                <ArrowUpRight style={{ width: 22, height: 22 }} />
+                <div>
+                  <div className="kicker" style={{ color: 'var(--red)', marginBottom: 10 }}>
+                    Prototype · Plate 01
+                  </div>
+                  <div
+                    className="font-serif"
+                    style={{
+                      fontSize: 30,
+                      fontWeight: 900,
+                      fontStyle: 'italic',
+                      lineHeight: 1,
+                      letterSpacing: '-0.02em',
+                      color: 'var(--ink)',
+                    }}
+                  >
+                    Read the setting in full.
+                  </div>
+                  <p style={{ marginTop: 10, color: 'var(--ink-secondary)', fontSize: 13, lineHeight: 1.6, maxWidth: 520 }}>
+                    The page as the synthetic reader will see it — typeset, cast, and open for inspection before the presses roll.
+                  </p>
+                </div>
+                <div
+                  style={{
+                    width: 58,
+                    height: 58,
+                    border: '0.5px solid var(--ink)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--red)',
+                  }}
+                >
+                  <ArrowUpRight style={{ width: 22, height: 22 }} />
+                </div>
               </div>
-            </div>
-          </Link>
+            </Link>
+          )}
 
-          <Link
-            href={`/project/${projectId}/hardware`}
-            style={{ textDecoration: 'none', color: 'var(--ink)', display: 'block' }}
-          >
-            <div
-              className="rise rise-1"
-              style={{
-                marginTop: 20,
-                position: 'relative',
-                padding: '26px 32px 26px 28px',
-                border: '0.5px solid var(--ink)',
-                borderLeft: '4px solid var(--workshop)',
-                background: 'linear-gradient(120deg, #fbf8f2 0%, var(--paper) 38%, #f0ebe3 100%)',
-                backgroundImage: `
+          {showHardwareFolio && (
+            <Link
+              href={`/project/${projectId}/hardware`}
+              style={{ textDecoration: 'none', color: 'var(--ink)', display: 'block' }}
+            >
+              <div
+                className="rise rise-1"
+                style={{
+                  marginTop: showSoftwarePlate ? 20 : 44,
+                  position: 'relative',
+                  padding: '26px 32px 26px 28px',
+                  border: '0.5px solid var(--ink)',
+                  borderLeft: '4px solid var(--workshop)',
+                  background: 'linear-gradient(120deg, #fbf8f2 0%, var(--paper) 38%, #f0ebe3 100%)',
+                  backgroundImage: `
                   radial-gradient(circle at 12% 88%, var(--workshop-dim) 0%, transparent 42%),
                   radial-gradient(circle at 88% 8%, rgba(192, 57, 43, 0.04) 0%, transparent 35%)
                 `,
-                display: 'grid',
-                gridTemplateColumns: '1fr auto',
-                alignItems: 'center',
-                gap: 24,
-                boxShadow: '10px 10px 0 var(--workshop-shadow)',
-                transition: 'transform 260ms ease, box-shadow 260ms ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translate(-2px, -2px)'
-                e.currentTarget.style.boxShadow = '14px 14px 0 rgba(45, 69, 86, 0.22)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translate(0, 0)'
-                e.currentTarget.style.boxShadow = '10px 10px 0 var(--workshop-shadow)'
-              }}
-            >
-              <div style={{ position: 'relative' }}>
-                <div
-                  className="kicker"
-                  style={{
-                    color: 'var(--workshop)',
-                    marginBottom: 8,
-                    letterSpacing: '0.2em',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                  }}
-                >
-                  <span>Hardware · Atelier</span>
-                  <span
+                  display: 'grid',
+                  gridTemplateColumns: '1fr auto',
+                  alignItems: 'center',
+                  gap: 24,
+                  boxShadow: '10px 10px 0 var(--workshop-shadow)',
+                  transition: 'transform 260ms ease, box-shadow 260ms ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translate(-2px, -2px)'
+                  e.currentTarget.style.boxShadow = '14px 14px 0 rgba(45, 69, 86, 0.22)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translate(0, 0)'
+                  e.currentTarget.style.boxShadow = '10px 10px 0 var(--workshop-shadow)'
+                }}
+              >
+                <div style={{ position: 'relative' }}>
+                  <div
+                    className="kicker"
                     style={{
-                      fontSize: 9,
-                      letterSpacing: '0.28em',
-                      color: 'var(--ink-tertiary)',
-                      textTransform: 'uppercase',
+                      color: 'var(--workshop)',
+                      marginBottom: 8,
+                      letterSpacing: '0.2em',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
                     }}
                   >
-                    folio B
-                  </span>
+                    <span>Hardware · Atelier</span>
+                    <span
+                      style={{
+                        fontSize: 9,
+                        letterSpacing: '0.28em',
+                        color: 'var(--ink-tertiary)',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      folio B
+                    </span>
+                  </div>
+                  <div
+                    className="font-serif"
+                    style={{
+                      fontSize: 28,
+                      fontWeight: 800,
+                      fontStyle: 'italic',
+                      lineHeight: 1.05,
+                      letterSpacing: '-0.02em',
+                      color: 'var(--ink)',
+                    }}
+                  >
+                    The dimensional proof.
+                  </div>
+                  <p
+                    style={{
+                      marginTop: 10,
+                      color: 'var(--ink-secondary)',
+                      fontSize: 13,
+                      lineHeight: 1.65,
+                      maxWidth: 520,
+                    }}
+                  >
+                    Stress maps, part zones, and render notes — the same page as the lab, now cut to the magazine’s
+                    light. Open when you are ready to lock geometry before the next press.
+                  </p>
                 </div>
                 <div
-                  className="font-serif"
                   style={{
-                    fontSize: 28,
-                    fontWeight: 800,
-                    fontStyle: 'italic',
-                    lineHeight: 1.05,
-                    letterSpacing: '-0.02em',
-                    color: 'var(--ink)',
+                    width: 58,
+                    height: 58,
+                    border: '0.5px solid var(--workshop)',
+                    background: 'linear-gradient(145deg, #fff 0%, var(--paper-dark) 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--workshop)',
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.85)',
                   }}
+                  aria-hidden
                 >
-                  The dimensional proof.
+                  <ArrowUpRight style={{ width: 22, height: 22 }} />
                 </div>
-                <p
-                  style={{
-                    marginTop: 10,
-                    color: 'var(--ink-secondary)',
-                    fontSize: 13,
-                    lineHeight: 1.65,
-                    maxWidth: 520,
-                  }}
-                >
-                  Stress maps, part zones, and render notes — the same page as the lab, now cut to the magazine’s
-                  light. Open when you are ready to lock geometry before the next press.
-                </p>
               </div>
-              <div
-                style={{
-                  width: 58,
-                  height: 58,
-                  border: '0.5px solid var(--workshop)',
-                  background: 'linear-gradient(145deg, #fff 0%, var(--paper-dark) 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--workshop)',
-                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.85)',
-                }}
-                aria-hidden
-              >
-                <ArrowUpRight style={{ width: 22, height: 22 }} />
-              </div>
-            </div>
-          </Link>
+            </Link>
+          )}
         </div>
       </section>
 
