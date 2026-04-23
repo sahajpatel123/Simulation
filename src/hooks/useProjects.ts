@@ -7,6 +7,7 @@ type ProjectListResponse = { projects: Project[]; total: number }
 
 const normalizeProject = (project: Project): Project => ({
   ...project,
+  dossier_axis: project.dossier_axis ?? null,
   created_at: project.created_at ?? (project.createdAt ? new Date(project.createdAt).toISOString() : undefined),
   updated_at: project.updated_at ?? (project.updatedAt ? new Date(project.updatedAt).toISOString() : undefined),
 })
@@ -35,6 +36,7 @@ type CreateProjectPayload = {
   landing_page_url?: string
   mvp_feature_list?: string[]
   existing_product_description?: string
+  dossier_axis?: string | null
 }
 
 export const useCreateProject = () => {
@@ -53,6 +55,7 @@ export const useCreateProject = () => {
           landing_page_url: raw.landing_page_url,
           mvp_feature_list: raw.mvp_feature_list ?? [],
           existing_product_description: raw.existing_product_description,
+          dossier_axis: raw.dossier_axis ?? 'software',
         })
         .then((r) => r.data)
     },

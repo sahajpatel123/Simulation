@@ -4,7 +4,7 @@
  * Scan-line label for whether a dossier is software-only, hardware-only,
  * or a legacy “full folio” (both workshop paths). New filings set axis at creation.
  */
-export function FolioAxisChip({ axis }: { axis?: 'software' | 'hardware' | null }) {
+export function FolioAxisChip({ axis }: { axis?: string | null }) {
   if (axis === 'software') {
     return (
       <span

@@ -33,6 +33,8 @@ export interface Project {
   title: string
   description: string
   status: string
+  /** New dossiers: software vs hardware axis; null/omitted = legacy (full folio) */
+  dossier_axis?: string | null
   created_at?: string
   updated_at?: string
   /* legacy compatibility */

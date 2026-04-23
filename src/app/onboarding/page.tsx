@@ -468,18 +468,15 @@ export default function OnboardingPage() {
       </div>
 
       <AnimatePresence mode="wait">
-        {
-          // @ts-expect-error Framer Motion: animation props vs current React 19 + motion DOM typings
-          <motion.div
-            key={step}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl p-8 space-y-6"
-          >
-            {stepBody()}
-          </motion.div>
-        }
+        <motion.div
+          key={step}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -12 }}
+          className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl p-8 space-y-6"
+        >
+          {stepBody()}
+        </motion.div>
       </AnimatePresence>
     </div>
   )
