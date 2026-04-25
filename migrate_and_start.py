@@ -758,8 +758,8 @@ def run_migrations():
                         id         SERIAL PRIMARY KEY,
                         user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
                         token_hash VARCHAR(64) NOT NULL UNIQUE,
-                        expires_at TIMESTAMP  NOT NULL,
-                        created_at TIMESTAMP  DEFAULT NOW(),
+                        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                         revoked    BOOLEAN    DEFAULT FALSE
                     );
                     """
@@ -770,6 +770,14 @@ def run_migrations():
                     """
                     CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash
                     ON refresh_tokens (token_hash);
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id
+                    ON refresh_tokens (user_id);
                     """
                 )
             )

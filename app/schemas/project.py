@@ -10,6 +10,7 @@ class ProjectCreate(BaseModel):
     landing_page_url: str | None = None
     mvp_feature_list: list[str] = Field(default_factory=list)
     existing_product_description: str | None = None
+    dossier_axis: Literal["software", "hardware"] = "software"
 
 
 class ProjectOut(BaseModel):
@@ -18,6 +19,7 @@ class ProjectOut(BaseModel):
     title: str
     description: str
     status: str
+    dossier_axis: str | None = None
 
     model_config = {"from_attributes": True}
 

@@ -29,6 +29,8 @@ class Project(Base, TimestampMixin):
     landing_page_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     mvp_feature_list: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     existing_product_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # software | hardware — NULL = legacy dossier (show both workshop paths in UI)
+    dossier_axis: Mapped[str | None] = mapped_column(String(20), nullable=True)
     prototype_html: Mapped[str | None] = mapped_column(Text)
     funnel_graph_json: Mapped[str | None] = mapped_column(Text)
     premortem_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
