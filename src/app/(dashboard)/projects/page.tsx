@@ -10,6 +10,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { DossierAxisSelector, type DossierAxis } from '@/components/DossierAxisSelector'
 import { FolioAxisChip } from '@/components/FolioAxisChip'
 import { apiError } from '@/lib/api'
+import { notify } from '@/lib/toast'
 import { useCreateProject, useProjects } from '@/hooks/useProjects'
 import type { Project } from '@/types'
 
@@ -159,14 +160,22 @@ function ProjectsPage() {
   const handleCreate = async () => {
     const description = idea.trim()
     if (!description) return
-    await createProject.mutateAsync({
-      description,
-      intake_mode: 'IDEA',
-      dossier_axis: dossierAxis,
-    })
-    setShowModal(false)
-    setIdea('')
-    setDossierAxis('software')
+    const tid = notify.loading('Sending to press…')
+    try {
+      await createProject.mutateAsync({
+        description,
+        intake_mode: 'IDEA',
+        dossier_axis: dossierAxis,
+      })
+      notify.dismiss(tid)
+      notify.success('Dossier filed.')
+      setShowModal(false)
+      setIdea('')
+      setDossierAxis('software')
+    } catch (err) {
+      notify.dismiss(tid)
+      notify.error(apiError(err))
+    }
   }
 
   const setFilter = (f: Filter) => {
