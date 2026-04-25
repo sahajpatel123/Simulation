@@ -699,35 +699,25 @@ function FeaturedDossier({ project, index }: { project: Project; index: number }
           <FolioAxisChip axis={project.dossier_axis} />
         </div>
 
-        <div style={{ position: 'relative', marginBottom: 20 }}>
-          <h2
-            className="font-serif"
-            style={{
-              fontSize: 'clamp(38px, 4.8vw, 64px)',
-              fontWeight: 900,
-              lineHeight: 1.05,
-              letterSpacing: '-0.03em',
-              color: 'var(--ink)',
-              overflow: 'hidden',
-              maxHeight: '3.15em',
-            }}
-          >
-            {project.title}
-          </h2>
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: '1.4em',
-              fontSize: 'clamp(38px, 4.8vw, 64px)',
-              background: 'linear-gradient(to bottom, transparent, var(--paper))',
-              pointerEvents: 'none',
-            }}
-          />
-        </div>
+        <h2
+          className="font-serif"
+          style={{
+            fontSize: 'clamp(38px, 4.8vw, 64px)',
+            fontWeight: 900,
+            lineHeight: 1.05,
+            letterSpacing: '-0.03em',
+            color: 'var(--ink)',
+            marginBottom: 20,
+            display: '-webkit-box',
+            WebkitLineClamp: 3,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            wordBreak: 'normal',
+            overflowWrap: 'break-word',
+          }}
+        >
+          {project.title}
+        </h2>
 
         <p
           style={{

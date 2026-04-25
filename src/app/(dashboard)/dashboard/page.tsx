@@ -356,35 +356,25 @@ function FeaturedLead({ project }: { project: Project }) {
         <div style={{ marginBottom: 12 }}>
           <FolioAxisChip axis={project.dossier_axis} />
         </div>
-        <div style={{ position: 'relative', marginBottom: 16 }}>
-          <h3
-            className="font-serif"
-            style={{
-              fontSize: 'clamp(28px, 3.4vw, 44px)',
-              fontWeight: 900,
-              lineHeight: 1.02,
-              letterSpacing: '-0.03em',
-              color: 'var(--ink)',
-              overflow: 'hidden',
-              maxHeight: '3.06em',
-            }}
-          >
-            {project.title}
-          </h3>
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: '1.2em',
-              fontSize: 'clamp(28px, 3.4vw, 44px)',
-              background: 'linear-gradient(to bottom, transparent, var(--paper))',
-              pointerEvents: 'none',
-            }}
-          />
-        </div>
+        <h3
+          className="font-serif"
+          style={{
+            fontSize: 'clamp(28px, 3.4vw, 44px)',
+            fontWeight: 900,
+            lineHeight: 1.02,
+            letterSpacing: '-0.03em',
+            color: 'var(--ink)',
+            marginBottom: 16,
+            display: '-webkit-box',
+            WebkitLineClamp: 3,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            wordBreak: 'normal',
+            overflowWrap: 'break-word',
+          }}
+        >
+          {project.title}
+        </h3>
         <p
           style={{
             fontSize: 14.5,
