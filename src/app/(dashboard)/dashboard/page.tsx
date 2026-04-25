@@ -51,7 +51,7 @@ export default function DashboardPage() {
     year: 'numeric',
   })
 
-  const { counts, featured, running, recent, rankMap } = useMemo(() => {
+  const { counts, featured, running, recent } = useMemo(() => {
     const list = [...(projects ?? [])].sort((a, b) => {
       const ad = a.created_at ? new Date(a.created_at).getTime() : 0
       const bd = b.created_at ? new Date(b.created_at).getTime() : 0
@@ -71,14 +71,7 @@ export default function DashboardPage() {
     const featured = list.find((p) => resolveStatus(p.status).bucket !== 'draft') ?? list[0]
     const running = list.filter((p) => resolveStatus(p.status).bucket === 'running').slice(0, 4)
     const recent = list.slice(0, 5)
-    // rank by creation order (oldest = 1) so display numbers match the archive sequence
-    const byAge = [...list].sort((a, b) => {
-      const at = a.created_at ? new Date(a.created_at).getTime() : 0
-      const bt = b.created_at ? new Date(b.created_at).getTime() : 0
-      return at - bt
-    })
-    const rankMap = new Map(byAge.map((p, i) => [p.id, i + 1]))
-    return { counts, featured, running, recent, rankMap }
+    return { counts, featured, running, recent }
   }, [projects])
 
   if (isLoading) {
@@ -186,10 +179,11 @@ export default function DashboardPage() {
           gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)',
           gap: 56,
           marginTop: 48,
+          minWidth: 0,
         }}
       >
-        {/* Lead */}
-        <div>
+        {/* Lead — minWidth:0 so long headlines wrap instead of clipping (grid + body overflow-x) */}
+        <div style={{ minWidth: 0 }}>
           <SectionTitle kicker="Lead dossier" title="The one on the press today." />
           {featured ? (
             <FeaturedLead project={featured} />
@@ -213,8 +207,8 @@ export default function DashboardPage() {
             </p>
           ) : (
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-              {recent.map((p) => (
-                <RecentLine key={p.id} project={p} rank={rankMap.get(p.id) ?? 1} />
+              {recent.map((p, i) => (
+                <RecentLine key={p.id} project={p} rank={i + 1} />
               ))}
             </ul>
           )}
@@ -338,6 +332,7 @@ function FeaturedLead({ project }: { project: Project }) {
         href={`/project/${project.id}`}
         style={{
           display: 'block',
+          minWidth: 0,
           textDecoration: 'none',
           color: 'var(--ink)',
           border: '0.5px solid var(--border-strong)',
@@ -345,6 +340,7 @@ function FeaturedLead({ project }: { project: Project }) {
           padding: 32,
           boxShadow: '16px 16px 0 rgba(26,23,20,0.08)',
           transition: 'box-shadow 200ms ease, transform 200ms ease',
+          overflow: 'visible',
         }}
         className="rise rise-1"
       >
@@ -361,16 +357,14 @@ function FeaturedLead({ project }: { project: Project }) {
           style={{
             fontSize: 'clamp(28px, 3.4vw, 44px)',
             fontWeight: 900,
-            lineHeight: 1.02,
+            lineHeight: 1.18,
             letterSpacing: '-0.03em',
             color: 'var(--ink)',
             marginBottom: 16,
-            display: '-webkit-box',
-            WebkitLineClamp: 3,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-            wordBreak: 'normal',
-            overflowWrap: 'break-word',
+            overflow: 'visible',
+            overflowWrap: 'anywhere',
+            wordBreak: 'break-word',
+            maxWidth: '100%',
           }}
         >
           {project.title}
@@ -480,9 +474,9 @@ function RecentLine({ project, rank }: { project: Project; rank: number }) {
         href={`/project/${project.id}`}
         style={{
           display: 'grid',
-          gridTemplateColumns: '40px minmax(0,1fr) 110px 120px 24px',
+          gridTemplateColumns: '3rem minmax(0,1fr) 110px 120px 24px',
           gap: 16,
-          alignItems: 'center',
+          alignItems: 'start',
           padding: '14px 0',
           borderBottom: '0.5px solid var(--border-color)',
           textDecoration: 'none',
@@ -490,7 +484,18 @@ function RecentLine({ project, rank }: { project: Project; rank: number }) {
         }}
         className="recent-line"
       >
-        <span className="numeral" style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-tertiary)' }}>
+        <span
+          className="numeral"
+          aria-hidden
+          style={{
+            fontSize: 18,
+            fontWeight: 800,
+            color: 'var(--ink)',
+            lineHeight: 1.2,
+            paddingTop: 2,
+            fontFeatureSettings: "'lnum' 1, 'tnum' 1",
+          }}
+        >
           {num}
         </span>
         <span
@@ -499,10 +504,13 @@ function RecentLine({ project, rank }: { project: Project; rank: number }) {
             fontSize: 17,
             fontWeight: 700,
             letterSpacing: '-0.01em',
-            lineHeight: 1.2,
+            lineHeight: 1.4,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
             overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
+            overflowWrap: 'anywhere',
+            minWidth: 0,
           }}
         >
           {project.title}
