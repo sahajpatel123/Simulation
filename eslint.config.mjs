@@ -19,6 +19,7 @@ const eslintConfig = defineConfig([
     "thecee-backend/**",
     "app/**",
     ".venv/**",
+    ".venv2/**",
     "**/venv/**",
     "**/__pycache__/**",
     "coverage/**",

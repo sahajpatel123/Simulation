@@ -1,5 +1,10 @@
-import time
+from __future__ import annotations
+
 import pytest
+
+pytest.importorskip("numpy", reason="Full stack: pip install -r requirements.txt (numpy)")
+
+import time
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.conductor import Conductor, ProductType, ARCHITECT_STACKS
 from app.simulation.accountability import AccountabilityEngine

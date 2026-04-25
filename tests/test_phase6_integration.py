@@ -6,6 +6,12 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip("numpy", reason="Full stack: pip install -r requirements.txt (numpy)")
+pytest.importorskip("scipy", reason="Full stack: pip install -r requirements.txt (scipy)")
+pytest.importorskip("tiktoken", reason="Optional test dep: pip install tiktoken")
+
 import tiktoken
 
 from app.core.prompts import INTERVENTION_PROMPT, PREMORTEM_PROMPT

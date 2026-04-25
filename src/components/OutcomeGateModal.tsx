@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { getApiV1Base } from '@/lib/api-v1-base'
@@ -26,10 +26,13 @@ export function OutcomeGateModal({ projectId, simulationId, isFullReport }: Outc
   const [submitted, setSubmitted] = useState(false)
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  }
+  const headers: HeadersInit = useMemo(
+    () => ({
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }),
+    [token],
+  )
 
   useEffect(() => {
     if (!projectId || isFullReport) return
@@ -40,7 +43,7 @@ export function OutcomeGateModal({ projectId, simulationId, isFullReport }: Outc
         if (d?.gate_active) setGateData(d)
       })
       .catch(() => {})
-  }, [projectId, isFullReport])
+  }, [projectId, isFullReport, headers])
 
   const handleSubmit = async () => {
     if (!gateData?.prev_sim_id) return
