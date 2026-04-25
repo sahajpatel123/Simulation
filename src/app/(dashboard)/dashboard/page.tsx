@@ -76,7 +76,7 @@ export default function DashboardPage() {
     year: 'numeric',
   })
 
-  const { counts, featured, running, recent } = useMemo(() => {
+  const { counts, featured, running, recent, rankMap } = useMemo(() => {
     const list = [...(projects ?? [])].sort((a, b) => {
       const ad = a.created_at ? new Date(a.created_at).getTime() : 0
       const bd = b.created_at ? new Date(b.created_at).getTime() : 0
@@ -96,7 +96,14 @@ export default function DashboardPage() {
     const featured = list.find((p) => resolveStatus(p.status).bucket !== 'draft') ?? list[0]
     const running = list.filter((p) => resolveStatus(p.status).bucket === 'running').slice(0, 4)
     const recent = list.slice(0, 5)
-    return { counts, featured, running, recent }
+    // rank by creation order (oldest = 1) so display numbers match the archive sequence
+    const byAge = [...list].sort((a, b) => {
+      const at = a.created_at ? new Date(a.created_at).getTime() : 0
+      const bt = b.created_at ? new Date(b.created_at).getTime() : 0
+      return at - bt
+    })
+    const rankMap = new Map(byAge.map((p, i) => [p.id, i + 1]))
+    return { counts, featured, running, recent, rankMap }
   }, [projects])
 
   if (isLoading) {
@@ -231,8 +238,8 @@ export default function DashboardPage() {
             </p>
           ) : (
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-              {recent.map((p, i) => (
-                <RecentLine key={p.id} project={p} i={i} />
+              {recent.map((p) => (
+                <RecentLine key={p.id} project={p} rank={rankMap.get(p.id) ?? 1} />
               ))}
             </ul>
           )}
@@ -482,10 +489,10 @@ function EmptyFeatured() {
 }
 
 /* ── Recent line ─────────────────────────────────────────────────── */
-function RecentLine({ project, i }: { project: Project; i: number }) {
+function RecentLine({ project, rank }: { project: Project; rank: number }) {
   const status = resolveStatus(project.status)
   const date = project.created_at ? new Date(project.created_at) : null
-  const num = String(i + 1).padStart(2, '0')
+  const num = String(rank).padStart(2, '0')
   return (
     <li>
       <Link
