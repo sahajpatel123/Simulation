@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowUpRight, FileText, Hourglass, Layers, Loader2, Plus, Radio } from 'lucide-react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 
 import { FolioAxisChip } from '@/components/FolioAxisChip'
 import { useProjects } from '@/hooks/useProjects'
@@ -27,21 +26,6 @@ const statusMeta: Record<string, { bucket: StatusBucket; label: string }> = {
 const resolveStatus = (s: string) =>
   statusMeta[s] ?? { bucket: 'draft' as StatusBucket, label: s.toLowerCase().replace(/_/g, ' ') }
 
-const ONBOARDING_DONE_KEY = 'thecee_onboarding_complete'
-
-function hasCompletedOnboardingClient(): boolean {
-  if (typeof window === 'undefined') return true
-  let fromLs = false
-  try {
-    fromLs = localStorage.getItem(ONBOARDING_DONE_KEY) === '1'
-  } catch {
-    /* private mode / disabled storage */
-  }
-  if (fromLs) return true
-  if (typeof document === 'undefined') return false
-  return document.cookie.split(';').some((c) => c.trim().startsWith('onboarded=1'))
-}
-
 /** Local wall-clock hour (0–23); `Date` in the browser uses the user’s timezone. */
 function salutationForHour(hour: number): string {
   if (hour >= 5 && hour < 12) return 'Good morning'
@@ -53,15 +37,6 @@ function salutationForHour(hour: number): string {
 export default function DashboardPage() {
   const { data: projects, isLoading } = useProjects()
   const user = useAuthStore((s) => s.user)
-  const router = useRouter()
-
-  useEffect(() => {
-    if (isLoading) return
-    const list = projects ?? []
-    if (list.length > 0) return
-    if (hasCompletedOnboardingClient()) return
-    router.replace('/onboarding')
-  }, [isLoading, projects, router])
 
   /* Same string on server + first client paint avoids hydration mismatch; then snap to local time. */
   const [salutation, setSalutation] = useState('Good morning')
