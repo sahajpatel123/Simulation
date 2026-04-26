@@ -103,7 +103,7 @@ export default function HeroCover({
           willChange: 'transform, opacity',
         }}
       >
-        {/* First screen = air → headline; folio lives in sticky masthead */}
+        {/* First screen: vertically centred headline + reference-style atmosphere */}
         <div
           style={{
             minHeight: 'calc(100svh - 96px)',
@@ -114,135 +114,195 @@ export default function HeroCover({
         >
           <div
             style={{
-              position: 'relative',
-              maxWidth: 1280,
-              margin: '0 auto',
-              width: '100%',
-              flex: '0 0 auto',
-              padding: 'clamp(28px, 8vh, 80px) 48px 0',
+              flex: '1 1 auto',
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              paddingTop: 'clamp(24px, 5vh, 64px)',
+              paddingBottom: 'clamp(24px, 5vh, 64px)',
+              paddingLeft: 'clamp(24px, 6vw, 100px)',
+              paddingRight: 'clamp(24px, 6vw, 100px)',
             }}
           >
-            {/* Headline — four fixed lines (wide viewports used to collapse when max-width capped at 100%). */}
-            <h1
-              className="font-serif"
+            <div
               style={{
-                fontSize: 'clamp(48px, min(8.2vw, 11.5svh), 132px)',
-                fontWeight: 900,
-                lineHeight: 0.86,
-                letterSpacing: '-0.045em',
-                color: 'var(--ink)',
-                margin: 0,
-                width: 'max-content',
-                maxWidth: '100%',
+                position: 'relative',
+                maxWidth: 1440,
+                margin: '0 auto',
+                width: '100%',
+                isolation: 'isolate',
               }}
             >
-              <motion.span
-                initial={{ y: '0.45em', opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ duration: 0.8, delay: 0.2, ease: [0.2, 0.7, 0.2, 1] }}
-                style={{ display: 'block' }}
-              >
-                Know before
-              </motion.span>
-              <motion.span
-                initial={{ y: '0.45em', opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ duration: 0.8, delay: 0.32, ease: [0.2, 0.7, 0.2, 1] }}
-                style={{ display: 'block', paddingLeft: '0.22em' }}
-              >
-                you
-              </motion.span>
-              <motion.span
-                initial={{ y: '0.45em', opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ duration: 0.8, delay: 0.44, ease: [0.2, 0.7, 0.2, 1] }}
-                style={{ display: 'block' }}
-              >
-                build your
-              </motion.span>
-              <motion.span
-                initial={{ y: '0.45em', opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ duration: 0.8, delay: 0.56, ease: [0.2, 0.7, 0.2, 1] }}
+              {/* Background wash — kept faint & *behind* type so the accent word stays saturated */}
+              <div
+                aria-hidden
                 style={{
+                  position: 'absolute',
+                  zIndex: 0,
+                  left: '50%',
+                  top: '42%',
+                  width: 'min(140%, 1100px)',
+                  height: 'min(130%, 720px)',
+                  transform: 'translate(-50%, -50%)',
+                  pointerEvents: 'none',
+                  background: `
+                    radial-gradient(ellipse 70% 58% at 50% 48%,
+                      rgba(255, 248, 236, 0.55) 0%,
+                      rgba(242, 236, 224, 0.22) 48%,
+                      transparent 72%)
+                  `,
+                }}
+              />
+              <div
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  zIndex: 0,
+                  left: '50%',
+                  top: '46%',
+                  width: 'min(120%, 900px)',
+                  height: '100%',
+                  transform: 'translate(-50%, -50%)',
+                  pointerEvents: 'none',
+                  background:
+                    'radial-gradient(ellipse 52% 48% at 52% 44%, rgba(192, 57, 43, 0.045), transparent 64%)',
+                }}
+              />
+
+              <div
+                style={{
+                  position: 'relative',
+                  zIndex: 2,
                   display: 'flex',
-                  flexDirection: 'row',
-                  flexWrap: 'nowrap',
-                  alignItems: 'flex-end',
-                  gap: '0.08em',
+                  width: '100%',
+                  justifyContent: 'center',
                 }}
               >
-                {/* Rotating accent word + underline; terminal dot on baseline */}
-                <span
+                {/* Four lines, symmetric side margins, explicit rhythm between baselines */}
+                <h1
+                  className="font-serif"
                   style={{
-                    position: 'relative',
-                    display: 'inline-flex',
+                    display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'flex-start',
-                    perspective: 800,
+                    gap: 'clamp(16px, 2.6vmin, 36px)',
+                    fontSize: 'clamp(52px, min(11.5vw, 17svh), 168px)',
+                    fontWeight: 900,
+                    lineHeight: 1,
+                    letterSpacing: '-0.05em',
+                    color: 'var(--ink)',
+                    margin: 0,
+                    maxWidth: '100%',
+                    textAlign: 'left',
                   }}
                 >
-                  <AnimatePresence mode="wait">
-                    <motion.span
-                      key={word}
-                      initial={{ y: '0.5em', opacity: 0, rotateX: 60 }}
-                      animate={{ y: 0, opacity: 1, rotateX: 0 }}
-                      exit={{ y: '-0.45em', opacity: 0, rotateX: -60 }}
-                      transition={{ duration: 0.55, ease: [0.76, 0, 0.24, 1] }}
+                  <motion.span
+                    initial={{ y: '0.45em', opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ duration: 0.8, delay: 0.2, ease: [0.2, 0.7, 0.2, 1] }}
+                    style={{ display: 'block' }}
+                  >
+                    Know before
+                  </motion.span>
+                  <motion.span
+                    initial={{ y: '0.45em', opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ duration: 0.8, delay: 0.32, ease: [0.2, 0.7, 0.2, 1] }}
+                    style={{ display: 'block', paddingLeft: '0.28em' }}
+                  >
+                    you
+                  </motion.span>
+                  <motion.span
+                    initial={{ y: '0.45em', opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ duration: 0.8, delay: 0.44, ease: [0.2, 0.7, 0.2, 1] }}
+                    style={{ display: 'block' }}
+                  >
+                    build your
+                  </motion.span>
+                  <motion.span
+                    initial={{ y: '0.45em', opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ duration: 0.8, delay: 0.56, ease: [0.2, 0.7, 0.2, 1] }}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'row',
+                      flexWrap: 'nowrap',
+                      alignItems: 'flex-end',
+                      gap: '0.14em',
+                    }}
+                  >
+                    <span
                       style={{
-                        display: 'inline-block',
-                        fontStyle: 'italic',
-                        color: 'var(--red)',
                         position: 'relative',
-                        transformOrigin: 'center bottom',
+                        zIndex: 2,
+                        display: 'inline-flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-start',
+                        perspective: 800,
                       }}
                     >
-                      <span
-                        aria-hidden
+                      <AnimatePresence mode="wait">
+                        <motion.span
+                          key={word}
+                          initial={{ y: '0.35em', opacity: 0, rotateX: 45 }}
+                          animate={{ y: 0, opacity: 1, rotateX: 0 }}
+                          exit={{ y: '-0.25em', opacity: 0, rotateX: -35 }}
+                          transition={{ duration: 0.38, ease: [0.4, 0, 0.2, 1] }}
+                          style={{
+                            display: 'inline-block',
+                            fontStyle: 'italic',
+                            color: 'var(--red)',
+                            WebkitTextFillColor: 'var(--red)',
+                            position: 'relative',
+                            transformOrigin: 'center bottom',
+                          }}
+                        >
+                          {word}
+                        </motion.span>
+                      </AnimatePresence>
+                      <motion.span
+                        initial={{ scaleX: 0, opacity: 0 }}
+                        animate={{ scaleX: 1, opacity: 0.9 }}
+                        transition={{ duration: 0.5, delay: 0.65 }}
                         style={{
-                          position: 'absolute',
-                          inset: '-0.05em -0.08em -0.1em -0.08em',
-                          background:
-                            'radial-gradient(closest-side, rgba(192,57,43,0.12), transparent 70%)',
-                          filter: 'blur(6px)',
-                          zIndex: -1,
+                          display: 'block',
+                          height: 1,
+                          marginTop: 4,
+                          width: '100%',
+                          background: 'var(--red)',
+                          transformOrigin: 'left',
                         }}
                       />
-                      {word}
-                    </motion.span>
-                  </AnimatePresence>
-                  <motion.span
-                    initial={{ scaleX: 0, opacity: 0 }}
-                    animate={{ scaleX: 1, opacity: 0.8 }}
-                    transition={{ duration: 0.6, delay: 0.7 }}
-                    style={{
-                      display: 'block',
-                      height: 2,
-                      marginTop: 2,
-                      width: '100%',
-                      background: 'var(--red)',
-                      transformOrigin: 'left',
-                    }}
-                  />
-                </span>
-                <motion.span
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.6, delay: 0.85 }}
-                  style={{
-                    color: 'var(--ink-tertiary)',
-                    lineHeight: 1,
-                    paddingBottom: '0.14em',
-                  }}
-                >
-                  .
-                </motion.span>
-              </motion.span>
-            </h1>
+                    </span>
+                    <motion.span
+                      initial={{ opacity: 0, scale: 0.35 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.45, delay: 0.78 }}
+                      aria-hidden
+                      style={{
+                        width: '0.16em',
+                        height: '0.16em',
+                        minWidth: 5,
+                        minHeight: 5,
+                        maxWidth: 10,
+                        maxHeight: 10,
+                        borderRadius: '50%',
+                        background: 'var(--ink-tertiary)',
+                        opacity: 0.8,
+                        marginBottom: '0.22em',
+                        flexShrink: 0,
+                      }}
+                    />
+                  </motion.span>
+                </h1>
+              </div>
+            </div>
           </div>
 
-          {/* Absorbs any slack so the fold lands near the viewport bottom */}
-          <div aria-hidden style={{ flex: '1 1 auto', minHeight: 0 }} />
+          {/* Keeps fold breathing room under the headline block */}
+          <div aria-hidden style={{ flex: '0 0 clamp(12px, 3vh, 40px)', minHeight: 0 }} />
         </div>
 
         {/* ── Below the fold: lede, CTAs, meta ───────────────── */}
