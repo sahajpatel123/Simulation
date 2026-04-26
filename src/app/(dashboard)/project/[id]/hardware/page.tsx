@@ -76,12 +76,12 @@ type CompetitiveReport = {
 }
 
 const STEPS: Array<{ key: Tab; numeral: string; label: string; subline: string }> = [
-  { key: 'spec', numeral: 'I', label: 'Spec', subline: 'Set the plate' },
-  { key: 'tests', numeral: 'II', label: 'Tests', subline: 'Shake the room' },
-  { key: 'cost', numeral: 'III', label: 'Cost', subline: 'Land the price' },
-  { key: 'simulation', numeral: 'IV', label: 'Simulation', subline: 'Cast the room' },
-  { key: 'competitive', numeral: 'V', label: 'Competitive', subline: 'Find the shelf' },
-  { key: 'report', numeral: 'VI', label: 'Report', subline: 'File the folio' },
+  { key: 'spec', numeral: 'I', label: 'Geometry', subline: 'Define the solid' },
+  { key: 'tests', numeral: 'II', label: 'Stress', subline: 'Prove the assembly' },
+  { key: 'cost', numeral: 'III', label: 'Landed cost', subline: 'BOM to shelf' },
+  { key: 'simulation', numeral: 'IV', label: 'Gauge room', subline: '52 cohorts' },
+  { key: 'competitive', numeral: 'V', label: 'Shelf map', subline: 'Position & gap' },
+  { key: 'report', numeral: 'VI', label: 'Release pack', subline: 'One PDF' },
 ]
 
 const STEP_HERO: Record<
@@ -89,46 +89,46 @@ const STEP_HERO: Record<
   { kicker: string; titleA: string; titleEm: string; titleB: string; sub: string }
 > = {
   spec: {
-    kicker: 'Section I · Plate',
-    titleA: 'An ',
-    titleEm: 'idea',
-    titleB: ' on the press.',
-    sub: 'Set the four-line configuration. The workshop returns a typeset plate.',
+    kicker: 'Bench I · Solid model',
+    titleA: 'Give the ',
+    titleEm: 'object',
+    titleB: ' a name and a spine.',
+    sub: 'Four inputs — geometry, category, target price, intent. The model returns a spec you can rotate, measure, and hand to a toolmaker.',
   },
   tests: {
-    kicker: 'Section II · Physics',
-    titleA: 'The room ',
-    titleEm: 'shakes',
-    titleB: ' the prototype.',
-    sub: 'Eight stress regimes — every component scored on the press.',
+    kicker: 'Bench II · Load cases',
+    titleA: 'Stress it ',
+    titleEm: 'before',
+    titleB: ' metal meets mold.',
+    sub: 'Eight regimes across structure, thermal, RF, and supply. Failures pin to parts on the diagram so you know what to redesign.',
   },
   cost: {
-    kicker: 'Section III · Margin',
-    titleA: 'What it ',
-    titleEm: 'costs',
-    titleB: ' to land on a desk.',
-    sub: 'Bill of materials, freight, duties — distilled to a single editor’s verdict.',
+    kicker: 'Bench III · Economics',
+    titleA: 'Know the ',
+    titleEm: 'margin',
+    titleB: ' before you cut steel.',
+    sub: 'BOM, freight, duties, and yield — rolled into a landed number against your shelf price.',
   },
   simulation: {
-    kicker: 'Section IV · The room',
-    titleA: 'Fifty-two clusters meet the ',
-    titleEm: 'plate',
-    titleB: '.',
-    sub: 'Synthetic readers walk the shelf, pick it up, and decide. The press records who buys.',
+    kicker: 'Bench IV · Synthetic market',
+    titleA: 'Let ',
+    titleEm: 'fifty-two',
+    titleB: ' reader clusters vote.',
+    sub: 'Each cohort behaves differently on price, trust, and novelty. You see who converts and why — not a single average score.',
   },
   competitive: {
-    kicker: 'Section V · Position',
-    titleA: 'Where this ',
-    titleEm: 'lands',
-    titleB: ' on the shelf.',
-    sub: 'Whitespace, threats, and the line that turns a browser into a believer.',
+    kicker: 'Bench V · Landscape',
+    titleA: 'See where you ',
+    titleEm: 'sit',
+    titleB: ' in the aisle.',
+    sub: 'Whitespace, threats, and a positioning line you can actually ship — not generic SWOT filler.',
   },
   report: {
-    kicker: 'Section VI · Filed',
-    titleA: 'The whole ',
-    titleEm: 'folio',
-    titleB: ', in one envelope.',
-    sub: 'Seven sections, one signed PDF — ready for the desk that decides.',
+    kicker: 'Bench VI · Handoff',
+    titleA: 'One ',
+    titleEm: 'release pack',
+    titleB: ' for the room that funds you.',
+    sub: 'Physics, cost, room behaviour, shelf story, and next moves — bound for investors or a CM.',
   },
 }
 
@@ -759,7 +759,7 @@ export default function HardwareBuilderPage() {
   // The single dedicated forward CTA per step
   const primaryCta = (() => {
     if (activeTab === 'spec') {
-      if (!hasPlate) return null // primary action lives in the card form (Send to press)
+      if (!hasPlate) return null // primary action lives in the build sheet (Generate build sheet)
       return { label: 'Run physics', icon: ArrowRight, onClick: () => setActiveTab('tests') }
     }
     if (activeTab === 'tests') {
@@ -779,7 +779,7 @@ export default function HardwareBuilderPage() {
     }
     if (activeTab === 'competitive') {
       return compDisplay?.price_position
-        ? { label: 'File the folio', icon: ArrowRight, onClick: () => setActiveTab('report') }
+        ? { label: 'Open release pack', icon: ArrowRight, onClick: () => setActiveTab('report') }
         : { label: runCompetitiveMutation.isPending ? 'Running…' : 'Run analysis', icon: Play, onClick: () => runCompetitiveMutation.mutate(), disabled: !hwId || runCompetitiveMutation.isPending }
     }
     return {
@@ -793,20 +793,31 @@ export default function HardwareBuilderPage() {
   const showSpecForm = activeTab === 'spec' && (!hasPlate || editingSpec)
 
   return (
-    <div className="hw-workshop relative min-h-screen bg-[var(--paper)] text-[var(--ink)]">
+    <div className="hw-workshop relative min-h-screen text-[var(--ink)]">
       <div className="mx-auto w-full max-w-[1200px] px-8 pt-8 pb-32 lg:px-12">
-        {/* ── Editorial top strip ────────────────────────────────────── */}
-        <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.28em] text-[var(--ink-secondary)]">
+        {/* ── Bench strip (hardware-specific; not archive masthead clone) ─ */}
+        <div className="flex items-center justify-between gap-4 text-[10px] uppercase tracking-[0.28em] text-[var(--ink-secondary)]">
           <Link
             href={`/project/${projectId}`}
-            className="flex items-center gap-2 transition-colors hover:text-[var(--red)]"
+            className="flex shrink-0 items-center gap-2 transition-colors hover:text-[var(--workshop)]"
           >
-            <ArrowLeft size={11} /> Workshop
+            <ArrowLeft size={11} /> Dossier
           </Link>
-          <span className="hidden text-right sm:block" style={{ color: 'var(--red)', fontWeight: 600 }}>
-            Folio {String(hwId ?? '—').padStart(3, '0')} · {hero.kicker}
+          <span
+            className="hidden min-w-0 truncate text-right font-mono text-[9px] normal-case tracking-[0.12em] sm:block"
+            style={{ color: 'var(--workshop)', fontWeight: 500 }}
+          >
+            Lot {String(hwId ?? '—').padStart(3, '0')} · PRJ {String(projectId).padStart(4, '0')} ·{' '}
+            <span className="text-[var(--ink-secondary)]">{hero.kicker}</span>
           </span>
         </div>
+        <div
+          className="mt-4 h-px w-full opacity-70"
+          style={{
+            background:
+              'linear-gradient(90deg, transparent, var(--workshop) 12%, var(--workshop) 88%, transparent)',
+          }}
+        />
 
         {/* ── HERO ──────────────────────────────────────────────────── */}
         <AnimatePresence mode="wait">
@@ -816,52 +827,58 @@ export default function HardwareBuilderPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.25 }}
-            className="mt-9"
+            className="mt-10"
           >
-            <p className="kicker" style={{ color: 'var(--red)' }}>
+            <p
+              className="font-mono text-[10px] uppercase tracking-[0.2em]"
+              style={{ color: 'var(--workshop)' }}
+            >
+              TC hardware bench · stage {STEPS[stepIdx].numeral}
+            </p>
+            <p className="kicker mt-2" style={{ color: 'var(--red)' }}>
               {hero.kicker}
             </p>
             <h1
-              className="mt-3 font-serif italic text-[var(--ink)]"
+              className="mt-4 max-w-[22ch] font-serif italic text-[var(--ink)]"
               style={{
-                fontSize: 'clamp(40px, 5.2vw, 68px)',
+                fontSize: 'clamp(34px, 4.5vw, 56px)',
                 fontWeight: 900,
-                letterSpacing: '-0.035em',
-                lineHeight: 0.95,
+                letterSpacing: '-0.032em',
+                lineHeight: 1.02,
               }}
             >
               {hero.titleA}
               <span style={{ color: 'var(--red)' }}>{hero.titleEm}</span>
               {hero.titleB}
             </h1>
-            <p className="mt-4 max-w-[58ch] text-[14px] leading-[1.7] text-[var(--ink-secondary)]">
+            <p className="mt-5 max-w-[56ch] text-[15px] font-light leading-[1.75] text-[var(--ink-secondary)]">
               {hero.sub}
             </p>
           </motion.header>
         </AnimatePresence>
 
         {/* ── DRAFTING CARD ─────────────────────────────────────────── */}
-        <div className="relative mt-10">
+        <div className="relative mt-11">
           <div
-            className="relative overflow-hidden border-[0.5px] border-[var(--ink)]/25 bg-[var(--paper)]"
-            style={{ boxShadow: '14px 14px 0 rgba(26,23,20,0.10)' }}
+            className="relative overflow-hidden border border-[var(--ink)]/18 bg-[color-mix(in_srgb,var(--paper)_92%,white)]"
+            style={{
+              boxShadow:
+                '0 1px 0 rgba(45,69,86,0.06), 0 22px 48px -28px rgba(26,23,20,0.22), 10px 10px 0 rgba(45,69,86,0.04)',
+            }}
           >
-            {/* Card chrome — registration row */}
-            <div className="flex flex-wrap items-center gap-3 border-b-[0.5px] border-[var(--border-strong)] bg-[var(--paper-dark)]/45 px-5 py-3">
-              <div className="flex shrink-0 gap-1.5">
-                {['var(--red)', '#b88a3a', '#3d7a4a'].map((c) => (
-                  <span
-                    key={c}
-                    className="h-2 w-2 rounded-full"
-                    style={{ background: c, opacity: 0.85 }}
-                  />
-                ))}
+            {/* Card chrome — registration marks (drafting sheet, not OS window) */}
+            <div className="flex flex-wrap items-center gap-3 border-b border-[var(--ink)]/12 bg-[color-mix(in_srgb,var(--paper-dark)_55%,transparent)] px-5 py-3.5">
+              <div className="relative h-5 w-9 shrink-0 text-[var(--workshop)]" aria-hidden>
+                <span className="absolute left-0 top-0 h-2 w-2 border-l border-t border-current opacity-55" />
+                <span className="absolute right-0 top-0 h-2 w-2 border-r border-t border-current opacity-55" />
+                <span className="absolute bottom-0 left-0 h-2 w-2 border-b border-l border-current opacity-55" />
+                <span className="absolute bottom-0 right-0 h-2 w-2 border-b border-r border-current opacity-55" />
               </div>
               <span
-                className="rounded-sm border-[0.5px] border-[var(--ink)]/30 bg-[var(--paper)] px-2 py-0.5 font-serif text-[11px] italic text-[var(--ink)]"
-                style={{ letterSpacing: 0 }}
+                className="border border-[var(--workshop)]/25 bg-[var(--paper)] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--workshop)]"
+                style={{ letterSpacing: '0.12em' }}
               >
-                {STEPS[stepIdx].numeral}.&nbsp;{STEPS[stepIdx].label}
+                {STEPS[stepIdx].numeral} · {STEPS[stepIdx].label}
               </span>
 
               {/* Step-specific chrome row */}
@@ -917,7 +934,7 @@ export default function HardwareBuilderPage() {
                         <PaperField />
                         <div className="relative z-10 max-w-md text-center">
                           <p className="kicker mb-5" style={{ color: 'var(--red)' }}>
-                            Standing type · Plate not yet filed
+                            No solid on file · Geometry idle
                           </p>
                           <div className="mx-auto mb-7 flex h-24 w-24 items-center justify-center border-[0.5px] border-[var(--workshop)]/35 bg-[var(--paper)]">
                             <Hexagon size={42} className="text-[var(--workshop)]" strokeWidth={1.2} />
@@ -926,11 +943,12 @@ export default function HardwareBuilderPage() {
                             className="font-serif italic text-[var(--ink)]"
                             style={{ fontSize: 36, fontWeight: 900, letterSpacing: '-0.025em' }}
                           >
-                            Awaiting <span style={{ color: 'var(--red)' }}>impression</span>.
+                            Awaiting <span style={{ color: 'var(--red)' }}>geometry</span>.
                           </h3>
                           <p className="mt-3 text-[14px] leading-relaxed text-[var(--ink-secondary)]">
-                            File the dispatch form above and the workshop will set a typeset
-                            blueprint, dimensions, and a component diagram on this plate.
+                            When this bench is on Geometry without a saved solid, the build sheet
+                            appears in this same frame. Complete it to generate the 3D plate,
+                            dimensions, and part list.
                           </p>
                         </div>
                       </div>
@@ -1016,7 +1034,7 @@ export default function HardwareBuilderPage() {
                       <EmptyStage
                         kicker="No tests on file"
                         title="The room is quiet."
-                        body="Press the dedicated action below to put the prototype through eight stress regimes."
+                        body="Use the bench control below to run eight load cases on the current solid."
                       />
                     )}
                   </div>
@@ -1029,7 +1047,7 @@ export default function HardwareBuilderPage() {
                       <>
                         <div className={`border-[0.5px] p-7 ${verdictBg(costView.verdict)}`}>
                           <p className="kicker mb-2" style={{ color: 'var(--ink-secondary)' }}>
-                            Editor&rsquo;s verdict
+                            Margin verdict
                           </p>
                           <p
                             className={`font-serif italic ${verdictTone(costView.verdict)}`}
@@ -1117,7 +1135,7 @@ export default function HardwareBuilderPage() {
                       <EmptyStage
                         kicker="No analysis on file"
                         title={costView.message ?? 'No verdict yet.'}
-                        body="Press the dedicated action below and the workshop will land the price."
+                        body="Run landed-cost analysis from the bench control below."
                       />
                     )}
                   </div>
@@ -1172,7 +1190,7 @@ export default function HardwareBuilderPage() {
                       <EmptyStage
                         kicker="No simulation on file"
                         title="An empty room awaits."
-                        body="Press the dedicated action below to put the prototype in front of fifty-two synthetic clusters."
+                        body="Queue the gauge-room run from the bench control — fifty-two cohorts evaluate the solid."
                       />
                     )}
                   </div>
@@ -1242,7 +1260,7 @@ export default function HardwareBuilderPage() {
                       <EmptyStage
                         kicker="No analysis filed"
                         title="The shelf is unread."
-                        body="Press the dedicated action below to derive positioning, threats, and opportunities."
+                        body="Run shelf mapping from the bench control to derive positioning, threats, and whitespace."
                         footer={
                           runCompetitiveMutation.isError ? (
                             <p className="font-mono text-xs text-red-700">
@@ -1309,77 +1327,65 @@ export default function HardwareBuilderPage() {
         </div>
       </div>
 
-      {/* ── BOTTOM COMMAND BAR — one desk at a time; no jump-to-step strip ── */}
+      {/* ── Bench rail: back / quiet stage / forward only (no step picker) ── */}
       <nav
-        className="fixed right-0 bottom-0 left-0 z-40 border-t-[0.5px] border-[var(--border-color)] bg-[var(--paper)]/96 backdrop-blur-sm"
-        style={{ boxShadow: '0 -10px 30px -20px rgba(26,23,20,0.18)' }}
-        aria-label="Workshop navigation"
+        className="fixed right-0 bottom-0 left-0 z-40 border-t border-[var(--ink)]/10 bg-[color-mix(in_srgb,var(--paper)_88%,var(--paper-dark))]/95 backdrop-blur-md"
+        style={{ boxShadow: '0 -12px 40px -24px rgba(26,23,20,0.2)' }}
+        aria-label="Bench navigation"
       >
-        <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-4 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 lg:px-12">
-          {/* Prev / back */}
-          <div className="flex shrink-0 justify-start">
+        <div className="mx-auto flex w-full max-w-[1200px] flex-col items-stretch gap-3 px-6 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-8 lg:px-12">
+          <div className="flex shrink-0 justify-start sm:min-w-[9rem]">
             {prevStep ? (
               <button
                 type="button"
                 onClick={() => setActiveTab(prevStep.key)}
-                className="group inline-flex items-center gap-3 border-[0.5px] border-[var(--ink)]/30 bg-[var(--paper)] px-4 py-3 text-[10px] font-medium uppercase tracking-[0.24em] text-[var(--ink-secondary)] transition-all hover:border-[var(--ink)] hover:text-[var(--ink)]"
+                className="group text-left text-[11px] font-medium tracking-[0.06em] text-[var(--ink-secondary)] transition-colors hover:text-[var(--workshop)]"
               >
-                <ArrowLeft size={12} className="transition-transform group-hover:-translate-x-0.5" />
-                <span className="flex flex-col items-start leading-tight">
-                  <span className="text-[8.5px] tracking-[0.28em] text-[var(--ink-tertiary)]">
-                    Return to desk {prevStep.numeral}
+                <span className="inline-flex items-center gap-2">
+                  <ArrowLeft size={12} className="opacity-70 transition-transform group-hover:-translate-x-0.5" />
+                  <span>
+                    <span className="block font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--ink-tertiary)]">
+                      Prior bench
+                    </span>
+                    {prevStep.label}
                   </span>
-                  <span>{prevStep.label}</span>
                 </span>
               </button>
             ) : (
               <Link
                 href={`/project/${projectId}`}
-                className="group inline-flex items-center gap-3 border-[0.5px] border-[var(--ink)]/30 bg-[var(--paper)] px-4 py-3 text-[10px] font-medium uppercase tracking-[0.24em] text-[var(--ink-secondary)] transition-all hover:border-[var(--ink)] hover:text-[var(--ink)]"
+                className="group text-[11px] font-medium tracking-[0.06em] text-[var(--ink-secondary)] transition-colors hover:text-[var(--workshop)]"
               >
-                <ArrowLeft size={12} className="transition-transform group-hover:-translate-x-0.5" />
-                Back to dossier
+                <span className="inline-flex items-center gap-2">
+                  <ArrowLeft size={12} className="opacity-70 transition-transform group-hover:-translate-x-0.5" />
+                  Back to dossier
+                </span>
               </Link>
             )}
           </div>
 
-          {/* Current chapter only — folio bind-rail (decorative, not a tab strip) */}
-          <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-1.5 px-2 text-center">
-            <p
-              className="text-[9px] font-medium uppercase tracking-[0.34em] text-[var(--ink-tertiary)]"
-              aria-live="polite"
-            >
-              Hardware atelier · Desk {STEPS[stepIdx].numeral} of VI
+          <div
+            className="flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-center"
+            aria-live="polite"
+          >
+            <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-[var(--ink-tertiary)]">
+              {String(stepIdx + 1).padStart(2, '0')} / 06
             </p>
-            <p className="max-w-[min(100%,42ch)] font-serif text-[13px] italic leading-snug text-[var(--ink)]">
-              <span style={{ letterSpacing: '0.02em' }}>{STEPS[stepIdx].label}</span>
-              <span className="mx-2 text-[10px] font-sans not-italic uppercase tracking-[0.22em] text-[var(--ink-secondary)]">
-                {STEPS[stepIdx].subline}
-              </span>
+            <p className="font-serif text-[15px] italic leading-tight text-[var(--ink)]">
+              {STEPS[stepIdx].numeral} — {STEPS[stepIdx].label}
             </p>
-            <div
-              className="mt-0.5 flex h-[3px] w-full max-w-[min(100%,200px)] items-stretch justify-between gap-1"
-              aria-hidden="true"
-            >
-              {STEPS.map((s) => (
-                <span
-                  key={s.key}
-                  className={`min-w-0 flex-1 rounded-full transition-colors ${
-                    s.key === activeTab ? 'bg-[var(--red)]' : 'bg-[var(--border-color)]'
-                  }`}
-                />
-              ))}
-            </div>
+            <p className="max-w-[36ch] text-[10px] font-normal normal-case tracking-normal text-[var(--ink-tertiary)]">
+              {STEPS[stepIdx].subline}
+            </p>
           </div>
 
-          {/* Primary desk action — sole forward control (matches editorial prototype) */}
-          <div className="flex shrink-0 justify-end">
+          <div className="flex min-h-[44px] shrink-0 items-center justify-end sm:min-w-[11rem]">
             {primaryCta ? (
               <button
                 type="button"
                 onClick={primaryCta.onClick}
                 disabled={primaryCta.disabled}
-                className="group inline-flex w-full items-center justify-center gap-3 bg-[var(--ink)] px-6 py-3 text-[10px] font-medium uppercase tracking-[0.24em] text-[var(--paper)] transition-all hover:bg-[var(--red)] disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+                className="group inline-flex w-full items-center justify-center gap-2.5 border border-[var(--ink)] bg-[var(--ink)] px-5 py-2.5 text-[10px] font-medium uppercase tracking-[0.22em] text-[var(--paper)] transition-all hover:border-[var(--red)] hover:bg-[var(--red)] disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
               >
                 {primaryCta.icon === Play ? (
                   primaryCta.disabled ? (
@@ -1394,11 +1400,7 @@ export default function HardwareBuilderPage() {
                 ) : null}
                 {primaryCta.icon === Download ? <Download size={12} /> : null}
               </button>
-            ) : (
-              <span className="text-[10px] uppercase tracking-[0.24em] text-[var(--ink-tertiary)]">
-                File the dispatch above
-              </span>
-            )}
+            ) : null}
           </div>
         </div>
       </nav>
@@ -1444,8 +1446,8 @@ function CardChrome({
   if (step === 'spec') {
     if (!hasPlate) {
       return (
-        <span className="font-serif text-[12px] italic text-[var(--ink-tertiary)]">
-          Press dispatch — set the four lines below.
+        <span className="max-w-[28ch] text-right font-mono text-[10px] leading-snug tracking-[0.04em] text-[var(--ink-tertiary)]">
+          Build sheet open — four fields required before the model runs.
         </span>
       )
     }
@@ -1532,7 +1534,20 @@ function CardChrome({
   return null
 }
 
-/* ── Press dispatch form (Spec step, when no plate / editing) ────────── */
+/* ── Build sheet (spec step — hardware intake, not “press” metaphor) ─── */
+
+function BuildSheetDatumLine() {
+  return (
+    <div
+      className="mt-7 h-px w-full max-w-xl opacity-50"
+      style={{
+        backgroundImage:
+          'repeating-linear-gradient(90deg, var(--workshop) 0, var(--workshop) 1px, transparent 1px, transparent 10px)',
+      }}
+      aria-hidden
+    />
+  )
+}
 
 function PressDispatchForm({
   form,
@@ -1562,21 +1577,22 @@ function PressDispatchForm({
     <div className="relative">
       <PaperField />
       <div className="relative z-10 mx-auto max-w-3xl px-8 py-12">
-        <p className="kicker" style={{ color: 'var(--red)' }}>
-          Press dispatch
+        <p className="font-mono text-[10px] uppercase tracking-[0.22em]" style={{ color: 'var(--workshop)' }}>
+          Build specification · intake
         </p>
         <h2
-          className="mt-2 font-serif italic text-[var(--ink)]"
-          style={{ fontSize: 36, fontWeight: 900, letterSpacing: '-0.025em', lineHeight: 1 }}
+          className="mt-3 font-serif italic text-[var(--ink)]"
+          style={{ fontSize: 34, fontWeight: 900, letterSpacing: '-0.028em', lineHeight: 1.05 }}
         >
-          File a new <span style={{ color: 'var(--red)' }}>plate</span>.
+          Name the <span style={{ color: 'var(--red)' }}>solid</span> you want to prove.
         </h2>
-        <p className="mt-3 max-w-[52ch] text-[14px] leading-relaxed text-[var(--ink-secondary)]">
-          Four lines. Set the parameters and the workshop returns a typeset
-          specification, dimensions, and a component diagram.
+        <p className="mt-4 max-w-[52ch] text-[14px] font-light leading-relaxed text-[var(--ink-secondary)]">
+          Identity, category, shelf price, and a short engineering note. The bench returns a
+          dimensioned solid, a part tree, and a diagram you can interrogate — not a slide deck.
         </p>
+        <BuildSheetDatumLine />
 
-        <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-[2fr_1fr_1fr]">
+        <div className="mt-10 grid grid-cols-1 gap-8 sm:grid-cols-[2fr_1fr_1fr] sm:gap-6">
           <FormField label="i. Product name">
             <input
               type="text"
@@ -1614,11 +1630,11 @@ function PressDispatchForm({
           </FormField>
         </div>
 
-        <div className="mt-7">
-          <FormField label="iv. Marginalia">
+        <div className="mt-8">
+          <FormField label="iv. Engineering note">
             <textarea
               rows={4}
-              placeholder="Materials, key features, form factor — the editor's note that sets the line."
+              placeholder="Materials, stack-up, ingress rating, radios — what a CM would need in the first call."
               value={form.description}
               onChange={(e) => onChange((f) => ({ ...f, description: e.target.value }))}
               className="w-full resize-none border-0 border-b border-[var(--ink)]/35 bg-transparent px-0 py-2 font-serif text-[16px] leading-relaxed italic text-[var(--ink)] placeholder-[var(--ink-tertiary)] focus:border-[var(--red)] focus:outline-none"
@@ -1626,16 +1642,17 @@ function PressDispatchForm({
           </FormField>
         </div>
 
-        <div className="mt-9 flex items-center justify-between gap-4">
-          <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--ink-tertiary)]">
-            ✶ The workshop typesets in seconds.
+        <div className="mt-10 flex flex-col gap-4 border-t border-[var(--ink)]/10 pt-8 sm:flex-row sm:items-end sm:justify-between">
+          <p className="max-w-[40ch] text-[12px] font-light leading-relaxed text-[var(--ink-tertiary)]">
+            Spec generation runs on the server; keep this tab open. You can iterate the note and
+            re-issue without leaving the bench.
           </p>
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-3">
             {canCancel ? (
               <button
                 type="button"
                 onClick={onCancel}
-                className="border-[0.5px] border-[var(--ink)]/30 bg-[var(--paper)] px-4 py-3 text-[10px] uppercase tracking-[0.24em] text-[var(--ink-secondary)] transition-colors hover:border-[var(--ink)] hover:text-[var(--ink)]"
+                className="border border-[var(--ink)]/25 bg-transparent px-4 py-2.5 text-[10px] uppercase tracking-[0.2em] text-[var(--ink-secondary)] transition-colors hover:border-[var(--ink)] hover:text-[var(--ink)]"
               >
                 Cancel
               </button>
@@ -1644,17 +1661,17 @@ function PressDispatchForm({
               type="button"
               onClick={onSubmit}
               disabled={!canSubmit}
-              className="group inline-flex items-center gap-3 bg-[var(--ink)] px-6 py-3 text-[10px] font-medium uppercase tracking-[0.26em] text-[var(--paper)] transition-all hover:bg-[var(--red)] disabled:cursor-not-allowed disabled:opacity-40"
+              className="group inline-flex items-center gap-2.5 border border-[var(--ink)] bg-[var(--ink)] px-6 py-2.5 text-[10px] font-medium uppercase tracking-[0.22em] text-[var(--paper)] transition-all hover:border-[var(--red)] hover:bg-[var(--red)] disabled:cursor-not-allowed disabled:opacity-40"
             >
               {generating ? (
                 <>
                   <Loader2 size={13} className="animate-spin" />
-                  Setting type…
+                  Generating solid…
                 </>
               ) : (
                 <>
                   <Sparkles size={13} />
-                  Send to press
+                  Generate build sheet
                   <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
                 </>
               )}

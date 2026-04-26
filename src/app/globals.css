@@ -368,10 +368,15 @@ body.thecee-scroll-reveal::-webkit-scrollbar-thumb:hover {
 .rise-3 { animation-delay: 220ms; }
 .rise-4 { animation-delay: 340ms; }
 
-/* Hardware lab — shares body typography; monospace remains for measurements only */
+/* Hardware lab — bench atmosphere (page-scoped class on /project/.../hardware only) */
 .hw-workshop {
   font-family: var(--font-body, 'DM Sans', sans-serif);
   font-weight: 300;
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(ellipse 95% 55% at 50% -8%, rgba(45, 69, 86, 0.09), transparent 58%),
+    radial-gradient(ellipse 70% 45% at 100% 100%, rgba(45, 69, 86, 0.05), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 0% 85%, rgba(192, 57, 43, 0.035), transparent 52%);
 }
 
 /* Modal-open state: blur the whole app shell (header, sidebar, main). */
