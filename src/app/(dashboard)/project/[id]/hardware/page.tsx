@@ -6,6 +6,22 @@ import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
+import {
+  ArrowLeft,
+  ArrowRight,
+  Cpu,
+  Download,
+  FileText,
+  FlaskConical,
+  Hexagon,
+  Loader2,
+  Play,
+  RotateCcw,
+  Scale,
+  Sparkles,
+  Target,
+  Users,
+} from 'lucide-react'
 
 import {
   HardwareFailureMap,
@@ -120,9 +136,7 @@ function normalizeCostView(
   const bomTotal = bom.reduce((acc, b) => acc + Number(b.unit_cost_inr ?? 0), 0)
   const landed = Number(raw.landed_cost_inr ?? 0)
   const marginPct =
-    typeof raw.margin_pct === 'number'
-      ? raw.margin_pct
-      : Number(raw.margin_pct ?? 0)
+    typeof raw.margin_pct === 'number' ? raw.margin_pct : Number(raw.margin_pct ?? 0)
   const target = Number(raw.target_price_inr ?? targetPriceInr)
   const marginInr =
     typeof raw.margin_inr === 'number'
@@ -155,39 +169,39 @@ function normalizeCostView(
   }
 }
 
-// ── Editorial “blueprint” field — warm paper, steel rule, no dark-lab chrome ──
+// ── Editorial paper field — warm grain, faint blueprint diagonals ────────
 function EditorialBlueprintGrid() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
       <div
         className="absolute inset-0"
         style={{
-          backgroundImage: `radial-gradient(circle at 1px 1px, rgba(45, 69, 86, 0.1) 1px, transparent 0)`,
-          backgroundSize: '22px 22px',
+          backgroundImage: `radial-gradient(circle at 1px 1px, rgba(45, 69, 86, 0.08) 1px, transparent 0)`,
+          backgroundSize: '24px 24px',
         }}
       />
       <div
-        className="absolute inset-0 opacity-50"
+        className="absolute inset-0 opacity-40"
         style={{
           backgroundImage: `
-            linear-gradient(105deg, transparent 48.5%, rgba(45, 69, 86, 0.04) 49.5%, rgba(45, 69, 86, 0.04) 50.5%, transparent 51.5%),
-            linear-gradient(-15deg, transparent 48.5%, rgba(45, 69, 86, 0.03) 49.5%, rgba(45, 69, 86, 0.03) 50.5%, transparent 51.5%)
+            linear-gradient(105deg, transparent 48.5%, rgba(45, 69, 86, 0.05) 49.5%, rgba(45, 69, 86, 0.05) 50.5%, transparent 51.5%),
+            linear-gradient(-15deg, transparent 48.5%, rgba(45, 69, 86, 0.04) 49.5%, rgba(45, 69, 86, 0.04) 50.5%, transparent 51.5%)
           `,
-          backgroundSize: '72px 72px, 96px 96px',
+          backgroundSize: '88px 88px, 120px 120px',
         }}
       />
       <div
         className="absolute inset-0"
         style={{
           background:
-            'radial-gradient(ellipse 75% 60% at 50% 48%, rgba(242, 236, 224, 0.9) 0%, transparent 62%)',
+            'radial-gradient(ellipse 78% 62% at 50% 48%, rgba(242, 236, 224, 0.92) 0%, transparent 64%)',
         }}
       />
     </div>
   )
 }
 
-// ── 3D Product Spec Viewer ──
+// ── 3D Product Spec Viewer (kept; trim refined) ─────────────────────────
 function SpecViewer({ spec, hwProduct }: { spec: Record<string, unknown>; hwProduct: HwListItem | null }) {
   const [rotateY, setRotateY] = useState(-25)
   const [rotateX, setRotateX] = useState(15)
@@ -230,13 +244,40 @@ function SpecViewer({ spec, hwProduct }: { spec: Record<string, unknown>; hwProd
 
   return (
     <div
-      className="relative flex min-h-96 flex-1 select-none flex-col items-center justify-center"
+      className="relative flex min-h-[520px] flex-1 select-none flex-col items-center justify-center"
       style={{ perspective: '900px' }}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
       onMouseLeave={onMouseUp}
     >
       <EditorialBlueprintGrid />
+
+      {/* Plate corner registration marks */}
+      <div className="pointer-events-none absolute inset-6 z-0">
+        {(['tl', 'tr', 'bl', 'br'] as const).map((c) => (
+          <span
+            key={c}
+            aria-hidden
+            className="absolute h-3 w-3 border-[var(--workshop)]/35"
+            style={{
+              top: c.startsWith('t') ? 0 : 'auto',
+              bottom: c.startsWith('b') ? 0 : 'auto',
+              left: c.endsWith('l') ? 0 : 'auto',
+              right: c.endsWith('r') ? 0 : 'auto',
+              borderTopWidth: c.startsWith('t') ? 1 : 0,
+              borderBottomWidth: c.startsWith('b') ? 1 : 0,
+              borderLeftWidth: c.endsWith('l') ? 1 : 0,
+              borderRightWidth: c.endsWith('r') ? 1 : 0,
+            }}
+          />
+        ))}
+      </div>
+
+      <div className="relative z-10 mb-3 text-center">
+        <p className="kicker" style={{ color: 'var(--workshop)' }}>
+          Plate · Component diagram
+        </p>
+      </div>
 
       <div
         className="relative z-10 cursor-grab active:cursor-grabbing"
@@ -250,7 +291,7 @@ function SpecViewer({ spec, hwProduct }: { spec: Record<string, unknown>; hwProd
         onDoubleClick={onReset}
         role="presentation"
       >
-        <svg viewBox="0 0 360 280" width={420} xmlns="http://www.w3.org/2000/svg" className="max-w-full">
+        <svg viewBox="0 0 360 280" width={460} xmlns="http://www.w3.org/2000/svg" className="max-w-full">
           <ellipse cx="180" cy="270" rx="120" ry="12" fill="var(--workshop)" opacity="0.1" />
 
           {shape === 'flat' ? (
@@ -331,17 +372,29 @@ function SpecViewer({ spec, hwProduct }: { spec: Record<string, unknown>; hwProd
         </svg>
       </div>
 
-      <p className="relative z-10 mt-3 text-xs text-[var(--ink-tertiary)]" style={{ letterSpacing: '0.12em' }}>
-        drag to rotate · double-click to reset
-      </p>
-
-      <div className="relative z-10 mt-2 flex items-center gap-2">
-        <div className="h-2 w-2 rounded-full bg-[var(--workshop)]" />
-        <span className="text-xs text-[var(--ink-secondary)]">
-          {material} · {components.length} components
-          {hwProduct?.name ? ` · ${hwProduct.name}` : ''}
+      <div className="relative z-10 mt-5 flex items-center gap-4 text-[11px] text-[var(--ink-secondary)]">
+        <span className="flex items-center gap-1.5">
+          <Hexagon size={11} className="text-[var(--workshop)]" />
+          {material}
         </span>
+        <span className="h-3 w-px bg-[var(--border-color)]" />
+        <span>{components.length} components</span>
+        {hwProduct?.name ? (
+          <>
+            <span className="h-3 w-px bg-[var(--border-color)]" />
+            <span className="font-serif italic text-[var(--ink)]">{hwProduct.name}</span>
+          </>
+        ) : null}
       </div>
+
+      <button
+        type="button"
+        onClick={onReset}
+        className="relative z-10 mt-4 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink-tertiary)] transition-colors hover:text-[var(--red)]"
+      >
+        <RotateCcw size={10} />
+        drag to rotate · double-click to reset
+      </button>
     </div>
   )
 }
@@ -353,6 +406,8 @@ const CATEGORIES = [
   { value: 'iot_hardware', label: 'IoT Hardware' },
   { value: 'b2b_hardware', label: 'B2B Hardware' },
 ] as const
+
+const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII']
 
 export default function HardwareBuilderPage() {
   const params = useParams()
@@ -379,6 +434,7 @@ export default function HardwareBuilderPage() {
   const [runningSim, setRunningSim] = useState(false)
   const [competitiveReport, setCompetitiveReport] = useState<CompetitiveReport | null>(null)
   const [pdfBusy, setPdfBusy] = useState(false)
+  const [configOpen, setConfigOpen] = useState(true)
 
   const [genForm, setGenForm] = useState({
     name: '',
@@ -640,30 +696,30 @@ export default function HardwareBuilderPage() {
     }
   }
 
-  const TABS: { key: Tab; label: string }[] = [
-    { key: 'spec', label: 'Spec' },
-    { key: 'tests', label: 'Tests' },
-    { key: 'cost', label: 'Cost' },
-    { key: 'simulation', label: 'Simulation' },
-    { key: 'competitive', label: 'Competitive' },
-    { key: 'report', label: 'Report' },
+  const TABS: { key: Tab; label: string; sub: string; Icon: typeof Cpu }[] = [
+    { key: 'spec', label: 'Spec', sub: 'Blueprint', Icon: Hexagon },
+    { key: 'tests', label: 'Tests', sub: 'Physics', Icon: FlaskConical },
+    { key: 'cost', label: 'Cost', sub: 'Margin', Icon: Scale },
+    { key: 'simulation', label: 'Simulation', sub: '52 clusters', Icon: Users },
+    { key: 'competitive', label: 'Competitive', sub: 'Position', Icon: Target },
+    { key: 'report', label: 'Report', sub: 'Filed PDF', Icon: FileText },
   ]
 
   const verdictColor = (v: string) =>
     v === 'VIABLE'
-      ? 'text-emerald-900 border-emerald-600/35'
+      ? 'text-emerald-900 border-emerald-700/35'
       : v === 'MARGINAL'
         ? 'text-amber-900 border-amber-700/35'
         : v === 'NOT_VIABLE'
-          ? 'text-red-900 border-red-600/40'
+          ? 'text-red-900 border-red-700/40'
           : 'text-[var(--ink-tertiary)] border-[var(--border-color)]'
 
   const verdictBorderBg = (v: string) =>
     v === 'VIABLE'
-      ? 'border-emerald-600/25 bg-emerald-500/[0.07]'
+      ? 'border-emerald-700/25 bg-emerald-500/[0.07]'
       : v === 'MARGINAL'
         ? 'border-amber-700/25 bg-amber-500/[0.08]'
-        : 'border-red-600/25 bg-red-500/[0.06]'
+        : 'border-red-700/25 bg-red-500/[0.06]'
 
   const statusColor = (s: string) =>
     s === 'PASS'
@@ -683,92 +739,126 @@ export default function HardwareBuilderPage() {
     { conversion_rate?: number; population_fraction?: number }
   >
 
+  const issueLine = `Folio ${String(hwId ?? '—').padStart(3, '0')} · Workshop edition`
+
   return (
     <div className="hw-workshop min-h-screen bg-[var(--paper)] text-[var(--ink)]">
-      {/* ── HEADER — workshop masthead, not devtools chrome ── */}
-      <div
-        className="relative z-20 flex items-center justify-between border-b border-[var(--border-color)] px-8 py-6"
-        style={{
-          background: 'linear-gradient(180deg, #faf7f0 0%, var(--paper) 100%)',
-        }}
+      {/* ── EDITORIAL MASTHEAD ────────────────────────────────────── */}
+      <section
+        className="relative z-20 border-b border-[var(--border-color)] px-10 pt-9 pb-6"
+        style={{ background: 'linear-gradient(180deg, #faf7f0 0%, var(--paper) 100%)' }}
       >
-        <div className="flex flex-wrap items-end gap-5">
-          <div>
-            <p
-              className="kicker mb-1"
-              style={{ color: 'var(--workshop)', letterSpacing: '0.2em' }}
-            >
-              TheCee / Workshop
-            </p>
-            <h1 className="font-serif text-2xl font-bold italic leading-tight tracking-tight text-[var(--ink)]">
-              {selectedHw?.name ?? 'Hardware atelier'}
-            </h1>
-            <p className="mt-1 max-w-xl text-xs text-[var(--ink-tertiary)]" style={{ letterSpacing: '0.06em' }}>
-              Blueprint, physics, and margin — filed like the rest of the magazine.
-            </p>
-          </div>
-          {hwList.length > 1 ? (
-            <label className="text-[10px] uppercase tracking-[0.16em] text-[var(--ink-tertiary)]">
-              Product
-              <select
-                value={hwId ?? ''}
-                onChange={(e) => setSelectedHwId(Number(e.target.value))}
-                className="ml-2 rounded border border-[var(--border-strong)] bg-white/80 px-2.5 py-1.5 text-xs text-[var(--ink)] shadow-sm"
-              >
-                {hwList.map((h) => (
-                  <option key={h.id} value={h.id}>
-                    {h.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
+        <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.28em] text-[var(--ink-secondary)]">
+          <span style={{ color: 'var(--red)', fontWeight: 600 }}>The Workshop</span>
+          <span>{issueLine}</span>
           <Link
             href={`/project/${projectId}`}
-            className="rounded border border-[var(--border-strong)] bg-white/50 px-3.5 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--ink-secondary)] transition-all hover:border-[var(--ink)] hover:text-[var(--red)]"
+            className="flex items-center gap-2 transition-colors hover:text-[var(--red)]"
           >
-            ← Dossier
+            <ArrowLeft size={11} />
+            Back to dossier
           </Link>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {selectedHw ? (
-            <span
-              className="rounded border border-[var(--workshop)]/35 bg-[var(--workshop-dim)] px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--workshop)]"
-            >
-              {(selectedHw.category ?? 'hardware').replace(/_/g, ' ')}
-            </span>
-          ) : null}
-          {headerCostVerdict && headerCostVerdict !== '—' ? (
-            <span
-              className={`rounded border px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.16em] ${verdictColor(headerCostVerdict)}`}
-            >
-              {headerCostVerdict}
-            </span>
-          ) : null}
-        </div>
-      </div>
 
-      {/* ── TABS — desktop: top bar ── */}
-      {!isMobile && (
-        <div className="relative z-20 flex gap-1 border-b border-[var(--border-color)] bg-[var(--paper-dark)]/40 px-8 backdrop-blur-sm">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setActiveTab(t.key)}
-              className={`px-4 py-3.5 text-xs uppercase tracking-[0.2em] transition-all ${
-                activeTab === t.key
-                  ? 'border-b-2 border-[var(--red)] text-[var(--ink)]'
-                  : 'text-[var(--ink-tertiary)] hover:text-[var(--ink-secondary)]'
-              }`}
+        <div className="mt-5 flex items-end justify-between gap-8">
+          <div className="min-w-0 flex-1">
+            <p className="kicker mb-2" style={{ color: 'var(--workshop)' }}>
+              <span className="status-dot status-dot--running" />
+              {selectedHw ? (selectedHw.category ?? 'hardware').replace(/_/g, ' ') : 'Awaiting first plate'}
+            </p>
+            <h1
+              className="font-serif italic leading-[0.96] tracking-tight text-[var(--ink)]"
+              style={{ fontSize: 'clamp(36px, 4.5vw, 56px)', fontWeight: 900, letterSpacing: '-0.035em' }}
             >
-              {t.label}
-            </button>
-          ))}
+              {selectedHw?.name ?? (
+                <>
+                  An <span style={{ color: 'var(--red)' }}>idea</span> on the press.
+                </>
+              )}
+            </h1>
+            <p className="mt-3 max-w-[58ch] text-[13px] leading-[1.7] text-[var(--ink-secondary)]">
+              Blueprint, physics, margin, and the room&rsquo;s verdict — typeset like the rest of
+              the magazine. Configure on the left, watch the plate set itself on the right.
+            </p>
+          </div>
+
+          <div className="flex shrink-0 flex-col items-end gap-3">
+            {hwList.length > 1 ? (
+              <label className="text-[10px] uppercase tracking-[0.22em] text-[var(--ink-tertiary)]">
+                Filed under
+                <select
+                  value={hwId ?? ''}
+                  onChange={(e) => setSelectedHwId(Number(e.target.value))}
+                  className="ml-2 rounded-none border-0 border-b border-[var(--ink)] bg-transparent px-1 py-1 font-serif text-sm italic text-[var(--ink)] focus:outline-none"
+                >
+                  {hwList.map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {h.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {headerCostVerdict && headerCostVerdict !== '—' ? (
+              <span
+                className={`inline-flex items-center gap-2 border px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.22em] ${verdictColor(headerCostVerdict)}`}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                Verdict · {headerCostVerdict}
+              </span>
+            ) : null}
+          </div>
         </div>
+
+        <div className="mt-6 h-[2px] bg-[var(--red)]" />
+      </section>
+
+      {/* ── SECTION TABS — editorial nav with roman numerals ────── */}
+      {!isMobile && (
+        <nav className="relative z-20 border-b border-[var(--border-color)] bg-[var(--paper)]/85 backdrop-blur-sm">
+          <ul className="flex">
+            {TABS.map((t, i) => {
+              const active = activeTab === t.key
+              const Icon = t.Icon
+              return (
+                <li key={t.key} className="flex-1">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab(t.key)}
+                    className={`group relative flex w-full items-center gap-3 px-5 py-4 text-left transition-colors ${
+                      active ? 'text-[var(--ink)]' : 'text-[var(--ink-tertiary)] hover:text-[var(--ink-secondary)]'
+                    }`}
+                  >
+                    <span
+                      className={`font-serif text-xs italic transition-colors ${
+                        active ? 'text-[var(--red)]' : 'text-[var(--ink-tertiary)]'
+                      }`}
+                      style={{ letterSpacing: 0 }}
+                    >
+                      {ROMAN[i]}.
+                    </span>
+                    <Icon size={14} className={active ? 'text-[var(--red)]' : 'text-[var(--ink-tertiary)]'} />
+                    <span className="flex flex-col leading-tight">
+                      <span className="text-[12px] font-medium uppercase tracking-[0.18em]">{t.label}</span>
+                      <span className="text-[9.5px] uppercase tracking-[0.22em] text-[var(--ink-tertiary)]">
+                        {t.sub}
+                      </span>
+                    </span>
+                    {active && (
+                      <motion.span
+                        layoutId="hw-tab-rule"
+                        className="absolute right-0 bottom-0 left-0 h-[2px] bg-[var(--red)]"
+                      />
+                    )}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </nav>
       )}
 
-      {/* ── CONTENT ── */}
+      {/* ── CONTENT ───────────────────────────────────────────────── */}
       <div className={`relative ${isMobile ? 'pb-24' : ''}`}>
         <AnimatePresence mode="wait">
           {activeTab === 'spec' && (
@@ -777,118 +867,176 @@ export default function HardwareBuilderPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex h-[calc(100vh-130px)]"
+              className="flex min-h-[calc(100vh-260px)]"
             >
-              <div className="relative z-10 flex w-80 flex-col border-r border-[var(--border-color)] bg-[var(--paper)]/95 backdrop-blur-sm">
-                <div className="flex-1 space-y-4 overflow-y-auto p-6">
-                  <p className="text-xs tracking-widest text-[var(--ink-tertiary)] uppercase">Hardware Configuration</p>
+              {/* ── Left ledger: Configuration sheet ─────────── */}
+              <aside
+                className={`relative z-10 flex flex-col border-r border-[var(--border-color)] bg-[var(--paper)]/96 transition-[width] duration-300 ${
+                  configOpen ? 'w-[360px]' : 'w-12'
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => setConfigOpen((v) => !v)}
+                  className="absolute -right-3 top-8 z-20 flex h-6 w-6 items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--paper)] text-[var(--ink-secondary)] shadow-sm transition-colors hover:border-[var(--red)] hover:text-[var(--red)]"
+                  aria-label={configOpen ? 'Collapse configuration' : 'Expand configuration'}
+                >
+                  {configOpen ? <ArrowLeft size={12} /> : <ArrowRight size={12} />}
+                </button>
 
-                  {(
-                    [
-                      { label: 'Product Name', key: 'name' as const, type: 'text', placeholder: 'e.g. SmartWatch Pro' },
-                      {
-                        label: 'Target Price (₹)',
-                        key: 'target_price_inr' as const,
-                        type: 'number',
-                        placeholder: 'e.g. 4999',
-                      },
-                    ] as const
-                  ).map((field) => (
-                    <div key={field.key}>
-                      <label className="mb-1.5 block text-xs tracking-widest text-[var(--ink-tertiary)] uppercase">
-                        {field.label}
-                      </label>
-                      <input
-                        type={field.type}
-                        placeholder={field.placeholder}
-                        value={field.key === 'target_price_inr' ? genForm.target_price_inr : genForm[field.key]}
-                        onChange={(e) =>
-                          setGenForm((f) => ({
-                            ...f,
-                            [field.key]:
-                              field.key === 'target_price_inr' ? Number(e.target.value) || 0 : e.target.value,
-                          }))
-                        }
-                        className="w-full rounded border border-[var(--border-color)] bg-white/90 px-3 py-2 font-mono text-sm text-[var(--ink)] placeholder-[var(--ink-tertiary)] focus:border-[var(--workshop)] focus:outline-none"
-                      />
+                {configOpen ? (
+                  <>
+                    <div className="border-b border-[var(--border-color)] px-7 pt-8 pb-5">
+                      <p className="kicker" style={{ color: 'var(--workshop)' }}>
+                        Configuration sheet
+                      </p>
+                      <h2
+                        className="mt-2 font-serif italic leading-tight tracking-tight text-[var(--ink)]"
+                        style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em' }}
+                      >
+                        File a new <span style={{ color: 'var(--red)' }}>plate</span>.
+                      </h2>
+                      <p className="mt-2 text-[12px] leading-relaxed text-[var(--ink-secondary)]">
+                        Four fields. Set the parameters, press the press, and the workshop returns
+                        a typeset specification.
+                      </p>
                     </div>
-                  ))}
 
-                  <div>
-                    <label className="mb-1.5 block text-xs tracking-widest text-[var(--ink-tertiary)] uppercase">Category</label>
-                    <select
-                      value={genForm.category}
-                      onChange={(e) =>
-                        setGenForm((f) => ({
-                          ...f,
-                          category: e.target.value,
-                          product_type: e.target.value,
-                        }))
-                      }
-                      className="w-full rounded border border-[var(--border-color)] bg-white/90 px-3 py-2 font-mono text-sm text-[var(--ink)] focus:border-[var(--workshop)] focus:outline-none"
+                    <div className="flex-1 space-y-5 overflow-y-auto px-7 py-6">
+                      <Field label="Product name" numeral="i.">
+                        <input
+                          type="text"
+                          placeholder="e.g. Daybreak SmartWatch"
+                          value={genForm.name}
+                          onChange={(e) => setGenForm((f) => ({ ...f, name: e.target.value }))}
+                          className="w-full border-0 border-b border-[var(--ink)]/35 bg-transparent px-0 py-2 font-serif text-base italic text-[var(--ink)] placeholder-[var(--ink-tertiary)] focus:border-[var(--red)] focus:outline-none"
+                        />
+                      </Field>
+
+                      <Field label="Target price (₹)" numeral="ii.">
+                        <input
+                          type="number"
+                          placeholder="4999"
+                          value={genForm.target_price_inr}
+                          onChange={(e) =>
+                            setGenForm((f) => ({ ...f, target_price_inr: Number(e.target.value) || 0 }))
+                          }
+                          className="w-full border-0 border-b border-[var(--ink)]/35 bg-transparent px-0 py-2 font-mono text-base text-[var(--ink)] placeholder-[var(--ink-tertiary)] focus:border-[var(--red)] focus:outline-none"
+                        />
+                      </Field>
+
+                      <Field label="Category" numeral="iii.">
+                        <select
+                          value={genForm.category}
+                          onChange={(e) =>
+                            setGenForm((f) => ({
+                              ...f,
+                              category: e.target.value,
+                              product_type: e.target.value,
+                            }))
+                          }
+                          className="w-full border-0 border-b border-[var(--ink)]/35 bg-transparent px-0 py-2 font-serif text-base italic text-[var(--ink)] focus:border-[var(--red)] focus:outline-none"
+                        >
+                          {CATEGORIES.map((c) => (
+                            <option key={c.value} value={c.value}>
+                              {c.label}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+
+                      <Field label="Marginalia" numeral="iv.">
+                        <textarea
+                          rows={5}
+                          placeholder="Materials, key features, form factor — the editor's note."
+                          value={genForm.description}
+                          onChange={(e) => setGenForm((f) => ({ ...f, description: e.target.value }))}
+                          className="w-full resize-none border-0 border-b border-[var(--ink)]/35 bg-transparent px-0 py-2 font-serif text-[15px] leading-relaxed italic text-[var(--ink)] placeholder-[var(--ink-tertiary)] focus:border-[var(--red)] focus:outline-none"
+                        />
+                      </Field>
+                    </div>
+
+                    <div className="space-y-2.5 border-t border-[var(--border-color)] px-7 py-6">
+                      <button
+                        type="button"
+                        onClick={() => void handleGenerate()}
+                        disabled={!genForm.name || !genForm.description || generating}
+                        className="flex w-full items-center justify-center gap-2.5 bg-[var(--ink)] py-3 text-[11px] font-medium uppercase tracking-[0.22em] text-[var(--paper)] transition-all hover:bg-[var(--red)] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {generating ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin" />
+                            Setting type…
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles size={13} />
+                            Send to press
+                          </>
+                        )}
+                      </button>
+                      {hwId ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleRunTests()}
+                          disabled={runningTests}
+                          className="flex w-full items-center justify-center gap-2.5 border border-[var(--workshop)]/45 py-2.5 text-[11px] font-medium uppercase tracking-[0.22em] text-[var(--workshop)] transition-all hover:bg-[var(--workshop)] hover:text-[var(--paper)] disabled:opacity-40"
+                        >
+                          {runningTests ? (
+                            <>
+                              <Loader2 size={12} className="animate-spin" />
+                              Running…
+                            </>
+                          ) : (
+                            <>
+                              <Play size={12} />
+                              Run physics tests
+                            </>
+                          )}
+                        </button>
+                      ) : null}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex flex-1 flex-col items-center pt-10">
+                    <span
+                      className="kicker rotate-180 text-[var(--ink-tertiary)]"
+                      style={{ writingMode: 'vertical-rl' }}
                     >
-                      {CATEGORIES.map((c) => (
-                        <option key={c.value} value={c.value}>
-                          {c.label}
-                        </option>
-                      ))}
-                    </select>
+                      Configuration sheet
+                    </span>
                   </div>
+                )}
+              </aside>
 
-                  <div>
-                    <label className="mb-1.5 block text-xs tracking-widest text-[var(--ink-tertiary)] uppercase">
-                      Description
-                    </label>
-                    <textarea
-                      rows={4}
-                      placeholder="Describe materials, key features, form factor..."
-                      value={genForm.description}
-                      onChange={(e) => setGenForm((f) => ({ ...f, description: e.target.value }))}
-                      className="w-full resize-none rounded border border-[var(--border-color)] bg-white/90 px-3 py-2 font-mono text-sm text-[var(--ink)] placeholder-[var(--ink-tertiary)] focus:border-[var(--workshop)] focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2 border-t border-[var(--border-color)] p-6">
-                  <button
-                    type="button"
-                    onClick={() => void handleGenerate()}
-                    disabled={!genForm.name || !genForm.description || generating}
-                    className="w-full rounded bg-[var(--ink)] py-3 text-sm font-bold tracking-widest text-[var(--paper)] uppercase transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {generating ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <span className="h-3 w-3 animate-spin rounded-full border-2 border-[var(--paper)] border-t-transparent" />
-                        Generating Spec...
-                      </span>
-                    ) : (
-                      'Generate Spec'
-                    )}
-                  </button>
-                  {hwId ? (
-                    <button
-                      type="button"
-                      onClick={() => void handleRunTests()}
-                      disabled={runningTests}
-                      className="w-full rounded border border-[var(--workshop)]/45 py-2.5 text-sm font-bold tracking-widest text-[var(--workshop)] uppercase transition-all hover:bg-[var(--workshop)] hover:text-[var(--paper)] disabled:opacity-40"
-                    >
-                      {runningTests ? 'Running Tests...' : '▶ Run Physics Tests'}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-
+              {/* ── Right plate: 3D viewer or empty editorial state ─ */}
               {mergedSpec && Object.keys(mergedSpec).length > 0 ? (
                 <SpecViewer spec={mergedSpec} hwProduct={selectedHw} />
               ) : (
-                <div className="relative flex flex-1 flex-col items-center justify-center">
+                <div className="relative flex flex-1 flex-col items-center justify-center px-10 py-16">
                   <EditorialBlueprintGrid />
-                  <div className="relative z-10 space-y-3 text-center">
-                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-[var(--border-color)] text-3xl">
-                      ⬡
+                  <div className="relative z-10 max-w-md text-center">
+                    <p className="kicker mb-5" style={{ color: 'var(--red)' }}>
+                      Standing type · Plate not yet filed
+                    </p>
+                    <div className="mx-auto mb-7 flex h-20 w-20 items-center justify-center border border-[var(--workshop)]/35 bg-[var(--paper)]">
+                      <Hexagon size={36} className="text-[var(--workshop)]" strokeWidth={1.2} />
                     </div>
-                    <p className="text-sm text-[var(--ink-tertiary)]">Configure your hardware and generate the spec</p>
-                    <p className="text-xs text-[var(--ink-secondary)]">A 3D component diagram will appear here</p>
+                    <h3
+                      className="font-serif italic leading-tight text-[var(--ink)]"
+                      style={{ fontSize: 30, fontWeight: 900, letterSpacing: '-0.025em' }}
+                    >
+                      Awaiting <span style={{ color: 'var(--red)' }}>impression</span>.
+                    </h3>
+                    <p className="mt-4 text-sm leading-relaxed text-[var(--ink-secondary)]">
+                      File the four-line configuration on the left and the workshop will set a
+                      blueprint, dimensions, and a component diagram on this plate.
+                    </p>
+                    <div className="mt-8 flex items-center justify-center gap-3 text-[10px] uppercase tracking-[0.28em] text-[var(--ink-tertiary)]">
+                      <span className="h-px w-8 bg-[var(--border-strong)]" />
+                      drag to rotate
+                      <span className="h-px w-8 bg-[var(--border-strong)]" />
+                    </div>
                   </div>
                 </div>
               )}
@@ -901,57 +1049,75 @@ export default function HardwareBuilderPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="space-y-6 p-8"
+              className="space-y-7 px-10 py-9"
             >
-              <div className="flex items-center justify-between">
-                <p className="text-xs tracking-widest text-[var(--ink-tertiary)] uppercase">Physics Test Results</p>
-                <button
-                  type="button"
-                  onClick={() => void handleRunTests()}
-                  disabled={!hwId || runningTests}
-                  className="rounded bg-[var(--ink)] px-4 py-2 text-xs font-bold tracking-widest text-[var(--paper)] uppercase transition-all hover:opacity-90 disabled:opacity-40"
-                >
-                  {runningTests ? 'Running...' : 'Re-run Tests'}
-                </button>
-              </div>
+              <SectionHead
+                kicker="Section II · Physics"
+                title="The room shakes the prototype."
+                description="Eight stress regimes, every component scored. The press returns a pass-rate per axis."
+                action={
+                  <button
+                    type="button"
+                    onClick={() => void handleRunTests()}
+                    disabled={!hwId || runningTests}
+                    className="flex items-center gap-2 bg-[var(--ink)] px-4 py-2.5 text-[11px] font-medium uppercase tracking-[0.22em] text-[var(--paper)] transition-all hover:bg-[var(--red)] disabled:opacity-40"
+                  >
+                    {runningTests ? (
+                      <>
+                        <Loader2 size={12} className="animate-spin" /> Running…
+                      </>
+                    ) : (
+                      <>
+                        <Play size={12} /> Re-run tests
+                      </>
+                    )}
+                  </button>
+                }
+              />
 
               {testResults.length > 0 ? (
                 <>
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-px bg-[var(--border-color)] sm:grid-cols-4">
                     {(
                       [
-                        { label: 'Tests Run', value: testResultsPayload?.total_tests, color: undefined },
-                        { label: 'Passed', value: testResultsPayload?.passed, color: 'text-green-400' },
-                        { label: 'Failed', value: testResultsPayload?.failed, color: 'text-red-400' },
+                        { label: 'Tests run', value: testResultsPayload?.total_tests, tone: 'ink' as const },
+                        { label: 'Passed', value: testResultsPayload?.passed, tone: 'green' as const },
+                        { label: 'Failed', value: testResultsPayload?.failed, tone: 'red' as const },
                         {
-                          label: 'Pass Rate',
+                          label: 'Pass rate',
                           value: `${((testResultsPayload?.overall_pass_rate ?? 0) * 100).toFixed(0)}%`,
-                          color: undefined,
+                          tone: 'workshop' as const,
                         },
                       ] as const
                     ).map((k) => (
-                      <div key={k.label} className="rounded-xl border border-[var(--border-color)] bg-[var(--paper)]/90 p-4">
-                        <p className="mb-1 text-xs tracking-widest text-[var(--ink-tertiary)] uppercase">{k.label}</p>
-                        <p className={`text-2xl font-bold ${k.color ?? 'text-[var(--workshop)]'}`}>{k.value}</p>
-                      </div>
+                      <Stat key={k.label} label={k.label} value={String(k.value ?? '—')} tone={k.tone} />
                     ))}
                   </div>
 
                   <div className="space-y-3">
                     {testResults.map((r) => (
-                      <div key={r.test_type} className="rounded-xl border border-[var(--border-color)] bg-[var(--paper-dark)]/35 p-5">
+                      <div
+                        key={r.test_type}
+                        className="border border-[var(--border-color)] bg-[var(--paper)]/85 p-5"
+                      >
                         <div className="mb-3 flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <span className={`text-sm font-bold ${statusColor(r.status)}`}>
+                            <span className={`font-serif text-base italic ${statusColor(r.status)}`}>
                               {r.status === 'PASS' ? '✓' : r.status === 'FAIL' ? '✗' : '~'}
                             </span>
-                            <span className="text-sm text-[var(--ink)]">{r.test_type?.replace(/_/g, ' ')}</span>
+                            <span className="text-sm capitalize text-[var(--ink)]">
+                              {r.test_type?.replace(/_/g, ' ')}
+                            </span>
                           </div>
                           <div className="flex items-center gap-3">
-                            <div className="h-1.5 w-32 overflow-hidden rounded-full bg-[var(--border-color)]">
+                            <div className="h-1 w-36 overflow-hidden bg-[var(--border-color)]">
                               <div
-                                className={`h-full rounded-full ${
-                                  r.pass_rate > 0.7 ? 'bg-green-500' : r.pass_rate > 0.4 ? 'bg-amber-500' : 'bg-red-500'
+                                className={`h-full ${
+                                  r.pass_rate > 0.7
+                                    ? 'bg-emerald-700'
+                                    : r.pass_rate > 0.4
+                                      ? 'bg-amber-600'
+                                      : 'bg-red-700'
                                 }`}
                                 style={{ width: `${Math.min(100, r.pass_rate * 100)}%` }}
                               />
@@ -962,9 +1128,9 @@ export default function HardwareBuilderPage() {
                           </div>
                         </div>
                         {r.failure_points?.length ? (
-                          <div className="space-y-1">
+                          <div className="space-y-1 border-t border-[var(--border-color)] pt-3">
                             {r.failure_points.slice(0, 2).map((fp: FailurePoint, i: number) => (
-                              <p key={i} className="font-mono text-xs text-red-400">
+                              <p key={i} className="font-mono text-xs text-red-700">
                                 → {fp.reason}
                               </p>
                             ))}
@@ -979,10 +1145,10 @@ export default function HardwareBuilderPage() {
                   ) : null}
                 </>
               ) : (
-                <div className="py-20 text-center text-[var(--ink-tertiary)]">
-                  <p className="text-sm">No test results yet.</p>
-                  <p className="mt-1 text-xs">Generate a spec first, then run physics tests.</p>
-                </div>
+                <EmptySection
+                  title="No tests on file."
+                  body="Generate a spec first, then send the prototype to the press for physical regimes."
+                />
               )}
             </motion.div>
           )}
@@ -993,70 +1159,82 @@ export default function HardwareBuilderPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="space-y-6 p-8"
+              className="space-y-7 px-10 py-9"
             >
-              <div className="flex items-center justify-between">
-                <p className="text-xs tracking-widest text-[var(--ink-tertiary)] uppercase">Manufacturing Cost Analysis</p>
-                {hwId ? (
-                  <button
-                    type="button"
-                    onClick={() => runCostMutation.mutate()}
-                    disabled={runCostMutation.isPending}
-                    className="rounded border border-[var(--border-strong)] px-4 py-2 text-xs font-bold tracking-widest uppercase transition-all hover:border-[var(--ink)] hover:text-[var(--red)] disabled:opacity-40"
-                  >
-                    {runCostMutation.isPending ? 'Running…' : 'Re-run Analysis'}
-                  </button>
-                ) : null}
-              </div>
+              <SectionHead
+                kicker="Section III · Margin"
+                title="What it costs to land on a desk."
+                description="Bill of materials, freight, duties, factory overhead — distilled to one verdict."
+                action={
+                  hwId ? (
+                    <button
+                      type="button"
+                      onClick={() => runCostMutation.mutate()}
+                      disabled={runCostMutation.isPending}
+                      className="flex items-center gap-2 border border-[var(--border-strong)] px-4 py-2.5 text-[11px] font-medium uppercase tracking-[0.22em] text-[var(--ink)] transition-all hover:border-[var(--ink)] hover:text-[var(--red)] disabled:opacity-40"
+                    >
+                      {runCostMutation.isPending ? (
+                        <>
+                          <Loader2 size={12} className="animate-spin" /> Running…
+                        </>
+                      ) : (
+                        <>Re-run analysis</>
+                      )}
+                    </button>
+                  ) : null
+                }
+              />
 
               {costView.hasData ? (
                 <>
-                  <div className={`rounded-2xl border p-6 ${verdictBorderBg(costView.verdict)}`}>
-                    <p className={`mb-1 text-lg font-bold ${verdictColor(costView.verdict).split(' ')[0]}`}>
-                      {costView.verdict}
+                  <div className={`border p-6 ${verdictBorderBg(costView.verdict)}`}>
+                    <p className="kicker mb-2" style={{ color: 'var(--ink-secondary)' }}>
+                      Editor&rsquo;s verdict
                     </p>
-                    <p className="text-sm text-[var(--ink-secondary)]">{costView.verdict_reason}</p>
+                    <p
+                      className={`font-serif italic ${verdictColor(costView.verdict).split(' ')[0]}`}
+                      style={{ fontSize: 32, fontWeight: 900, letterSpacing: '-0.02em' }}
+                    >
+                      {costView.verdict.replace(/_/g, ' ')}
+                    </p>
+                    <p className="mt-2 text-sm leading-relaxed text-[var(--ink-secondary)]">
+                      {costView.verdict_reason}
+                    </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-px bg-[var(--border-color)] lg:grid-cols-4">
                     {(
                       [
-                        {
-                          label: 'Landed Cost',
-                          value: `₹${costView.landed_cost_inr.toLocaleString('en-IN')}`,
-                        },
-                        {
-                          label: 'Target Price',
-                          value: `₹${costView.target_price_inr.toLocaleString('en-IN')}`,
-                        },
-                        { label: 'Gross Margin', value: `${costView.margin_pct.toFixed(1)}%` },
+                        { label: 'Landed cost', value: `₹${costView.landed_cost_inr.toLocaleString('en-IN')}`, tone: 'workshop' as const },
+                        { label: 'Target price', value: `₹${costView.target_price_inr.toLocaleString('en-IN')}`, tone: 'ink' as const },
+                        { label: 'Gross margin', value: `${costView.margin_pct.toFixed(1)}%`, tone: 'workshop' as const },
                         {
                           label: 'Break-even',
                           value:
                             costView.break_even_moq != null
                               ? `${costView.break_even_moq.toLocaleString('en-IN')} units`
                               : '—',
+                          tone: 'ink' as const,
                         },
                       ] as const
                     ).map((k) => (
-                      <div key={k.label} className="rounded-xl border border-[var(--border-color)] bg-[var(--paper)]/90 p-4">
-                        <p className="mb-1 text-xs tracking-widest text-[var(--ink-tertiary)] uppercase">{k.label}</p>
-                        <p className="text-xl font-bold text-[var(--workshop)]">{k.value}</p>
-                      </div>
+                      <Stat key={k.label} label={k.label} value={k.value} tone={k.tone} />
                     ))}
                   </div>
 
                   {costView.bom.length > 0 ? (
                     <div>
-                      <p className="mb-3 text-xs tracking-widest text-[var(--ink-tertiary)] uppercase">Bill of Materials</p>
-                      <div className="table-mobile-scroll overflow-hidden rounded-xl border border-[var(--border-color)]">
-                        <table className="w-full min-w-[500px] text-sm">
+                      <p className="kicker mb-3" style={{ color: 'var(--ink-secondary)' }}>
+                        Bill of materials
+                      </p>
+                      <div className="table-mobile-scroll overflow-hidden border border-[var(--border-color)] bg-[var(--paper)]/90">
+                        <table className="w-full min-w-[560px] text-sm">
                           <thead>
-                            <tr className="border-b border-[var(--border-color)] bg-white/90">
-                              {(['Component', 'Material', 'Volume (cm³)', 'Unit Cost'] as const).map((h) => (
+                            <tr className="border-b border-[var(--border-color)]">
+                              {(['Component', 'Material', 'Volume (cm³)', 'Unit cost'] as const).map((h) => (
                                 <th
                                   key={h}
-                                  className="px-4 py-3 text-left text-xs font-normal tracking-widest text-[var(--ink-tertiary)] uppercase"
+                                  className="px-5 py-3 text-left text-[10px] font-medium uppercase tracking-[0.22em] text-[var(--ink-tertiary)]"
                                 >
                                   {h}
                                 </th>
@@ -1067,23 +1245,25 @@ export default function HardwareBuilderPage() {
                             {costView.bom.map((item, idx) => (
                               <tr
                                 key={String(item.component_id ?? item.component_name ?? idx)}
-                                className="border-b border-[var(--border-color)] hover:bg-[var(--paper-dark)]/35"
+                                className="border-b border-[var(--border-color)] transition-colors hover:bg-[var(--paper-dark)]/35"
                               >
-                                <td className="px-4 py-3 text-[var(--ink)]">{String(item.component_name ?? '—')}</td>
-                                <td className="px-4 py-3 text-[var(--ink-secondary)]">{String(item.material ?? '—')}</td>
-                                <td className="px-4 py-3 font-mono text-[var(--ink-secondary)]">
+                                <td className="px-5 py-3 font-serif italic text-[var(--ink)]">
+                                  {String(item.component_name ?? '—')}
+                                </td>
+                                <td className="px-5 py-3 text-[var(--ink-secondary)]">{String(item.material ?? '—')}</td>
+                                <td className="px-5 py-3 font-mono text-[var(--ink-secondary)]">
                                   {item.volume_cm3 != null ? Number(item.volume_cm3).toFixed(1) : '—'}
                                 </td>
-                                <td className="px-4 py-3 font-mono text-[var(--workshop)]">
+                                <td className="px-5 py-3 font-mono text-[var(--workshop)]">
                                   ₹{Number(item.unit_cost_inr ?? 0).toFixed(2)}
                                 </td>
                               </tr>
                             ))}
-                            <tr className="bg-white/90">
-                              <td colSpan={3} className="px-4 py-3 text-xs tracking-widest text-[var(--ink-tertiary)] uppercase">
+                            <tr className="bg-[var(--paper-dark)]/50">
+                              <td colSpan={3} className="px-5 py-3 text-[10px] uppercase tracking-[0.22em] text-[var(--ink-tertiary)]">
                                 Total BOM
                               </td>
-                              <td className="px-4 py-3 font-mono font-bold text-[var(--workshop)]">
+                              <td className="px-5 py-3 font-mono font-bold text-[var(--workshop)]">
                                 ₹{costView.bom_total_inr.toFixed(2)}
                               </td>
                             </tr>
@@ -1094,18 +1274,21 @@ export default function HardwareBuilderPage() {
                   ) : null}
                 </>
               ) : (
-                <div className="py-20 text-center text-[var(--ink-tertiary)]">
-                  <p className="text-sm">{costView.message ?? 'No cost analysis yet.'}</p>
-                  {hwId ? (
-                    <button
-                      type="button"
-                      onClick={() => runCostMutation.mutate()}
-                      className="mt-3 rounded bg-[var(--ink)] px-4 py-2 text-xs text-[var(--paper)]"
-                    >
-                      Run Cost Analysis
-                    </button>
-                  ) : null}
-                </div>
+                <EmptySection
+                  title={costView.message ?? 'No cost analysis yet.'}
+                  body="Run the manufacturing pass to estimate landed cost and margin."
+                  action={
+                    hwId ? (
+                      <button
+                        type="button"
+                        onClick={() => runCostMutation.mutate()}
+                        className="bg-[var(--ink)] px-5 py-2.5 text-[11px] uppercase tracking-[0.22em] text-[var(--paper)]"
+                      >
+                        Run cost analysis
+                      </button>
+                    ) : null
+                  }
+                />
               )}
             </motion.div>
           )}
@@ -1116,43 +1299,55 @@ export default function HardwareBuilderPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="space-y-6 p-8"
+              className="space-y-7 px-10 py-9"
             >
-              <div className="flex items-center justify-between">
-                <p className="text-xs tracking-widest text-[var(--ink-tertiary)] uppercase">Consumer Simulation — 52 Clusters</p>
-                <button
-                  type="button"
-                  onClick={() => void handleRunSim()}
-                  disabled={!hwId || runningSim}
-                  className="rounded bg-[var(--ink)] px-4 py-2 text-xs font-bold tracking-widest text-[var(--paper)] uppercase transition-all hover:opacity-90 disabled:opacity-40"
-                >
-                  {runningSim ? 'Queuing...' : '▶ Run Simulation'}
-                </button>
-              </div>
+              <SectionHead
+                kicker="Section IV · The room"
+                title="52 clusters meet the prototype."
+                description="Synthetic readers walk past the shelf, pick it up, and decide. The press records who buys, and who hesitates."
+                action={
+                  <button
+                    type="button"
+                    onClick={() => void handleRunSim()}
+                    disabled={!hwId || runningSim}
+                    className="flex items-center gap-2 bg-[var(--ink)] px-4 py-2.5 text-[11px] font-medium uppercase tracking-[0.22em] text-[var(--paper)] transition-all hover:bg-[var(--red)] disabled:opacity-40"
+                  >
+                    {runningSim ? (
+                      <>
+                        <Loader2 size={12} className="animate-spin" /> Queuing…
+                      </>
+                    ) : (
+                      <>
+                        <Play size={12} /> Run simulation
+                      </>
+                    )}
+                  </button>
+                }
+              />
 
               {hasSimulation ? (
                 <>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-px bg-[var(--border-color)] sm:grid-cols-3">
                     {(
                       [
                         {
-                          label: 'Overall Conversion',
+                          label: 'Overall conversion',
                           value: `${((Number(simData?.overall_conversion_rate) || 0) * 100).toFixed(1)}%`,
+                          tone: 'workshop' as const,
                         },
                         {
-                          label: 'Total Agents',
+                          label: 'Total agents',
                           value: (Number(simData?.agent_count ?? simData?.total_agents) || 0).toLocaleString('en-IN'),
+                          tone: 'ink' as const,
                         },
                         {
-                          label: 'Prototype Wired',
+                          label: 'Prototype wired',
                           value: simData?.prototype_wired ? 'Yes' : 'No',
+                          tone: 'workshop' as const,
                         },
                       ] as const
                     ).map((k) => (
-                      <div key={k.label} className="rounded-xl border border-[var(--border-color)] bg-[var(--paper)]/90 p-4">
-                        <p className="mb-1 text-xs tracking-widest text-[var(--ink-tertiary)] uppercase">{k.label}</p>
-                        <p className="text-2xl font-bold text-[var(--workshop)]">{k.value}</p>
-                      </div>
+                      <Stat key={k.label} label={k.label} value={k.value} tone={k.tone} />
                     ))}
                   </div>
 
@@ -1163,17 +1358,17 @@ export default function HardwareBuilderPage() {
                       primaryFailure={String(simData?.primary_failure_domain ?? 'unknown')}
                     />
                   ) : (
-                    <p className="text-sm text-[var(--ink-tertiary)]">
-                      Simulation is running or results are still sparse — check back when `cluster_results` and findings
-                      are populated.
-                    </p>
+                    <EmptySection
+                      title="The room is still arriving."
+                      body="Cluster results and findings populate moments after the run completes — check back when both are filed."
+                    />
                   )}
                 </>
               ) : (
-                <div className="py-20 text-center text-[var(--ink-tertiary)]">
-                  <p className="text-sm">No simulation run yet.</p>
-                  <p className="mt-1 text-xs">Run physics tests first, then simulate consumer behaviour.</p>
-                </div>
+                <EmptySection
+                  title="No simulation on file."
+                  body="Run physics first, then put the prototype in front of the room."
+                />
               )}
             </motion.div>
           )}
@@ -1184,63 +1379,83 @@ export default function HardwareBuilderPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="space-y-6 p-8"
+              className="space-y-7 px-10 py-9"
             >
-              <div className="flex items-center justify-between">
-                <p className="text-xs tracking-widest text-[var(--ink-tertiary)] uppercase">Competitive Analysis</p>
-                {hwId ? (
-                  <button
-                    type="button"
-                    onClick={() => runCompetitiveMutation.mutate()}
-                    disabled={runCompetitiveMutation.isPending}
-                    className="rounded bg-[var(--ink)] px-4 py-2 text-xs font-bold tracking-widest text-[var(--paper)] uppercase transition-all hover:opacity-90 disabled:opacity-40"
-                  >
-                    {runCompetitiveMutation.isPending ? 'Running…' : 'Run Analysis'}
-                  </button>
-                ) : null}
-              </div>
+              <SectionHead
+                kicker="Section V · Position"
+                title="Where this lands on the shelf."
+                description="Price band, differentiation score, the whitespace nobody owns yet — distilled from the simulated room."
+                action={
+                  hwId ? (
+                    <button
+                      type="button"
+                      onClick={() => runCompetitiveMutation.mutate()}
+                      disabled={runCompetitiveMutation.isPending}
+                      className="flex items-center gap-2 bg-[var(--ink)] px-4 py-2.5 text-[11px] font-medium uppercase tracking-[0.22em] text-[var(--paper)] transition-all hover:bg-[var(--red)] disabled:opacity-40"
+                    >
+                      {runCompetitiveMutation.isPending ? (
+                        <>
+                          <Loader2 size={12} className="animate-spin" /> Running…
+                        </>
+                      ) : (
+                        <>Run analysis</>
+                      )}
+                    </button>
+                  ) : null
+                }
+              />
 
               {compDisplay?.price_position ? (
                 <>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-px bg-[var(--border-color)] sm:grid-cols-3">
                     {(
                       [
-                        { label: 'Price Position', value: compDisplay.price_position },
+                        { label: 'Price position', value: String(compDisplay.price_position), tone: 'ink' as const },
                         {
-                          label: 'Differentiation Score',
+                          label: 'Differentiation',
                           value: `${((compDisplay.overall_differentiation ?? 0) * 100).toFixed(0)}%`,
+                          tone: 'workshop' as const,
                         },
                         {
-                          label: 'Whitespace Clusters',
-                          value: compDisplay.whitespace_clusters?.length ?? 0,
+                          label: 'Whitespace clusters',
+                          value: String(compDisplay.whitespace_clusters?.length ?? 0),
+                          tone: 'ink' as const,
                         },
                       ] as const
                     ).map((k) => (
-                      <div key={k.label} className="rounded-xl border border-[var(--border-color)] bg-[var(--paper)]/90 p-4">
-                        <p className="mb-1 text-xs tracking-widest text-[var(--ink-tertiary)] uppercase">{k.label}</p>
-                        <p className="text-xl font-bold text-[var(--workshop)]">{k.value}</p>
-                      </div>
+                      <Stat key={k.label} label={k.label} value={k.value} tone={k.tone} />
                     ))}
                   </div>
 
-                  <div className="rounded-xl border border-[var(--workshop)]/25 bg-[var(--workshop-dim)] p-5">
-                    <p className="kicker mb-2 text-[var(--workshop)]">Recommended Positioning</p>
-                    <p className="text-sm text-[var(--ink)]">{compDisplay.recommended_positioning}</p>
+                  <div className="border border-[var(--workshop)]/30 bg-[var(--workshop-dim)] p-6">
+                    <p className="kicker mb-2" style={{ color: 'var(--workshop)' }}>
+                      Recommended positioning
+                    </p>
+                    <p
+                      className="font-serif italic leading-snug text-[var(--ink)]"
+                      style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.015em' }}
+                    >
+                      &ldquo;{compDisplay.recommended_positioning}&rdquo;
+                    </p>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <p className="text-xs tracking-widest text-red-400 uppercase">Top Threats</p>
+                  <div className="grid grid-cols-1 gap-px border border-[var(--border-color)] bg-[var(--border-color)] md:grid-cols-2">
+                    <div className="space-y-2 bg-[var(--paper)] p-5">
+                      <p className="kicker" style={{ color: 'var(--red)' }}>
+                        Top threats
+                      </p>
                       {compDisplay.top_threats?.map((t, i) => (
-                        <p key={i} className="font-mono text-xs text-[var(--ink-secondary)]">
+                        <p key={i} className="font-serif text-sm italic text-[var(--ink-secondary)]">
                           → {t}
                         </p>
                       ))}
                     </div>
-                    <div className="space-y-2">
-                      <p className="text-xs tracking-widest text-green-400 uppercase">Opportunities</p>
+                    <div className="space-y-2 bg-[var(--paper)] p-5">
+                      <p className="kicker" style={{ color: 'var(--workshop)' }}>
+                        Opportunities
+                      </p>
                       {compDisplay.top_opportunities?.map((o, i) => (
-                        <p key={i} className="font-mono text-xs text-[var(--ink-secondary)]">
+                        <p key={i} className="font-serif text-sm italic text-[var(--ink-secondary)]">
                           → {o}
                         </p>
                       ))}
@@ -1248,18 +1463,23 @@ export default function HardwareBuilderPage() {
                   </div>
                 </>
               ) : (
-                <div className="py-20 text-center text-[var(--ink-tertiary)]">
-                  <p className="text-sm">
-                    Run consumer simulation first, then press{' '}
-                    <span className="font-medium text-[var(--red)]">Run Analysis</span> to
-                    generate positioning, threats, and opportunities (results are returned from the POST endpoint).
-                  </p>
-                  {runCompetitiveMutation.isError ? (
-                    <p className="mt-2 font-mono text-xs text-red-400">
-                      {(runCompetitiveMutation.error as Error).message}
-                    </p>
-                  ) : null}
-                </div>
+                <EmptySection
+                  title="No analysis filed."
+                  body={
+                    <>
+                      Run consumer simulation first, then press{' '}
+                      <span className="font-medium text-[var(--red)]">Run analysis</span> to derive
+                      positioning, threats, and opportunities.
+                    </>
+                  }
+                  footer={
+                    runCompetitiveMutation.isError ? (
+                      <p className="font-mono text-xs text-red-700">
+                        {(runCompetitiveMutation.error as Error).message}
+                      </p>
+                    ) : null
+                  }
+                />
               )}
             </motion.div>
           )}
@@ -1270,46 +1490,80 @@ export default function HardwareBuilderPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="p-8"
+              className="px-10 py-12"
             >
-              <div className="mx-auto max-w-lg space-y-8 pt-16 text-center">
-                <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl border border-[var(--workshop)]/30 bg-[var(--workshop-dim)] text-4xl">
-                  📋
-                </div>
+              <div className="mx-auto grid max-w-5xl grid-cols-1 gap-12 md:grid-cols-[1fr_320px]">
                 <div>
-                  <h2 className="mb-2 font-serif text-2xl font-bold italic text-[var(--ink)]">Hardware intelligence report</h2>
-                  <p className="text-sm text-[var(--ink-tertiary)]">
-                    7-section PDF covering product viability, physics tests, manufacturing cost, cluster behavioral
-                    analysis, and competitive positioning.
+                  <p className="kicker" style={{ color: 'var(--red)' }}>
+                    Section VI · Filed PDF
                   </p>
-                </div>
-                {hwId ? (
-                  <button
-                    type="button"
-                    onClick={() => void downloadPdf()}
-                    disabled={pdfBusy}
-                    className="inline-block rounded-xl bg-[var(--ink)] px-8 py-4 text-sm font-bold tracking-widest text-[var(--paper)] uppercase transition-all hover:opacity-90 disabled:opacity-50"
+                  <h2
+                    className="mt-3 font-serif italic leading-[0.96] tracking-tight text-[var(--ink)]"
+                    style={{ fontSize: 'clamp(36px, 4vw, 52px)', fontWeight: 900, letterSpacing: '-0.03em' }}
                   >
-                    {pdfBusy ? 'Preparing…' : '↓ Download PDF Report'}
-                  </button>
-                ) : (
-                  <p className="text-sm text-[var(--ink-tertiary)]">Generate a hardware spec first to unlock the report.</p>
-                )}
-                <div className="space-y-2 rounded-xl border border-[var(--border-color)] p-5 text-left">
-                  {[
-                    'Executive Summary — viability verdict',
-                    'Key Person Report — blocker and champion personas',
-                    'Physics Test Results — all 8 test types',
-                    'Manufacturing Cost — BOM, margin, break-even',
-                    'Cluster Behavioral Analysis — 52-segment breakdown',
-                    'Competitive Analysis — positioning and displacement',
-                    'Recommended Actions — ranked by impact',
-                  ].map((s, i) => (
-                    <p key={s} className="font-mono text-xs text-[var(--ink-secondary)]">
-                      {i + 1}. {s}
-                    </p>
-                  ))}
+                    The whole <span style={{ color: 'var(--red)' }}>folio</span>, in one envelope.
+                  </h2>
+                  <p className="lead-para mt-5">
+                    Seven sections, one filed envelope: viability verdict, key-person report,
+                    physics, manufacturing cost, the room&rsquo;s 52-cluster behaviour, competitive
+                    positioning, and a ranked list of next moves.
+                  </p>
+
+                  <div className="mt-8 flex items-center gap-4">
+                    {hwId ? (
+                      <button
+                        type="button"
+                        onClick={() => void downloadPdf()}
+                        disabled={pdfBusy}
+                        className="flex items-center gap-3 bg-[var(--ink)] px-7 py-4 text-[11px] font-medium uppercase tracking-[0.24em] text-[var(--paper)] transition-all hover:bg-[var(--red)] disabled:opacity-50"
+                      >
+                        {pdfBusy ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" /> Preparing…
+                          </>
+                        ) : (
+                          <>
+                            <Download size={14} />
+                            Download the folio
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <p className="text-sm italic text-[var(--ink-tertiary)]">
+                        Generate a hardware spec first to unlock the report.
+                      </p>
+                    )}
+                  </div>
                 </div>
+
+                <aside className="border border-[var(--border-color)] bg-[var(--paper)]/90">
+                  <div className="border-b border-[var(--border-color)] px-5 py-3">
+                    <p className="kicker" style={{ color: 'var(--ink-secondary)' }}>
+                      Contents
+                    </p>
+                  </div>
+                  <ol className="divide-y divide-[var(--border-color)]">
+                    {[
+                      'Executive summary',
+                      'Key-person report',
+                      'Physics test results',
+                      'Manufacturing cost & BOM',
+                      '52-cluster behaviour',
+                      'Competitive positioning',
+                      'Recommended actions',
+                    ].map((s, i) => (
+                      <li
+                        key={s}
+                        className="flex items-baseline gap-4 px-5 py-3.5 text-[13px] text-[var(--ink)]"
+                      >
+                        <span className="font-serif text-xs italic text-[var(--red)]" style={{ minWidth: 22 }}>
+                          {ROMAN[i]}.
+                        </span>
+                        <span>{s}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </aside>
               </div>
             </motion.div>
           )}
@@ -1317,21 +1571,145 @@ export default function HardwareBuilderPage() {
       </div>
 
       {isMobile && (
-        <nav className="safe-area-inset-bottom fixed right-0 bottom-0 left-0 z-50 flex items-center justify-around border-t border-slate-800 bg-slate-950/95 px-2 py-2 backdrop-blur-sm">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setActiveTab(t.key)}
-              className={`flex flex-1 flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 transition-all ${
-                activeTab === t.key ? 'bg-blue-500/10 text-blue-400' : 'text-slate-600'
-              }`}
-            >
-              <span className="text-xs tracking-wide">{t.label}</span>
-            </button>
-          ))}
+        <nav className="safe-area-inset-bottom fixed right-0 bottom-0 left-0 z-50 flex items-center justify-around border-t border-[var(--border-color)] bg-[var(--paper)]/95 px-2 py-2 backdrop-blur-sm">
+          {TABS.map((t) => {
+            const Icon = t.Icon
+            const active = activeTab === t.key
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setActiveTab(t.key)}
+                className={`flex flex-1 flex-col items-center gap-0.5 px-2 py-1.5 transition-all ${
+                  active ? 'text-[var(--red)]' : 'text-[var(--ink-tertiary)]'
+                }`}
+              >
+                <Icon size={14} />
+                <span className="text-[10px] uppercase tracking-[0.16em]">{t.label}</span>
+              </button>
+            )
+          })}
         </nav>
       )}
+    </div>
+  )
+}
+
+/* ── Editorial atoms ──────────────────────────────────────────────── */
+
+function Field({
+  label,
+  numeral,
+  children,
+}: {
+  label: string
+  numeral: string
+  children: React.ReactNode
+}) {
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline gap-2">
+        <span className="font-serif text-[11px] italic text-[var(--red)]">{numeral}</span>
+        <label className="text-[10px] font-medium uppercase tracking-[0.22em] text-[var(--ink-tertiary)]">
+          {label}
+        </label>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function SectionHead({
+  kicker,
+  title,
+  description,
+  action,
+}: {
+  kicker: string
+  title: string
+  description: string
+  action?: React.ReactNode
+}) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-6 border-b border-[var(--border-color)] pb-5">
+      <div className="max-w-3xl">
+        <p className="kicker" style={{ color: 'var(--red)' }}>
+          {kicker}
+        </p>
+        <h2
+          className="mt-2 font-serif italic leading-tight tracking-tight text-[var(--ink)]"
+          style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' }}
+        >
+          {title}
+        </h2>
+        <p className="mt-2 max-w-[60ch] text-[13px] leading-relaxed text-[var(--ink-secondary)]">
+          {description}
+        </p>
+      </div>
+      {action}
+    </div>
+  )
+}
+
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: string | number
+  tone: 'ink' | 'workshop' | 'green' | 'red'
+}) {
+  const color =
+    tone === 'workshop'
+      ? 'text-[var(--workshop)]'
+      : tone === 'green'
+        ? 'text-emerald-800'
+        : tone === 'red'
+          ? 'text-red-800'
+          : 'text-[var(--ink)]'
+  return (
+    <div className="bg-[var(--paper)] p-5">
+      <p className="kicker mb-2" style={{ color: 'var(--ink-tertiary)' }}>
+        {label}
+      </p>
+      <p
+        className={`font-serif italic ${color}`}
+        style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em' }}
+      >
+        {value}
+      </p>
+    </div>
+  )
+}
+
+function EmptySection({
+  title,
+  body,
+  action,
+  footer,
+}: {
+  title: string
+  body: React.ReactNode
+  action?: React.ReactNode
+  footer?: React.ReactNode
+}) {
+  return (
+    <div className="border border-dashed border-[var(--border-color)] bg-[var(--paper)]/60 px-8 py-14 text-center">
+      <p className="kicker" style={{ color: 'var(--ink-tertiary)' }}>
+        Standing type
+      </p>
+      <h3
+        className="mt-3 font-serif italic text-[var(--ink)]"
+        style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.015em' }}
+      >
+        {title}
+      </h3>
+      <p className="mx-auto mt-2 max-w-[52ch] text-sm leading-relaxed text-[var(--ink-secondary)]">
+        {body}
+      </p>
+      {action ? <div className="mt-5 flex justify-center">{action}</div> : null}
+      {footer ? <div className="mt-3">{footer}</div> : null}
     </div>
   )
 }

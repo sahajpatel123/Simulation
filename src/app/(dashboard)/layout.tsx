@@ -23,6 +23,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       setSidebarCollapsed(true)
       setArchiveStripHidden(true)
     }
+    if (pathname.match(/^\/project\/\d+\/hardware\/?$/)) {
+      setSidebarCollapsed(true)
+    }
   }, [pathname])
 
   const today = new Date().toLocaleDateString('en-GB', {
