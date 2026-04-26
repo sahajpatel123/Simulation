@@ -9,18 +9,13 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowLeft,
   ArrowRight,
-  Cpu,
   Download,
-  FileText,
-  FlaskConical,
   Hexagon,
   Loader2,
+  Pencil,
   Play,
   RotateCcw,
-  Scale,
   Sparkles,
-  Target,
-  Users,
 } from 'lucide-react'
 
 import {
@@ -32,7 +27,6 @@ import {
 import { KeyPersonReport } from '@/components/KeyPersonReport'
 import type { DomainFindingRow } from '@/components/simulation-results/types'
 import { getApiV1Base } from '@/lib/api-v1-base'
-import { useIsMobile } from '@/hooks/useIsMobile'
 import { useProject } from '@/hooks/useProjects'
 
 function authHeaders(): HeadersInit {
@@ -79,6 +73,63 @@ type CompetitiveReport = {
   recommended_positioning?: string
   top_threats?: string[]
   top_opportunities?: string[]
+}
+
+const STEPS: Array<{ key: Tab; numeral: string; label: string; subline: string }> = [
+  { key: 'spec', numeral: 'I', label: 'Spec', subline: 'Set the plate' },
+  { key: 'tests', numeral: 'II', label: 'Tests', subline: 'Shake the room' },
+  { key: 'cost', numeral: 'III', label: 'Cost', subline: 'Land the price' },
+  { key: 'simulation', numeral: 'IV', label: 'Simulation', subline: 'Cast the room' },
+  { key: 'competitive', numeral: 'V', label: 'Competitive', subline: 'Find the shelf' },
+  { key: 'report', numeral: 'VI', label: 'Report', subline: 'File the folio' },
+]
+
+const STEP_HERO: Record<
+  Tab,
+  { kicker: string; titleA: string; titleEm: string; titleB: string; sub: string }
+> = {
+  spec: {
+    kicker: 'Section I · Plate',
+    titleA: 'An ',
+    titleEm: 'idea',
+    titleB: ' on the press.',
+    sub: 'Set the four-line configuration. The workshop returns a typeset plate.',
+  },
+  tests: {
+    kicker: 'Section II · Physics',
+    titleA: 'The room ',
+    titleEm: 'shakes',
+    titleB: ' the prototype.',
+    sub: 'Eight stress regimes — every component scored on the press.',
+  },
+  cost: {
+    kicker: 'Section III · Margin',
+    titleA: 'What it ',
+    titleEm: 'costs',
+    titleB: ' to land on a desk.',
+    sub: 'Bill of materials, freight, duties — distilled to a single editor’s verdict.',
+  },
+  simulation: {
+    kicker: 'Section IV · The room',
+    titleA: 'Fifty-two clusters meet the ',
+    titleEm: 'plate',
+    titleB: '.',
+    sub: 'Synthetic readers walk the shelf, pick it up, and decide. The press records who buys.',
+  },
+  competitive: {
+    kicker: 'Section V · Position',
+    titleA: 'Where this ',
+    titleEm: 'lands',
+    titleB: ' on the shelf.',
+    sub: 'Whitespace, threats, and the line that turns a browser into a believer.',
+  },
+  report: {
+    kicker: 'Section VI · Filed',
+    titleA: 'The whole ',
+    titleEm: 'folio',
+    titleB: ', in one envelope.',
+    sub: 'Seven sections, one signed PDF — ready for the desk that decides.',
+  },
 }
 
 function verdictFromMargin(marginPct: number): 'VIABLE' | 'MARGINAL' | 'NOT_VIABLE' {
@@ -170,7 +221,7 @@ function normalizeCostView(
 }
 
 // ── Editorial paper field — warm grain, faint blueprint diagonals ────────
-function EditorialBlueprintGrid() {
+function PaperField() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
       <div
@@ -201,7 +252,7 @@ function EditorialBlueprintGrid() {
   )
 }
 
-// ── 3D Product Spec Viewer (kept; trim refined) ─────────────────────────
+// ── 3D Product Spec Viewer (SVG isometric) ────────────────────────────────
 function SpecViewer({ spec, hwProduct }: { spec: Record<string, unknown>; hwProduct: HwListItem | null }) {
   const [rotateY, setRotateY] = useState(-25)
   const [rotateX, setRotateX] = useState(15)
@@ -244,40 +295,13 @@ function SpecViewer({ spec, hwProduct }: { spec: Record<string, unknown>; hwProd
 
   return (
     <div
-      className="relative flex min-h-[520px] flex-1 select-none flex-col items-center justify-center"
+      className="relative flex h-full min-h-[520px] w-full select-none flex-col items-center justify-center"
       style={{ perspective: '900px' }}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
       onMouseLeave={onMouseUp}
     >
-      <EditorialBlueprintGrid />
-
-      {/* Plate corner registration marks */}
-      <div className="pointer-events-none absolute inset-6 z-0">
-        {(['tl', 'tr', 'bl', 'br'] as const).map((c) => (
-          <span
-            key={c}
-            aria-hidden
-            className="absolute h-3 w-3 border-[var(--workshop)]/35"
-            style={{
-              top: c.startsWith('t') ? 0 : 'auto',
-              bottom: c.startsWith('b') ? 0 : 'auto',
-              left: c.endsWith('l') ? 0 : 'auto',
-              right: c.endsWith('r') ? 0 : 'auto',
-              borderTopWidth: c.startsWith('t') ? 1 : 0,
-              borderBottomWidth: c.startsWith('b') ? 1 : 0,
-              borderLeftWidth: c.endsWith('l') ? 1 : 0,
-              borderRightWidth: c.endsWith('r') ? 1 : 0,
-            }}
-          />
-        ))}
-      </div>
-
-      <div className="relative z-10 mb-3 text-center">
-        <p className="kicker" style={{ color: 'var(--workshop)' }}>
-          Plate · Component diagram
-        </p>
-      </div>
+      <PaperField />
 
       <div
         className="relative z-10 cursor-grab active:cursor-grabbing"
@@ -291,7 +315,7 @@ function SpecViewer({ spec, hwProduct }: { spec: Record<string, unknown>; hwProd
         onDoubleClick={onReset}
         role="presentation"
       >
-        <svg viewBox="0 0 360 280" width={460} xmlns="http://www.w3.org/2000/svg" className="max-w-full">
+        <svg viewBox="0 0 360 280" width={520} xmlns="http://www.w3.org/2000/svg" className="max-w-full">
           <ellipse cx="180" cy="270" rx="120" ry="12" fill="var(--workshop)" opacity="0.1" />
 
           {shape === 'flat' ? (
@@ -372,7 +396,7 @@ function SpecViewer({ spec, hwProduct }: { spec: Record<string, unknown>; hwProd
         </svg>
       </div>
 
-      <div className="relative z-10 mt-5 flex items-center gap-4 text-[11px] text-[var(--ink-secondary)]">
+      <div className="relative z-10 mt-6 flex items-center gap-4 text-[11px] text-[var(--ink-secondary)]">
         <span className="flex items-center gap-1.5">
           <Hexagon size={11} className="text-[var(--workshop)]" />
           {material}
@@ -390,24 +414,22 @@ function SpecViewer({ spec, hwProduct }: { spec: Record<string, unknown>; hwProd
       <button
         type="button"
         onClick={onReset}
-        className="relative z-10 mt-4 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink-tertiary)] transition-colors hover:text-[var(--red)]"
+        className="relative z-10 mt-3 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink-tertiary)] transition-colors hover:text-[var(--red)]"
       >
         <RotateCcw size={10} />
-        drag to rotate · double-click to reset
+        drag · double-click to reset
       </button>
     </div>
   )
 }
 
 const CATEGORIES = [
-  { value: 'consumer_hardware', label: 'Consumer Hardware' },
-  { value: 'health_hardware', label: 'Health Hardware' },
+  { value: 'consumer_hardware', label: 'Consumer hardware' },
+  { value: 'health_hardware', label: 'Health hardware' },
   { value: 'wearable', label: 'Wearable' },
-  { value: 'iot_hardware', label: 'IoT Hardware' },
-  { value: 'b2b_hardware', label: 'B2B Hardware' },
+  { value: 'iot_hardware', label: 'IoT hardware' },
+  { value: 'b2b_hardware', label: 'B2B hardware' },
 ] as const
-
-const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII']
 
 export default function HardwareBuilderPage() {
   const params = useParams()
@@ -427,14 +449,13 @@ export default function HardwareBuilderPage() {
   }, [project, router, projectId])
 
   const [activeTab, setActiveTab] = useState<Tab>('spec')
-  const isMobile = useIsMobile()
   const [selectedHwId, setSelectedHwId] = useState<number | null>(null)
   const [generating, setGenerating] = useState(false)
   const [runningTests, setRunningTests] = useState(false)
   const [runningSim, setRunningSim] = useState(false)
   const [competitiveReport, setCompetitiveReport] = useState<CompetitiveReport | null>(null)
   const [pdfBusy, setPdfBusy] = useState(false)
-  const [configOpen, setConfigOpen] = useState(true)
+  const [editingSpec, setEditingSpec] = useState(false)
 
   const [genForm, setGenForm] = useState({
     name: '',
@@ -490,6 +511,8 @@ export default function HardwareBuilderPage() {
       render_hints: specData.render_hints,
     } as Record<string, unknown>
   }, [specData])
+
+  const hasPlate = Boolean(mergedSpec && Object.keys(mergedSpec).length > 0)
 
   const hardwareSpec: HardwareSpec | null = useMemo(() => {
     if (!specData) return null
@@ -596,8 +619,6 @@ export default function HardwareBuilderPage() {
     },
   })
 
-  const headerCostVerdict = costView.hasData ? costView.verdict : null
-
   const runCompetitiveMutation = useMutation({
     mutationFn: async () => {
       const r = await fetch(`${api}/projects/${projectId}/hardware/${hwId}/competitive-analysis`, {
@@ -630,6 +651,7 @@ export default function HardwareBuilderPage() {
       const created = (await r.json()) as { id: number }
       await refetchHw()
       setSelectedHwId(created.id)
+      setEditingSpec(false)
       void queryClient.invalidateQueries({ queryKey: ['hw-spec', projectId, created.id] })
       setActiveTab('spec')
     } finally {
@@ -696,957 +718,961 @@ export default function HardwareBuilderPage() {
     }
   }
 
-  const TABS: { key: Tab; label: string; sub: string; Icon: typeof Cpu }[] = [
-    { key: 'spec', label: 'Spec', sub: 'Blueprint', Icon: Hexagon },
-    { key: 'tests', label: 'Tests', sub: 'Physics', Icon: FlaskConical },
-    { key: 'cost', label: 'Cost', sub: 'Margin', Icon: Scale },
-    { key: 'simulation', label: 'Simulation', sub: '52 clusters', Icon: Users },
-    { key: 'competitive', label: 'Competitive', sub: 'Position', Icon: Target },
-    { key: 'report', label: 'Report', sub: 'Filed PDF', Icon: FileText },
-  ]
-
-  const verdictColor = (v: string) =>
+  const verdictTone = (v: string) =>
     v === 'VIABLE'
-      ? 'text-emerald-900 border-emerald-700/35'
+      ? 'text-emerald-800'
       : v === 'MARGINAL'
-        ? 'text-amber-900 border-amber-700/35'
+        ? 'text-amber-800'
         : v === 'NOT_VIABLE'
-          ? 'text-red-900 border-red-700/40'
-          : 'text-[var(--ink-tertiary)] border-[var(--border-color)]'
+          ? 'text-red-800'
+          : 'text-[var(--ink-tertiary)]'
 
-  const verdictBorderBg = (v: string) =>
+  const verdictBg = (v: string) =>
     v === 'VIABLE'
-      ? 'border-emerald-700/25 bg-emerald-500/[0.07]'
+      ? 'border-emerald-700/25 bg-emerald-500/[0.06]'
       : v === 'MARGINAL'
-        ? 'border-amber-700/25 bg-amber-500/[0.08]'
+        ? 'border-amber-700/25 bg-amber-500/[0.07]'
         : 'border-red-700/25 bg-red-500/[0.06]'
 
   const statusColor = (s: string) =>
     s === 'PASS'
       ? 'text-emerald-800'
       : s === 'PARTIAL'
-        ? 'text-amber-900'
+        ? 'text-amber-800'
         : s === 'FAIL'
           ? 'text-red-800'
           : 'text-[var(--ink-tertiary)]'
 
   const testResults = testResultsPayload?.results ?? []
   const compDisplay = competitiveReport
-
   const simFindings = (simData?.domain_findings ?? []) as DomainFindingRow[]
   const simClusters = (simData?.cluster_results ?? {}) as Record<
     string,
     { conversion_rate?: number; population_fraction?: number }
   >
 
-  const issueLine = `Folio ${String(hwId ?? '—').padStart(3, '0')} · Workshop edition`
+  // ── Step navigation logic ────────────────────────────────────────────
+  const stepIdx = STEPS.findIndex((s) => s.key === activeTab)
+  const prevStep = STEPS[stepIdx - 1] ?? null
+  const hero = STEP_HERO[activeTab]
+
+  // The single dedicated forward CTA per step
+  const primaryCta = (() => {
+    if (activeTab === 'spec') {
+      if (!hasPlate) return null // primary action lives in the card form (Send to press)
+      return { label: 'Run physics', icon: ArrowRight, onClick: () => setActiveTab('tests') }
+    }
+    if (activeTab === 'tests') {
+      return testResults.length > 0
+        ? { label: 'Land the price', icon: ArrowRight, onClick: () => setActiveTab('cost') }
+        : { label: runningTests ? 'Running…' : 'Run physics', icon: Play, onClick: () => void handleRunTests(), disabled: !hwId || runningTests }
+    }
+    if (activeTab === 'cost') {
+      return costView.hasData
+        ? { label: 'Cast the room', icon: ArrowRight, onClick: () => setActiveTab('simulation') }
+        : { label: runCostMutation.isPending ? 'Running…' : 'Run analysis', icon: Play, onClick: () => runCostMutation.mutate(), disabled: !hwId || runCostMutation.isPending }
+    }
+    if (activeTab === 'simulation') {
+      return hasSimulation
+        ? { label: 'Find the shelf', icon: ArrowRight, onClick: () => setActiveTab('competitive') }
+        : { label: runningSim ? 'Queuing…' : 'Run simulation', icon: Play, onClick: () => void handleRunSim(), disabled: !hwId || runningSim }
+    }
+    if (activeTab === 'competitive') {
+      return compDisplay?.price_position
+        ? { label: 'File the folio', icon: ArrowRight, onClick: () => setActiveTab('report') }
+        : { label: runCompetitiveMutation.isPending ? 'Running…' : 'Run analysis', icon: Play, onClick: () => runCompetitiveMutation.mutate(), disabled: !hwId || runCompetitiveMutation.isPending }
+    }
+    return {
+      label: pdfBusy ? 'Preparing…' : 'Download PDF',
+      icon: Download,
+      onClick: () => void downloadPdf(),
+      disabled: !hwId || pdfBusy,
+    }
+  })()
+
+  const showSpecForm = activeTab === 'spec' && (!hasPlate || editingSpec)
 
   return (
-    <div className="hw-workshop min-h-screen bg-[var(--paper)] text-[var(--ink)]">
-      {/* ── EDITORIAL MASTHEAD ────────────────────────────────────── */}
-      <section
-        className="relative z-20 border-b border-[var(--border-color)] px-10 pt-9 pb-6"
-        style={{ background: 'linear-gradient(180deg, #faf7f0 0%, var(--paper) 100%)' }}
-      >
+    <div className="hw-workshop relative min-h-screen bg-[var(--paper)] text-[var(--ink)]">
+      <div className="mx-auto w-full max-w-[1200px] px-8 pt-8 pb-32 lg:px-12">
+        {/* ── Editorial top strip ────────────────────────────────────── */}
         <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.28em] text-[var(--ink-secondary)]">
-          <span style={{ color: 'var(--red)', fontWeight: 600 }}>The Workshop</span>
-          <span>{issueLine}</span>
           <Link
             href={`/project/${projectId}`}
             className="flex items-center gap-2 transition-colors hover:text-[var(--red)]"
           >
-            <ArrowLeft size={11} />
-            Back to dossier
+            <ArrowLeft size={11} /> Workshop
           </Link>
+          <span className="hidden text-right sm:block" style={{ color: 'var(--red)', fontWeight: 600 }}>
+            Folio {String(hwId ?? '—').padStart(3, '0')} · {hero.kicker}
+          </span>
         </div>
 
-        <div className="mt-5 flex items-end justify-between gap-8">
-          <div className="min-w-0 flex-1">
-            <p className="kicker mb-2" style={{ color: 'var(--workshop)' }}>
-              <span className="status-dot status-dot--running" />
-              {selectedHw ? (selectedHw.category ?? 'hardware').replace(/_/g, ' ') : 'Awaiting first plate'}
+        {/* ── HERO ──────────────────────────────────────────────────── */}
+        <AnimatePresence mode="wait">
+          <motion.header
+            key={activeTab + '-hero'}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.25 }}
+            className="mt-9"
+          >
+            <p className="kicker" style={{ color: 'var(--red)' }}>
+              {hero.kicker}
             </p>
             <h1
-              className="font-serif italic leading-[0.96] tracking-tight text-[var(--ink)]"
-              style={{ fontSize: 'clamp(36px, 4.5vw, 56px)', fontWeight: 900, letterSpacing: '-0.035em' }}
+              className="mt-3 font-serif italic text-[var(--ink)]"
+              style={{
+                fontSize: 'clamp(40px, 5.2vw, 68px)',
+                fontWeight: 900,
+                letterSpacing: '-0.035em',
+                lineHeight: 0.95,
+              }}
             >
-              {selectedHw?.name ?? (
-                <>
-                  An <span style={{ color: 'var(--red)' }}>idea</span> on the press.
-                </>
-              )}
+              {hero.titleA}
+              <span style={{ color: 'var(--red)' }}>{hero.titleEm}</span>
+              {hero.titleB}
             </h1>
-            <p className="mt-3 max-w-[58ch] text-[13px] leading-[1.7] text-[var(--ink-secondary)]">
-              Blueprint, physics, margin, and the room&rsquo;s verdict — typeset like the rest of
-              the magazine. Configure on the left, watch the plate set itself on the right.
+            <p className="mt-4 max-w-[58ch] text-[14px] leading-[1.7] text-[var(--ink-secondary)]">
+              {hero.sub}
             </p>
-          </div>
+          </motion.header>
+        </AnimatePresence>
 
-          <div className="flex shrink-0 flex-col items-end gap-3">
-            {hwList.length > 1 ? (
-              <label className="text-[10px] uppercase tracking-[0.22em] text-[var(--ink-tertiary)]">
-                Filed under
-                <select
-                  value={hwId ?? ''}
-                  onChange={(e) => setSelectedHwId(Number(e.target.value))}
-                  className="ml-2 rounded-none border-0 border-b border-[var(--ink)] bg-transparent px-1 py-1 font-serif text-sm italic text-[var(--ink)] focus:outline-none"
-                >
-                  {hwList.map((h) => (
-                    <option key={h.id} value={h.id}>
-                      {h.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-            {headerCostVerdict && headerCostVerdict !== '—' ? (
+        {/* ── DRAFTING CARD ─────────────────────────────────────────── */}
+        <div className="relative mt-10">
+          <div
+            className="relative overflow-hidden border-[0.5px] border-[var(--ink)]/25 bg-[var(--paper)]"
+            style={{ boxShadow: '14px 14px 0 rgba(26,23,20,0.10)' }}
+          >
+            {/* Card chrome — registration row */}
+            <div className="flex flex-wrap items-center gap-3 border-b-[0.5px] border-[var(--border-strong)] bg-[var(--paper-dark)]/45 px-5 py-3">
+              <div className="flex shrink-0 gap-1.5">
+                {['var(--red)', '#b88a3a', '#3d7a4a'].map((c) => (
+                  <span
+                    key={c}
+                    className="h-2 w-2 rounded-full"
+                    style={{ background: c, opacity: 0.85 }}
+                  />
+                ))}
+              </div>
               <span
-                className={`inline-flex items-center gap-2 border px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.22em] ${verdictColor(headerCostVerdict)}`}
+                className="rounded-sm border-[0.5px] border-[var(--ink)]/30 bg-[var(--paper)] px-2 py-0.5 font-serif text-[11px] italic text-[var(--ink)]"
+                style={{ letterSpacing: 0 }}
               >
-                <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                Verdict · {headerCostVerdict}
+                {STEPS[stepIdx].numeral}.&nbsp;{STEPS[stepIdx].label}
               </span>
-            ) : null}
-          </div>
-        </div>
 
-        <div className="mt-6 h-[2px] bg-[var(--red)]" />
-      </section>
+              {/* Step-specific chrome row */}
+              <div className="ml-auto flex flex-1 items-center justify-end gap-3">
+                <CardChrome
+                  step={activeTab}
+                  selectedHw={selectedHw}
+                  hwList={hwList}
+                  onSelectHw={(id) => setSelectedHwId(id)}
+                  hasPlate={hasPlate}
+                  editing={editingSpec}
+                  onToggleEdit={() => setEditingSpec((v) => !v)}
+                  onRunTests={() => void handleRunTests()}
+                  runningTests={runningTests}
+                  onRerunCost={() => runCostMutation.mutate()}
+                  costPending={runCostMutation.isPending}
+                  onRunSim={() => void handleRunSim()}
+                  runningSim={runningSim}
+                  onRunCompetitive={() => runCompetitiveMutation.mutate()}
+                  competitivePending={runCompetitiveMutation.isPending}
+                />
+              </div>
+            </div>
 
-      {/* ── SECTION TABS — editorial nav with roman numerals ────── */}
-      {!isMobile && (
-        <nav className="relative z-20 border-b border-[var(--border-color)] bg-[var(--paper)]/85 backdrop-blur-sm">
-          <ul className="flex">
-            {TABS.map((t, i) => {
-              const active = activeTab === t.key
-              const Icon = t.Icon
-              return (
-                <li key={t.key} className="flex-1">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab(t.key)}
-                    className={`group relative flex w-full items-center gap-3 px-5 py-4 text-left transition-colors ${
-                      active ? 'text-[var(--ink)]' : 'text-[var(--ink-tertiary)] hover:text-[var(--ink-secondary)]'
-                    }`}
-                  >
-                    <span
-                      className={`font-serif text-xs italic transition-colors ${
-                        active ? 'text-[var(--red)]' : 'text-[var(--ink-tertiary)]'
-                      }`}
-                      style={{ letterSpacing: 0 }}
-                    >
-                      {ROMAN[i]}.
-                    </span>
-                    <Icon size={14} className={active ? 'text-[var(--red)]' : 'text-[var(--ink-tertiary)]'} />
-                    <span className="flex flex-col leading-tight">
-                      <span className="text-[12px] font-medium uppercase tracking-[0.18em]">{t.label}</span>
-                      <span className="text-[9.5px] uppercase tracking-[0.22em] text-[var(--ink-tertiary)]">
-                        {t.sub}
-                      </span>
-                    </span>
-                    {active && (
-                      <motion.span
-                        layoutId="hw-tab-rule"
-                        className="absolute right-0 bottom-0 left-0 h-[2px] bg-[var(--red)]"
-                      />
-                    )}
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        </nav>
-      )}
-
-      {/* ── CONTENT ───────────────────────────────────────────────── */}
-      <div className={`relative ${isMobile ? 'pb-24' : ''}`}>
-        <AnimatePresence mode="wait">
-          {activeTab === 'spec' && (
-            <motion.div
-              key="spec"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="flex min-h-[calc(100vh-260px)]"
-            >
-              {/* ── Left ledger: Configuration sheet ─────────── */}
-              <aside
-                className={`relative z-10 flex flex-col border-r border-[var(--border-color)] bg-[var(--paper)]/96 transition-[width] duration-300 ${
-                  configOpen ? 'w-[360px]' : 'w-12'
-                }`}
+            {/* Card body */}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab + '-body'}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.22 }}
+                className="relative"
               >
-                <button
-                  type="button"
-                  onClick={() => setConfigOpen((v) => !v)}
-                  className="absolute -right-3 top-8 z-20 flex h-6 w-6 items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--paper)] text-[var(--ink-secondary)] shadow-sm transition-colors hover:border-[var(--red)] hover:text-[var(--red)]"
-                  aria-label={configOpen ? 'Collapse configuration' : 'Expand configuration'}
-                >
-                  {configOpen ? <ArrowLeft size={12} /> : <ArrowRight size={12} />}
-                </button>
-
-                {configOpen ? (
-                  <>
-                    <div className="border-b border-[var(--border-color)] px-7 pt-8 pb-5">
-                      <p className="kicker" style={{ color: 'var(--workshop)' }}>
-                        Configuration sheet
-                      </p>
-                      <h2
-                        className="mt-2 font-serif italic leading-tight tracking-tight text-[var(--ink)]"
-                        style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em' }}
-                      >
-                        File a new <span style={{ color: 'var(--red)' }}>plate</span>.
-                      </h2>
-                      <p className="mt-2 text-[12px] leading-relaxed text-[var(--ink-secondary)]">
-                        Four fields. Set the parameters, press the press, and the workshop returns
-                        a typeset specification.
-                      </p>
-                    </div>
-
-                    <div className="flex-1 space-y-5 overflow-y-auto px-7 py-6">
-                      <Field label="Product name" numeral="i.">
-                        <input
-                          type="text"
-                          placeholder="e.g. Daybreak SmartWatch"
-                          value={genForm.name}
-                          onChange={(e) => setGenForm((f) => ({ ...f, name: e.target.value }))}
-                          className="w-full border-0 border-b border-[var(--ink)]/35 bg-transparent px-0 py-2 font-serif text-base italic text-[var(--ink)] placeholder-[var(--ink-tertiary)] focus:border-[var(--red)] focus:outline-none"
-                        />
-                      </Field>
-
-                      <Field label="Target price (₹)" numeral="ii.">
-                        <input
-                          type="number"
-                          placeholder="4999"
-                          value={genForm.target_price_inr}
-                          onChange={(e) =>
-                            setGenForm((f) => ({ ...f, target_price_inr: Number(e.target.value) || 0 }))
-                          }
-                          className="w-full border-0 border-b border-[var(--ink)]/35 bg-transparent px-0 py-2 font-mono text-base text-[var(--ink)] placeholder-[var(--ink-tertiary)] focus:border-[var(--red)] focus:outline-none"
-                        />
-                      </Field>
-
-                      <Field label="Category" numeral="iii.">
-                        <select
-                          value={genForm.category}
-                          onChange={(e) =>
-                            setGenForm((f) => ({
-                              ...f,
-                              category: e.target.value,
-                              product_type: e.target.value,
-                            }))
-                          }
-                          className="w-full border-0 border-b border-[var(--ink)]/35 bg-transparent px-0 py-2 font-serif text-base italic text-[var(--ink)] focus:border-[var(--red)] focus:outline-none"
-                        >
-                          {CATEGORIES.map((c) => (
-                            <option key={c.value} value={c.value}>
-                              {c.label}
-                            </option>
-                          ))}
-                        </select>
-                      </Field>
-
-                      <Field label="Marginalia" numeral="iv.">
-                        <textarea
-                          rows={5}
-                          placeholder="Materials, key features, form factor — the editor's note."
-                          value={genForm.description}
-                          onChange={(e) => setGenForm((f) => ({ ...f, description: e.target.value }))}
-                          className="w-full resize-none border-0 border-b border-[var(--ink)]/35 bg-transparent px-0 py-2 font-serif text-[15px] leading-relaxed italic text-[var(--ink)] placeholder-[var(--ink-tertiary)] focus:border-[var(--red)] focus:outline-none"
-                        />
-                      </Field>
-                    </div>
-
-                    <div className="space-y-2.5 border-t border-[var(--border-color)] px-7 py-6">
-                      <button
-                        type="button"
-                        onClick={() => void handleGenerate()}
-                        disabled={!genForm.name || !genForm.description || generating}
-                        className="flex w-full items-center justify-center gap-2.5 bg-[var(--ink)] py-3 text-[11px] font-medium uppercase tracking-[0.22em] text-[var(--paper)] transition-all hover:bg-[var(--red)] disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        {generating ? (
-                          <>
-                            <Loader2 size={13} className="animate-spin" />
-                            Setting type…
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles size={13} />
-                            Send to press
-                          </>
-                        )}
-                      </button>
-                      {hwId ? (
-                        <button
-                          type="button"
-                          onClick={() => void handleRunTests()}
-                          disabled={runningTests}
-                          className="flex w-full items-center justify-center gap-2.5 border border-[var(--workshop)]/45 py-2.5 text-[11px] font-medium uppercase tracking-[0.22em] text-[var(--workshop)] transition-all hover:bg-[var(--workshop)] hover:text-[var(--paper)] disabled:opacity-40"
-                        >
-                          {runningTests ? (
-                            <>
-                              <Loader2 size={12} className="animate-spin" />
-                              Running…
-                            </>
-                          ) : (
-                            <>
-                              <Play size={12} />
-                              Run physics tests
-                            </>
-                          )}
-                        </button>
-                      ) : null}
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex flex-1 flex-col items-center pt-10">
-                    <span
-                      className="kicker rotate-180 text-[var(--ink-tertiary)]"
-                      style={{ writingMode: 'vertical-rl' }}
-                    >
-                      Configuration sheet
-                    </span>
+                {/* SPEC */}
+                {activeTab === 'spec' && (
+                  <div className="relative">
+                    {showSpecForm ? (
+                      <PressDispatchForm
+                        form={genForm}
+                        onChange={setGenForm}
+                        onSubmit={() => void handleGenerate()}
+                        generating={generating}
+                        canCancel={hasPlate}
+                        onCancel={() => setEditingSpec(false)}
+                      />
+                    ) : hasPlate ? (
+                      <div className="px-6 py-10">
+                        <SpecViewer spec={mergedSpec} hwProduct={selectedHw} />
+                      </div>
+                    ) : (
+                      <div className="relative flex min-h-[520px] flex-col items-center justify-center px-8 py-20">
+                        <PaperField />
+                        <div className="relative z-10 max-w-md text-center">
+                          <p className="kicker mb-5" style={{ color: 'var(--red)' }}>
+                            Standing type · Plate not yet filed
+                          </p>
+                          <div className="mx-auto mb-7 flex h-24 w-24 items-center justify-center border-[0.5px] border-[var(--workshop)]/35 bg-[var(--paper)]">
+                            <Hexagon size={42} className="text-[var(--workshop)]" strokeWidth={1.2} />
+                          </div>
+                          <h3
+                            className="font-serif italic text-[var(--ink)]"
+                            style={{ fontSize: 36, fontWeight: 900, letterSpacing: '-0.025em' }}
+                          >
+                            Awaiting <span style={{ color: 'var(--red)' }}>impression</span>.
+                          </h3>
+                          <p className="mt-3 text-[14px] leading-relaxed text-[var(--ink-secondary)]">
+                            File the dispatch form above and the workshop will set a typeset
+                            blueprint, dimensions, and a component diagram on this plate.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
-              </aside>
 
-              {/* ── Right plate: 3D viewer or empty editorial state ─ */}
-              {mergedSpec && Object.keys(mergedSpec).length > 0 ? (
-                <SpecViewer spec={mergedSpec} hwProduct={selectedHw} />
-              ) : (
-                <div className="relative flex flex-1 flex-col items-center justify-center px-10 py-16">
-                  <EditorialBlueprintGrid />
-                  <div className="relative z-10 max-w-md text-center">
-                    <p className="kicker mb-5" style={{ color: 'var(--red)' }}>
-                      Standing type · Plate not yet filed
-                    </p>
-                    <div className="mx-auto mb-7 flex h-20 w-20 items-center justify-center border border-[var(--workshop)]/35 bg-[var(--paper)]">
-                      <Hexagon size={36} className="text-[var(--workshop)]" strokeWidth={1.2} />
-                    </div>
-                    <h3
-                      className="font-serif italic leading-tight text-[var(--ink)]"
-                      style={{ fontSize: 30, fontWeight: 900, letterSpacing: '-0.025em' }}
-                    >
-                      Awaiting <span style={{ color: 'var(--red)' }}>impression</span>.
-                    </h3>
-                    <p className="mt-4 text-sm leading-relaxed text-[var(--ink-secondary)]">
-                      File the four-line configuration on the left and the workshop will set a
-                      blueprint, dimensions, and a component diagram on this plate.
-                    </p>
-                    <div className="mt-8 flex items-center justify-center gap-3 text-[10px] uppercase tracking-[0.28em] text-[var(--ink-tertiary)]">
-                      <span className="h-px w-8 bg-[var(--border-strong)]" />
-                      drag to rotate
-                      <span className="h-px w-8 bg-[var(--border-strong)]" />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          )}
-
-          {activeTab === 'tests' && (
-            <motion.div
-              key="tests"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="space-y-7 px-10 py-9"
-            >
-              <SectionHead
-                kicker="Section II · Physics"
-                title="The room shakes the prototype."
-                description="Eight stress regimes, every component scored. The press returns a pass-rate per axis."
-                action={
-                  <button
-                    type="button"
-                    onClick={() => void handleRunTests()}
-                    disabled={!hwId || runningTests}
-                    className="flex items-center gap-2 bg-[var(--ink)] px-4 py-2.5 text-[11px] font-medium uppercase tracking-[0.22em] text-[var(--paper)] transition-all hover:bg-[var(--red)] disabled:opacity-40"
-                  >
-                    {runningTests ? (
+                {/* TESTS */}
+                {activeTab === 'tests' && (
+                  <div className="px-8 py-10">
+                    {testResults.length > 0 ? (
                       <>
-                        <Loader2 size={12} className="animate-spin" /> Running…
+                        <div className="grid grid-cols-2 gap-px border-[0.5px] border-[var(--border-color)] bg-[var(--border-color)] sm:grid-cols-4">
+                          {(
+                            [
+                              { label: 'Tests run', value: testResultsPayload?.total_tests, tone: 'ink' as const },
+                              { label: 'Passed', value: testResultsPayload?.passed, tone: 'green' as const },
+                              { label: 'Failed', value: testResultsPayload?.failed, tone: 'red' as const },
+                              {
+                                label: 'Pass rate',
+                                value: `${((testResultsPayload?.overall_pass_rate ?? 0) * 100).toFixed(0)}%`,
+                                tone: 'workshop' as const,
+                              },
+                            ] as const
+                          ).map((k) => (
+                            <Stat key={k.label} label={k.label} value={String(k.value ?? '—')} tone={k.tone} />
+                          ))}
+                        </div>
+
+                        <div className="mt-6 space-y-3">
+                          {testResults.map((r) => (
+                            <div
+                              key={r.test_type}
+                              className="border-[0.5px] border-[var(--border-color)] bg-[var(--paper)]/85 p-5"
+                            >
+                              <div className="mb-3 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <span className={`font-serif text-base italic ${statusColor(r.status)}`}>
+                                    {r.status === 'PASS' ? '✓' : r.status === 'FAIL' ? '✗' : '~'}
+                                  </span>
+                                  <span className="text-sm capitalize text-[var(--ink)]">
+                                    {r.test_type?.replace(/_/g, ' ')}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <div className="h-1 w-36 overflow-hidden bg-[var(--border-color)]">
+                                    <div
+                                      className={`h-full ${
+                                        r.pass_rate > 0.7
+                                          ? 'bg-emerald-700'
+                                          : r.pass_rate > 0.4
+                                            ? 'bg-amber-600'
+                                            : 'bg-red-700'
+                                      }`}
+                                      style={{ width: `${Math.min(100, r.pass_rate * 100)}%` }}
+                                    />
+                                  </div>
+                                  <span className="w-10 font-mono text-xs text-[var(--ink-secondary)]">
+                                    {(r.pass_rate * 100).toFixed(0)}%
+                                  </span>
+                                </div>
+                              </div>
+                              {r.failure_points?.length ? (
+                                <div className="space-y-1 border-t border-[var(--border-color)] pt-3">
+                                  {r.failure_points.slice(0, 2).map((fp: FailurePoint, i: number) => (
+                                    <p key={i} className="font-mono text-xs text-red-700">
+                                      → {fp.reason}
+                                    </p>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+
+                        {hardwareSpec ? (
+                          <div className="mt-6">
+                            <HardwareFailureMap spec={hardwareSpec} testResults={testResults} />
+                          </div>
+                        ) : null}
                       </>
                     ) : (
-                      <>
-                        <Play size={12} /> Re-run tests
-                      </>
+                      <EmptyStage
+                        kicker="No tests on file"
+                        title="The room is quiet."
+                        body="Press the dedicated action below to put the prototype through eight stress regimes."
+                      />
                     )}
-                  </button>
-                }
-              />
-
-              {testResults.length > 0 ? (
-                <>
-                  <div className="grid grid-cols-2 gap-px bg-[var(--border-color)] sm:grid-cols-4">
-                    {(
-                      [
-                        { label: 'Tests run', value: testResultsPayload?.total_tests, tone: 'ink' as const },
-                        { label: 'Passed', value: testResultsPayload?.passed, tone: 'green' as const },
-                        { label: 'Failed', value: testResultsPayload?.failed, tone: 'red' as const },
-                        {
-                          label: 'Pass rate',
-                          value: `${((testResultsPayload?.overall_pass_rate ?? 0) * 100).toFixed(0)}%`,
-                          tone: 'workshop' as const,
-                        },
-                      ] as const
-                    ).map((k) => (
-                      <Stat key={k.label} label={k.label} value={String(k.value ?? '—')} tone={k.tone} />
-                    ))}
                   </div>
+                )}
 
-                  <div className="space-y-3">
-                    {testResults.map((r) => (
-                      <div
-                        key={r.test_type}
-                        className="border border-[var(--border-color)] bg-[var(--paper)]/85 p-5"
-                      >
-                        <div className="mb-3 flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <span className={`font-serif text-base italic ${statusColor(r.status)}`}>
-                              {r.status === 'PASS' ? '✓' : r.status === 'FAIL' ? '✗' : '~'}
-                            </span>
-                            <span className="text-sm capitalize text-[var(--ink)]">
-                              {r.test_type?.replace(/_/g, ' ')}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className="h-1 w-36 overflow-hidden bg-[var(--border-color)]">
-                              <div
-                                className={`h-full ${
-                                  r.pass_rate > 0.7
-                                    ? 'bg-emerald-700'
-                                    : r.pass_rate > 0.4
-                                      ? 'bg-amber-600'
-                                      : 'bg-red-700'
-                                }`}
-                                style={{ width: `${Math.min(100, r.pass_rate * 100)}%` }}
-                              />
-                            </div>
-                            <span className="w-10 font-mono text-xs text-[var(--ink-secondary)]">
-                              {(r.pass_rate * 100).toFixed(0)}%
-                            </span>
-                          </div>
+                {/* COST */}
+                {activeTab === 'cost' && (
+                  <div className="px-8 py-10">
+                    {costView.hasData ? (
+                      <>
+                        <div className={`border-[0.5px] p-7 ${verdictBg(costView.verdict)}`}>
+                          <p className="kicker mb-2" style={{ color: 'var(--ink-secondary)' }}>
+                            Editor&rsquo;s verdict
+                          </p>
+                          <p
+                            className={`font-serif italic ${verdictTone(costView.verdict)}`}
+                            style={{ fontSize: 44, fontWeight: 900, letterSpacing: '-0.02em', lineHeight: 1 }}
+                          >
+                            {costView.verdict.replace(/_/g, ' ')}
+                          </p>
+                          <p className="mt-3 max-w-[60ch] text-sm leading-relaxed text-[var(--ink-secondary)]">
+                            {costView.verdict_reason}
+                          </p>
                         </div>
-                        {r.failure_points?.length ? (
-                          <div className="space-y-1 border-t border-[var(--border-color)] pt-3">
-                            {r.failure_points.slice(0, 2).map((fp: FailurePoint, i: number) => (
-                              <p key={i} className="font-mono text-xs text-red-700">
-                                → {fp.reason}
+
+                        <div className="mt-6 grid grid-cols-2 gap-px border-[0.5px] border-[var(--border-color)] bg-[var(--border-color)] lg:grid-cols-4">
+                          {(
+                            [
+                              { label: 'Landed cost', value: `₹${costView.landed_cost_inr.toLocaleString('en-IN')}`, tone: 'workshop' as const },
+                              { label: 'Target price', value: `₹${costView.target_price_inr.toLocaleString('en-IN')}`, tone: 'ink' as const },
+                              { label: 'Gross margin', value: `${costView.margin_pct.toFixed(1)}%`, tone: 'workshop' as const },
+                              {
+                                label: 'Break-even',
+                                value:
+                                  costView.break_even_moq != null
+                                    ? `${costView.break_even_moq.toLocaleString('en-IN')} units`
+                                    : '—',
+                                tone: 'ink' as const,
+                              },
+                            ] as const
+                          ).map((k) => (
+                            <Stat key={k.label} label={k.label} value={k.value} tone={k.tone} />
+                          ))}
+                        </div>
+
+                        {costView.bom.length > 0 ? (
+                          <div className="mt-7">
+                            <p className="kicker mb-3" style={{ color: 'var(--ink-secondary)' }}>
+                              Bill of materials
+                            </p>
+                            <div className="table-mobile-scroll overflow-hidden border-[0.5px] border-[var(--border-color)] bg-[var(--paper)]/90">
+                              <table className="w-full min-w-[560px] text-sm">
+                                <thead>
+                                  <tr className="border-b border-[var(--border-color)]">
+                                    {(['Component', 'Material', 'Volume (cm³)', 'Unit cost'] as const).map((h) => (
+                                      <th
+                                        key={h}
+                                        className="px-5 py-3 text-left text-[10px] font-medium uppercase tracking-[0.22em] text-[var(--ink-tertiary)]"
+                                      >
+                                        {h}
+                                      </th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {costView.bom.map((item, idx) => (
+                                    <tr
+                                      key={String(item.component_id ?? item.component_name ?? idx)}
+                                      className="border-b border-[var(--border-color)] transition-colors hover:bg-[var(--paper-dark)]/35"
+                                    >
+                                      <td className="px-5 py-3 font-serif italic text-[var(--ink)]">
+                                        {String(item.component_name ?? '—')}
+                                      </td>
+                                      <td className="px-5 py-3 text-[var(--ink-secondary)]">{String(item.material ?? '—')}</td>
+                                      <td className="px-5 py-3 font-mono text-[var(--ink-secondary)]">
+                                        {item.volume_cm3 != null ? Number(item.volume_cm3).toFixed(1) : '—'}
+                                      </td>
+                                      <td className="px-5 py-3 font-mono text-[var(--workshop)]">
+                                        ₹{Number(item.unit_cost_inr ?? 0).toFixed(2)}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                  <tr className="bg-[var(--paper-dark)]/45">
+                                    <td colSpan={3} className="px-5 py-3 text-[10px] uppercase tracking-[0.22em] text-[var(--ink-tertiary)]">
+                                      Total BOM
+                                    </td>
+                                    <td className="px-5 py-3 font-mono font-bold text-[var(--workshop)]">
+                                      ₹{costView.bom_total_inr.toFixed(2)}
+                                    </td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <EmptyStage
+                        kicker="No analysis on file"
+                        title={costView.message ?? 'No verdict yet.'}
+                        body="Press the dedicated action below and the workshop will land the price."
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* SIMULATION */}
+                {activeTab === 'simulation' && (
+                  <div className="px-8 py-10">
+                    {hasSimulation ? (
+                      <>
+                        <div className="grid grid-cols-1 gap-px border-[0.5px] border-[var(--border-color)] bg-[var(--border-color)] sm:grid-cols-3">
+                          {(
+                            [
+                              {
+                                label: 'Overall conversion',
+                                value: `${((Number(simData?.overall_conversion_rate) || 0) * 100).toFixed(1)}%`,
+                                tone: 'workshop' as const,
+                              },
+                              {
+                                label: 'Total agents',
+                                value: (Number(simData?.agent_count ?? simData?.total_agents) || 0).toLocaleString('en-IN'),
+                                tone: 'ink' as const,
+                              },
+                              {
+                                label: 'Prototype wired',
+                                value: simData?.prototype_wired ? 'Yes' : 'No',
+                                tone: 'workshop' as const,
+                              },
+                            ] as const
+                          ).map((k) => (
+                            <Stat key={k.label} label={k.label} value={k.value} tone={k.tone} />
+                          ))}
+                        </div>
+
+                        <div className="mt-7">
+                          {Object.keys(simClusters).length > 0 && simFindings.length > 0 ? (
+                            <KeyPersonReport
+                              findings={simFindings}
+                              clusterBreakdown={simClusters}
+                              primaryFailure={String(simData?.primary_failure_domain ?? 'unknown')}
+                            />
+                          ) : (
+                            <EmptyStage
+                              kicker="Half-filed"
+                              title="The room is still arriving."
+                              body="Cluster results and findings populate moments after the run completes."
+                            />
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <EmptyStage
+                        kicker="No simulation on file"
+                        title="An empty room awaits."
+                        body="Press the dedicated action below to put the prototype in front of fifty-two synthetic clusters."
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* COMPETITIVE */}
+                {activeTab === 'competitive' && (
+                  <div className="px-8 py-10">
+                    {compDisplay?.price_position ? (
+                      <>
+                        <div className="grid grid-cols-1 gap-px border-[0.5px] border-[var(--border-color)] bg-[var(--border-color)] sm:grid-cols-3">
+                          {(
+                            [
+                              { label: 'Price position', value: String(compDisplay.price_position), tone: 'ink' as const },
+                              {
+                                label: 'Differentiation',
+                                value: `${((compDisplay.overall_differentiation ?? 0) * 100).toFixed(0)}%`,
+                                tone: 'workshop' as const,
+                              },
+                              {
+                                label: 'Whitespace clusters',
+                                value: String(compDisplay.whitespace_clusters?.length ?? 0),
+                                tone: 'ink' as const,
+                              },
+                            ] as const
+                          ).map((k) => (
+                            <Stat key={k.label} label={k.label} value={k.value} tone={k.tone} />
+                          ))}
+                        </div>
+
+                        <div className="mt-6 border-[0.5px] border-[var(--workshop)]/30 bg-[var(--workshop-dim)] p-7">
+                          <p className="kicker mb-2" style={{ color: 'var(--workshop)' }}>
+                            Recommended positioning
+                          </p>
+                          <p
+                            className="font-serif italic leading-snug text-[var(--ink)]"
+                            style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.015em' }}
+                          >
+                            &ldquo;{compDisplay.recommended_positioning}&rdquo;
+                          </p>
+                        </div>
+
+                        <div className="mt-6 grid grid-cols-1 gap-px border-[0.5px] border-[var(--border-color)] bg-[var(--border-color)] md:grid-cols-2">
+                          <div className="space-y-2 bg-[var(--paper)] p-6">
+                            <p className="kicker" style={{ color: 'var(--red)' }}>
+                              Top threats
+                            </p>
+                            {compDisplay.top_threats?.map((t, i) => (
+                              <p key={i} className="font-serif text-sm italic text-[var(--ink-secondary)]">
+                                → {t}
                               </p>
                             ))}
                           </div>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-
-                  {hardwareSpec ? (
-                    <HardwareFailureMap spec={hardwareSpec} testResults={testResults} />
-                  ) : null}
-                </>
-              ) : (
-                <EmptySection
-                  title="No tests on file."
-                  body="Generate a spec first, then send the prototype to the press for physical regimes."
-                />
-              )}
-            </motion.div>
-          )}
-
-          {activeTab === 'cost' && (
-            <motion.div
-              key="cost"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="space-y-7 px-10 py-9"
-            >
-              <SectionHead
-                kicker="Section III · Margin"
-                title="What it costs to land on a desk."
-                description="Bill of materials, freight, duties, factory overhead — distilled to one verdict."
-                action={
-                  hwId ? (
-                    <button
-                      type="button"
-                      onClick={() => runCostMutation.mutate()}
-                      disabled={runCostMutation.isPending}
-                      className="flex items-center gap-2 border border-[var(--border-strong)] px-4 py-2.5 text-[11px] font-medium uppercase tracking-[0.22em] text-[var(--ink)] transition-all hover:border-[var(--ink)] hover:text-[var(--red)] disabled:opacity-40"
-                    >
-                      {runCostMutation.isPending ? (
-                        <>
-                          <Loader2 size={12} className="animate-spin" /> Running…
-                        </>
-                      ) : (
-                        <>Re-run analysis</>
-                      )}
-                    </button>
-                  ) : null
-                }
-              />
-
-              {costView.hasData ? (
-                <>
-                  <div className={`border p-6 ${verdictBorderBg(costView.verdict)}`}>
-                    <p className="kicker mb-2" style={{ color: 'var(--ink-secondary)' }}>
-                      Editor&rsquo;s verdict
-                    </p>
-                    <p
-                      className={`font-serif italic ${verdictColor(costView.verdict).split(' ')[0]}`}
-                      style={{ fontSize: 32, fontWeight: 900, letterSpacing: '-0.02em' }}
-                    >
-                      {costView.verdict.replace(/_/g, ' ')}
-                    </p>
-                    <p className="mt-2 text-sm leading-relaxed text-[var(--ink-secondary)]">
-                      {costView.verdict_reason}
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-px bg-[var(--border-color)] lg:grid-cols-4">
-                    {(
-                      [
-                        { label: 'Landed cost', value: `₹${costView.landed_cost_inr.toLocaleString('en-IN')}`, tone: 'workshop' as const },
-                        { label: 'Target price', value: `₹${costView.target_price_inr.toLocaleString('en-IN')}`, tone: 'ink' as const },
-                        { label: 'Gross margin', value: `${costView.margin_pct.toFixed(1)}%`, tone: 'workshop' as const },
-                        {
-                          label: 'Break-even',
-                          value:
-                            costView.break_even_moq != null
-                              ? `${costView.break_even_moq.toLocaleString('en-IN')} units`
-                              : '—',
-                          tone: 'ink' as const,
-                        },
-                      ] as const
-                    ).map((k) => (
-                      <Stat key={k.label} label={k.label} value={k.value} tone={k.tone} />
-                    ))}
-                  </div>
-
-                  {costView.bom.length > 0 ? (
-                    <div>
-                      <p className="kicker mb-3" style={{ color: 'var(--ink-secondary)' }}>
-                        Bill of materials
-                      </p>
-                      <div className="table-mobile-scroll overflow-hidden border border-[var(--border-color)] bg-[var(--paper)]/90">
-                        <table className="w-full min-w-[560px] text-sm">
-                          <thead>
-                            <tr className="border-b border-[var(--border-color)]">
-                              {(['Component', 'Material', 'Volume (cm³)', 'Unit cost'] as const).map((h) => (
-                                <th
-                                  key={h}
-                                  className="px-5 py-3 text-left text-[10px] font-medium uppercase tracking-[0.22em] text-[var(--ink-tertiary)]"
-                                >
-                                  {h}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {costView.bom.map((item, idx) => (
-                              <tr
-                                key={String(item.component_id ?? item.component_name ?? idx)}
-                                className="border-b border-[var(--border-color)] transition-colors hover:bg-[var(--paper-dark)]/35"
-                              >
-                                <td className="px-5 py-3 font-serif italic text-[var(--ink)]">
-                                  {String(item.component_name ?? '—')}
-                                </td>
-                                <td className="px-5 py-3 text-[var(--ink-secondary)]">{String(item.material ?? '—')}</td>
-                                <td className="px-5 py-3 font-mono text-[var(--ink-secondary)]">
-                                  {item.volume_cm3 != null ? Number(item.volume_cm3).toFixed(1) : '—'}
-                                </td>
-                                <td className="px-5 py-3 font-mono text-[var(--workshop)]">
-                                  ₹{Number(item.unit_cost_inr ?? 0).toFixed(2)}
-                                </td>
-                              </tr>
+                          <div className="space-y-2 bg-[var(--paper)] p-6">
+                            <p className="kicker" style={{ color: 'var(--workshop)' }}>
+                              Opportunities
+                            </p>
+                            {compDisplay.top_opportunities?.map((o, i) => (
+                              <p key={i} className="font-serif text-sm italic text-[var(--ink-secondary)]">
+                                → {o}
+                              </p>
                             ))}
-                            <tr className="bg-[var(--paper-dark)]/50">
-                              <td colSpan={3} className="px-5 py-3 text-[10px] uppercase tracking-[0.22em] text-[var(--ink-tertiary)]">
-                                Total BOM
-                              </td>
-                              <td className="px-5 py-3 font-mono font-bold text-[var(--workshop)]">
-                                ₹{costView.bom_total_inr.toFixed(2)}
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <EmptyStage
+                        kicker="No analysis filed"
+                        title="The shelf is unread."
+                        body="Press the dedicated action below to derive positioning, threats, and opportunities."
+                        footer={
+                          runCompetitiveMutation.isError ? (
+                            <p className="font-mono text-xs text-red-700">
+                              {(runCompetitiveMutation.error as Error).message}
+                            </p>
+                          ) : null
+                        }
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* REPORT */}
+                {activeTab === 'report' && (
+                  <div className="grid grid-cols-1 gap-10 px-8 py-10 md:grid-cols-[1fr_320px]">
+                    <div>
+                      <p className="lead-para">
+                        Seven sections, one filed envelope: viability verdict, key-person report,
+                        physics, manufacturing cost, the room&rsquo;s 52-cluster behaviour,
+                        competitive positioning, and a ranked list of next moves.
+                      </p>
+                      {!hwId ? (
+                        <p className="mt-6 text-sm italic text-[var(--ink-tertiary)]">
+                          Generate a hardware spec first to unlock the report.
+                        </p>
+                      ) : null}
+                    </div>
+                    <aside className="border-[0.5px] border-[var(--border-color)] bg-[var(--paper)]/90">
+                      <div className="border-b border-[var(--border-color)] px-5 py-3">
+                        <p className="kicker" style={{ color: 'var(--ink-secondary)' }}>
+                          Contents
+                        </p>
                       </div>
-                    </div>
-                  ) : null}
-                </>
-              ) : (
-                <EmptySection
-                  title={costView.message ?? 'No cost analysis yet.'}
-                  body="Run the manufacturing pass to estimate landed cost and margin."
-                  action={
-                    hwId ? (
-                      <button
-                        type="button"
-                        onClick={() => runCostMutation.mutate()}
-                        className="bg-[var(--ink)] px-5 py-2.5 text-[11px] uppercase tracking-[0.22em] text-[var(--paper)]"
-                      >
-                        Run cost analysis
-                      </button>
-                    ) : null
-                  }
-                />
-              )}
-            </motion.div>
-          )}
-
-          {activeTab === 'simulation' && (
-            <motion.div
-              key="simulation"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="space-y-7 px-10 py-9"
-            >
-              <SectionHead
-                kicker="Section IV · The room"
-                title="52 clusters meet the prototype."
-                description="Synthetic readers walk past the shelf, pick it up, and decide. The press records who buys, and who hesitates."
-                action={
-                  <button
-                    type="button"
-                    onClick={() => void handleRunSim()}
-                    disabled={!hwId || runningSim}
-                    className="flex items-center gap-2 bg-[var(--ink)] px-4 py-2.5 text-[11px] font-medium uppercase tracking-[0.22em] text-[var(--paper)] transition-all hover:bg-[var(--red)] disabled:opacity-40"
-                  >
-                    {runningSim ? (
-                      <>
-                        <Loader2 size={12} className="animate-spin" /> Queuing…
-                      </>
-                    ) : (
-                      <>
-                        <Play size={12} /> Run simulation
-                      </>
-                    )}
-                  </button>
-                }
-              />
-
-              {hasSimulation ? (
-                <>
-                  <div className="grid grid-cols-1 gap-px bg-[var(--border-color)] sm:grid-cols-3">
-                    {(
-                      [
-                        {
-                          label: 'Overall conversion',
-                          value: `${((Number(simData?.overall_conversion_rate) || 0) * 100).toFixed(1)}%`,
-                          tone: 'workshop' as const,
-                        },
-                        {
-                          label: 'Total agents',
-                          value: (Number(simData?.agent_count ?? simData?.total_agents) || 0).toLocaleString('en-IN'),
-                          tone: 'ink' as const,
-                        },
-                        {
-                          label: 'Prototype wired',
-                          value: simData?.prototype_wired ? 'Yes' : 'No',
-                          tone: 'workshop' as const,
-                        },
-                      ] as const
-                    ).map((k) => (
-                      <Stat key={k.label} label={k.label} value={k.value} tone={k.tone} />
-                    ))}
+                      <ol className="divide-y divide-[var(--border-color)]">
+                        {[
+                          'Executive summary',
+                          'Key-person report',
+                          'Physics test results',
+                          'Manufacturing cost & BOM',
+                          '52-cluster behaviour',
+                          'Competitive positioning',
+                          'Recommended actions',
+                        ].map((s, i) => (
+                          <li
+                            key={s}
+                            className="flex items-baseline gap-4 px-5 py-3 text-[13px] text-[var(--ink)]"
+                          >
+                            <span
+                              className="font-serif text-xs italic text-[var(--red)]"
+                              style={{ minWidth: 22 }}
+                            >
+                              {String(i + 1).padStart(2, '0')}.
+                            </span>
+                            <span>{s}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    </aside>
                   </div>
-
-                  {Object.keys(simClusters).length > 0 && simFindings.length > 0 ? (
-                    <KeyPersonReport
-                      findings={simFindings}
-                      clusterBreakdown={simClusters}
-                      primaryFailure={String(simData?.primary_failure_domain ?? 'unknown')}
-                    />
-                  ) : (
-                    <EmptySection
-                      title="The room is still arriving."
-                      body="Cluster results and findings populate moments after the run completes — check back when both are filed."
-                    />
-                  )}
-                </>
-              ) : (
-                <EmptySection
-                  title="No simulation on file."
-                  body="Run physics first, then put the prototype in front of the room."
-                />
-              )}
-            </motion.div>
-          )}
-
-          {activeTab === 'competitive' && (
-            <motion.div
-              key="competitive"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="space-y-7 px-10 py-9"
-            >
-              <SectionHead
-                kicker="Section V · Position"
-                title="Where this lands on the shelf."
-                description="Price band, differentiation score, the whitespace nobody owns yet — distilled from the simulated room."
-                action={
-                  hwId ? (
-                    <button
-                      type="button"
-                      onClick={() => runCompetitiveMutation.mutate()}
-                      disabled={runCompetitiveMutation.isPending}
-                      className="flex items-center gap-2 bg-[var(--ink)] px-4 py-2.5 text-[11px] font-medium uppercase tracking-[0.22em] text-[var(--paper)] transition-all hover:bg-[var(--red)] disabled:opacity-40"
-                    >
-                      {runCompetitiveMutation.isPending ? (
-                        <>
-                          <Loader2 size={12} className="animate-spin" /> Running…
-                        </>
-                      ) : (
-                        <>Run analysis</>
-                      )}
-                    </button>
-                  ) : null
-                }
-              />
-
-              {compDisplay?.price_position ? (
-                <>
-                  <div className="grid grid-cols-1 gap-px bg-[var(--border-color)] sm:grid-cols-3">
-                    {(
-                      [
-                        { label: 'Price position', value: String(compDisplay.price_position), tone: 'ink' as const },
-                        {
-                          label: 'Differentiation',
-                          value: `${((compDisplay.overall_differentiation ?? 0) * 100).toFixed(0)}%`,
-                          tone: 'workshop' as const,
-                        },
-                        {
-                          label: 'Whitespace clusters',
-                          value: String(compDisplay.whitespace_clusters?.length ?? 0),
-                          tone: 'ink' as const,
-                        },
-                      ] as const
-                    ).map((k) => (
-                      <Stat key={k.label} label={k.label} value={k.value} tone={k.tone} />
-                    ))}
-                  </div>
-
-                  <div className="border border-[var(--workshop)]/30 bg-[var(--workshop-dim)] p-6">
-                    <p className="kicker mb-2" style={{ color: 'var(--workshop)' }}>
-                      Recommended positioning
-                    </p>
-                    <p
-                      className="font-serif italic leading-snug text-[var(--ink)]"
-                      style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.015em' }}
-                    >
-                      &ldquo;{compDisplay.recommended_positioning}&rdquo;
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-px border border-[var(--border-color)] bg-[var(--border-color)] md:grid-cols-2">
-                    <div className="space-y-2 bg-[var(--paper)] p-5">
-                      <p className="kicker" style={{ color: 'var(--red)' }}>
-                        Top threats
-                      </p>
-                      {compDisplay.top_threats?.map((t, i) => (
-                        <p key={i} className="font-serif text-sm italic text-[var(--ink-secondary)]">
-                          → {t}
-                        </p>
-                      ))}
-                    </div>
-                    <div className="space-y-2 bg-[var(--paper)] p-5">
-                      <p className="kicker" style={{ color: 'var(--workshop)' }}>
-                        Opportunities
-                      </p>
-                      {compDisplay.top_opportunities?.map((o, i) => (
-                        <p key={i} className="font-serif text-sm italic text-[var(--ink-secondary)]">
-                          → {o}
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <EmptySection
-                  title="No analysis filed."
-                  body={
-                    <>
-                      Run consumer simulation first, then press{' '}
-                      <span className="font-medium text-[var(--red)]">Run analysis</span> to derive
-                      positioning, threats, and opportunities.
-                    </>
-                  }
-                  footer={
-                    runCompetitiveMutation.isError ? (
-                      <p className="font-mono text-xs text-red-700">
-                        {(runCompetitiveMutation.error as Error).message}
-                      </p>
-                    ) : null
-                  }
-                />
-              )}
-            </motion.div>
-          )}
-
-          {activeTab === 'report' && (
-            <motion.div
-              key="report"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="px-10 py-12"
-            >
-              <div className="mx-auto grid max-w-5xl grid-cols-1 gap-12 md:grid-cols-[1fr_320px]">
-                <div>
-                  <p className="kicker" style={{ color: 'var(--red)' }}>
-                    Section VI · Filed PDF
-                  </p>
-                  <h2
-                    className="mt-3 font-serif italic leading-[0.96] tracking-tight text-[var(--ink)]"
-                    style={{ fontSize: 'clamp(36px, 4vw, 52px)', fontWeight: 900, letterSpacing: '-0.03em' }}
-                  >
-                    The whole <span style={{ color: 'var(--red)' }}>folio</span>, in one envelope.
-                  </h2>
-                  <p className="lead-para mt-5">
-                    Seven sections, one filed envelope: viability verdict, key-person report,
-                    physics, manufacturing cost, the room&rsquo;s 52-cluster behaviour, competitive
-                    positioning, and a ranked list of next moves.
-                  </p>
-
-                  <div className="mt-8 flex items-center gap-4">
-                    {hwId ? (
-                      <button
-                        type="button"
-                        onClick={() => void downloadPdf()}
-                        disabled={pdfBusy}
-                        className="flex items-center gap-3 bg-[var(--ink)] px-7 py-4 text-[11px] font-medium uppercase tracking-[0.24em] text-[var(--paper)] transition-all hover:bg-[var(--red)] disabled:opacity-50"
-                      >
-                        {pdfBusy ? (
-                          <>
-                            <Loader2 size={14} className="animate-spin" /> Preparing…
-                          </>
-                        ) : (
-                          <>
-                            <Download size={14} />
-                            Download the folio
-                          </>
-                        )}
-                      </button>
-                    ) : (
-                      <p className="text-sm italic text-[var(--ink-tertiary)]">
-                        Generate a hardware spec first to unlock the report.
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <aside className="border border-[var(--border-color)] bg-[var(--paper)]/90">
-                  <div className="border-b border-[var(--border-color)] px-5 py-3">
-                    <p className="kicker" style={{ color: 'var(--ink-secondary)' }}>
-                      Contents
-                    </p>
-                  </div>
-                  <ol className="divide-y divide-[var(--border-color)]">
-                    {[
-                      'Executive summary',
-                      'Key-person report',
-                      'Physics test results',
-                      'Manufacturing cost & BOM',
-                      '52-cluster behaviour',
-                      'Competitive positioning',
-                      'Recommended actions',
-                    ].map((s, i) => (
-                      <li
-                        key={s}
-                        className="flex items-baseline gap-4 px-5 py-3.5 text-[13px] text-[var(--ink)]"
-                      >
-                        <span className="font-serif text-xs italic text-[var(--red)]" style={{ minWidth: 22 }}>
-                          {ROMAN[i]}.
-                        </span>
-                        <span>{s}</span>
-                      </li>
-                    ))}
-                  </ol>
-                </aside>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </div>
       </div>
 
-      {isMobile && (
-        <nav className="safe-area-inset-bottom fixed right-0 bottom-0 left-0 z-50 flex items-center justify-around border-t border-[var(--border-color)] bg-[var(--paper)]/95 px-2 py-2 backdrop-blur-sm">
-          {TABS.map((t) => {
-            const Icon = t.Icon
-            const active = activeTab === t.key
-            return (
+      {/* ── BOTTOM COMMAND BAR — one desk at a time; no jump-to-step strip ── */}
+      <nav
+        className="fixed right-0 bottom-0 left-0 z-40 border-t-[0.5px] border-[var(--border-color)] bg-[var(--paper)]/96 backdrop-blur-sm"
+        style={{ boxShadow: '0 -10px 30px -20px rgba(26,23,20,0.18)' }}
+        aria-label="Workshop navigation"
+      >
+        <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-4 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 lg:px-12">
+          {/* Prev / back */}
+          <div className="flex shrink-0 justify-start">
+            {prevStep ? (
               <button
-                key={t.key}
                 type="button"
-                onClick={() => setActiveTab(t.key)}
-                className={`flex flex-1 flex-col items-center gap-0.5 px-2 py-1.5 transition-all ${
-                  active ? 'text-[var(--red)]' : 'text-[var(--ink-tertiary)]'
-                }`}
+                onClick={() => setActiveTab(prevStep.key)}
+                className="group inline-flex items-center gap-3 border-[0.5px] border-[var(--ink)]/30 bg-[var(--paper)] px-4 py-3 text-[10px] font-medium uppercase tracking-[0.24em] text-[var(--ink-secondary)] transition-all hover:border-[var(--ink)] hover:text-[var(--ink)]"
               >
-                <Icon size={14} />
-                <span className="text-[10px] uppercase tracking-[0.16em]">{t.label}</span>
+                <ArrowLeft size={12} className="transition-transform group-hover:-translate-x-0.5" />
+                <span className="flex flex-col items-start leading-tight">
+                  <span className="text-[8.5px] tracking-[0.28em] text-[var(--ink-tertiary)]">
+                    Return to desk {prevStep.numeral}
+                  </span>
+                  <span>{prevStep.label}</span>
+                </span>
               </button>
-            )
-          })}
-        </nav>
-      )}
+            ) : (
+              <Link
+                href={`/project/${projectId}`}
+                className="group inline-flex items-center gap-3 border-[0.5px] border-[var(--ink)]/30 bg-[var(--paper)] px-4 py-3 text-[10px] font-medium uppercase tracking-[0.24em] text-[var(--ink-secondary)] transition-all hover:border-[var(--ink)] hover:text-[var(--ink)]"
+              >
+                <ArrowLeft size={12} className="transition-transform group-hover:-translate-x-0.5" />
+                Back to dossier
+              </Link>
+            )}
+          </div>
+
+          {/* Current chapter only — folio bind-rail (decorative, not a tab strip) */}
+          <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-1.5 px-2 text-center">
+            <p
+              className="text-[9px] font-medium uppercase tracking-[0.34em] text-[var(--ink-tertiary)]"
+              aria-live="polite"
+            >
+              Hardware atelier · Desk {STEPS[stepIdx].numeral} of VI
+            </p>
+            <p className="max-w-[min(100%,42ch)] font-serif text-[13px] italic leading-snug text-[var(--ink)]">
+              <span style={{ letterSpacing: '0.02em' }}>{STEPS[stepIdx].label}</span>
+              <span className="mx-2 text-[10px] font-sans not-italic uppercase tracking-[0.22em] text-[var(--ink-secondary)]">
+                {STEPS[stepIdx].subline}
+              </span>
+            </p>
+            <div
+              className="mt-0.5 flex h-[3px] w-full max-w-[min(100%,200px)] items-stretch justify-between gap-1"
+              aria-hidden="true"
+            >
+              {STEPS.map((s) => (
+                <span
+                  key={s.key}
+                  className={`min-w-0 flex-1 rounded-full transition-colors ${
+                    s.key === activeTab ? 'bg-[var(--red)]' : 'bg-[var(--border-color)]'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Primary desk action — sole forward control (matches editorial prototype) */}
+          <div className="flex shrink-0 justify-end">
+            {primaryCta ? (
+              <button
+                type="button"
+                onClick={primaryCta.onClick}
+                disabled={primaryCta.disabled}
+                className="group inline-flex w-full items-center justify-center gap-3 bg-[var(--ink)] px-6 py-3 text-[10px] font-medium uppercase tracking-[0.24em] text-[var(--paper)] transition-all hover:bg-[var(--red)] disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+              >
+                {primaryCta.icon === Play ? (
+                  primaryCta.disabled ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : (
+                    <Play size={12} />
+                  )
+                ) : null}
+                {primaryCta.label}
+                {primaryCta.icon === ArrowRight ? (
+                  <ArrowRight size={12} className="transition-transform group-hover:translate-x-0.5" />
+                ) : null}
+                {primaryCta.icon === Download ? <Download size={12} /> : null}
+              </button>
+            ) : (
+              <span className="text-[10px] uppercase tracking-[0.24em] text-[var(--ink-tertiary)]">
+                File the dispatch above
+              </span>
+            )}
+          </div>
+        </div>
+      </nav>
     </div>
   )
 }
 
-/* ── Editorial atoms ──────────────────────────────────────────────── */
+/* ── Card chrome row — step-specific controls ────────────────────────── */
 
-function Field({
-  label,
-  numeral,
-  children,
+function CardChrome({
+  step,
+  selectedHw,
+  hwList,
+  onSelectHw,
+  hasPlate,
+  editing,
+  onToggleEdit,
+  onRunTests,
+  runningTests,
+  onRerunCost,
+  costPending,
+  onRunSim,
+  runningSim,
+  onRunCompetitive,
+  competitivePending,
 }: {
-  label: string
-  numeral: string
-  children: React.ReactNode
+  step: Tab
+  selectedHw: HwListItem | null
+  hwList: HwListItem[]
+  onSelectHw: (id: number) => void
+  hasPlate: boolean
+  editing: boolean
+  onToggleEdit: () => void
+  onRunTests: () => void
+  runningTests: boolean
+  onRerunCost: () => void
+  costPending: boolean
+  onRunSim: () => void
+  runningSim: boolean
+  onRunCompetitive: () => void
+  competitivePending: boolean
 }) {
-  return (
-    <div>
-      <div className="mb-1 flex items-baseline gap-2">
-        <span className="font-serif text-[11px] italic text-[var(--red)]">{numeral}</span>
-        <label className="text-[10px] font-medium uppercase tracking-[0.22em] text-[var(--ink-tertiary)]">
-          {label}
-        </label>
-      </div>
-      {children}
-    </div>
-  )
+  if (step === 'spec') {
+    if (!hasPlate) {
+      return (
+        <span className="font-serif text-[12px] italic text-[var(--ink-tertiary)]">
+          Press dispatch — set the four lines below.
+        </span>
+      )
+    }
+    return (
+      <>
+        {hwList.length > 1 ? (
+          <select
+            value={selectedHw?.id ?? ''}
+            onChange={(e) => onSelectHw(Number(e.target.value))}
+            className="border-0 border-b border-[var(--ink)]/40 bg-transparent px-1 py-0.5 font-serif text-[13px] italic text-[var(--ink)] focus:border-[var(--red)] focus:outline-none"
+          >
+            {hwList.map((h) => (
+              <option key={h.id} value={h.id}>
+                {h.name}
+              </option>
+            ))}
+          </select>
+        ) : selectedHw ? (
+          <span className="font-serif text-[13px] italic text-[var(--ink)]">{selectedHw.name}</span>
+        ) : null}
+        <button
+          type="button"
+          onClick={onToggleEdit}
+          className="inline-flex items-center gap-1.5 border-[0.5px] border-[var(--ink)]/30 bg-[var(--paper)] px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] text-[var(--ink-secondary)] transition-colors hover:border-[var(--ink)] hover:text-[var(--ink)]"
+        >
+          <Pencil size={10} />
+          {editing ? 'Cancel' : 'Re-configure'}
+        </button>
+      </>
+    )
+  }
+  if (step === 'tests') {
+    return (
+      <button
+        type="button"
+        onClick={onRunTests}
+        disabled={runningTests}
+        className="inline-flex items-center gap-2 border-[0.5px] border-[var(--ink)]/30 bg-[var(--paper)] px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink-secondary)] transition-colors hover:border-[var(--ink)] hover:text-[var(--ink)] disabled:opacity-40"
+      >
+        {runningTests ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
+        Re-run tests
+      </button>
+    )
+  }
+  if (step === 'cost') {
+    return (
+      <button
+        type="button"
+        onClick={onRerunCost}
+        disabled={costPending}
+        className="inline-flex items-center gap-2 border-[0.5px] border-[var(--ink)]/30 bg-[var(--paper)] px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink-secondary)] transition-colors hover:border-[var(--ink)] hover:text-[var(--ink)] disabled:opacity-40"
+      >
+        {costPending ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
+        Re-run analysis
+      </button>
+    )
+  }
+  if (step === 'simulation') {
+    return (
+      <button
+        type="button"
+        onClick={onRunSim}
+        disabled={runningSim}
+        className="inline-flex items-center gap-2 border-[0.5px] border-[var(--ink)]/30 bg-[var(--paper)] px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink-secondary)] transition-colors hover:border-[var(--ink)] hover:text-[var(--ink)] disabled:opacity-40"
+      >
+        {runningSim ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
+        Re-cast room
+      </button>
+    )
+  }
+  if (step === 'competitive') {
+    return (
+      <button
+        type="button"
+        onClick={onRunCompetitive}
+        disabled={competitivePending}
+        className="inline-flex items-center gap-2 border-[0.5px] border-[var(--ink)]/30 bg-[var(--paper)] px-3 py-1.5 text-[10px] uppercase tracking-[0.22em] text-[var(--ink-secondary)] transition-colors hover:border-[var(--ink)] hover:text-[var(--ink)] disabled:opacity-40"
+      >
+        {competitivePending ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
+        Re-run analysis
+      </button>
+    )
+  }
+  return null
 }
 
-function SectionHead({
-  kicker,
-  title,
-  description,
-  action,
+/* ── Press dispatch form (Spec step, when no plate / editing) ────────── */
+
+function PressDispatchForm({
+  form,
+  onChange,
+  onSubmit,
+  generating,
+  canCancel,
+  onCancel,
 }: {
-  kicker: string
-  title: string
-  description: string
-  action?: React.ReactNode
+  form: { name: string; description: string; category: string; target_price_inr: number; product_type: string }
+  onChange: React.Dispatch<
+    React.SetStateAction<{
+      name: string
+      description: string
+      category: string
+      target_price_inr: number
+      product_type: string
+    }>
+  >
+  onSubmit: () => void
+  generating: boolean
+  canCancel: boolean
+  onCancel: () => void
 }) {
+  const canSubmit = form.name.trim() && form.description.trim() && !generating
   return (
-    <div className="flex flex-wrap items-end justify-between gap-6 border-b border-[var(--border-color)] pb-5">
-      <div className="max-w-3xl">
+    <div className="relative">
+      <PaperField />
+      <div className="relative z-10 mx-auto max-w-3xl px-8 py-12">
         <p className="kicker" style={{ color: 'var(--red)' }}>
-          {kicker}
+          Press dispatch
         </p>
         <h2
-          className="mt-2 font-serif italic leading-tight tracking-tight text-[var(--ink)]"
-          style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' }}
+          className="mt-2 font-serif italic text-[var(--ink)]"
+          style={{ fontSize: 36, fontWeight: 900, letterSpacing: '-0.025em', lineHeight: 1 }}
         >
-          {title}
+          File a new <span style={{ color: 'var(--red)' }}>plate</span>.
         </h2>
-        <p className="mt-2 max-w-[60ch] text-[13px] leading-relaxed text-[var(--ink-secondary)]">
-          {description}
+        <p className="mt-3 max-w-[52ch] text-[14px] leading-relaxed text-[var(--ink-secondary)]">
+          Four lines. Set the parameters and the workshop returns a typeset
+          specification, dimensions, and a component diagram.
         </p>
+
+        <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-[2fr_1fr_1fr]">
+          <FormField label="i. Product name">
+            <input
+              type="text"
+              placeholder="e.g. Daybreak SmartWatch"
+              value={form.name}
+              onChange={(e) => onChange((f) => ({ ...f, name: e.target.value }))}
+              className="w-full border-0 border-b border-[var(--ink)]/35 bg-transparent px-0 py-2 font-serif text-[18px] italic text-[var(--ink)] placeholder-[var(--ink-tertiary)] focus:border-[var(--red)] focus:outline-none"
+            />
+          </FormField>
+          <FormField label="ii. Category">
+            <select
+              value={form.category}
+              onChange={(e) =>
+                onChange((f) => ({ ...f, category: e.target.value, product_type: e.target.value }))
+              }
+              className="w-full border-0 border-b border-[var(--ink)]/35 bg-transparent px-0 py-2 font-serif text-[16px] italic text-[var(--ink)] focus:border-[var(--red)] focus:outline-none"
+            >
+              {CATEGORIES.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </FormField>
+          <FormField label="iii. Target price (₹)">
+            <input
+              type="number"
+              placeholder="4999"
+              value={form.target_price_inr}
+              onChange={(e) =>
+                onChange((f) => ({ ...f, target_price_inr: Number(e.target.value) || 0 }))
+              }
+              className="w-full border-0 border-b border-[var(--ink)]/35 bg-transparent px-0 py-2 font-mono text-[18px] text-[var(--ink)] placeholder-[var(--ink-tertiary)] focus:border-[var(--red)] focus:outline-none"
+            />
+          </FormField>
+        </div>
+
+        <div className="mt-7">
+          <FormField label="iv. Marginalia">
+            <textarea
+              rows={4}
+              placeholder="Materials, key features, form factor — the editor's note that sets the line."
+              value={form.description}
+              onChange={(e) => onChange((f) => ({ ...f, description: e.target.value }))}
+              className="w-full resize-none border-0 border-b border-[var(--ink)]/35 bg-transparent px-0 py-2 font-serif text-[16px] leading-relaxed italic text-[var(--ink)] placeholder-[var(--ink-tertiary)] focus:border-[var(--red)] focus:outline-none"
+            />
+          </FormField>
+        </div>
+
+        <div className="mt-9 flex items-center justify-between gap-4">
+          <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--ink-tertiary)]">
+            ✶ The workshop typesets in seconds.
+          </p>
+          <div className="flex items-center gap-3">
+            {canCancel ? (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="border-[0.5px] border-[var(--ink)]/30 bg-[var(--paper)] px-4 py-3 text-[10px] uppercase tracking-[0.24em] text-[var(--ink-secondary)] transition-colors hover:border-[var(--ink)] hover:text-[var(--ink)]"
+              >
+                Cancel
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={!canSubmit}
+              className="group inline-flex items-center gap-3 bg-[var(--ink)] px-6 py-3 text-[10px] font-medium uppercase tracking-[0.26em] text-[var(--paper)] transition-all hover:bg-[var(--red)] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {generating ? (
+                <>
+                  <Loader2 size={13} className="animate-spin" />
+                  Setting type…
+                </>
+              ) : (
+                <>
+                  <Sparkles size={13} />
+                  Send to press
+                  <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
+                </>
+              )}
+            </button>
+          </div>
+        </div>
       </div>
-      {action}
+    </div>
+  )
+}
+
+function FormField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-[var(--ink-tertiary)]">
+        {label}
+      </p>
+      {children}
     </div>
   )
 }
@@ -1675,7 +1701,7 @@ function Stat({
       </p>
       <p
         className={`font-serif italic ${color}`}
-        style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em' }}
+        style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' }}
       >
         {value}
       </p>
@@ -1683,33 +1709,33 @@ function Stat({
   )
 }
 
-function EmptySection({
+function EmptyStage({
+  kicker,
   title,
   body,
-  action,
   footer,
 }: {
+  kicker: string
   title: string
   body: React.ReactNode
-  action?: React.ReactNode
   footer?: React.ReactNode
 }) {
   return (
-    <div className="border border-dashed border-[var(--border-color)] bg-[var(--paper)]/60 px-8 py-14 text-center">
-      <p className="kicker" style={{ color: 'var(--ink-tertiary)' }}>
-        Standing type
-      </p>
-      <h3
-        className="mt-3 font-serif italic text-[var(--ink)]"
-        style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.015em' }}
-      >
-        {title}
-      </h3>
-      <p className="mx-auto mt-2 max-w-[52ch] text-sm leading-relaxed text-[var(--ink-secondary)]">
-        {body}
-      </p>
-      {action ? <div className="mt-5 flex justify-center">{action}</div> : null}
-      {footer ? <div className="mt-3">{footer}</div> : null}
+    <div className="relative flex min-h-[440px] flex-col items-center justify-center px-8 py-16 text-center">
+      <PaperField />
+      <div className="relative z-10 max-w-[44ch]">
+        <p className="kicker mb-4" style={{ color: 'var(--ink-tertiary)' }}>
+          {kicker}
+        </p>
+        <h3
+          className="font-serif italic text-[var(--ink)]"
+          style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.05 }}
+        >
+          {title}
+        </h3>
+        <p className="mt-3 text-[14px] leading-relaxed text-[var(--ink-secondary)]">{body}</p>
+        {footer ? <div className="mt-4">{footer}</div> : null}
+      </div>
     </div>
   )
 }
