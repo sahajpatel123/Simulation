@@ -17,12 +17,8 @@ function useRotating(intervalMs = 2600) {
 }
 
 /**
- * A quiet broadsheet cover.
- *   - Four stacked headline lines (Know before / you / build your / {word}.)
- *     so laptop landscape never collapses to a single wide line.
- *   - Two thin rules (masthead + baseline) that draw in on mount.
- *   - Subtle parallax on scroll, and a cursor-tracked spotlight
- *     that lives behind the headline without touching legibility.
+ * Landing hero — matches the editorial “plate” reference:
+ * rounded inset card, four tight lines with staggered “you”, red italic last word + rule + dot.
  */
 export default function HeroCover({
   onSignup,
@@ -98,15 +94,22 @@ export default function HeroCover({
 
       <div
         style={{
-          transform: `translateY(${-8 * leaveProgress}%)`,
-          opacity: 1 - 0.45 * leaveProgress,
+          transform: `translateY(${-6 * leaveProgress}%)`,
+          opacity: 1 - 0.12 * leaveProgress,
           willChange: 'transform, opacity',
         }}
       >
-        {/* First screen: vertically centred headline + reference-style atmosphere */}
+        {/* Rounded “plate” + reference composition (tight stack, staggered lines, huge type) */}
         <div
           style={{
-            minHeight: 'calc(100svh - 96px)',
+            margin: 'clamp(8px, 1.2vw, 22px) clamp(10px, 2vw, 32px) clamp(8px, 1.2vw, 22px)',
+            borderRadius: 18,
+            border: '0.5px solid rgba(26, 23, 20, 0.08)',
+            background: 'linear-gradient(165deg, #faf7f0 0%, var(--paper) 38%, var(--paper) 100%)',
+            boxShadow:
+              '0 1px 0 rgba(255,255,255,0.65) inset, 0 28px 70px -36px rgba(26,23,20,0.14), 0 12px 32px -28px rgba(45,69,86,0.08)',
+            overflow: 'hidden',
+            minHeight: 'calc(100svh - 96px - clamp(16px, 2.4vw, 28px))',
             display: 'flex',
             flexDirection: 'column',
             boxSizing: 'border-box',
@@ -119,54 +122,31 @@ export default function HeroCover({
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'center',
-              paddingTop: 'clamp(24px, 5vh, 64px)',
-              paddingBottom: 'clamp(24px, 5vh, 64px)',
-              paddingLeft: 'clamp(24px, 6vw, 100px)',
-              paddingRight: 'clamp(24px, 6vw, 100px)',
+              padding: 'clamp(28px, 5vh, 72px) clamp(22px, 5vw, 96px)',
             }}
           >
             <div
               style={{
                 position: 'relative',
-                maxWidth: 1440,
+                maxWidth: 1320,
                 margin: '0 auto',
                 width: '100%',
                 isolation: 'isolate',
               }}
             >
-              {/* Background wash — kept faint & *behind* type so the accent word stays saturated */}
               <div
                 aria-hidden
                 style={{
                   position: 'absolute',
                   zIndex: 0,
-                  left: '50%',
-                  top: '42%',
-                  width: 'min(140%, 1100px)',
-                  height: 'min(130%, 720px)',
-                  transform: 'translate(-50%, -50%)',
+                  inset: '-8% -6% -12% -6%',
                   pointerEvents: 'none',
                   background: `
-                    radial-gradient(ellipse 70% 58% at 50% 48%,
-                      rgba(255, 248, 236, 0.55) 0%,
-                      rgba(242, 236, 224, 0.22) 48%,
-                      transparent 72%)
+                    radial-gradient(ellipse 68% 56% at 48% 46%,
+                      rgba(255, 250, 242, 0.75) 0%,
+                      rgba(242, 236, 224, 0.28) 52%,
+                      transparent 74%)
                   `,
-                }}
-              />
-              <div
-                aria-hidden
-                style={{
-                  position: 'absolute',
-                  zIndex: 0,
-                  left: '50%',
-                  top: '46%',
-                  width: 'min(120%, 900px)',
-                  height: '100%',
-                  transform: 'translate(-50%, -50%)',
-                  pointerEvents: 'none',
-                  background:
-                    'radial-gradient(ellipse 52% 48% at 52% 44%, rgba(192, 57, 43, 0.045), transparent 64%)',
                 }}
               />
 
@@ -179,18 +159,13 @@ export default function HeroCover({
                   justifyContent: 'center',
                 }}
               >
-                {/* Four lines, symmetric side margins, explicit rhythm between baselines */}
                 <h1
                   className="font-serif"
                   style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'flex-start',
-                    gap: 'clamp(16px, 2.6vmin, 36px)',
-                    fontSize: 'clamp(52px, min(11.5vw, 17svh), 168px)',
+                    fontSize: 'clamp(56px, min(13.8vw, 20svh), 176px)',
                     fontWeight: 900,
-                    lineHeight: 1,
-                    letterSpacing: '-0.05em',
+                    lineHeight: 0.84,
+                    letterSpacing: '-0.048em',
                     color: 'var(--ink)',
                     margin: 0,
                     maxWidth: '100%',
@@ -198,39 +173,44 @@ export default function HeroCover({
                   }}
                 >
                   <motion.span
-                    initial={{ y: '0.45em', opacity: 0 }}
+                    initial={{ y: '0.35em', opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
-                    transition={{ duration: 0.8, delay: 0.2, ease: [0.2, 0.7, 0.2, 1] }}
+                    transition={{ duration: 0.75, delay: 0.18, ease: [0.2, 0.72, 0.2, 1] }}
                     style={{ display: 'block' }}
                   >
                     Know before
                   </motion.span>
                   <motion.span
-                    initial={{ y: '0.45em', opacity: 0 }}
+                    initial={{ y: '0.35em', opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
-                    transition={{ duration: 0.8, delay: 0.32, ease: [0.2, 0.7, 0.2, 1] }}
-                    style={{ display: 'block', paddingLeft: '0.28em' }}
+                    transition={{ duration: 0.75, delay: 0.28, ease: [0.2, 0.72, 0.2, 1] }}
+                    style={{
+                      display: 'block',
+                      marginTop: '-0.035em',
+                      paddingLeft: 'clamp(2.25rem, 15vw, 9rem)',
+                    }}
                   >
                     you
                   </motion.span>
                   <motion.span
-                    initial={{ y: '0.45em', opacity: 0 }}
+                    initial={{ y: '0.35em', opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
-                    transition={{ duration: 0.8, delay: 0.44, ease: [0.2, 0.7, 0.2, 1] }}
-                    style={{ display: 'block' }}
+                    transition={{ duration: 0.75, delay: 0.38, ease: [0.2, 0.72, 0.2, 1] }}
+                    style={{ display: 'block', marginTop: '-0.04em' }}
                   >
                     build your
                   </motion.span>
                   <motion.span
-                    initial={{ y: '0.45em', opacity: 0 }}
+                    initial={{ y: '0.35em', opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
-                    transition={{ duration: 0.8, delay: 0.56, ease: [0.2, 0.7, 0.2, 1] }}
+                    transition={{ duration: 0.75, delay: 0.48, ease: [0.2, 0.72, 0.2, 1] }}
                     style={{
                       display: 'flex',
                       flexDirection: 'row',
                       flexWrap: 'nowrap',
                       alignItems: 'flex-end',
-                      gap: '0.14em',
+                      gap: '0.12em',
+                      marginTop: '-0.04em',
                     }}
                   >
                     <span
@@ -240,58 +220,52 @@ export default function HeroCover({
                         display: 'inline-flex',
                         flexDirection: 'column',
                         alignItems: 'flex-start',
-                        perspective: 800,
                       }}
                     >
                       <AnimatePresence mode="wait">
                         <motion.span
                           key={word}
-                          initial={{ y: '0.35em', opacity: 0, rotateX: 45 }}
-                          animate={{ y: 0, opacity: 1, rotateX: 0 }}
-                          exit={{ y: '-0.25em', opacity: 0, rotateX: -35 }}
-                          transition={{ duration: 0.38, ease: [0.4, 0, 0.2, 1] }}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -8 }}
+                          transition={{ duration: 0.22, ease: 'easeOut' }}
                           style={{
                             display: 'inline-block',
                             fontStyle: 'italic',
                             color: 'var(--red)',
                             WebkitTextFillColor: 'var(--red)',
                             position: 'relative',
-                            transformOrigin: 'center bottom',
                           }}
                         >
                           {word}
                         </motion.span>
                       </AnimatePresence>
-                      <motion.span
-                        initial={{ scaleX: 0, opacity: 0 }}
-                        animate={{ scaleX: 1, opacity: 0.9 }}
-                        transition={{ duration: 0.5, delay: 0.65 }}
+                      <span
+                        aria-hidden
                         style={{
                           display: 'block',
                           height: 1,
-                          marginTop: 4,
+                          marginTop: 5,
                           width: '100%',
                           background: 'var(--red)',
                           transformOrigin: 'left',
+                          opacity: 0.92,
                         }}
                       />
                     </span>
-                    <motion.span
-                      initial={{ opacity: 0, scale: 0.35 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.45, delay: 0.78 }}
+                    <span
                       aria-hidden
                       style={{
-                        width: '0.16em',
-                        height: '0.16em',
+                        width: '0.14em',
+                        height: '0.14em',
                         minWidth: 5,
                         minHeight: 5,
-                        maxWidth: 10,
-                        maxHeight: 10,
+                        maxWidth: 9,
+                        maxHeight: 9,
                         borderRadius: '50%',
                         background: 'var(--ink-tertiary)',
-                        opacity: 0.8,
-                        marginBottom: '0.22em',
+                        opacity: 0.78,
+                        marginBottom: '0.24em',
                         flexShrink: 0,
                       }}
                     />
@@ -301,8 +275,7 @@ export default function HeroCover({
             </div>
           </div>
 
-          {/* Keeps fold breathing room under the headline block */}
-          <div aria-hidden style={{ flex: '0 0 clamp(12px, 3vh, 40px)', minHeight: 0 }} />
+          <div aria-hidden style={{ flex: '0 0 clamp(10px, 2.5vh, 32px)', minHeight: 0 }} />
         </div>
 
         {/* ── Below the fold: lede, CTAs, meta ───────────────── */}
