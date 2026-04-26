@@ -70,7 +70,9 @@ export default function DashboardPage() {
     })
     const featured = list.find((p) => resolveStatus(p.status).bucket !== 'draft') ?? list[0]
     const running = list.filter((p) => resolveStatus(p.status).bucket === 'running').slice(0, 4)
-    const recent = list.slice(0, 5)
+    /* Rank reflects creation order (oldest = 1) so the dashboard № matches the
+       dossier's own identity used elsewhere — not its position in the newest-first feed. */
+    const recent = list.slice(0, 5).map((project, i) => ({ project, rank: list.length - i }))
     return { counts, featured, running, recent }
   }, [projects])
 
@@ -207,8 +209,8 @@ export default function DashboardPage() {
             </p>
           ) : (
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-              {recent.map((p, i) => (
-                <RecentLine key={p.id} project={p} rank={i + 1} />
+              {recent.map(({ project, rank }) => (
+                <RecentLine key={project.id} project={project} rank={rank} />
               ))}
             </ul>
           )}
