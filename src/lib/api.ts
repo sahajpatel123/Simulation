@@ -1,30 +1,83 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
+import { auth } from '@/lib/auth'
+import { getApiV1Base } from '@/lib/api-v1-base'
 
 /*
   Central API client for all TheCee backend calls.
 */
+type RetriableRequestConfig = InternalAxiosRequestConfig & {
+  _retry?: boolean
+}
+
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1',
+  baseURL: getApiV1Base(),
   timeout: 60_000,
   headers: { 'Content-Type': 'application/json' },
 })
 
-api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+const refreshClient = axios.create({
+  baseURL: getApiV1Base(),
+  timeout: 15_000,
+  headers: { 'Content-Type': 'application/json' },
+})
+
+let refreshPromise: Promise<string | null> | null = null
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (typeof window === 'undefined') return null
+  const refreshToken = auth.getRefreshToken()
+  if (!refreshToken) return null
+
+  if (!refreshPromise) {
+    refreshPromise = refreshClient
+      .post('/auth/refresh', { refresh_token: refreshToken })
+      .then(({ data }) => {
+        const accessToken = typeof data?.access_token === 'string' ? data.access_token : null
+        const rotatedRefresh = typeof data?.refresh_token === 'string' ? data.refresh_token : null
+        if (!accessToken || !rotatedRefresh) {
+          throw new Error('Refresh response missing tokens')
+        }
+        auth.setTokens(accessToken, rotatedRefresh)
+        return accessToken
+      })
+      .catch(() => {
+        auth.clearTokens()
+        return null
+      })
+      .finally(() => {
+        refreshPromise = null
+      })
+  }
+
+  return refreshPromise
+}
+
+function attachAuthHeader(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {
   if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('access_token')
+    const token = auth.getToken()
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`
     }
   }
   return config
-})
+}
+
+api.interceptors.request.use(attachAuthHeader)
 
 api.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => {
-    if (error.response?.status === 401 && typeof window !== 'undefined') {
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('refresh_token')
+  async (error: AxiosError) => {
+    const status = error.response?.status
+    const original = error.config as RetriableRequestConfig | undefined
+
+    if (status === 401 && typeof window !== 'undefined' && original && !original._retry) {
+      original._retry = true
+      const newAccess = await refreshAccessToken()
+      if (newAccess) {
+        original.headers = original.headers ?? {}
+        original.headers.Authorization = `Bearer ${newAccess}`
+        return api.request(original)
+      }
       window.location.href = '/login'
     }
     return Promise.reject(error)
@@ -34,25 +87,27 @@ api.interceptors.response.use(
 export default api
 
 export const apiLong = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1',
+  baseURL: getApiV1Base(),
   timeout: 300_000,   /* 5 minutes for simulation creation + polling */
   headers: { 'Content-Type': 'application/json' },
 })
 
-apiLong.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('access_token')
-    if (token && config.headers) config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
-})
+apiLong.interceptors.request.use(attachAuthHeader)
 
 apiLong.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => {
-    if (error.response?.status === 401 && typeof window !== 'undefined') {
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('refresh_token')
+  async (error: AxiosError) => {
+    const status = error.response?.status
+    const original = error.config as RetriableRequestConfig | undefined
+
+    if (status === 401 && typeof window !== 'undefined' && original && !original._retry) {
+      original._retry = true
+      const newAccess = await refreshAccessToken()
+      if (newAccess) {
+        original.headers = original.headers ?? {}
+        original.headers.Authorization = `Bearer ${newAccess}`
+        return apiLong.request(original)
+      }
       window.location.href = '/login'
     }
     return Promise.reject(error)

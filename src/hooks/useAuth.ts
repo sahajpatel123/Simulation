@@ -110,7 +110,16 @@ export const useLogout = () => {
   const logout = useAuthStore(s => s.logout)
   const qc     = useQueryClient()
 
-  return () => {
+  return async () => {
+    const refreshToken = auth.getRefreshToken()
+    const hasSession = auth.getToken() && refreshToken
+    if (hasSession) {
+      try {
+        await api.post('/auth/logout')
+      } catch {
+        /* Local logout still proceeds if the network is down or token is already invalid. */
+      }
+    }
     qc.clear()
     logout()
   }

@@ -25,9 +25,14 @@ const dmSerifDisplay = DM_Serif_Display({
   weight: '400',
 })
 
+const allowIndexing = process.env.NEXT_PUBLIC_ALLOW_INDEXING === 'true'
+
 export const metadata: Metadata = {
   title: 'TheCee — Know Before You Build',
   description: 'Simulate your startup before you commit to it.',
+  robots: allowIndexing
+    ? { index: true, follow: true }
+    : { index: false, follow: false },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

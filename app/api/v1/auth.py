@@ -1,5 +1,5 @@
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
@@ -40,11 +40,45 @@ def _store_refresh_token(db: Session, user_id: int, raw_token: str) -> None:
         text(
             """
             INSERT INTO refresh_tokens (user_id, token_hash, expires_at, created_at, revoked)
-            VALUES (:uid, :hash, NOW() + INTERVAL '30 days', NOW(), FALSE)
+            VALUES (:uid, :hash, :expires_at, NOW(), FALSE)
             """
         ),
-        {"uid": user_id, "hash": token_hash},
+        {
+            "uid": user_id,
+            "hash": token_hash,
+            "expires_at": datetime.now(timezone.utc)
+            + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        },
     )
+
+
+def _revoke_refresh_token(db: Session, raw_token: str) -> int:
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    result = db.execute(
+        text(
+            """
+            UPDATE refresh_tokens
+            SET revoked = TRUE
+            WHERE token_hash = :hash AND revoked = FALSE
+            """
+        ),
+        {"hash": token_hash},
+    )
+    return int(result.rowcount or 0)
+
+
+def _revoke_user_refresh_tokens(db: Session, user_id: int) -> int:
+    result = db.execute(
+        text(
+            """
+            UPDATE refresh_tokens
+            SET revoked = TRUE
+            WHERE user_id = :uid AND revoked = FALSE
+            """
+        ),
+        {"uid": user_id},
+    )
+    return int(result.rowcount or 0)
 
 
 @router.post(
@@ -152,9 +186,15 @@ def refresh_access_token(payload: RefreshRequest, db: Session = Depends(get_db))
             status.HTTP_401_UNAUTHORIZED, detail="Refresh token expired"
         )
 
+    _revoke_refresh_token(db, raw_token)
+    new_refresh = create_refresh_token()
+    _store_refresh_token(db, int(row["user_id"]), new_refresh)
+    db.commit()
+
     new_access = create_access_token(str(row["user_id"]))
     return AccessTokenResponse(
         access_token=new_access,
+        refresh_token=new_refresh,
         token_type="bearer",
         expires_in=EXPIRES_IN_SECONDS,
     )
@@ -222,6 +262,7 @@ def change_password(
             detail="Current password is incorrect",
         )
     current_user.hashed_password = get_password_hash(payload.new_password)
+    _revoke_user_refresh_tokens(db, current_user.id)
     db.commit()
     return MessageResponse(message="Password updated")
 
@@ -245,6 +286,7 @@ def delete_me(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Password is incorrect",
         )
+    _revoke_user_refresh_tokens(db, current_user.id)
     db.delete(current_user)
     db.commit()
     return MessageResponse(message="Account deleted")
@@ -253,7 +295,12 @@ def delete_me(
 @router.post(
     "/logout",
     response_model=MessageResponse,
-    summary="Log out (client should discard tokens)",
+    summary="Log out and revoke active refresh tokens",
 )
-def logout():
-    return MessageResponse(message="Logged out successfully")
+def logout(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    revoked = _revoke_user_refresh_tokens(db, current_user.id)
+    db.commit()
+    return MessageResponse(message=f"Logged out successfully ({revoked} sessions revoked)")

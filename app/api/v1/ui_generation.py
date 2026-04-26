@@ -6,6 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.claude_client import claude_call_with_fallback
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.prompts import UI_GENERATION_PROMPT, validate_generated_html
@@ -334,7 +335,7 @@ async def start_ui_simulation(
     db.refresh(run)
 
     serve_url = (
-        f"https://simulation-production-c81f.up.railway.app/api/v1/generated-uis/{ui_id}/serve"
+        f"{settings.PUBLIC_API_BASE_URL.rstrip('/')}/api/v1/generated-uis/{ui_id}/serve"
     )
 
     run_ui_simulation.delay(

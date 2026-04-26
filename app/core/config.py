@@ -16,14 +16,25 @@ class Settings(BaseSettings):
 
     SECRET_KEY: str = "dev-secret-change-in-prod"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     ANTHROPIC_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
     FRONTEND_URL: str = "http://localhost:3000"
+    PUBLIC_API_BASE_URL: str = "http://127.0.0.1:8000"
     REDIS_URL: str = "redis://localhost:6379/0"
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
+    REDIS_CONNECT_TIMEOUT_SECONDS: float = 2.0
+    REDIS_SOCKET_TIMEOUT_SECONDS: float = 2.0
+
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 20
+    DB_POOL_TIMEOUT_SECONDS: int = 30
+    DB_POOL_RECYCLE_SECONDS: int = 1800
+    DB_CONNECT_TIMEOUT_SECONDS: int = 10
+    DB_STATEMENT_TIMEOUT_MS: int = 30000
 
     VECTOR_DIMENSION: int = 1536
 
@@ -39,6 +50,17 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = ""
     # Comma-separated admin emails; may access GET /api/v1/analytics/platform
     ADMIN_EMAILS: str = ""
+    ALLOW_INDEXING: bool = False
+
+    def cors_allowed_origins(self) -> list[str]:
+        defaults = ["http://localhost:3000", "http://localhost:3001"]
+        frontend = self.FRONTEND_URL.strip()
+        if self.ENVIRONMENT.lower() == "production":
+            return [frontend] if frontend else []
+        origins = [*defaults]
+        if frontend and frontend not in origins:
+            origins.insert(0, frontend)
+        return origins
 
 
 settings = Settings()

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Monitor, Smartphone, ArrowRight, ArrowLeft, Loader2 } from 'lucide-react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { formatProductTypeLabel, PRODUCT_TYPES } from '@/components/ui-builder/constants'
@@ -141,6 +141,7 @@ const MOCK_HTML = `<!DOCTYPE html>
 
 export default function PrototypePage() {
   const params = useParams()
+  const router = useRouter()
   const projectId = Number(params.id)
   const idStr = String(projectId)
 
@@ -158,6 +159,13 @@ export default function PrototypePage() {
     promptSeededRef.current = false
     setPrompt('')
   }, [projectId])
+
+  useEffect(() => {
+    if (!project || isLoading) return
+    if (project.dossier_axis === 'hardware') {
+      router.replace(`/project/${projectId}/hardware`)
+    }
+  }, [project, isLoading, router, projectId])
 
   const generateMutation = useMutation({
     mutationFn: async (body: UIGenerateRequest) => {

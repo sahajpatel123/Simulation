@@ -1,14 +1,18 @@
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from app.api.v1 import api_router
 from app.core.config import settings
-from app.core.database import init_extensions
+from app.core.database import engine, init_extensions
 from app.core.errors import TheCeeError, generic_error_handler, thecee_error_handler
 from app.core.logging_config import configure_logging
+from app.core.redis_client import get_redis_client
 from app.core.timing_middleware import TimingMiddleware
 from app.worker import celery_app as _celery_app
 
@@ -55,27 +59,72 @@ app.add_exception_handler(Exception, generic_error_handler)
 
 app.add_middleware(TimingMiddleware)
 
-# CORS: in production, only the configured FRONTEND_URL. Bearer tokens (not cookies).
-_default_origins = ["http://localhost:3000", "http://localhost:3001"]
-if settings.ENVIRONMENT.lower() == "production":
-    _allowed_origins: list[str] = [settings.FRONTEND_URL] if settings.FRONTEND_URL else []
-else:
-    _allowed_origins = (
-        [settings.FRONTEND_URL, *_default_origins]
-        if settings.FRONTEND_URL not in _default_origins
-        else _default_origins
-    )
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_allowed_origins,
+    allow_origins=settings.cors_allowed_origins(),
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["Content-Disposition", "Content-Length", "X-Response-Time"],
 )
 
+
+@app.middleware("http")
+async def set_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    if settings.ENVIRONMENT.lower() == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+    return response
+
+
 app.include_router(api_router)
+
+
+def _service_health() -> tuple[dict[str, object], int]:
+    report: dict[str, object] = {
+        "status": "healthy",
+        "environment": settings.ENVIRONMENT,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "services": {},
+    }
+    status_code = 200
+
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        report["services"]["database"] = {"status": "healthy"}
+    except Exception as exc:
+        report["services"]["database"] = {"status": "unhealthy", "detail": str(exc)}
+        report["status"] = "unhealthy"
+        status_code = 503
+
+    redis_client = get_redis_client()
+    if redis_client is None:
+        report["services"]["redis"] = {"status": "unconfigured"}
+    else:
+        try:
+            redis_client.ping()
+            report["services"]["redis"] = {"status": "healthy"}
+        except Exception as exc:
+            report["services"]["redis"] = {"status": "unhealthy", "detail": str(exc)}
+            report["status"] = "unhealthy"
+            status_code = 503
+
+    try:
+        inspector = _celery_app.control.inspect(timeout=2.0)
+        active_workers = inspector.ping() or {}
+        report["services"]["celery"] = {
+            "status": "healthy" if active_workers else "degraded",
+            "workers_online": len(active_workers),
+        }
+    except Exception as exc:
+        report["services"]["celery"] = {"status": "degraded", "detail": str(exc)}
+
+    return report, status_code
 
 
 @app.get(
@@ -123,4 +172,5 @@ async def root():
     responses={200: {"description": "Health status", "content": {"application/json": {}}}},
 )
 async def health():
-    return {"status": "healthy"}
+    payload, status_code = _service_health()
+    return JSONResponse(content=payload, status_code=status_code)

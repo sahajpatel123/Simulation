@@ -125,13 +125,13 @@ export default function HeroCover({
             <h1
               className="font-serif"
               style={{
-                fontSize: 'clamp(64px, 11vw, 188px)',
+                fontSize: 'clamp(58px, 14.2vw, 168px)',
                 fontWeight: 900,
                 lineHeight: 0.88,
                 letterSpacing: '-0.045em',
                 color: 'var(--ink)',
                 margin: 0,
-                maxWidth: '18ch',
+                maxWidth: 'min(100%, 13ch)',
               }}
             >
               <motion.span
@@ -157,8 +157,7 @@ export default function HeroCover({
                 style={{ display: 'inline-block' }}
               >
                 you
-              </motion.span>
-              <br />
+              </motion.span>{' '}
               <motion.span
                 initial={{ y: '0.45em', opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}

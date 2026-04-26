@@ -54,13 +54,17 @@ This repository contains the FastAPI backend under `app/` and the Next.js app at
   `RAZORPAY_PRO_PLAN_ID=plan_...`
   `RAZORPAY_ENTERPRISE_PLAN_ID=plan_...`
   `REDIS_URL=redis://...`
-  `JWT_SECRET=...`
+  `SECRET_KEY=...`
+  `PUBLIC_API_BASE_URL=https://your-api-domain`
   `ENVIRONMENT=development`
   `SENTRY_DSN=`           # optional
   `CONDUCTOR_WORKERS=4`
+  `ACCESS_TOKEN_EXPIRE_MINUTES=60`
+  `REFRESH_TOKEN_EXPIRE_DAYS=30`
 
 ### Frontend (.env.local)
   `NEXT_PUBLIC_API_URL=http://localhost:8080`
+  `NEXT_PUBLIC_ALLOW_INDEXING=false`
 
 ## Railway + Vercel Deployment
 
@@ -88,6 +92,8 @@ This repository contains the FastAPI backend under `app/` and the Next.js app at
 ## Running Tests
   From repository root, with the virtualenv active:
   `pytest tests/ -v`
+  `npm run typecheck`
+  `npm run build`
 
 ## API documentation
 

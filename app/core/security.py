@@ -1,4 +1,5 @@
 import secrets
+import string
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -16,6 +17,21 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
+
+
+def validate_password_strength(password: str) -> str:
+    if len(password) < 10:
+        raise ValueError("Password must be at least 10 characters")
+    if not any(ch.islower() for ch in password):
+        raise ValueError("Password must include a lowercase letter")
+    if not any(ch.isupper() for ch in password):
+        raise ValueError("Password must include an uppercase letter")
+    if not any(ch.isdigit() for ch in password):
+        raise ValueError("Password must include a number")
+    allowed_punctuation = set(string.punctuation)
+    if not any(ch in allowed_punctuation for ch in password):
+        raise ValueError("Password must include a special character")
+    return password
 
 
 def create_access_token(subject: str, expires_delta: Optional[timedelta] = None) -> str:
