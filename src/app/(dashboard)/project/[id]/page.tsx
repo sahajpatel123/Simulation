@@ -78,6 +78,8 @@ export default function ProjectPage() {
   const axis = project.dossier_axis
   const showSoftwarePlate = !axis || axis === 'software'
   const showHardwareFolio = !axis || axis === 'hardware'
+  /** Full submission for the masthead; `title` is still capped when derived at create time (see useCreateProject). */
+  const heroHeadingText = (project.description ?? '').trim() || project.title
 
   /* ── Page ─────────────────────────────────────────────────────── */
   return (
@@ -162,7 +164,7 @@ export default function ProjectPage() {
               marginBottom: 6,
             }}
           >
-            {project.title.split(/\s+/).map((word, i, arr) => {
+            {heroHeadingText.split(/\s+/).map((word, i, arr) => {
               const isLast = i === arr.length - 1
               const italicize = arr.length > 2 && (i === Math.floor(arr.length / 2) || i === arr.length - 2)
               return (

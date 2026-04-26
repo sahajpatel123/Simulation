@@ -46,7 +46,7 @@ export const useCreateProject = () => {
       const description = typeof payload === 'string' ? payload : payload.description
       const raw = typeof payload === 'string' ? ({} as CreateProjectPayload) : payload
       const rawTitle = typeof payload === 'string' ? '' : (payload.title ?? '')
-      const title = rawTitle.trim() || description.trim().slice(0, 60) || 'Untitled idea'
+      const title = rawTitle.trim() || description.trim().slice(0, 500) || 'Untitled idea'
       return api
         .post('/projects', {
           title,
