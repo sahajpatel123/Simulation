@@ -84,47 +84,38 @@ const STEPS: Array<{ key: Tab; numeral: string; label: string; subline: string }
   { key: 'report', numeral: 'VI', label: 'Release pack', subline: 'One PDF' },
 ]
 
-const STEP_HERO: Record<
-  Tab,
-  { kicker: string; titleA: string; titleEm: string; titleB: string; sub: string }
-> = {
+const STEP_HERO: Record<Tab, { titleA: string; titleEm: string; titleB: string; sub: string }> = {
   spec: {
-    kicker: 'Bench I · Solid model',
     titleA: 'Give the ',
     titleEm: 'object',
     titleB: ' a name and a spine.',
     sub: 'Four inputs — geometry, category, target price, intent. The model returns a spec you can rotate, measure, and hand to a toolmaker.',
   },
   tests: {
-    kicker: 'Bench II · Load cases',
     titleA: 'Stress it ',
     titleEm: 'before',
     titleB: ' metal meets mold.',
     sub: 'Eight regimes across structure, thermal, RF, and supply. Failures pin to parts on the diagram so you know what to redesign.',
   },
   cost: {
-    kicker: 'Bench III · Economics',
     titleA: 'Know the ',
     titleEm: 'margin',
     titleB: ' before you cut steel.',
     sub: 'BOM, freight, duties, and yield — rolled into a landed number against your shelf price.',
   },
   simulation: {
-    kicker: 'Bench IV · Synthetic market',
     titleA: 'Let ',
     titleEm: 'fifty-two',
     titleB: ' reader clusters vote.',
     sub: 'Each cohort behaves differently on price, trust, and novelty. You see who converts and why — not a single average score.',
   },
   competitive: {
-    kicker: 'Bench V · Landscape',
     titleA: 'See where you ',
     titleEm: 'sit',
     titleB: ' in the aisle.',
     sub: 'Whitespace, threats, and a positioning line you can actually ship — not generic SWOT filler.',
   },
   report: {
-    kicker: 'Bench VI · Handoff',
     titleA: 'One ',
     titleEm: 'release pack',
     titleB: ' for the room that funds you.',
@@ -794,9 +785,9 @@ export default function HardwareBuilderPage() {
 
   return (
     <div className="hw-workshop relative min-h-screen text-[var(--ink)]">
-      <div className="mx-auto w-full max-w-[1200px] px-8 pt-8 pb-32 lg:px-12">
+      <div className="mx-auto w-full max-w-[1200px] px-8 pt-6 pb-32 lg:px-12">
         <div
-          className="mt-4 h-px w-full opacity-70"
+          className="mt-3 h-px w-full opacity-70"
           style={{
             background:
               'linear-gradient(90deg, transparent, var(--workshop) 12%, var(--workshop) 88%, transparent)',
@@ -811,13 +802,10 @@ export default function HardwareBuilderPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.25 }}
-            className="mt-10"
+            className="mt-8"
           >
-            <p className="kicker" style={{ color: 'var(--red)' }}>
-              {hero.kicker}
-            </p>
             <h1
-              className="mt-4 max-w-[22ch] font-serif italic text-[var(--ink)]"
+              className="max-w-[22ch] font-serif italic text-[var(--ink)]"
               style={{
                 fontSize: 'clamp(34px, 4.5vw, 56px)',
                 fontWeight: 900,
@@ -836,7 +824,7 @@ export default function HardwareBuilderPage() {
         </AnimatePresence>
 
         {/* ── DRAFTING CARD ─────────────────────────────────────────── */}
-        <div className="relative mt-11">
+        <div className="relative mt-9">
           <div
             className="relative overflow-hidden border border-[var(--ink)]/18 bg-[color-mix(in_srgb,var(--paper)_92%,white)]"
             style={{
