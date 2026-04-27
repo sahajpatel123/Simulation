@@ -813,13 +813,7 @@ export default function HardwareBuilderPage() {
             transition={{ duration: 0.25 }}
             className="mt-10"
           >
-            <p
-              className="font-mono text-[10px] uppercase tracking-[0.2em]"
-              style={{ color: 'var(--workshop)' }}
-            >
-              TC hardware bench · stage {STEPS[stepIdx].numeral}
-            </p>
-            <p className="kicker mt-2" style={{ color: 'var(--red)' }}>
+            <p className="kicker" style={{ color: 'var(--red)' }}>
               {hero.kicker}
             </p>
             <h1
