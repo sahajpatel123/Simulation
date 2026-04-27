@@ -793,7 +793,7 @@ export default function HardwareBuilderPage() {
 
   return (
     <div className="hw-workshop relative min-h-screen text-[var(--ink)]" style={{ marginLeft: 32 }}>
-      <div className="mx-auto w-full max-w-[1200px] px-8 pt-6 pb-32 lg:px-12">
+      <div className="mx-auto w-full max-w-[1200px] px-8 pt-14 pb-32 lg:px-12">
         <div
           className="mt-3 h-px w-full opacity-70"
           style={{
