@@ -792,8 +792,8 @@ export default function HardwareBuilderPage() {
   const showSpecForm = activeTab === 'spec' && (!hasPlate || editingSpec)
 
   return (
-    <div className="hw-workshop relative min-h-screen text-[var(--ink)]">
-      <div className="mx-auto w-full max-w-[1200px] pt-6 pb-32 pl-12 pr-8 md:pl-14 lg:pl-16 lg:pr-12">
+    <div className="hw-workshop relative min-h-screen text-[var(--ink)]" style={{ marginLeft: 32 }}>
+      <div className="mx-auto w-full max-w-[1200px] px-8 pt-6 pb-32 lg:px-12">
         <div
           className="mt-3 h-px w-full opacity-70"
           style={{
@@ -1307,7 +1307,7 @@ export default function HardwareBuilderPage() {
         style={{ boxShadow: '0 -12px 40px -24px rgba(26,23,20,0.2)' }}
         aria-label="Bench navigation"
       >
-        <div className="mx-auto flex w-full max-w-[1200px] flex-col items-stretch gap-3 py-3.5 pl-12 pr-6 sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:pr-8 lg:pl-16 lg:pr-12">
+        <div className="mx-auto flex w-full max-w-[1200px] flex-col items-stretch gap-3 px-6 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-8 lg:px-12">
           <div className="flex shrink-0 justify-start sm:min-w-[9rem]">
             {prevStep ? (
               <button
