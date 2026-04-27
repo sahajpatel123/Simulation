@@ -404,9 +404,8 @@ export default function LandingPage() {
               </Link>
             ) : isHydrated ? (
               <>
-                <button
-                  type="button"
-                  onClick={() => openAuth('login')}
+                <Link
+                  href="/login"
                   style={{
                     background: 'none',
                     border: 'none',
@@ -417,15 +416,15 @@ export default function LandingPage() {
                     textTransform: 'uppercase',
                     fontFamily: 'inherit',
                     padding: 0,
+                    textDecoration: 'none',
                   }}
                   onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--ink)')}
                   onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--ink-secondary)')}
                 >
                   Sign in
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openAuth('signup')}
+                </Link>
+                <Link
+                  href="/signup"
                   style={{
                     fontSize: 11,
                     color: 'var(--paper)',
@@ -440,10 +439,11 @@ export default function LandingPage() {
                     gap: 6,
                     cursor: 'pointer',
                     fontFamily: 'inherit',
+                    textDecoration: 'none',
                   }}
                 >
                   Open account <ArrowRight size={11} />
-                </button>
+                </Link>
               </>
             ) : null}
           </div>
