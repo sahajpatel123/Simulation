@@ -56,6 +56,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             zIndex: 30,
             background: 'var(--paper)',
             borderBottom: '0.5px solid var(--border-strong)',
+            paddingBottom: 48,
           }}
         >
           {/* Top meta strip — omitted after opening a prototype plate (stays off until `/projects`) */}
