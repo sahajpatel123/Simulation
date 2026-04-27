@@ -29,6 +29,18 @@ import type { DomainFindingRow } from '@/components/simulation-results/types'
 import { getApiV1Base } from '@/lib/api-v1-base'
 import { useProject } from '@/hooks/useProjects'
 
+/*
+  HardwareBuilderPage → hero <h1> (tag . classNames only; layout wraps in <main>):
+  div.hw-workshop.relative.min-h-screen.pt-16.text-[var(--ink)]
+    div.mx-auto.w-full.max-w-[1200px].px-8.pt-6.pb-32.lg:px-12
+      div.mt-3.h-px.w-full.opacity-70
+      AnimatePresence
+        motion.header → header.mt-8
+          h1.max-w-[22ch].font-serif.italic.text-[var(--ink)]
+  Chain audit: no overflow-hidden / overflow-clip between root and h1; hw-workshop has min-h-screen
+  (min-height only). body uses overflow-x:clip (globals.css), outside this tree. Top gap: pt-16 on root.
+*/
+
 function authHeaders(): HeadersInit {
   const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
   return {
@@ -792,7 +804,7 @@ export default function HardwareBuilderPage() {
   const showSpecForm = activeTab === 'spec' && (!hasPlate || editingSpec)
 
   return (
-    <div className="hw-workshop relative min-h-screen text-[var(--ink)]" style={{ marginLeft: 32 }}>
+    <div className="hw-workshop relative min-h-screen pt-16 text-[var(--ink)]" style={{ marginLeft: 32 }}>
       <div className="mx-auto w-full max-w-[1200px] px-8 pt-6 pb-32 lg:px-12">
         <div
           className="mt-3 h-px w-full opacity-70"
@@ -810,7 +822,7 @@ export default function HardwareBuilderPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.25 }}
-            className="pt-16"
+            className="mt-8"
           >
             <h1
               className="max-w-[22ch] font-serif italic text-[var(--ink)]"
