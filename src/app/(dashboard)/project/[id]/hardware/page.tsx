@@ -3,7 +3,7 @@
 import type { MouseEvent } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
@@ -431,6 +431,14 @@ export default function HardwareBuilderPage() {
     projectId && Number.isFinite(projectIdNum) ? projectIdNum : null
   )
   const queryClient = useQueryClient()
+
+  /** Keep the bench hero in view on first paint; async spec / motion can otherwise leave the viewport scrolled down. */
+  useLayoutEffect(() => {
+    const top = () => window.scrollTo(0, 0)
+    top()
+    const t = window.setTimeout(top, 0)
+    return () => clearTimeout(t)
+  }, [projectId])
 
   useEffect(() => {
     if (!project) return
