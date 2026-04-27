@@ -795,22 +795,6 @@ export default function HardwareBuilderPage() {
   return (
     <div className="hw-workshop relative min-h-screen text-[var(--ink)]">
       <div className="mx-auto w-full max-w-[1200px] px-8 pt-8 pb-32 lg:px-12">
-        {/* ── Bench strip (hardware-specific; not archive masthead clone) ─ */}
-        <div className="flex items-center justify-between gap-4 text-[10px] uppercase tracking-[0.28em] text-[var(--ink-secondary)]">
-          <Link
-            href={`/project/${projectId}`}
-            className="flex shrink-0 items-center gap-2 transition-colors hover:text-[var(--workshop)]"
-          >
-            <ArrowLeft size={11} /> Dossier
-          </Link>
-          <span
-            className="hidden min-w-0 truncate text-right font-mono text-[9px] normal-case tracking-[0.12em] sm:block"
-            style={{ color: 'var(--workshop)', fontWeight: 500 }}
-          >
-            Lot {String(hwId ?? '—').padStart(3, '0')} · PRJ {String(projectId).padStart(4, '0')} ·{' '}
-            <span className="text-[var(--ink-secondary)]">{hero.kicker}</span>
-          </span>
-        </div>
         <div
           className="mt-4 h-px w-full opacity-70"
           style={{
