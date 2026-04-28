@@ -92,14 +92,18 @@ export function EditorialExpandable({
             role="button"
             aria-label="Read full title"
             style={{
-              color: '#c0392b',
+              display: 'inline-block',
+              width: '0.45em',
+              height: '0.06em',
+              backgroundColor: '#c0392b',
+              borderRadius: '2px',
               cursor: 'pointer',
               userSelect: 'none',
-              marginLeft: '0.05em',
+              marginLeft: '0.1em',
+              marginBottom: '0.12em',
+              verticalAlign: 'middle',
             }}
-          >
-            {'—'}
-          </span>
+          />
         </>
       ) : (
         <>
