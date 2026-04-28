@@ -10,6 +10,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { DossierAxisSelector, type DossierAxis } from '@/components/DossierAxisSelector'
 import { FolioAxisChip } from '@/components/FolioAxisChip'
 import { apiError } from '@/lib/api'
+import { editorialTruncate } from '@/lib/typography'
 import { notify } from '@/lib/toast'
 import { useCreateProject, useProjects } from '@/hooks/useProjects'
 import type { Project } from '@/types'
@@ -700,23 +701,17 @@ function FeaturedDossier({ project, index }: { project: Project; index: number }
         </div>
 
         <h2
-          className="font-serif"
+          className="font-serif overflow-hidden break-words leading-tight"
           style={{
             fontSize: 'clamp(38px, 4.8vw, 64px)',
             fontWeight: 900,
-            lineHeight: 1.05,
             letterSpacing: '-0.03em',
             color: 'var(--ink)',
             marginBottom: 20,
-            display: '-webkit-box',
-            WebkitLineClamp: 3,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-            wordBreak: 'normal',
-            overflowWrap: 'break-word',
+            maxWidth: '100%',
           }}
         >
-          {project.title}
+          {editorialTruncate(project.title, 10)}
         </h2>
 
         <p
