@@ -7,6 +7,7 @@ import Link from 'next/link'
 
 import { FolioAxisChip } from '@/components/FolioAxisChip'
 import { useProjects } from '@/hooks/useProjects'
+import { editorialTruncate } from '@/lib/typography'
 import { useAuthStore } from '@/store/auth.store'
 import type { Project } from '@/types'
 
@@ -355,21 +356,17 @@ function FeaturedLead({ project }: { project: Project }) {
           <FolioAxisChip axis={project.dossier_axis} />
         </div>
         <h3
-          className="font-serif"
+          className="font-serif overflow-hidden break-words leading-tight"
           style={{
             fontSize: 'clamp(28px, 3.4vw, 44px)',
             fontWeight: 900,
-            lineHeight: 1.18,
             letterSpacing: '-0.03em',
             color: 'var(--ink)',
             marginBottom: 16,
-            overflow: 'visible',
-            overflowWrap: 'anywhere',
-            wordBreak: 'break-word',
             maxWidth: '100%',
           }}
         >
-          {project.title}
+          {editorialTruncate(project.title, 10)}
         </h3>
         <p
           style={{
