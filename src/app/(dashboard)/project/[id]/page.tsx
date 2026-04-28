@@ -79,6 +79,8 @@ export default function ProjectPage() {
   const axis = project.dossier_axis
   const showSoftwarePlate = !axis || axis === 'software'
   const showHardwareFolio = !axis || axis === 'hardware'
+  /** Full submission for the masthead; `title` is still capped when derived at create time (see useCreateProject). */
+  const heroHeadingText = (project.description ?? '').trim() || project.title
   /* ── Page ─────────────────────────────────────────────────────── */
   return (
     <div
@@ -162,7 +164,7 @@ export default function ProjectPage() {
               marginBottom: 6,
             }}
           >
-            <EditorialExpandable text={project.title} maxWords={10} className="font-serif" />
+            <EditorialExpandable text={heroHeadingText || ''} maxWords={10} className="font-serif" />
           </h1>
         </div>
 

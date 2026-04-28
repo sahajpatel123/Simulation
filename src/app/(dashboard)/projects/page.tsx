@@ -665,6 +665,8 @@ function FeaturedDossier({ project, index }: { project: Project; index: number }
   const status = resolveStatus(project.status)
   const date = project.created_at ? new Date(project.created_at) : null
   const num = String(index).padStart(3, '0')
+  /** Same masthead source as dossier detail: description (full submission) falls back to title. */
+  const heroHeadingText = (project.description ?? '').trim() || project.title
 
   return (
     <Link
@@ -711,7 +713,7 @@ function FeaturedDossier({ project, index }: { project: Project; index: number }
             maxWidth: '100%',
           }}
         >
-          <EditorialExpandable text={project.title} maxWords={10} />
+          <EditorialExpandable text={heroHeadingText || ''} maxWords={10} />
         </h2>
 
         <p
