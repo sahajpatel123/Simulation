@@ -162,7 +162,6 @@ export default function ProjectPage() {
               letterSpacing: '-0.035em',
               color: 'var(--ink)',
               marginBottom: 6,
-              paddingLeft: 32,
             }}
           >
             <EditorialExpandable text={heroHeadingText || ''} maxWords={10} className="font-serif" />
