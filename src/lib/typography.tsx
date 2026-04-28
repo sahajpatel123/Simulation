@@ -11,7 +11,7 @@ export function editorialTruncate(text: string, maxWords: number = 10): React.Re
     <>
       {visible}
       <span style={{ color: '#c0392b' }} aria-hidden="true">
-        {'\u2026'}
+        {'\u2014'}
       </span>
     </>
   )
