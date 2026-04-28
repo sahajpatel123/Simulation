@@ -82,6 +82,8 @@ export function EditorialExpandable({
         transition: isTransitioning
           ? 'height 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
           : 'none',
+        paddingBottom: '0.25em',
+        marginBottom: '-0.25em',
       }}
     >
       {!expanded ? (
