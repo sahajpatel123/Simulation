@@ -6,6 +6,7 @@ import { ArrowUpRight, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 
+import { EditorialExpandable } from '@/components/EditorialExpandable'
 import { FolioAxisChip, LegacyFolioSlip } from '@/components/FolioAxisChip'
 import { useAssumptions } from '@/hooks/useAssumptions'
 import { useProject } from '@/hooks/useProjects'
@@ -78,9 +79,6 @@ export default function ProjectPage() {
   const axis = project.dossier_axis
   const showSoftwarePlate = !axis || axis === 'software'
   const showHardwareFolio = !axis || axis === 'hardware'
-  /** Full submission for the masthead; `title` is still capped when derived at create time (see useCreateProject). */
-  const heroHeadingText = (project.description ?? '').trim() || project.title
-
   /* ── Page ─────────────────────────────────────────────────────── */
   return (
     <div
@@ -164,20 +162,7 @@ export default function ProjectPage() {
               marginBottom: 6,
             }}
           >
-            {heroHeadingText.split(/\s+/).map((word, i, arr) => {
-              const isLast = i === arr.length - 1
-              const italicize = arr.length > 2 && (i === Math.floor(arr.length / 2) || i === arr.length - 2)
-              return (
-                <span
-                  key={`${word}-${i}`}
-                  style={italicize ? { fontStyle: 'italic', color: 'var(--red)' } : undefined}
-                >
-                  {word}
-                  {!isLast ? ' ' : ''}
-                </span>
-              )
-            })}
-            <span style={{ color: 'var(--red)' }}>.</span>
+            <EditorialExpandable text={project.title} maxWords={10} className="font-serif" />
           </h1>
         </div>
 

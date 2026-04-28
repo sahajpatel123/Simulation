@@ -10,7 +10,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { DossierAxisSelector, type DossierAxis } from '@/components/DossierAxisSelector'
 import { FolioAxisChip } from '@/components/FolioAxisChip'
 import { apiError } from '@/lib/api'
-import { editorialTruncate } from '@/lib/typography'
+import { EditorialExpandable } from '@/components/EditorialExpandable'
 import { notify } from '@/lib/toast'
 import { useCreateProject, useProjects } from '@/hooks/useProjects'
 import type { Project } from '@/types'
@@ -711,7 +711,7 @@ function FeaturedDossier({ project, index }: { project: Project; index: number }
             maxWidth: '100%',
           }}
         >
-          {editorialTruncate(project.title, 10)}
+          <EditorialExpandable text={project.title} maxWords={10} />
         </h2>
 
         <p
