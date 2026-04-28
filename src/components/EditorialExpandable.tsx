@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef } from 'react'
 
 interface EditorialExpandableProps {
   text: string
@@ -17,76 +17,80 @@ export function EditorialExpandable({
   const needsTruncation = words.length > maxWords
 
   const [expanded, setExpanded] = useState(false)
-  const [height, setHeight] = useState<number | 'auto'>('auto')
-  const [isAnimating, setIsAnimating] = useState(false)
-  const contentRef = useRef<HTMLSpanElement>(null)
-  const collapsedRef = useRef<HTMLSpanElement>(null)
+  const [height, setHeight] = useState<string>('auto')
+  const [isTransitioning, setIsTransitioning] = useState(false)
+  const containerRef = useRef<HTMLSpanElement>(null)
 
   const visibleText = needsTruncation ? words.slice(0, maxWords).join(' ') : text
-
-  useEffect(() => {
-    if (!needsTruncation) return
-    if (!contentRef.current || !collapsedRef.current) return
-
-    if (expanded) {
-      const fullHeight = contentRef.current.scrollHeight
-      setHeight(fullHeight)
-      setIsAnimating(true)
-      const timer = setTimeout(() => {
-        setHeight('auto')
-        setIsAnimating(false)
-      }, 400)
-      return () => clearTimeout(timer)
-    } else {
-      if (height === 'auto') {
-        const currentHeight = contentRef.current.scrollHeight
-        setHeight(currentHeight)
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            setHeight(collapsedRef.current?.scrollHeight ?? 'auto')
-            setIsAnimating(true)
-            const timer = setTimeout(() => {
-              setIsAnimating(false)
-            }, 400)
-          })
-        })
-      } else {
-        setHeight(collapsedRef.current?.scrollHeight ?? 'auto')
-        setIsAnimating(true)
-        const timer = setTimeout(() => {
-          setIsAnimating(false)
-        }, 400)
-        return () => clearTimeout(timer)
-      }
-    }
-  }, [expanded])
 
   if (!needsTruncation) {
     return <span className={className}>{text}</span>
   }
 
+  const handleExpand = () => {
+    const el = containerRef.current
+    if (!el) return
+
+    const fromHeight = el.scrollHeight
+    setHeight(`${fromHeight}px`)
+    setIsTransitioning(true)
+    setExpanded(true)
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!containerRef.current) return
+        const toHeight = containerRef.current.scrollHeight
+        setHeight(`${toHeight}px`)
+        setTimeout(() => {
+          setHeight('auto')
+          setIsTransitioning(false)
+        }, 400)
+      })
+    })
+  }
+
+  const handleCollapse = () => {
+    const el = containerRef.current
+    if (!el) return
+
+    const fromHeight = el.scrollHeight
+    setHeight(`${fromHeight}px`)
+    setIsTransitioning(true)
+    setExpanded(false)
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!containerRef.current) return
+        const toHeight = containerRef.current.scrollHeight
+        setHeight(`${toHeight}px`)
+        setTimeout(() => {
+          setHeight('auto')
+          setIsTransitioning(false)
+        }, 400)
+      })
+    })
+  }
+
   return (
     <span
-      ref={contentRef}
+      ref={containerRef}
       className={className}
       style={{
         display: 'block',
         overflow: 'hidden',
-        height: height === 'auto' ? 'auto' : `${height}px`,
-        transition: isAnimating ? 'height 0.4s cubic-bezier(0.4, 0, 0.2, 1)' : 'none',
+        height,
+        transition: isTransitioning
+          ? 'height 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
+          : 'none',
       }}
     >
-      <span ref={collapsedRef} style={{ display: 'none' }}>
-        {visibleText}
-      </span>
-
       {!expanded ? (
         <>
           {visibleText}
           <span
-            onClick={() => setExpanded(true)}
-            aria-label="Read full title"
+            onClick={handleExpand}
             role="button"
+            aria-label="Read full title"
             style={{
               color: '#c0392b',
               cursor: 'pointer',
@@ -94,16 +98,16 @@ export function EditorialExpandable({
               marginLeft: '0.05em',
             }}
           >
-            &#x2014;
+            {'—'}
           </span>
         </>
       ) : (
         <>
           {text}
           <span
-            onClick={() => setExpanded(false)}
-            aria-label="Collapse title"
+            onClick={handleCollapse}
             role="button"
+            aria-label="Collapse title"
             style={{
               color: '#c0392b',
               cursor: 'pointer',
