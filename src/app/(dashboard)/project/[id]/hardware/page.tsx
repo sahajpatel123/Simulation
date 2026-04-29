@@ -24,6 +24,7 @@ import {
   type HardwareSpec,
   type TestResult,
 } from '@/components/HardwareFailureMap'
+import { TechnicalPlate } from '@/components/hardware/TechnicalPlate'
 import { KeyPersonReport } from '@/components/KeyPersonReport'
 import type { DomainFindingRow } from '@/components/simulation-results/types'
 import { getApiV1Base } from '@/lib/api-v1-base'
@@ -912,32 +913,12 @@ export default function HardwareBuilderPage() {
                         canCancel={hasPlate}
                         onCancel={() => setEditingSpec(false)}
                       />
-                    ) : hasPlate ? (
-                      <div className="px-6 py-10">
-                        <SpecViewer spec={mergedSpec} hwProduct={selectedHw} />
-                      </div>
                     ) : (
-                      <div className="relative flex min-h-[520px] flex-col items-center justify-center px-8 py-20">
-                        <PaperField />
-                        <div className="relative z-10 max-w-md text-center">
-                          <p className="kicker mb-5" style={{ color: 'var(--red)' }}>
-                            No solid on file · Geometry idle
-                          </p>
-                          <div className="mx-auto mb-7 flex h-24 w-24 items-center justify-center border-[0.5px] border-[var(--workshop)]/35 bg-[var(--paper)]">
-                            <Hexagon size={42} className="text-[var(--workshop)]" strokeWidth={1.2} />
-                          </div>
-                          <h3
-                            className="font-serif italic text-[var(--ink)]"
-                            style={{ fontSize: 36, fontWeight: 900, letterSpacing: '-0.025em' }}
-                          >
-                            Awaiting <span style={{ color: 'var(--red)' }}>geometry</span>.
-                          </h3>
-                          <p className="mt-3 text-[14px] leading-relaxed text-[var(--ink-secondary)]">
-                            When this bench is on Geometry without a saved solid, the build sheet
-                            appears in this same frame. Complete it to generate the 3D plate,
-                            dimensions, and part list.
-                          </p>
-                        </div>
+                      <div className="relative flex min-h-[520px]" style={{ height: '100%' }}>
+                        <TechnicalPlate
+                          productName={(mergedSpec?.product_name as string) || selectedHw?.name || project?.title || '—'}
+                          category={selectedHw?.category || genForm.category || project?.dossier_axis || '—'}
+                        />
                       </div>
                     )}
                   </div>
