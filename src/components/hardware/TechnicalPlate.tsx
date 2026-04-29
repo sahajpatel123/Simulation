@@ -38,7 +38,7 @@ const DEFAULT_LAYERS: Layer[] = [
     rightFace: '#182540',
     leftFace: '#1c2844',
     textColor: '#7788cc',
-    yOffset: 52,
+    yOffset: 64,
   },
   {
     id: 'pcb',
@@ -48,7 +48,7 @@ const DEFAULT_LAYERS: Layer[] = [
     rightFace: '#121f38',
     leftFace: '#162240',
     textColor: '#5577bb',
-    yOffset: 106,
+    yOffset: 128,
   },
   {
     id: 'battery',
@@ -58,7 +58,7 @@ const DEFAULT_LAYERS: Layer[] = [
     rightFace: '#a4c0a4',
     leftFace: '#acc8ac',
     textColor: '#2d5a2d',
-    yOffset: 162,
+    yOffset: 192,
   },
   {
     id: 'shell',
@@ -68,7 +68,7 @@ const DEFAULT_LAYERS: Layer[] = [
     rightFace: '#ccc8be',
     leftFace: '#d4d0c6',
     textColor: '#555',
-    yOffset: 214,
+    yOffset: 256,
   },
 ]
 
@@ -168,103 +168,96 @@ export function TechnicalPlate({
         STANDING TYPE · HARDWARE ATELIER
       </div>
 
-      {/* Dark mode toggle */}
-      <button
-        onClick={() => setDark(d => !d)}
-        title={dark ? 'Switch to daylight' : 'Switch to pressroom'}
+      <div
         style={{
           position: 'absolute',
-          top: 28,
-          right: 14,
-          background: 'transparent',
-          border: `0.5px solid ${dark ? '#444' : '#c8c3b8'}`,
-          padding: '4px 9px',
-          cursor: 'pointer',
-          fontFamily: "'Courier New', monospace",
-          fontSize: 6.5,
-          letterSpacing: '0.12em',
-          color: dark ? '#888' : '#aaa',
+          top: 26,
+          right: 16,
           display: 'flex',
-          alignItems: 'center',
-          gap: 5,
-          transition: 'all 0.2s ease',
-          zIndex: 10,
+          flexDirection: 'column',
+          gap: 22,
+          alignItems: 'flex-end',
+          zIndex: 5,
         }}
       >
-        <span
+        <button
+          onClick={() => setDark(d => !d)}
+          title={dark ? 'Switch to daylight' : 'Switch to pressroom'}
+          type="button"
           style={{
-            display: 'inline-block',
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
-            background: dark ? '#f5f0e8' : '#1a1a1a',
-            transition: 'background 0.2s ease',
+            background: 'transparent',
+            border: `0.5px solid ${dark ? '#444' : '#c8c3b8'}`,
+            padding: '4px 9px',
+            cursor: 'pointer',
+            fontFamily: "'Courier New', monospace",
+            fontSize: 6.5,
+            letterSpacing: '0.12em',
+            color: dark ? '#888' : '#aaa',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            transition: 'all 0.2s ease',
           }}
-        />
-        {dark ? 'DAYLIGHT' : 'PRESSROOM'}
-      </button>
+        >
+          <span
+            style={{
+              display: 'inline-block',
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: dark ? '#f5f0e8' : '#1a1a1a',
+              transition: 'background 0.2s ease',
+            }}
+          />
+          {dark ? 'DAYLIGHT' : 'PRESSROOM'}
+        </button>
 
-      {/* Component count */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 56,
-          right: 14,
-          textAlign: 'right',
-        }}
-      >
-        <div style={{
-          fontFamily: "'Courier New', monospace",
-          fontSize: 6.5,
-          letterSpacing: '0.1em',
-          color: lblCol,
-        }}>
-          COMPONENTS
+        <div style={{ textAlign: 'right' }}>
+          <div style={{
+            fontFamily: "'Courier New', monospace",
+            fontSize: 6.5,
+            letterSpacing: '0.1em',
+            color: lblCol,
+          }}>
+            COMPONENTS
+          </div>
+          <div style={{
+            fontFamily: 'Georgia, serif',
+            fontSize: 28,
+            fontWeight: 'bold',
+            color: dark ? '#f5f0e8' : '#1a1a1a',
+            lineHeight: 1,
+          }}>
+            {layers.length}
+          </div>
+          <div style={{
+            fontFamily: "'Courier New', monospace",
+            fontSize: 6.5,
+            color: RED,
+            letterSpacing: '0.1em',
+          }}>
+            LAYERS · EXPLODED
+          </div>
         </div>
-        <div style={{
-          fontFamily: 'Georgia, serif',
-          fontSize: 28,
-          fontWeight: 'bold',
-          color: dark ? '#f5f0e8' : '#1a1a1a',
-          lineHeight: 1,
-        }}>
-          {layers.length}
-        </div>
-        <div style={{
-          fontFamily: "'Courier New', monospace",
-          fontSize: 6.5,
-          color: RED,
-          letterSpacing: '0.1em',
-        }}>
-          LAYERS · EXPLODED
-        </div>
-      </div>
 
-      {/* Mass */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 118,
-          right: 14,
-          textAlign: 'right',
-        }}
-      >
-        <div style={{
-          fontFamily: "'Courier New', monospace",
-          fontSize: 6.5,
-          letterSpacing: '0.1em',
-          color: lblCol,
-          marginBottom: 2,
-        }}>
-          EST. MASS
-        </div>
-        <div style={{
-          fontFamily: "'Courier New', monospace",
-          fontSize: 13,
-          fontWeight: 'bold',
-          color: dark ? '#f5f0e8' : '#1a1a1a',
-        }}>
-          48g
+        <div style={{ textAlign: 'right' }}>
+          <div style={{
+            fontFamily: "'Courier New', monospace",
+            fontSize: 6.5,
+            letterSpacing: '0.1em',
+            color: lblCol,
+            marginBottom: 2,
+          }}>
+            EST. MASS
+          </div>
+          <div style={{
+            fontFamily: "'Courier New', monospace",
+            fontSize: 13,
+            fontWeight: 'bold',
+            color: dark ? '#f5f0e8' : '#1a1a1a',
+          }}>
+            48g
+          </div>
         </div>
       </div>
 
@@ -273,15 +266,15 @@ export function TechnicalPlate({
         style={{
           position: 'absolute',
           top: '50%',
-          left: '44%',
-          transform: 'translate(-50%, -52%)',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
           pointerEvents: 'none',
         }}
       >
         <svg
-          width={320}
-          height={340}
-          viewBox="0 0 320 340"
+          width={400}
+          height={460}
+          viewBox="0 0 360 400"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
         >
@@ -294,9 +287,9 @@ export function TechnicalPlate({
                 {idx < layers.length - 1 && (
                   <line
                     x1={cx}
-                    y1={y + 52 - 4}
+                    y1={y + 56 - 4}
                     x2={cx}
-                    y2={y + 52 + 16}
+                    y2={y + 56 + 8}
                     stroke={RED}
                     strokeWidth={0.5}
                     strokeDasharray="2,2"
@@ -394,22 +387,6 @@ export function TechnicalPlate({
             textAnchor="middle"
           >
             W · 44mm
-          </text>
-
-          {/* Height dimension */}
-          <line x1={268} y1={4}   x2={268} y2={284} stroke={dimCol} strokeWidth={0.5} />
-          <line x1={262} y1={4}   x2={274} y2={4}   stroke={dimCol} strokeWidth={0.5} />
-          <line x1={262} y1={284} x2={274} y2={284} stroke={dimCol} strokeWidth={0.5} />
-          <text
-            x={282}
-            y={144}
-            fontFamily="'Courier New', monospace"
-            fontSize={6}
-            fill={dimCol}
-            textAnchor="middle"
-            transform="rotate(90,282,144)"
-          >
-            H · 12mm TOTAL
           </text>
         </svg>
       </div>
