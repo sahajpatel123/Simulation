@@ -124,7 +124,6 @@ export default function HardwareBuilderPage() {
     } as Record<string, unknown>
   })()
 
-  const hasPlate = Boolean(mergedSpec && Object.keys(mergedSpec).length > 0)
   const selectedHw = hwList.find((h) => h.id === hwId) ?? null
 
   const handleGenerate = async () => {
@@ -181,7 +180,7 @@ export default function HardwareBuilderPage() {
           onChange={setGenForm}
           onSubmit={() => void handleGenerate()}
           generating={generating}
-          canCancel={hasPlate}
+          canCancel={false}
           onCancel={() => {}}
         />
       </div>
