@@ -28,11 +28,7 @@ class AssumptionCascadeArchitect(BaseArchitect):
 
     @property
     def product_types(self) -> list[str]:
-        return [
-            "saas", "marketplace", "mobile_app", "developer_tool",
-            "enterprise_software", "consumer_hardware", "health_hardware",
-            "iot_hardware", "wearable", "b2b_hardware",
-        ]
+        return self.ALL_PRODUCT_TYPES
 
     def compute(
         self,

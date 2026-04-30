@@ -44,8 +44,12 @@ class DecisionTask(Task):
         if self._db is not None:
             try:
                 self._db.close()
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.debug(
+                    "%s suppressed: %s",
+                    __name__,
+                    _exc,
+                )
             self._db = None
 
 
@@ -344,6 +348,10 @@ def run_decision_comparison(self, decision_id: int) -> dict[str, Any]:
                     f"{type(exc).__name__}: {str(exc)}\n{traceback.format_exc()[:1000]}"
                 )
                 self.db.commit()
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.debug(
+                    "%s suppressed: %s",
+                    __name__,
+                    _exc,
+                )
         raise self.retry(exc=exc)

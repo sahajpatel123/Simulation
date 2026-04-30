@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
 import json
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import text
 
@@ -200,8 +203,12 @@ def run_hardware_tests(self, hardware_product_id: int, project_id: int):
     except Exception as e:
         try:
             db.rollback()
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug(
+                "%s suppressed: %s",
+                __name__,
+                _exc,
+            )
         try:
             db.execute(
                 text("""

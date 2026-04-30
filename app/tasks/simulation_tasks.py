@@ -45,8 +45,12 @@ class SimulationTask(Task):
         if self._db is not None:
             try:
                 self._db.close()
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.debug(
+                    "%s suppressed: %s",
+                    __name__,
+                    _exc,
+                )
             self._db = None
 
 
@@ -76,8 +80,12 @@ def _mark_failed(db: Session, sim: Simulation, exc: Exception) -> None:
         logger.error(f"[Simulation] Could not persist FAILED status: {inner}")
         try:
             db.rollback()
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug(
+                "%s suppressed: %s",
+                __name__,
+                _exc,
+            )
 
 
 def _funnel_result_from_conductor(

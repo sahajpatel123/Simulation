@@ -25,8 +25,12 @@ class ConnectionManager:
         if simulation_id in self._connections:
             try:
                 await self._connections[simulation_id].close(code=1001)
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.debug(
+                    "%s suppressed: %s",
+                    __name__,
+                    _exc,
+                )
         self._connections[simulation_id] = websocket
         logger.info(f"[WS] Client connected - simulation_id={simulation_id}")
 
@@ -115,8 +119,12 @@ def sync_broadcast(
     finally:
         try:
             asyncio.set_event_loop(None)
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug(
+                "%s suppressed: %s",
+                __name__,
+                _exc,
+            )
         if loop is not None:
             loop.close()
 

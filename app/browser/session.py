@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
 import asyncio
 import json
 import random
@@ -176,5 +178,9 @@ class BrowserSession:
                 await self._browser.close()
             if self._pw:
                 await self._pw.stop()
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug(
+                "%s suppressed: %s",
+                __name__,
+                _exc,
+            )

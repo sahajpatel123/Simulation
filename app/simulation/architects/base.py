@@ -9,11 +9,14 @@ cross-cluster domain summary.
 """
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import text
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from app.simulation.clusters.definitions import ClusterDefinition
@@ -61,6 +64,13 @@ class BaseArchitect(ABC):
       - Override `transition_overrides()` to return Markov state-transition
         delta weights keyed by (from_state, to_state) pairs.
     """
+
+    ALL_PRODUCT_TYPES: list[str] = [
+        "saas", "marketplace", "mobile_app",
+        "developer_tool", "enterprise_software",
+        "consumer_hardware", "health_hardware",
+        "iot_hardware", "wearable", "b2b_hardware",
+    ]
 
     @property
     @abstractmethod
@@ -173,6 +183,10 @@ class BaseArchitect(ABC):
                 for k in metrics:
                     if isinstance(metrics[k], float):
                         metrics[k] = max(0.0, min(1.0, metrics[k] * float(row.correction_scalar)))
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug(
+                "%s suppressed: %s",
+                __name__,
+                _exc,
+            )
         return metrics

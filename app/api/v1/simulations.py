@@ -336,8 +336,12 @@ def get_simulation_progress(
             if task_result.state == "PROGRESS":
                 meta = task_result.info or {}
                 pct = meta.get("pct", 50)
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug(
+                "%s suppressed: %s",
+                __name__,
+                _exc,
+            )
 
     return {
         "simulation_id": sim.id,

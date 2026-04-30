@@ -5,6 +5,8 @@ for the learning system.
 """
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
 import traceback
 from dataclasses import dataclass, replace
 from typing import Any
@@ -470,8 +472,12 @@ class Conductor:
             if arch_outputs:
                 try:
                     domain_reports.append(architect.generate_report(arch_outputs))
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    logger.debug(
+                        "%s suppressed: %s",
+                        __name__,
+                        _exc,
+                    )
 
         architect_accountability = self._compute_accountability(
             cluster_results, cluster_weights, all_clusters

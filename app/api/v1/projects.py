@@ -1,6 +1,9 @@
 import json
+import logging
 import re
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
@@ -583,8 +586,12 @@ def extract_assumptions(
             user_reliability_note = (
                 f"Personal accuracy profile active: {len(profile_rows)} architects calibrated."
             )
-    except Exception:
-        pass
+    except Exception as _exc:
+        logger.debug(
+            "%s suppressed: %s",
+            __name__,
+            _exc,
+        )
 
     hidden_count = sum(1 for a in saved if a.is_hidden)
 

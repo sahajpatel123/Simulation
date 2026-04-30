@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import json
 import os
 import random
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import text
 
@@ -494,8 +497,12 @@ def run_hardware_consumer_simulation(
     except Exception as e:
         try:
             db.rollback()
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug(
+                "%s suppressed: %s",
+                __name__,
+                _exc,
+            )
         try:
             err_msg = str(e)[:500]
             db.execute(
