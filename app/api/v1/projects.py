@@ -55,6 +55,7 @@ from app.schemas.stress_test import (
     StressTestStatusOut,
 )
 from app.simulation.calibration_engine import CalibrationEngine
+from app.core.utils import extract_json_from_markdown
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.competitive_software import CompetitiveSoftwareAnalyser
 from app.simulation.conductor import Conductor
@@ -464,11 +465,7 @@ def extract_assumptions(
             )
         raw = (claude_out.get("content") or "").strip()
 
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-
+        raw = extract_json_from_markdown(raw)
         parsed = json.loads(raw)
         assumptions_data = parsed.get("assumptions", [])
 
@@ -657,11 +654,7 @@ def generate_prototype(
             )
         raw = (claude_out.get("content") or "").strip()
 
-        if raw.startswith("```"):
-            lines = raw.split("\n")
-            raw = "\n".join(
-                line for line in lines if not line.strip().startswith("```")
-            )
+        raw = extract_json_from_markdown(raw)
 
         json_match = re.search(r"\{.*\}", raw, re.DOTALL)
         if not json_match:
@@ -874,11 +867,7 @@ def run_premortem(
                 detail=str(claude_out.get("error", "Claude unavailable")),
             )
         raw = (claude_out.get("content") or "").strip()
-
-        if raw.startswith("```"):
-            raw = "\n".join(
-                line for line in raw.split("\n") if not line.strip().startswith("```")
-            )
+        raw = extract_json_from_markdown(raw)
 
         json_match = re.search(r"\{.*\}", raw, re.DOTALL)
         if not json_match:
@@ -1232,10 +1221,7 @@ def generate_interventions(
                 detail=str(claude_out.get("error", "Claude unavailable")),
             )
         raw = (claude_out.get("content") or "").strip()
-        if raw.startswith("```"):
-            raw = "\n".join(
-                line for line in raw.split("\n") if not line.strip().startswith("```")
-            )
+        raw = extract_json_from_markdown(raw)
 
         json_match = re.search(r"\{.*\}", raw, re.DOTALL)
         if not json_match:
@@ -1425,10 +1411,7 @@ def run_competitive_analysis(
                 detail=str(claude_out.get("error", "Claude unavailable")),
             )
         raw = (claude_out.get("content") or "").strip()
-        if raw.startswith("```"):
-            raw = "\n".join(
-                line for line in raw.split("\n") if not line.strip().startswith("```")
-            )
+        raw = extract_json_from_markdown(raw)
 
         json_match = re.search(r"\{.*\}", raw, re.DOTALL)
         if not json_match:

@@ -20,7 +20,6 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     ANTHROPIC_API_KEY: str = ""
-    OPENAI_API_KEY: str = ""
     FRONTEND_URL: str = "http://localhost:3000"
     PUBLIC_API_BASE_URL: str = "http://127.0.0.1:8000"
     REDIS_URL: str = "redis://localhost:6379/0"

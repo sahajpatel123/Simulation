@@ -8,20 +8,11 @@ from __future__ import annotations
 
 from app.simulation.architects.base import ArchitectOutput, BaseArchitect, DomainReport
 from app.simulation.clusters.definitions import ClusterDefinition
+from app.core.utils import geo_tier
 
 
 def _patience_from(traits: dict) -> float:
     return float(traits.get("patience_score", 0.5))
-
-
-def _geo_tier(geo: str) -> str:
-    """Normalise compound geography strings to metro / tier2 / tier3."""
-    geo = geo.lower()
-    if "tier3" in geo or "rural" in geo:
-        return "tier3"
-    if "tier2" in geo:
-        return "tier2"
-    return "metro"
 
 
 class DistributionChannelArchitect(BaseArchitect):
@@ -52,7 +43,7 @@ class DistributionChannelArchitect(BaseArchitect):
         social       = t["social_orientation"]
         income       = t["income_level"]
         age          = cluster.demographic_profile.get("age_bracket", "25-35")
-        geo          = _geo_tier(cluster.demographic_profile.get("geography", "metro"))
+        geo          = geo_tier(cluster.demographic_profile.get("geography", "metro"))
         AOV          = float(env_params.get("average_order_value", 3000))
         product_type = str(env_params.get("product_type", "consumer_hardware"))
         urgency      = float(agent_profile.get("problem_urgency_intensity", 0.5))

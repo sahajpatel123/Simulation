@@ -8,15 +8,7 @@ from __future__ import annotations
 
 from app.simulation.architects.base import ArchitectOutput, BaseArchitect, DomainReport
 from app.simulation.clusters.definitions import ClusterDefinition
-
-
-def _geo_tier(geo: str) -> str:
-    geo = geo.lower()
-    if "tier3" in geo or "rural" in geo:
-        return "tier3"
-    if "tier2" in geo:
-        return "tier2"
-    return "metro"
+from app.core.utils import geo_tier
 
 
 class SetupFirstUseArchitect(BaseArchitect):
@@ -45,7 +37,7 @@ class SetupFirstUseArchitect(BaseArchitect):
         trust        = t["trust"]
         motivation   = t["motivation"]
         age          = cluster.demographic_profile.get("age_bracket", "25-35")
-        geo          = _geo_tier(cluster.demographic_profile.get("geography", "metro"))
+        geo          = geo_tier(cluster.demographic_profile.get("geography", "metro"))
         product_type = str(env_params.get("product_type", "consumer_hardware"))
 
         # ── Extract signals from assumptions ──────────────────────────────
