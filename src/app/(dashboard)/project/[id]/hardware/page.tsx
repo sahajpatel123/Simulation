@@ -55,6 +55,7 @@ const CATEGORIES = [
 const inputStyle: CSSProperties = {
   width: '100%',
   background: '#f5f0e8',
+  backgroundColor: '#f5f0e8',
   border: 'none',
   borderBottom: '1px solid #1a1a1a',
   fontFamily: 'Georgia, serif',
@@ -64,7 +65,7 @@ const inputStyle: CSSProperties = {
   padding: '12px 4px',
   outline: 'none',
   borderRadius: 0,
-  transition: 'border-color 0.2s ease, background 0.2s ease',
+  transition: 'border-color 0.2s ease, background 0.2s ease, background-color 0.2s ease',
 }
 
 const SELECT_CHEVRON =
@@ -83,10 +84,18 @@ const selectStyle: CSSProperties = {
   paddingRight: 28,
 }
 
+/** Number inputs ignore `background` in some WebKit builds; reinforce + textfield chrome. */
+const numberInputStyle: CSSProperties = {
+  ...inputStyle,
+  backgroundColor: '#f5f0e8',
+  MozAppearance: 'textfield',
+  WebkitAppearance: 'textfield',
+}
+
 const inputFocusHandlers = {
   onFocus: (e: FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     e.currentTarget.style.borderBottomColor = '#c0392b'
-    if (e.currentTarget instanceof HTMLSelectElement) {
+    if (e.currentTarget instanceof HTMLSelectElement || e.currentTarget instanceof HTMLInputElement) {
       e.currentTarget.style.backgroundColor = '#fff'
     } else {
       e.currentTarget.style.background = '#fff'
@@ -94,7 +103,7 @@ const inputFocusHandlers = {
   },
   onBlur: (e: FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     e.currentTarget.style.borderBottomColor = '#1a1a1a'
-    if (e.currentTarget instanceof HTMLSelectElement) {
+    if (e.currentTarget instanceof HTMLSelectElement || e.currentTarget instanceof HTMLInputElement) {
       e.currentTarget.style.backgroundColor = '#f5f0e8'
     } else {
       e.currentTarget.style.background = '#f5f0e8'
@@ -379,7 +388,7 @@ function PressDispatchForm({
         <FormField label="III. TARGET PRICE (₹)">
           <input
             type="number"
-            style={inputStyle}
+            style={numberInputStyle}
             {...inputFocusHandlers}
             value={form.target_price_inr}
             onChange={(e) => onChange((f) => ({ ...f, target_price_inr: Number(e.target.value) || 0 }))}
