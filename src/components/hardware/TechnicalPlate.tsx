@@ -41,27 +41,10 @@ export function TechnicalPlate({
   onBack,
 }: TechnicalPlateProps) {
   const [dark, setDark] = useState(false);
-  const [hoveredLayer, setHoveredLayer] = useState<number | null>(null);
-  const [revealedCount, setRevealedCount] = useState(0);
   const [rotation, setRotation] = useState(0);
   const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!hasSpec) {
-      setRevealedCount(0);
-      return;
-    }
-    let i = 0;
-    const id = setInterval(() => {
-      i += 1;
-      setRevealedCount(i);
-      if (i >= layers.length) clearInterval(id);
-    }, 140);
-    return () => clearInterval(id);
-  }, [hasSpec, layers.length]);
-
-  useEffect(() => {
-    if (hasSpec) return;
     const animate = () => {
       setRotation(r => (r + 0.25) % 360);
       rafRef.current = requestAnimationFrame(animate);
@@ -70,13 +53,12 @@ export function TechnicalPlate({
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [hasSpec]);
+  }, []);
 
   const sheetBg     = dark ? '#0f0f0f' : '#f5f0e8';
   const sheetBorder = dark ? '#222'    : '#1a1a1a';
   const gridCol     = dark ? 'rgba(255,255,255,0.04)' : 'rgba(140,135,125,0.18)';
   const gridStrong  = dark ? 'rgba(255,255,255,0.07)' : 'rgba(140,135,125,0.32)';
-  const dimCol      = dark ? '#3a3a3a' : '#c4bfb4';
   const lblCol      = dark ? '#666'    : '#999';
   const valCol      = dark ? '#e8e4dc' : '#1a1a1a';
   const regCol      = dark ? '#3a3a3a' : '#999';
@@ -202,18 +184,7 @@ export function TechnicalPlate({
         </button>
 
         {/* MAIN STAGE */}
-        {!hasSpec ? (
-          <EmptyHologram dark={dark} rotation={rotation} subtleText={subtleText} valCol={valCol} />
-        ) : (
-          <SpecDiagram
-            layers={layers}
-            revealedCount={revealedCount}
-            hoveredLayer={hoveredLayer}
-            setHoveredLayer={setHoveredLayer}
-            dark={dark}
-            dimCol={dimCol}
-          />
-        )}
+        <EmptyHologram dark={dark} rotation={rotation} subtleText={subtleText} valCol={valCol} />
 
         {/* TITLE BLOCK — BOTTOM RIGHT */}
         <div style={{
@@ -246,9 +217,9 @@ export function TechnicalPlate({
           ))}
           <Divider dark={dark} />
           {[
-            ['COMPONENTS', hasSpec ? String(layers.length)         : '—'],
-            ['EST. MASS',  hasSpec ? '48g'                          : '—'],
-            ['SCALE',      hasSpec ? 'NTS · EXPLODED'               : '—'],
+            ['COMPONENTS', '—'],
+            ['EST. MASS',  '—'],
+            ['SCALE',      '—'],
           ].map(([l, v]) => (
             <TitleRow key={l} label={l} value={v} dark={dark} lblCol={lblCol} valCol={valCol} />
           ))}
@@ -466,135 +437,6 @@ function Icosahedron({ stroke, accent, fill }: {
           fill={accent} />
       ))}
     </g>
-  );
-}
-
-// ────────── SPEC DIAGRAM ──────────
-
-function SpecDiagram({
-  layers, revealedCount, hoveredLayer, setHoveredLayer, dark, dimCol,
-}: {
-  layers: Layer[];
-  revealedCount: number;
-  hoveredLayer: number | null;
-  setHoveredLayer: (n: number | null) => void;
-  dark: boolean;
-  dimCol: string;
-}) {
-  const stroke = dark ? '#888' : '#1a1a1a';
-  const callCol = dark ? '#c8c4bc' : '#3a3a3a';
-  const callSub = dark ? '#666' : '#999';
-
-  return (
-    <div style={{
-      position: 'absolute',
-      top: '50%',
-      left: '50%',
-      transform: 'translate(-50%, -52%)',
-      pointerEvents: 'none',
-    }}>
-      <svg width={520} height={520} viewBox="0 0 520 520"
-           style={{ filter: dark ? 'drop-shadow(0 0 30px rgba(192,57,43,0.15))' : 'drop-shadow(0 12px 32px rgba(0,0,0,0.10))' }}>
-        {layers.map((layer, idx) => {
-          const visible = idx < revealedCount;
-          const hovered = hoveredLayer === idx;
-          const y = 30 + layer.yOffset;
-          const cx = 260;
-          const w = 84;
-          return (
-            <g key={layer.id}
-               opacity={visible ? 1 : 0}
-               style={{
-                 transition: 'opacity 0.5s ease, transform 0.5s ease',
-                 transform: visible ? 'translateY(0)' : 'translateY(-12px)',
-                 cursor: 'pointer',
-                 pointerEvents: visible ? 'auto' : 'none',
-               }}
-               onMouseEnter={() => setHoveredLayer(idx)}
-               onMouseLeave={() => setHoveredLayer(null)}
-            >
-              <path
-                d={`M${cx - w} ${y + 42} L${cx} ${y} L${cx + w} ${y + 42} L${cx} ${y + 84} Z`}
-                fill={layer.fill}
-                stroke={stroke}
-                strokeWidth={hovered ? 1.4 : 1}
-                style={{ transition: 'stroke-width 0.2s' }}
-              />
-              <path
-                d={`M${cx + w} ${y + 42} L${cx + w} ${y + 60} L${cx} ${y + 102} L${cx} ${y + 84} Z`}
-                fill={layer.rightFace}
-                stroke={stroke}
-                strokeWidth={hovered ? 1.4 : 1}
-              />
-              <path
-                d={`M${cx - w} ${y + 42} L${cx - w} ${y + 60} L${cx} ${y + 102} L${cx} ${y + 84} Z`}
-                fill={layer.leftFace}
-                stroke={stroke}
-                strokeWidth={hovered ? 1.4 : 1}
-              />
-              <text x={cx} y={y + 50}
-                fontFamily="'Courier New', monospace"
-                fontSize={9} fill={layer.textColor}
-                textAnchor="middle">
-                {layer.label}
-              </text>
-              <text x={cx} y={y + 64}
-                fontFamily="'Courier New', monospace"
-                fontSize={7} fill={layer.textColor}
-                opacity={0.7} textAnchor="middle">
-                {layer.sublabel}
-              </text>
-
-              {/* CALLOUT (hover) */}
-              <g style={{
-                opacity: hovered ? 1 : 0,
-                transition: 'opacity 0.3s ease',
-                pointerEvents: 'none',
-              }}>
-                <line
-                  x1={cx - w} y1={y + 42}
-                  x2={70} y2={y + 60}
-                  stroke="#c0392b" strokeWidth={0.6} />
-                <circle cx={cx - w} cy={y + 42} r={3}
-                  fill="#c0392b" />
-                <text x={28} y={y + 56}
-                  fontFamily="'Courier New', monospace"
-                  fontSize={9} fill={callCol}
-                  fontWeight={500}>
-                  {String(idx + 1).padStart(2, '0')} · {layer.label}
-                </text>
-                <text x={28} y={y + 70}
-                  fontFamily="'Courier New', monospace"
-                  fontSize={8} fill={callSub}>
-                  {layer.sublabel}
-                </text>
-              </g>
-            </g>
-          );
-        })}
-
-        {/* WIDTH DIMENSION */}
-        <line x1={150} y1={460} x2={370} y2={460}
-              stroke={dimCol} strokeWidth={0.5}
-              opacity={revealedCount >= layers.length ? 1 : 0}
-              style={{ transition: 'opacity 0.6s 0.2s' }} />
-        <line x1={150} y1={454} x2={150} y2={466}
-              stroke={dimCol} strokeWidth={0.5}
-              opacity={revealedCount >= layers.length ? 1 : 0}
-              style={{ transition: 'opacity 0.6s 0.2s' }} />
-        <line x1={370} y1={454} x2={370} y2={466}
-              stroke={dimCol} strokeWidth={0.5}
-              opacity={revealedCount >= layers.length ? 1 : 0}
-              style={{ transition: 'opacity 0.6s 0.2s' }} />
-        <text x={260} y={478}
-          fontFamily="'Courier New', monospace"
-          fontSize={9} fill={dimCol} textAnchor="middle"
-          opacity={revealedCount >= layers.length ? 1 : 0}
-          style={{ transition: 'opacity 0.6s 0.2s' }}>
-          W · 44mm
-        </text>
-      </svg>
-    </div>
   );
 }
 
