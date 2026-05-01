@@ -2,33 +2,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 
-interface Layer {
-  id: string;
-  label: string;
-  sublabel: string;
-  fill: string;
-  rightFace: string;
-  leftFace: string;
-  textColor: string;
-  yOffset: number;
-}
-
 interface TechnicalPlateProps {
   productName?: string;
   category?: string;
-  layers?: Layer[];
   hasSpec?: boolean;
   onRunPhysics?: () => void;
   onBack?: () => void;
 }
-
-const DEFAULT_LAYERS: Layer[] = [
-  { id: 'glass',   label: 'COVER GLASS',     sublabel: 'Gorilla Glass 3 · 2.5D · 0.7mm',     fill: 'rgba(170,205,235,0.30)', rightFace: 'rgba(150,188,220,0.20)', leftFace: 'rgba(160,196,228,0.25)', textColor: '#2266aa', yOffset: 0   },
-  { id: 'display', label: 'DISPLAY MODULE',  sublabel: 'AMOLED · 1.4in · 454ppi',            fill: '#22324e',                rightFace: '#182540',                leftFace: '#1c2844',                textColor: '#7788cc', yOffset: 64  },
-  { id: 'pcb',     label: 'MAIN PCB',        sublabel: 'FR4 · 4-Layer · ARM Cortex',         fill: '#1a2a4a',                rightFace: '#121f38',                leftFace: '#162240',                textColor: '#5577bb', yOffset: 128 },
-  { id: 'battery', label: 'BATTERY CELL',    sublabel: 'LiPo · 3.7V · 300mAh',               fill: '#b8d4b8',                rightFace: '#a4c0a4',                leftFace: '#acc8ac',                textColor: '#2d5a2d', yOffset: 192 },
-  { id: 'shell',   label: 'ENCLOSURE SHELL', sublabel: 'ABS · 1.2mm',                        fill: '#e0dbd0',                rightFace: '#ccc8be',                leftFace: '#d4d0c6',                textColor: '#555',    yOffset: 256 },
-];
 
 const RED = '#c0392b';
 
@@ -38,7 +18,6 @@ const DRAWING_SHEET_GRID_STEP_PX = 12;
 export function TechnicalPlate({
   productName = '—',
   category = '—',
-  layers = DEFAULT_LAYERS,
   hasSpec = false,
   onRunPhysics,
   onBack,
@@ -201,7 +180,7 @@ export function TechnicalPlate({
             ['PROJECT',  productName],
             ['CATEGORY', category],
           ].map(([l, v]) => (
-            <TitleRow key={l} label={l} value={v} dark={dark} lblCol={lblCol} valCol={valCol} />
+            <TitleRow key={l} label={l} value={v} lblCol={lblCol} valCol={valCol} />
           ))}
           <Divider dark={dark} />
           {[
@@ -209,14 +188,14 @@ export function TechnicalPlate({
             ['EST. MASS',  '—'],
             ['SCALE',      '—'],
           ].map(([l, v]) => (
-            <TitleRow key={l} label={l} value={v} dark={dark} lblCol={lblCol} valCol={valCol} />
+            <TitleRow key={l} label={l} value={v} lblCol={lblCol} valCol={valCol} />
           ))}
           <Divider dark={dark} />
           {[
             ['EDITION', 'HARDWARE ATELIER'],
             ['FILED',   hasSpec ? today : 'PENDING PRESS'],
           ].map(([l, v]) => (
-            <TitleRow key={l} label={l} value={v} dark={dark} lblCol={lblCol} valCol={valCol} />
+            <TitleRow key={l} label={l} value={v} lblCol={lblCol} valCol={valCol} />
           ))}
         </div>
       </div>
@@ -293,7 +272,6 @@ function EmptyHologram({
 }) {
   const stroke = dark ? '#c0392b' : '#1a1a1a';
   const accent = '#c0392b';
-  const fill   = dark ? 'rgba(192,57,43,0.04)' : 'rgba(192,57,43,0.02)';
   const glow   = dark
     ? 'drop-shadow(0 0 24px rgba(192,57,43,0.35))'
     : 'drop-shadow(0 4px 12px rgba(0,0,0,0.08))';
@@ -354,7 +332,7 @@ function EmptyHologram({
           }}
         >
           <g transform="translate(190 190)">
-            <Icosahedron stroke={stroke} accent={accent} fill={fill} />
+            <Icosahedron stroke={stroke} accent={accent} />
           </g>
         </svg>
 
@@ -409,8 +387,8 @@ function EmptyHologram({
   );
 }
 
-function Icosahedron({ stroke, accent, fill }: {
-  stroke: string; accent: string; fill: string;
+function Icosahedron({ stroke, accent }: {
+  stroke: string; accent: string;
 }) {
   const t = (1 + Math.sqrt(5)) / 2;
   const r = 90;
@@ -452,9 +430,9 @@ function Icosahedron({ stroke, accent, fill }: {
 // ────────── SHARED SUB-COMPONENTS ──────────
 
 function TitleRow({
-  label, value, dark, lblCol, valCol,
+  label, value, lblCol, valCol,
 }: {
-  label: string; value: string; dark: boolean;
+  label: string; value: string;
   lblCol: string; valCol: string;
 }) {
   return (

@@ -228,8 +228,6 @@ export default function HardwareBuilderPage() {
         onChange={setGenForm}
         onSubmit={() => void handleGenerate()}
         generating={generating}
-        canCancel={false}
-        onCancel={() => {}}
       />
 
       <TechnicalPlate
@@ -243,58 +241,11 @@ export default function HardwareBuilderPage() {
   )
 }
 
-// ── Editorial paper field — warm grain, faint blueprint diagonals ────────
-function PaperField() {
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <div
-        className="absolute inset-0"
-        style={{
-          backgroundImage: `radial-gradient(circle at 1px 1px, rgba(45, 69, 86, 0.08) 1px, transparent 0)`,
-          backgroundSize: '24px 24px',
-        }}
-      />
-      <div
-        className="absolute inset-0 opacity-40"
-        style={{
-          backgroundImage: `
-            linear-gradient(105deg, transparent 48.5%, rgba(45, 69, 86, 0.05) 49.5%, rgba(45, 69, 86, 0.05) 50.5%, transparent 51.5%),
-            linear-gradient(-15deg, transparent 48.5%, rgba(45, 69, 86, 0.04) 49.5%, rgba(45, 69, 86, 0.04) 50.5%, transparent 51.5%)
-          `,
-          backgroundSize: '88px 88px, 120px 120px',
-        }}
-      />
-      <div
-        className="absolute inset-0"
-        style={{
-          background:
-            'radial-gradient(ellipse 78% 62% at 50% 48%, rgba(242, 236, 224, 0.92) 0%, transparent 64%)',
-        }}
-      />
-    </div>
-  )
-}
-
-function BuildSheetDatumLine() {
-  return (
-    <div
-      className="mt-7 h-px w-full max-w-xl opacity-50"
-      style={{
-        backgroundImage:
-          'repeating-linear-gradient(90deg, var(--workshop) 0, var(--workshop) 1px, transparent 1px, transparent 10px)',
-      }}
-      aria-hidden
-    />
-  )
-}
-
 function PressDispatchForm({
   form,
   onChange,
   onSubmit,
   generating,
-  canCancel,
-  onCancel,
 }: {
   form: { name: string; description: string; category: string; target_price_inr: number; product_type: string }
   onChange: Dispatch<
@@ -308,8 +259,6 @@ function PressDispatchForm({
   >
   onSubmit: () => void
   generating: boolean
-  canCancel: boolean
-  onCancel: () => void
 }) {
   const canSubmit = form.name.trim() && form.description.trim() && !generating
   return (
