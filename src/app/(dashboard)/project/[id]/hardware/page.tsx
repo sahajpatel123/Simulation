@@ -163,7 +163,6 @@ export default function HardwareBuilderPage() {
         height: 'calc(100vh - 120px)',
         background: '#f5f0e8',
         overflow: 'hidden',
-        marginLeft: 32,
       }}
     >
       <div
@@ -173,6 +172,7 @@ export default function HardwareBuilderPage() {
           maxWidth: '40%',
           overflowY: 'auto',
           borderRight: '1px solid rgba(45, 69, 86, 0.12)',
+          borderLeft: 'none',
         }}
       >
         <PressDispatchForm
@@ -262,7 +262,7 @@ function PressDispatchForm({
   return (
     <div className="relative">
       <PaperField />
-      <div className="relative z-10 mx-auto max-w-3xl px-8 py-12">
+      <div className="relative z-10 mx-auto max-w-3xl px-0 py-12">
         <p className="font-mono text-[10px] uppercase tracking-[0.22em]" style={{ color: 'var(--workshop)' }}>
           Build specification · intake
         </p>
