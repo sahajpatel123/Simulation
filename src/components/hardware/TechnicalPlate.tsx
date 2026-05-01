@@ -1,83 +1,36 @@
-'use client'
+'use client';
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react';
 
 interface Layer {
-  id: string
-  label: string
-  sublabel: string
-  fill: string
-  rightFace: string
-  leftFace: string
-  textColor: string
-  yOffset: number
+  id: string;
+  label: string;
+  sublabel: string;
+  fill: string;
+  rightFace: string;
+  leftFace: string;
+  textColor: string;
+  yOffset: number;
 }
 
 interface TechnicalPlateProps {
-  productName?: string
-  category?: string
-  layers?: Layer[]
-  hasSpec?: boolean
-  onRunPhysics?: () => void
-  onBack?: () => void
+  productName?: string;
+  category?: string;
+  layers?: Layer[];
+  hasSpec?: boolean;
+  onRunPhysics?: () => void;
+  onBack?: () => void;
 }
 
 const DEFAULT_LAYERS: Layer[] = [
-  {
-    id: 'glass',
-    label: 'COVER GLASS',
-    sublabel: 'Gorilla Glass 3 · 2.5D · 0.7mm',
-    fill: 'rgba(170,205,235,0.30)',
-    rightFace: 'rgba(150,188,220,0.20)',
-    leftFace: 'rgba(160,196,228,0.25)',
-    textColor: '#2266aa',
-    yOffset: 0,
-  },
-  {
-    id: 'display',
-    label: 'DISPLAY MODULE',
-    sublabel: 'AMOLED · 1.4in · 454ppi',
-    fill: '#22324e',
-    rightFace: '#182540',
-    leftFace: '#1c2844',
-    textColor: '#7788cc',
-    yOffset: 64,
-  },
-  {
-    id: 'pcb',
-    label: 'MAIN PCB',
-    sublabel: 'FR4 · 4-Layer · ARM Cortex',
-    fill: '#1a2a4a',
-    rightFace: '#121f38',
-    leftFace: '#162240',
-    textColor: '#5577bb',
-    yOffset: 128,
-  },
-  {
-    id: 'battery',
-    label: 'BATTERY CELL',
-    sublabel: 'LiPo · 3.7V · 300mAh',
-    fill: '#b8d4b8',
-    rightFace: '#a4c0a4',
-    leftFace: '#acc8ac',
-    textColor: '#2d5a2d',
-    yOffset: 192,
-  },
-  {
-    id: 'shell',
-    label: 'ENCLOSURE SHELL',
-    sublabel: 'ABS · 1.2mm',
-    fill: '#e0dbd0',
-    rightFace: '#ccc8be',
-    leftFace: '#d4d0c6',
-    textColor: '#555',
-    yOffset: 256,
-  },
-]
+  { id: 'glass',   label: 'COVER GLASS',     sublabel: 'Gorilla Glass 3 · 2.5D · 0.7mm',     fill: 'rgba(170,205,235,0.30)', rightFace: 'rgba(150,188,220,0.20)', leftFace: 'rgba(160,196,228,0.25)', textColor: '#2266aa', yOffset: 0   },
+  { id: 'display', label: 'DISPLAY MODULE',  sublabel: 'AMOLED · 1.4in · 454ppi',            fill: '#22324e',                rightFace: '#182540',                leftFace: '#1c2844',                textColor: '#7788cc', yOffset: 64  },
+  { id: 'pcb',     label: 'MAIN PCB',        sublabel: 'FR4 · 4-Layer · ARM Cortex',         fill: '#1a2a4a',                rightFace: '#121f38',                leftFace: '#162240',                textColor: '#5577bb', yOffset: 128 },
+  { id: 'battery', label: 'BATTERY CELL',    sublabel: 'LiPo · 3.7V · 300mAh',               fill: '#b8d4b8',                rightFace: '#a4c0a4',                leftFace: '#acc8ac',                textColor: '#2d5a2d', yOffset: 192 },
+  { id: 'shell',   label: 'ENCLOSURE SHELL', sublabel: 'ABS · 1.2mm',                        fill: '#e0dbd0',                rightFace: '#ccc8be',                leftFace: '#d4d0c6',                textColor: '#555',    yOffset: 256 },
+];
 
-const CREAM = '#f5f0e8'
-const DARK  = '#111111'
-const RED   = '#c0392b'
+const RED = '#c0392b';
 
 export function TechnicalPlate({
   productName = '—',
@@ -87,471 +40,687 @@ export function TechnicalPlate({
   onRunPhysics,
   onBack,
 }: TechnicalPlateProps) {
-  const [dark, setDark] = useState(false)
-  const [revealedCount, setRevealedCount] = useState(0)
-  const [hoveredLayer, setHoveredLayer] = useState<number | null>(null)
+  const [dark, setDark] = useState(false);
+  const [hoveredLayer, setHoveredLayer] = useState<number | null>(null);
+  const [revealedCount, setRevealedCount] = useState(0);
+  const [rotation, setRotation] = useState(0);
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!hasSpec) {
-      setRevealedCount(0)
-      return
+      setRevealedCount(0);
+      return;
     }
-    let i = 0
-    const interval = setInterval(() => {
-      i += 1
-      setRevealedCount(i)
-      if (i >= layers.length) clearInterval(interval)
-    }, 110)
-    return () => clearInterval(interval)
-  }, [hasSpec, layers.length])
+    let i = 0;
+    const id = setInterval(() => {
+      i += 1;
+      setRevealedCount(i);
+      if (i >= layers.length) clearInterval(id);
+    }, 140);
+    return () => clearInterval(id);
+  }, [hasSpec, layers.length]);
 
-  const bg      = dark ? DARK  : CREAM
-  const gridCol = dark
-    ? 'rgba(255,255,255,0.06)'
-    : 'rgba(140,135,125,0.22)'
-  const dimCol  = dark ? '#555' : '#c4bfb4'
-  const lblCol  = dark ? '#888' : '#bbb'
-  const regCol  = dark ? '#444' : '#bbb'
-  const callCol = dark ? '#aaa' : '#555'
-  const callSub = dark ? '#666' : '#aaa'
-  const tbBg    = dark
-    ? 'rgba(20,20,20,0.95)'
-    : 'rgba(245,240,232,0.95)'
-  const tbBorder = dark ? '#333' : '#c8c3b8'
-  const tbLbl   = dark ? '#555' : '#bbb'
-  const tbVal   = dark ? '#ccc' : '#1a1a1a'
+  useEffect(() => {
+    if (hasSpec) return;
+    const animate = () => {
+      setRotation(r => (r + 0.25) % 360);
+      rafRef.current = requestAnimationFrame(animate);
+    };
+    rafRef.current = requestAnimationFrame(animate);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [hasSpec]);
+
+  const bg          = dark ? '#0a0a0a' : '#f5f0e8';
+  const sheetBg     = dark ? '#0f0f0f' : '#f5f0e8';
+  const sheetBorder = dark ? '#222'    : '#1a1a1a';
+  const gridCol     = dark ? 'rgba(255,255,255,0.04)' : 'rgba(140,135,125,0.18)';
+  const gridStrong  = dark ? 'rgba(255,255,255,0.07)' : 'rgba(140,135,125,0.32)';
+  const dimCol      = dark ? '#3a3a3a' : '#c4bfb4';
+  const lblCol      = dark ? '#666'    : '#999';
+  const valCol      = dark ? '#e8e4dc' : '#1a1a1a';
+  const regCol      = dark ? '#3a3a3a' : '#999';
+  const subtleText  = dark ? '#5a5a5a' : '#888';
 
   const today = new Date().toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).toUpperCase()
+    day: '2-digit', month: 'short', year: 'numeric',
+  }).toUpperCase();
 
   return (
-    <div
-      style={{
+    <div style={{
+      position: 'relative',
+      flex: 1,
+      padding: '32px 32px 96px 32px',
+      background: bg,
+      transition: 'background 0.5s cubic-bezier(0.4,0,0.2,1)',
+      overflow: 'hidden',
+      minHeight: 0,
+    }}>
+      {/* DRAWING SHEET */}
+      <div style={{
         position: 'relative',
-        flex: 1,
-        padding: '24px',
-        paddingBottom: '76px',
-        background: CREAM,
-        transition: 'background 0.35s ease',
+        width: '100%',
+        height: '100%',
+        background: sheetBg,
+        border: `1px solid ${sheetBorder}`,
+        boxShadow: dark
+          ? '0 0 0 1px rgba(192,57,43,0.06), 0 24px 60px rgba(0,0,0,0.6)'
+          : '0 1px 0 rgba(0,0,0,0.03), 0 18px 48px rgba(60,40,20,0.10)',
+        transition: 'all 0.5s cubic-bezier(0.4,0,0.2,1)',
         overflow: 'hidden',
-      }}
-    >
-      <div
-        style={{
-          position: 'relative',
-          width: '100%',
-          height: '100%',
-          background: bg,
-          border: '1px solid #1a1a1a',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06)',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Grid */}
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            backgroundImage: `
-              linear-gradient(${gridCol} 1px, transparent 1px),
-              linear-gradient(90deg, ${gridCol} 1px, transparent 1px)
-            `,
-            backgroundSize: '24px 24px',
-            pointerEvents: 'none',
-          }}
-        />
+      }}>
 
-        {/* Registration marks */}
-        {(['tl', 'tr', 'bl', 'br'] as const).map(pos => (
-          <div
-            key={pos}
-            style={{
-              position: 'absolute',
-              width: 14,
-              height: 14,
-              top:    pos.startsWith('t') ? 10 : undefined,
-              bottom: pos.startsWith('b') ? 46 : undefined,
-              left:   pos.endsWith('l')   ? 10 : undefined,
-              right:  pos.endsWith('r')   ? 10 : undefined,
-              borderTop:    pos.startsWith('t') ? `1px solid ${regCol}` : undefined,
-              borderBottom: pos.startsWith('b') ? `1px solid ${regCol}` : undefined,
-              borderLeft:   pos.endsWith('l')   ? `1px solid ${regCol}` : undefined,
-              borderRight:  pos.endsWith('r')   ? `1px solid ${regCol}` : undefined,
-            }}
-          />
+        {/* GRID */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          backgroundImage: `
+            linear-gradient(${gridCol} 1px, transparent 1px),
+            linear-gradient(90deg, ${gridCol} 1px, transparent 1px),
+            linear-gradient(${gridStrong} 1px, transparent 1px),
+            linear-gradient(90deg, ${gridStrong} 1px, transparent 1px)
+          `,
+          backgroundSize: '24px 24px, 24px 24px, 120px 120px, 120px 120px',
+          pointerEvents: 'none',
+          transition: 'all 0.5s ease',
+        }} />
+
+        {/* REGISTRATION MARKS */}
+        {(['tl','tr','bl','br'] as const).map(pos => (
+          <div key={pos} style={{
+            position: 'absolute',
+            width: 22, height: 22,
+            top:    pos.startsWith('t') ? 18 : undefined,
+            bottom: pos.startsWith('b') ? 18 : undefined,
+            left:   pos.endsWith('l')   ? 18 : undefined,
+            right:  pos.endsWith('r')   ? 18 : undefined,
+            borderTop:    pos.startsWith('t') ? `1px solid ${regCol}` : undefined,
+            borderBottom: pos.startsWith('b') ? `1px solid ${regCol}` : undefined,
+            borderLeft:   pos.endsWith('l')   ? `1px solid ${regCol}` : undefined,
+            borderRight:  pos.endsWith('r')   ? `1px solid ${regCol}` : undefined,
+            transition: 'border-color 0.5s ease',
+          }} />
         ))}
 
-        {/* Plate label */}
-        <div
-          style={{
-            position: 'absolute',
-            top: 13,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            fontFamily: "'Courier New', monospace",
-            fontSize: 7,
-            letterSpacing: '0.18em',
-            color: RED,
-            whiteSpace: 'nowrap',
-            pointerEvents: 'none',
-          }}
-        >
+        {/* TOP RAIL — STANDING TYPE */}
+        <div style={{
+          position: 'absolute',
+          top: 22,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          fontFamily: "'Courier New', monospace",
+          fontSize: 10,
+          letterSpacing: '0.3em',
+          color: RED,
+          whiteSpace: 'nowrap',
+          pointerEvents: 'none',
+          fontWeight: 500,
+        }}>
           STANDING TYPE · HARDWARE ATELIER
         </div>
 
-        <div
+        {/* PRESSROOM TOGGLE — LARGE */}
+        <button
+          onClick={() => setDark(d => !d)}
           style={{
             position: 'absolute',
-            top: 26,
-            right: 16,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 22,
-            alignItems: 'flex-end',
-            zIndex: 5,
-          }}
-        >
-          <button
-            onClick={() => setDark(d => !d)}
-            title={dark ? 'Switch to daylight' : 'Switch to pressroom'}
-            type="button"
-            style={{
-              background: 'transparent',
-              border: `0.5px solid ${dark ? '#444' : '#c8c3b8'}`,
-              padding: '4px 9px',
-              cursor: 'pointer',
-              fontFamily: "'Courier New', monospace",
-              fontSize: 6.5,
-              letterSpacing: '0.12em',
-              color: dark ? '#888' : '#aaa',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              transition: 'all 0.2s ease',
-            }}
-          >
-            <span
-              style={{
-                display: 'inline-block',
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                background: dark ? '#f5f0e8' : '#1a1a1a',
-                transition: 'background 0.2s ease',
-              }}
-            />
-            {dark ? 'DAYLIGHT' : 'PRESSROOM'}
-          </button>
-        </div>
-
-        {!hasSpec ? (
-          <div style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            textAlign: 'center',
-            pointerEvents: 'none',
-          }}>
-            <div style={{
-              fontFamily: "'Courier New', monospace",
-              fontSize: 9,
-              letterSpacing: '0.22em',
-              color: '#c0392b',
-              marginBottom: 12,
-            }}>
-              AWAITING PRESS
-            </div>
-            <div style={{
-              fontFamily: 'Georgia, serif',
-              fontStyle: 'italic',
-              fontSize: 14,
-              color: '#888',
-            }}>
-              File the specification sheet to begin.
-            </div>
-          </div>
-        ) : (
-          <div
-            style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              pointerEvents: 'none',
-            }}
-          >
-            <svg
-              width={400}
-              height={460}
-              viewBox="0 0 360 400"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              style={{ pointerEvents: 'visible' }}
-            >
-              {layers.map((layer, idx) => {
-                const y = layer.yOffset
-                const cx = 168 - idx * 6
-                const w  = 56
-                const isHovered = hoveredLayer === idx
-                return (
-                  <g
-                    key={layer.id}
-                    onMouseEnter={() => setHoveredLayer(idx)}
-                    onMouseLeave={() => setHoveredLayer(null)}
-                    style={{
-                      cursor: 'pointer',
-                      opacity: idx < revealedCount ? 1 : 0,
-                      transition: 'opacity 0.4s ease, transform 0.4s ease',
-                      transform: idx < revealedCount ? 'translateY(0)' : 'translateY(-8px)',
-                      transformOrigin: 'center',
-                      transformBox: 'fill-box',
-                    }}
-                  >
-                    {idx < layers.length - 1 && (
-                      <line
-                        x1={cx}
-                        y1={y + 56 - 4}
-                        x2={cx}
-                        y2={y + 56 + 8}
-                        stroke={RED}
-                        strokeWidth={0.5}
-                        strokeDasharray="2,2"
-                      />
-                    )}
-                    {/* Top face */}
-                    <path
-                      d={`M${cx - w} ${y + 28} L${cx} ${y} L${cx + w} ${y + 28} L${cx} ${y + 56} Z`}
-                      fill={layer.fill}
-                      stroke={dark ? '#444' : '#1a1a1a'}
-                      strokeWidth={0.8}
-                    />
-                    {/* Right face */}
-                    <path
-                      d={`M${cx + w} ${y + 28} L${cx + w} ${y + 40} L${cx} ${y + 68} L${cx} ${y + 56} Z`}
-                      fill={layer.rightFace}
-                      stroke={dark ? '#444' : '#1a1a1a'}
-                      strokeWidth={0.8}
-                    />
-                    {/* Left face */}
-                    <path
-                      d={`M${cx - w} ${y + 28} L${cx - w} ${y + 40} L${cx} ${y + 68} L${cx} ${y + 56} Z`}
-                      fill={layer.leftFace}
-                      stroke={dark ? '#444' : '#1a1a1a'}
-                      strokeWidth={0.8}
-                    />
-                    {/* Label */}
-                    <text
-                      x={cx}
-                      y={y + 33}
-                      fontFamily="'Courier New', monospace"
-                      fontSize={6.5}
-                      fill={layer.textColor}
-                      textAnchor="middle"
-                      style={{ pointerEvents: 'none' }}
-                    >
-                      {layer.label}
-                    </text>
-                    <text
-                      x={cx}
-                      y={y + 43}
-                      fontFamily="'Courier New', monospace"
-                      fontSize={5}
-                      fill={layer.textColor}
-                      opacity={0.7}
-                      textAnchor="middle"
-                      style={{ pointerEvents: 'none' }}
-                    >
-                      {layer.sublabel}
-                    </text>
-                    {/* Left callout */}
-                    <circle
-                      cx={cx - w + 2}
-                      cy={y + 28}
-                      r={2}
-                      fill={RED}
-                      style={{ opacity: isHovered ? 1 : 0, transition: 'opacity 0.3s ease' }}
-                    />
-                    <line
-                      x1={cx - w + 2}
-                      y1={y + 28}
-                      x2={38}
-                      y2={y + 42}
-                      stroke={RED}
-                      strokeWidth={0.4}
-                      style={{ opacity: isHovered ? 1 : 0, transition: 'opacity 0.3s ease' }}
-                    />
-                    <text
-                      x={2}
-                      y={y + 46}
-                      fontFamily="'Courier New', monospace"
-                      fontSize={6}
-                      fill={callCol}
-                      style={{ opacity: isHovered ? 1 : 0, transition: 'opacity 0.3s ease' }}
-                    >
-                      {String(idx + 1).padStart(2, '0')} · {layer.label}
-                    </text>
-                    <text
-                      x={2}
-                      y={y + 55}
-                      fontFamily="'Courier New', monospace"
-                      fontSize={5}
-                      fill={callSub}
-                      style={{ opacity: isHovered ? 1 : 0, transition: 'opacity 0.3s ease' }}
-                    >
-                      {layer.sublabel}
-                    </text>
-                  </g>
-                )
-              })}
-
-              {/* Width dimension */}
-              <line x1={96} y1={308} x2={208} y2={308} stroke={dimCol} strokeWidth={0.5} />
-              <line x1={96} y1={302} x2={96}  y2={314} stroke={dimCol} strokeWidth={0.5} />
-              <line x1={208} y1={302} x2={208} y2={314} stroke={dimCol} strokeWidth={0.5} />
-              <text
-                x={152} y={322}
-                fontFamily="'Courier New', monospace"
-                fontSize={6}
-                fill={dimCol}
-                textAnchor="middle"
-              >
-                W · 44mm
-              </text>
-            </svg>
-          </div>
-        )}
-
-        {/* Title block */}
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 46,
-            right: 14,
-            border: `0.5px solid ${tbBorder}`,
-            background: tbBg,
-            padding: '6px 10px',
-            minWidth: 138,
-            transition: 'background 0.35s, border-color 0.35s',
-          }}
-        >
-          {([
-            ['PROJECT',  productName],
-            ['CATEGORY', category],
-          ] as [string, string][]).map(([l, v]) => (
-            <div key={l} style={{ display: 'flex', justifyContent: 'space-between', gap: 14, marginBottom: 2 }}>
-              <span style={{ fontFamily: "'Courier New', monospace", fontSize: 6, letterSpacing: '0.08em', color: tbLbl }}>{l}</span>
-              <span style={{ fontFamily: "'Courier New', monospace", fontSize: 6, color: tbVal, textAlign: 'right' }}>{v}</span>
-            </div>
-          ))}
-          <hr style={{ border: 'none', borderTop: `0.5px solid ${tbBorder}`, margin: '3px 0' }} />
-          {([
-            ['COMPONENTS', hasSpec ? String(layers.length) : '—'],
-            ['EST. MASS', hasSpec ? '48g' : '—'],
-          ] as [string, string][]).map(([l, v]) => (
-            <div key={l} style={{ display: 'flex', justifyContent: 'space-between', gap: 14, marginBottom: 2 }}>
-              <span style={{ fontFamily: "'Courier New', monospace", fontSize: 6, letterSpacing: '0.08em', color: tbLbl }}>{l}</span>
-              <span style={{ fontFamily: "'Courier New', monospace", fontSize: 6, color: tbVal, textAlign: 'right' }}>{v}</span>
-            </div>
-          ))}
-          <hr style={{ border: 'none', borderTop: `0.5px solid ${tbBorder}`, margin: '3px 0' }} />
-          {([
-            ['SCALE',   'NTS · EXPLODED'],
-            ['EDITION', 'HARDWARE ATELIER'],
-            ['FILED',   hasSpec ? today : '—'],
-          ] as [string, string][]).map(([l, v]) => (
-            <div key={l} style={{ display: 'flex', justifyContent: 'space-between', gap: 14, marginBottom: 2 }}>
-              <span style={{ fontFamily: "'Courier New', monospace", fontSize: 6, letterSpacing: '0.08em', color: tbLbl }}>{l}</span>
-              <span style={{ fontFamily: "'Courier New', monospace", fontSize: 6, color: tbVal, textAlign: 'right' }}>{v}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: 52,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 24px',
-        background: 'transparent',
-      }}>
-        {/* LEFT — Back to dossier */}
-        <button onClick={onBack} style={{
-          background: 'transparent',
-          border: '0.5px solid #c8c3b8',
-          padding: '8px 16px',
-          fontFamily: "'Courier New', monospace",
-          fontSize: 10,
-          letterSpacing: '0.12em',
-          color: '#1a1a1a',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-        }}>
-          ← BACK TO DOSSIER
-        </button>
-
-        {/* CENTER — view toggle */}
-        <div style={{
-          display: 'flex',
-          border: '0.5px solid #c8c3b8',
-        }}>
-          <button style={{
-            background: '#1a1a1a',
-            color: '#f5f0e8',
-            padding: '8px 18px',
-            border: 'none',
-            fontFamily: "'Courier New', monospace",
-            fontSize: 10,
-            letterSpacing: '0.14em',
+            top: 18,
+            right: 22,
+            background: dark ? '#1a1a1a' : 'transparent',
+            border: `0.5px solid ${dark ? '#444' : '#1a1a1a'}`,
+            padding: '8px 14px',
             cursor: 'pointer',
-          }}>
-            ⊞ BLUEPRINT
-          </button>
-          <button style={{
-            background: 'transparent',
-            color: '#1a1a1a',
-            padding: '8px 18px',
-            border: 'none',
-            borderLeft: '0.5px solid #c8c3b8',
             fontFamily: "'Courier New', monospace",
-            fontSize: 10,
-            letterSpacing: '0.14em',
-            cursor: 'pointer',
-          }}>
-            ◇ DIAGRAM
-          </button>
-        </div>
-
-        {/* RIGHT — primary action */}
-        <button 
-          onClick={onRunPhysics}
-          disabled={!hasSpec}
-          style={{
-            background: hasSpec ? '#1a1a1a' : '#888',
-            color: '#f5f0e8',
-            border: 'none',
-            padding: '10px 20px',
-            fontFamily: "'Courier New', monospace",
-            fontSize: 10,
-            letterSpacing: '0.14em',
-            cursor: hasSpec ? 'pointer' : 'not-allowed',
+            fontSize: 9,
+            letterSpacing: '0.18em',
+            color: dark ? '#e8e4dc' : '#1a1a1a',
             display: 'flex',
             alignItems: 'center',
             gap: 8,
-          }}>
-          RUN PHYSICS →
+            transition: 'all 0.25s ease',
+            zIndex: 20,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = dark ? '#222' : '#1a1a1a';
+            e.currentTarget.style.color = dark ? '#fff' : '#f5f0e8';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = dark ? '#1a1a1a' : 'transparent';
+            e.currentTarget.style.color = dark ? '#e8e4dc' : '#1a1a1a';
+          }}
+        >
+          <span style={{
+            display: 'inline-block',
+            width: 8, height: 8,
+            borderRadius: '50%',
+            background: dark ? '#f5f0e8' : '#1a1a1a',
+            transition: 'background 0.3s ease',
+          }} />
+          {dark ? 'DAYLIGHT' : 'PRESSROOM'}
         </button>
+
+        {/* MAIN STAGE */}
+        {!hasSpec ? (
+          <EmptyHologram dark={dark} rotation={rotation} subtleText={subtleText} valCol={valCol} />
+        ) : (
+          <SpecDiagram
+            layers={layers}
+            revealedCount={revealedCount}
+            hoveredLayer={hoveredLayer}
+            setHoveredLayer={setHoveredLayer}
+            dark={dark}
+            dimCol={dimCol}
+          />
+        )}
+
+        {/* TITLE BLOCK — BOTTOM RIGHT */}
+        <div style={{
+          position: 'absolute',
+          bottom: 28,
+          right: 28,
+          minWidth: 280,
+          background: dark ? 'rgba(15,15,15,0.92)' : 'rgba(245,240,232,0.94)',
+          border: `0.5px solid ${dark ? '#333' : '#1a1a1a'}`,
+          padding: '14px 18px',
+          backdropFilter: 'blur(2px)',
+          transition: 'all 0.5s ease',
+        }}>
+          <div style={{
+            fontFamily: "'Courier New', monospace",
+            fontSize: 9,
+            letterSpacing: '0.22em',
+            color: RED,
+            paddingBottom: 8,
+            marginBottom: 10,
+            borderBottom: `0.5px solid ${dark ? '#2a2a2a' : '#c4bfb4'}`,
+          }}>
+            ENGINEERING TITLE BLOCK
+          </div>
+          {[
+            ['PROJECT',  productName],
+            ['CATEGORY', category],
+          ].map(([l, v]) => (
+            <TitleRow key={l} label={l} value={v} dark={dark} lblCol={lblCol} valCol={valCol} />
+          ))}
+          <Divider dark={dark} />
+          {[
+            ['COMPONENTS', hasSpec ? String(layers.length)         : '—'],
+            ['EST. MASS',  hasSpec ? '48g'                          : '—'],
+            ['SCALE',      hasSpec ? 'NTS · EXPLODED'               : '—'],
+          ].map(([l, v]) => (
+            <TitleRow key={l} label={l} value={v} dark={dark} lblCol={lblCol} valCol={valCol} />
+          ))}
+          <Divider dark={dark} />
+          {[
+            ['EDITION', 'HARDWARE ATELIER'],
+            ['FILED',   hasSpec ? today : 'PENDING PRESS'],
+          ].map(([l, v]) => (
+            <TitleRow key={l} label={l} value={v} dark={dark} lblCol={lblCol} valCol={valCol} />
+          ))}
+        </div>
+      </div>
+
+      {/* ACTION BAR — BOTTOM */}
+      <div style={{
+        position: 'absolute',
+        bottom: 24,
+        left: 32,
+        right: 32,
+        height: 56,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 16,
+        zIndex: 5,
+      }}>
+        <ActionButton onClick={onBack} dark={dark}>
+          ← BACK TO DOSSIER
+        </ActionButton>
+
+        <div style={{
+          display: 'flex',
+          border: `0.5px solid ${dark ? '#333' : '#1a1a1a'}`,
+          background: dark ? '#0f0f0f' : '#f5f0e8',
+          transition: 'all 0.5s ease',
+        }}>
+          <ToggleSeg active={true}  dark={dark}>BLUEPRINT</ToggleSeg>
+          <ToggleSeg active={false} dark={dark}>DIAGRAM</ToggleSeg>
+        </div>
+
+        <PrimaryButton
+          onClick={onRunPhysics}
+          disabled={!hasSpec}
+          dark={dark}
+        >
+          RUN PHYSICS →
+        </PrimaryButton>
       </div>
     </div>
-  )
+  );
+}
+
+// ────────── EMPTY HOLOGRAM ──────────
+
+function EmptyHologram({
+  dark, rotation, subtleText, valCol,
+}: {
+  dark: boolean;
+  rotation: number;
+  subtleText: string;
+  valCol: string;
+}) {
+  const stroke = dark ? '#c0392b' : '#1a1a1a';
+  const accent = '#c0392b';
+  const fill   = dark ? 'rgba(192,57,43,0.04)' : 'rgba(192,57,43,0.02)';
+  const glow   = dark
+    ? 'drop-shadow(0 0 24px rgba(192,57,43,0.35))'
+    : 'drop-shadow(0 4px 12px rgba(0,0,0,0.08))';
+
+  return (
+    <div style={{
+      position: 'absolute',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -54%)',
+      textAlign: 'center',
+      pointerEvents: 'none',
+    }}>
+      <div style={{
+        position: 'relative',
+        width: 380,
+        height: 380,
+        margin: '0 auto',
+        filter: glow,
+      }}>
+        {/* OUTER RING — STATIC */}
+        <svg width={380} height={380} viewBox="0 0 380 380"
+             style={{ position: 'absolute', inset: 0 }}>
+          <circle cx={190} cy={190} r={184}
+            fill="none" stroke={stroke}
+            strokeWidth={0.5} strokeDasharray="2 6"
+            opacity={dark ? 0.4 : 0.25} />
+          <circle cx={190} cy={190} r={150}
+            fill="none" stroke={stroke}
+            strokeWidth={0.5}
+            opacity={dark ? 0.3 : 0.18} />
+          {[0, 90, 180, 270].map(a => (
+            <line key={a}
+              x1={190 + 184 * Math.cos((a - 90) * Math.PI / 180)}
+              y1={190 + 184 * Math.sin((a - 90) * Math.PI / 180)}
+              x2={190 + 196 * Math.cos((a - 90) * Math.PI / 180)}
+              y2={190 + 196 * Math.sin((a - 90) * Math.PI / 180)}
+              stroke={accent} strokeWidth={1} />
+          ))}
+          {[0, 30, 60, 120, 150, 210, 240, 300, 330].map(a => (
+            <line key={a}
+              x1={190 + 184 * Math.cos((a - 90) * Math.PI / 180)}
+              y1={190 + 184 * Math.sin((a - 90) * Math.PI / 180)}
+              x2={190 + 190 * Math.cos((a - 90) * Math.PI / 180)}
+              y2={190 + 190 * Math.sin((a - 90) * Math.PI / 180)}
+              stroke={stroke} strokeWidth={0.5}
+              opacity={dark ? 0.4 : 0.3} />
+          ))}
+        </svg>
+
+        {/* ROTATING WIREFRAME ICOSAHEDRON */}
+        <svg
+          width={380} height={380} viewBox="0 0 380 380"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            transform: `rotate(${rotation}deg)`,
+          }}
+        >
+          <g transform="translate(190 190)">
+            <Icosahedron stroke={stroke} accent={accent} fill={fill} />
+          </g>
+        </svg>
+
+        {/* CROSSHAIR */}
+        <svg width={380} height={380} viewBox="0 0 380 380"
+             style={{ position: 'absolute', inset: 0 }}>
+          <line x1={190} y1={60}  x2={190} y2={100} stroke={accent} strokeWidth={0.8} />
+          <line x1={190} y1={280} x2={190} y2={320} stroke={accent} strokeWidth={0.8} />
+          <line x1={60}  y1={190} x2={100} y2={190} stroke={accent} strokeWidth={0.8} />
+          <line x1={280} y1={190} x2={320} y2={190} stroke={accent} strokeWidth={0.8} />
+          <circle cx={190} cy={190} r={3} fill={accent} />
+        </svg>
+      </div>
+
+      {/* CALL TO ACTION */}
+      <div style={{ marginTop: 32 }}>
+        <div style={{
+          fontFamily: "'Courier New', monospace",
+          fontSize: 11,
+          letterSpacing: '0.32em',
+          color: accent,
+          marginBottom: 14,
+          fontWeight: 500,
+        }}>
+          AWAITING SPECIFICATION
+        </div>
+        <div style={{
+          fontFamily: 'Georgia, serif',
+          fontStyle: 'italic',
+          fontSize: 22,
+          color: valCol,
+          letterSpacing: '-0.01em',
+          maxWidth: 480,
+          margin: '0 auto',
+          lineHeight: 1.35,
+          transition: 'color 0.5s ease',
+        }}>
+          File the build sheet on the left. The bench will press a solid you can rotate, measure, and interrogate.
+        </div>
+        <div style={{
+          fontFamily: "'Courier New', monospace",
+          fontSize: 9,
+          letterSpacing: '0.18em',
+          color: subtleText,
+          marginTop: 18,
+          transition: 'color 0.5s ease',
+        }}>
+          NO PLATE FILED · STANDING BY
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Icosahedron({ stroke, accent, fill }: {
+  stroke: string; accent: string; fill: string;
+}) {
+  const t = (1 + Math.sqrt(5)) / 2;
+  const r = 90;
+  const verts3d: [number, number, number][] = [
+    [-1,  t,  0], [ 1,  t,  0], [-1, -t,  0], [ 1, -t,  0],
+    [ 0, -1,  t], [ 0,  1,  t], [ 0, -1, -t], [ 0,  1, -t],
+    [ t,  0, -1], [ t,  0,  1], [-t,  0, -1], [-t,  0,  1],
+  ];
+  const project = ([x, y, z]: [number, number, number]) => {
+    const f = 1 / (3 - z * 0.18);
+    return [x * r * f, y * r * f] as [number, number];
+  };
+  const v = verts3d.map(project);
+  const edges: [number, number][] = [
+    [0,1],[0,5],[0,7],[0,10],[0,11],[1,5],[1,7],[1,8],[1,9],
+    [2,3],[2,4],[2,6],[2,10],[2,11],[3,4],[3,6],[3,8],[3,9],
+    [4,5],[4,9],[4,11],[5,9],[5,11],[6,7],[6,8],[6,10],
+    [7,8],[7,10],[8,9],[10,11],
+  ];
+  return (
+    <g>
+      {edges.map(([a, b], i) => (
+        <line key={i}
+          x1={v[a][0]} y1={v[a][1]}
+          x2={v[b][0]} y2={v[b][1]}
+          stroke={stroke}
+          strokeWidth={0.8}
+          opacity={0.55}
+        />
+      ))}
+      {v.map(([x, y], i) => (
+        <circle key={i} cx={x} cy={y} r={2}
+          fill={accent} />
+      ))}
+    </g>
+  );
+}
+
+// ────────── SPEC DIAGRAM ──────────
+
+function SpecDiagram({
+  layers, revealedCount, hoveredLayer, setHoveredLayer, dark, dimCol,
+}: {
+  layers: Layer[];
+  revealedCount: number;
+  hoveredLayer: number | null;
+  setHoveredLayer: (n: number | null) => void;
+  dark: boolean;
+  dimCol: string;
+}) {
+  const stroke = dark ? '#888' : '#1a1a1a';
+  const callCol = dark ? '#c8c4bc' : '#3a3a3a';
+  const callSub = dark ? '#666' : '#999';
+
+  return (
+    <div style={{
+      position: 'absolute',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -52%)',
+      pointerEvents: 'none',
+    }}>
+      <svg width={520} height={520} viewBox="0 0 520 520"
+           style={{ filter: dark ? 'drop-shadow(0 0 30px rgba(192,57,43,0.15))' : 'drop-shadow(0 12px 32px rgba(0,0,0,0.10))' }}>
+        {layers.map((layer, idx) => {
+          const visible = idx < revealedCount;
+          const hovered = hoveredLayer === idx;
+          const y = 30 + layer.yOffset;
+          const cx = 260;
+          const w = 84;
+          return (
+            <g key={layer.id}
+               opacity={visible ? 1 : 0}
+               style={{
+                 transition: 'opacity 0.5s ease, transform 0.5s ease',
+                 transform: visible ? 'translateY(0)' : 'translateY(-12px)',
+                 cursor: 'pointer',
+                 pointerEvents: visible ? 'auto' : 'none',
+               }}
+               onMouseEnter={() => setHoveredLayer(idx)}
+               onMouseLeave={() => setHoveredLayer(null)}
+            >
+              <path
+                d={`M${cx - w} ${y + 42} L${cx} ${y} L${cx + w} ${y + 42} L${cx} ${y + 84} Z`}
+                fill={layer.fill}
+                stroke={stroke}
+                strokeWidth={hovered ? 1.4 : 1}
+                style={{ transition: 'stroke-width 0.2s' }}
+              />
+              <path
+                d={`M${cx + w} ${y + 42} L${cx + w} ${y + 60} L${cx} ${y + 102} L${cx} ${y + 84} Z`}
+                fill={layer.rightFace}
+                stroke={stroke}
+                strokeWidth={hovered ? 1.4 : 1}
+              />
+              <path
+                d={`M${cx - w} ${y + 42} L${cx - w} ${y + 60} L${cx} ${y + 102} L${cx} ${y + 84} Z`}
+                fill={layer.leftFace}
+                stroke={stroke}
+                strokeWidth={hovered ? 1.4 : 1}
+              />
+              <text x={cx} y={y + 50}
+                fontFamily="'Courier New', monospace"
+                fontSize={9} fill={layer.textColor}
+                textAnchor="middle">
+                {layer.label}
+              </text>
+              <text x={cx} y={y + 64}
+                fontFamily="'Courier New', monospace"
+                fontSize={7} fill={layer.textColor}
+                opacity={0.7} textAnchor="middle">
+                {layer.sublabel}
+              </text>
+
+              {/* CALLOUT (hover) */}
+              <g style={{
+                opacity: hovered ? 1 : 0,
+                transition: 'opacity 0.3s ease',
+                pointerEvents: 'none',
+              }}>
+                <line
+                  x1={cx - w} y1={y + 42}
+                  x2={70} y2={y + 60}
+                  stroke="#c0392b" strokeWidth={0.6} />
+                <circle cx={cx - w} cy={y + 42} r={3}
+                  fill="#c0392b" />
+                <text x={28} y={y + 56}
+                  fontFamily="'Courier New', monospace"
+                  fontSize={9} fill={callCol}
+                  fontWeight={500}>
+                  {String(idx + 1).padStart(2, '0')} · {layer.label}
+                </text>
+                <text x={28} y={y + 70}
+                  fontFamily="'Courier New', monospace"
+                  fontSize={8} fill={callSub}>
+                  {layer.sublabel}
+                </text>
+              </g>
+            </g>
+          );
+        })}
+
+        {/* WIDTH DIMENSION */}
+        <line x1={150} y1={460} x2={370} y2={460}
+              stroke={dimCol} strokeWidth={0.5}
+              opacity={revealedCount >= layers.length ? 1 : 0}
+              style={{ transition: 'opacity 0.6s 0.2s' }} />
+        <line x1={150} y1={454} x2={150} y2={466}
+              stroke={dimCol} strokeWidth={0.5}
+              opacity={revealedCount >= layers.length ? 1 : 0}
+              style={{ transition: 'opacity 0.6s 0.2s' }} />
+        <line x1={370} y1={454} x2={370} y2={466}
+              stroke={dimCol} strokeWidth={0.5}
+              opacity={revealedCount >= layers.length ? 1 : 0}
+              style={{ transition: 'opacity 0.6s 0.2s' }} />
+        <text x={260} y={478}
+          fontFamily="'Courier New', monospace"
+          fontSize={9} fill={dimCol} textAnchor="middle"
+          opacity={revealedCount >= layers.length ? 1 : 0}
+          style={{ transition: 'opacity 0.6s 0.2s' }}>
+          W · 44mm
+        </text>
+      </svg>
+    </div>
+  );
+}
+
+// ────────── SHARED SUB-COMPONENTS ──────────
+
+function TitleRow({
+  label, value, dark, lblCol, valCol,
+}: {
+  label: string; value: string; dark: boolean;
+  lblCol: string; valCol: string;
+}) {
+  return (
+    <div style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      gap: 24,
+      marginBottom: 4,
+    }}>
+      <span style={{
+        fontFamily: "'Courier New', monospace",
+        fontSize: 9, letterSpacing: '0.14em',
+        color: lblCol,
+        transition: 'color 0.5s ease',
+      }}>{label}</span>
+      <span style={{
+        fontFamily: "'Courier New', monospace",
+        fontSize: 9, color: valCol, textAlign: 'right',
+        transition: 'color 0.5s ease',
+      }}>{value}</span>
+    </div>
+  );
+}
+
+function Divider({ dark }: { dark: boolean }) {
+  return (
+    <hr style={{
+      border: 'none',
+      borderTop: `0.5px solid ${dark ? '#2a2a2a' : '#c4bfb4'}`,
+      margin: '8px 0',
+      transition: 'border-color 0.5s ease',
+    }} />
+  );
+}
+
+function ActionButton({
+  onClick, dark, children,
+}: {
+  onClick?: () => void; dark: boolean; children: React.ReactNode;
+}) {
+  return (
+    <button onClick={onClick} style={{
+      background: 'transparent',
+      border: `0.5px solid ${dark ? '#444' : '#1a1a1a'}`,
+      padding: '12px 20px',
+      fontFamily: "'Courier New', monospace",
+      fontSize: 11,
+      letterSpacing: '0.18em',
+      color: dark ? '#e8e4dc' : '#1a1a1a',
+      cursor: 'pointer',
+      transition: 'all 0.2s ease',
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.background = dark ? '#1a1a1a' : '#1a1a1a';
+      e.currentTarget.style.color = '#f5f0e8';
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.background = 'transparent';
+      e.currentTarget.style.color = dark ? '#e8e4dc' : '#1a1a1a';
+    }}>
+      {children}
+    </button>
+  );
+}
+
+function ToggleSeg({
+  active, dark, children,
+}: {
+  active: boolean; dark: boolean; children: React.ReactNode;
+}) {
+  return (
+    <button style={{
+      background: active ? '#1a1a1a' : 'transparent',
+      color: active ? '#f5f0e8' : (dark ? '#888' : '#1a1a1a'),
+      padding: '12px 22px',
+      border: 'none',
+      borderLeft: active ? 'none' : `0.5px solid ${dark ? '#333' : '#1a1a1a'}`,
+      fontFamily: "'Courier New', monospace",
+      fontSize: 11,
+      letterSpacing: '0.18em',
+      cursor: 'pointer',
+      transition: 'all 0.2s ease',
+    }}>
+      {children}
+    </button>
+  );
+}
+
+function PrimaryButton({
+  onClick, disabled, dark, children,
+}: {
+  onClick?: () => void; disabled: boolean; dark: boolean; children: React.ReactNode;
+}) {
+  const enabled = !disabled;
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        background: enabled ? '#c0392b' : (dark ? '#1a1a1a' : '#bbb'),
+        color: '#f5f0e8',
+        border: enabled ? '0.5px solid #c0392b' : `0.5px solid ${dark ? '#333' : '#999'}`,
+        padding: '14px 26px',
+        fontFamily: "'Courier New', monospace",
+        fontSize: 11,
+        letterSpacing: '0.2em',
+        cursor: enabled ? 'pointer' : 'not-allowed',
+        transition: 'all 0.2s ease',
+        opacity: enabled ? 1 : 0.7,
+        fontWeight: 500,
+      }}
+      onMouseEnter={(e) => {
+        if (enabled) e.currentTarget.style.background = '#a82c1f';
+      }}
+      onMouseLeave={(e) => {
+        if (enabled) e.currentTarget.style.background = '#c0392b';
+      }}
+    >
+      {children}
+    </button>
+  );
 }
