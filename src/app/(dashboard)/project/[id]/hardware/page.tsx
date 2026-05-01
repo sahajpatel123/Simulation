@@ -185,7 +185,13 @@ export default function HardwareBuilderPage() {
         />
       </div>
 
-      <TechnicalPlate productName={productNameForPlate} category={categoryForPlate} />
+      <TechnicalPlate
+        productName={productNameForPlate}
+        category={categoryForPlate}
+        hasSpec={!!specData}
+        onBack={() => router.push(`/project/${projectId}`)}
+        onRunPhysics={() => {}}
+      />
     </div>
   )
 }
