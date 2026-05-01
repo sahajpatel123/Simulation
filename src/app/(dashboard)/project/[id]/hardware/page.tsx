@@ -1,10 +1,9 @@
 'use client'
 
-import type { Dispatch, ReactNode, SetStateAction } from 'react'
+import type { CSSProperties, Dispatch, FocusEvent, ReactNode, SetStateAction } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, Loader2, Sparkles } from 'lucide-react'
 
 import { TechnicalPlate } from '@/components/hardware/TechnicalPlate'
 import { getApiV1Base } from '@/lib/api-v1-base'
@@ -52,6 +51,32 @@ const CATEGORIES = [
   { value: 'iot_hardware', label: 'IoT hardware' },
   { value: 'b2b_hardware', label: 'B2B hardware' },
 ] as const
+
+const inputStyle: CSSProperties = {
+  width: '100%',
+  background: '#fffbf3',
+  border: 'none',
+  borderBottom: '1px solid #1a1a1a',
+  fontFamily: 'Georgia, serif',
+  fontStyle: 'italic',
+  fontSize: 18,
+  color: '#1a1a1a',
+  padding: '12px 4px',
+  outline: 'none',
+  borderRadius: 0,
+  transition: 'border-color 0.2s ease, background 0.2s ease',
+}
+
+const inputFocusHandlers = {
+  onFocus: (e: FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    e.currentTarget.style.borderBottomColor = '#c0392b'
+    e.currentTarget.style.background = '#fff'
+  },
+  onBlur: (e: FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    e.currentTarget.style.borderBottomColor = '#1a1a1a'
+    e.currentTarget.style.background = '#fffbf3'
+  },
+}
 
 export default function HardwareBuilderPage() {
   const params = useParams()
@@ -300,6 +325,7 @@ function PressDispatchForm({
           type="text"
           placeholder="e.g. Daybreak SmartWatch"
           style={inputStyle}
+          {...inputFocusHandlers}
           value={form.name}
           onChange={(e) => onChange((f) => ({ ...f, name: e.target.value }))}
         />
@@ -314,6 +340,7 @@ function PressDispatchForm({
         <FormField label="II. CATEGORY">
           <select
             style={{ ...inputStyle, cursor: 'pointer' }}
+            {...inputFocusHandlers}
             value={form.category}
             onChange={(e) => onChange((f) => ({ ...f, category: e.target.value, product_type: e.target.value }))}
           >
@@ -328,8 +355,8 @@ function PressDispatchForm({
         <FormField label="III. TARGET PRICE (₹)">
           <input
             type="number"
-            defaultValue={4999}
             style={inputStyle}
+            {...inputFocusHandlers}
             value={form.target_price_inr}
             onChange={(e) => onChange((f) => ({ ...f, target_price_inr: Number(e.target.value) || 0 }))}
           />
@@ -340,13 +367,26 @@ function PressDispatchForm({
       <FormField label="IV. ENGINEERING NOTE">
         <textarea
           placeholder="Materials, stack-up, ingress rating, radios — what a CM would need in the first call."
-          rows={5}
+          rows={4}
           style={{
             ...inputStyle,
-            resize: 'vertical',
-            minHeight: 120,
-            fontStyle: 'italic',
+            border: '0.5px solid #1a1a1a',
+            borderBottom: '0.5px solid #1a1a1a',
+            padding: '14px 16px',
+            resize: 'none',
+            minHeight: 110,
+            fontSize: 15,
             lineHeight: 1.6,
+            fontStyle: 'italic',
+            background: '#fffbf3',
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.borderColor = '#c0392b'
+            e.currentTarget.style.background = '#fff'
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = '#1a1a1a'
+            e.currentTarget.style.background = '#fffbf3'
           }}
           value={form.description}
           onChange={(e) => onChange((f) => ({ ...f, description: e.target.value }))}
@@ -369,64 +409,61 @@ function PressDispatchForm({
       </div>
 
       {/* GENERATE BUTTON */}
-      <button style={{
-        background: '#1a1a1a',
-        color: '#f5f0e8',
-        border: 'none',
-        padding: '18px 24px',
-        fontFamily: "'Courier New', monospace",
-        fontSize: 12,
-        letterSpacing: '0.22em',
-        fontWeight: 500,
-        cursor: canSubmit ? 'pointer' : 'not-allowed',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
-        width: '100%',
-        transition: 'all 0.2s ease',
-        marginTop: 8,
-        opacity: canSubmit ? 1 : 0.4,
-      }}
-      disabled={!canSubmit}
-      onClick={onSubmit}
-      onMouseEnter={(e) => {
-        if (canSubmit && !generating) e.currentTarget.style.background = '#c0392b';
-      }}
-      onMouseLeave={(e) => {
-        if (canSubmit && !generating) e.currentTarget.style.background = '#1a1a1a';
-      }}
+      <button
+        type="button"
+        disabled={!canSubmit || generating}
+        onClick={onSubmit}
+        style={{
+          background: '#c0392b',
+          color: '#f5f0e8',
+          border: '0.5px solid #c0392b',
+          padding: '20px 28px',
+          fontFamily: "'Courier New', monospace",
+          fontSize: 12,
+          letterSpacing: '0.24em',
+          fontWeight: 600,
+          cursor: !canSubmit || generating ? 'not-allowed' : 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          width: '100%',
+          transition: 'all 0.2s ease',
+          marginTop: 12,
+          boxShadow: '0 1px 0 rgba(0,0,0,0.04), 0 8px 20px rgba(192,57,43,0.18)',
+          opacity: !canSubmit || generating ? 0.45 : 1,
+        }}
+        onMouseEnter={(e) => {
+          if (!canSubmit || generating) return
+          e.currentTarget.style.background = '#1a1a1a'
+          e.currentTarget.style.borderColor = '#1a1a1a'
+          e.currentTarget.style.boxShadow = '0 1px 0 rgba(0,0,0,0.04), 0 8px 20px rgba(0,0,0,0.20)'
+        }}
+        onMouseLeave={(e) => {
+          if (!canSubmit || generating) return
+          e.currentTarget.style.background = '#c0392b'
+          e.currentTarget.style.borderColor = '#c0392b'
+          e.currentTarget.style.boxShadow = '0 1px 0 rgba(0,0,0,0.04), 0 8px 20px rgba(192,57,43,0.18)'
+        }}
       >
-        <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{
-            display: 'inline-block',
-            width: 6, height: 6,
-            borderRadius: '50%',
-            background: '#c0392b',
-          }} />
+        <span style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <span
+            style={{
+              display: 'inline-block',
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: '#f5f0e8',
+            }}
+          />
           {generating ? 'GENERATING SOLID…' : 'GENERATE BUILD SHEET'}
         </span>
-        <span>→</span>
+        <span style={{ fontSize: 16 }}>→</span>
       </button>
 
     </div>
   )
 }
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  background: 'transparent',
-  border: 'none',
-  borderBottom: '0.5px solid #1a1a1a',
-  fontFamily: 'Georgia, serif',
-  fontStyle: 'italic',
-  fontSize: 18,
-  color: '#1a1a1a',
-  padding: '8px 0',
-  outline: 'none',
-  borderRadius: 0,
-  transition: 'border-color 0.2s ease',
-};
 
 function FormField({
   label,

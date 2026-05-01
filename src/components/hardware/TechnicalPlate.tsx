@@ -384,12 +384,12 @@ function EmptyHologram({
         <div style={{
           fontFamily: 'Georgia, serif',
           fontStyle: 'italic',
-          fontSize: 22,
+          fontSize: 18,
           color: valCol,
           letterSpacing: '-0.01em',
-          maxWidth: 480,
+          maxWidth: 360,
           margin: '0 auto',
-          lineHeight: 1.35,
+          lineHeight: 1.4,
           transition: 'color 0.5s ease',
         }}>
           File the build sheet on the left. The bench will press a solid you can rotate, measure, and interrogate.
