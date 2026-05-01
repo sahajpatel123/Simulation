@@ -161,30 +161,18 @@ export default function HardwareBuilderPage() {
       style={{
         display: 'flex',
         height: 'calc(100vh - 120px)',
+        background: '#f5f0e8',
         overflow: 'hidden',
-        /* No local fill — matches projects index: var(--paper) + .paper-grain from #app-shell */
-        background: 'transparent',
       }}
     >
-      <div
-        style={{
-          flex: '0 0 35%',
-          minWidth: 280,
-          maxWidth: '40%',
-          overflowY: 'auto',
-          borderRight: '1px solid rgba(45, 69, 86, 0.12)',
-          borderLeft: 'none',
-        }}
-      >
-        <PressDispatchForm
-          form={genForm}
-          onChange={setGenForm}
-          onSubmit={() => void handleGenerate()}
-          generating={generating}
-          canCancel={false}
-          onCancel={() => {}}
-        />
-      </div>
+      <PressDispatchForm
+        form={genForm}
+        onChange={setGenForm}
+        onSubmit={() => void handleGenerate()}
+        generating={generating}
+        canCancel={false}
+        onCancel={() => {}}
+      />
 
       <TechnicalPlate
         productName={productNameForPlate}
@@ -267,115 +255,198 @@ function PressDispatchForm({
 }) {
   const canSubmit = form.name.trim() && form.description.trim() && !generating
   return (
-    <div className="relative">
-      <PaperField />
-      <div className="relative z-10 mx-auto max-w-3xl px-0 py-12">
-        <h2
-          className="mt-3 font-serif italic text-[var(--ink)]"
-          style={{ fontSize: 34, fontWeight: 900, letterSpacing: '-0.028em', lineHeight: 1.05 }}
-        >
-          Name the <span style={{ color: 'var(--red)' }}>solid</span> you want to prove.
-        </h2>
-        <BuildSheetDatumLine />
+    <div style={{
+      width: '38%',
+      minWidth: 460,
+      padding: '56px 48px 96px 56px',
+      background: '#f5f0e8',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 32,
+      overflowY: 'auto',
+    }}>
 
-        <div className="mt-10 grid grid-cols-1 gap-8 sm:grid-cols-[2fr_1fr_1fr] sm:gap-6">
-          <FormField label="i. Product name">
-            <input
-              type="text"
-              placeholder="e.g. Daybreak SmartWatch"
-              value={form.name}
-              onChange={(e) => onChange((f) => ({ ...f, name: e.target.value }))}
-              className="w-full border-0 border-b border-[var(--ink)]/35 bg-transparent px-0 py-2 font-serif text-[18px] italic text-[var(--ink)] placeholder-[var(--ink-tertiary)] focus:border-[var(--red)] focus:outline-none"
-            />
-          </FormField>
-          <FormField label="ii. Category">
-            <select
-              value={form.category}
-              onChange={(e) =>
-                onChange((f) => ({ ...f, category: e.target.value, product_type: e.target.value }))
-              }
-              className="w-full border-0 border-b border-[var(--ink)]/35 bg-transparent px-0 py-2 font-serif text-[16px] italic text-[var(--ink)] focus:border-[var(--red)] focus:outline-none"
-            >
-              {CATEGORIES.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </FormField>
-          <FormField label="iii. Target price (₹)">
-            <input
-              type="number"
-              placeholder="4999"
-              value={form.target_price_inr}
-              onChange={(e) =>
-                onChange((f) => ({ ...f, target_price_inr: Number(e.target.value) || 0 }))
-              }
-              className="w-full border-0 border-b border-[var(--ink)]/35 bg-transparent px-0 py-2 font-mono text-[18px] text-[var(--ink)] placeholder-[var(--ink-tertiary)] focus:border-[var(--red)] focus:outline-none"
-            />
-          </FormField>
+      {/* HEADING */}
+      <div>
+        <div style={{
+          fontFamily: "'Courier New', monospace",
+          fontSize: 10,
+          letterSpacing: '0.22em',
+          color: '#c0392b',
+          marginBottom: 16,
+        }}>
+          BUILD SPECIFICATION · INTAKE
         </div>
-
-        <div className="mt-8">
-          <FormField label="iv. Engineering note">
-            <textarea
-              rows={4}
-              placeholder="Materials, stack-up, ingress rating, radios — what a CM would need in the first call."
-              value={form.description}
-              onChange={(e) => onChange((f) => ({ ...f, description: e.target.value }))}
-              className="w-full resize-none border-0 border-b border-[var(--ink)]/35 bg-transparent px-0 py-2 font-serif text-[16px] leading-relaxed italic text-[var(--ink)] placeholder-[var(--ink-tertiary)] focus:border-[var(--red)] focus:outline-none"
-            />
-          </FormField>
-        </div>
-
-        <div className="mt-10 flex flex-col gap-4 border-t border-[var(--ink)]/10 pt-8 sm:flex-row sm:items-end sm:justify-between">
-          <p className="max-w-[40ch] text-[12px] font-light leading-relaxed text-[var(--ink-tertiary)]">
-            Spec generation runs on the server; keep this tab open. You can iterate the note and
-            re-issue without leaving the bench.
-          </p>
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-3">
-            {canCancel ? (
-              <button
-                type="button"
-                onClick={onCancel}
-                className="border border-[var(--ink)]/25 bg-transparent px-4 py-2.5 text-[10px] uppercase tracking-[0.2em] text-[var(--ink-secondary)] transition-colors hover:border-[var(--ink)] hover:text-[var(--ink)]"
-              >
-                Cancel
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={onSubmit}
-              disabled={!canSubmit}
-              className="group inline-flex items-center gap-2.5 border border-[var(--ink)] bg-[var(--ink)] px-6 py-2.5 text-[10px] font-medium uppercase tracking-[0.22em] text-[var(--paper)] transition-all hover:border-[var(--red)] hover:bg-[var(--red)] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {generating ? (
-                <>
-                  <Loader2 size={13} className="animate-spin" />
-                  Generating solid…
-                </>
-              ) : (
-                <>
-                  <Sparkles size={13} />
-                  Generate build sheet
-                  <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
-                </>
-              )}
-            </button>
-          </div>
-        </div>
+        <h1 style={{
+          fontFamily: 'Georgia, serif',
+          fontWeight: 700,
+          fontSize: 42,
+          lineHeight: 1.08,
+          letterSpacing: '-0.02em',
+          color: '#1a1a1a',
+          margin: 0,
+        }}>
+          Name the{' '}
+          <em style={{ color: '#c0392b', fontStyle: 'italic' }}>
+            solid
+          </em>{' '}
+          you want to prove.
+        </h1>
       </div>
+
+      {/* FIELD: PRODUCT NAME */}
+      <FormField label="I. PRODUCT NAME">
+        <input
+          type="text"
+          placeholder="e.g. Daybreak SmartWatch"
+          style={inputStyle}
+          value={form.name}
+          onChange={(e) => onChange((f) => ({ ...f, name: e.target.value }))}
+        />
+      </FormField>
+
+      {/* TWO-COLUMN ROW: CATEGORY + PRICE */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: 20,
+      }}>
+        <FormField label="II. CATEGORY">
+          <select
+            style={{ ...inputStyle, cursor: 'pointer' }}
+            value={form.category}
+            onChange={(e) => onChange((f) => ({ ...f, category: e.target.value, product_type: e.target.value }))}
+          >
+            {CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </FormField>
+
+        <FormField label="III. TARGET PRICE (₹)">
+          <input
+            type="number"
+            defaultValue={4999}
+            style={inputStyle}
+            value={form.target_price_inr}
+            onChange={(e) => onChange((f) => ({ ...f, target_price_inr: Number(e.target.value) || 0 }))}
+          />
+        </FormField>
+      </div>
+
+      {/* FIELD: ENGINEERING NOTE */}
+      <FormField label="IV. ENGINEERING NOTE">
+        <textarea
+          placeholder="Materials, stack-up, ingress rating, radios — what a CM would need in the first call."
+          rows={5}
+          style={{
+            ...inputStyle,
+            resize: 'vertical',
+            minHeight: 120,
+            fontStyle: 'italic',
+            lineHeight: 1.6,
+          }}
+          value={form.description}
+          onChange={(e) => onChange((f) => ({ ...f, description: e.target.value }))}
+        />
+      </FormField>
+
+      {/* HELP TEXT */}
+      <div style={{
+        fontFamily: 'Georgia, serif',
+        fontSize: 13,
+        fontStyle: 'italic',
+        color: '#888',
+        lineHeight: 1.6,
+        paddingTop: 8,
+        borderTop: '0.5px solid #c4bfb4',
+      }}>
+        Spec generation runs on the server; keep this
+        tab open. You can iterate the note and re-issue
+        without leaving the bench.
+      </div>
+
+      {/* GENERATE BUTTON */}
+      <button style={{
+        background: '#1a1a1a',
+        color: '#f5f0e8',
+        border: 'none',
+        padding: '18px 24px',
+        fontFamily: "'Courier New', monospace",
+        fontSize: 12,
+        letterSpacing: '0.22em',
+        fontWeight: 500,
+        cursor: canSubmit ? 'pointer' : 'not-allowed',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        width: '100%',
+        transition: 'all 0.2s ease',
+        marginTop: 8,
+        opacity: canSubmit ? 1 : 0.4,
+      }}
+      disabled={!canSubmit}
+      onClick={onSubmit}
+      onMouseEnter={(e) => {
+        if (canSubmit && !generating) e.currentTarget.style.background = '#c0392b';
+      }}
+      onMouseLeave={(e) => {
+        if (canSubmit && !generating) e.currentTarget.style.background = '#1a1a1a';
+      }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{
+            display: 'inline-block',
+            width: 6, height: 6,
+            borderRadius: '50%',
+            background: '#c0392b',
+          }} />
+          {generating ? 'GENERATING SOLID…' : 'GENERATE BUILD SHEET'}
+        </span>
+        <span>→</span>
+      </button>
+
     </div>
   )
 }
 
-function FormField({ label, children }: { label: string; children: ReactNode }) {
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  background: 'transparent',
+  border: 'none',
+  borderBottom: '0.5px solid #1a1a1a',
+  fontFamily: 'Georgia, serif',
+  fontStyle: 'italic',
+  fontSize: 18,
+  color: '#1a1a1a',
+  padding: '8px 0',
+  outline: 'none',
+  borderRadius: 0,
+  transition: 'border-color 0.2s ease',
+};
+
+function FormField({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
   return (
-    <div>
-      <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-[var(--ink-tertiary)]">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <label style={{
+        fontFamily: "'Courier New', monospace",
+        fontSize: 10,
+        letterSpacing: '0.18em',
+        color: '#1a1a1a',
+        fontWeight: 500,
+      }}>
         {label}
-      </p>
+      </label>
       {children}
     </div>
-  )
+  );
 }
