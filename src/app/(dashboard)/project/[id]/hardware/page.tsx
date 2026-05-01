@@ -158,11 +158,12 @@ export default function HardwareBuilderPage() {
 
   return (
     <div
-      className="hw-hardware-workbench"
       style={{
         display: 'flex',
         height: 'calc(100vh - 120px)',
         overflow: 'hidden',
+        /* No local fill — matches projects index: var(--paper) + .paper-grain from #app-shell */
+        background: 'transparent',
       }}
     >
       <div

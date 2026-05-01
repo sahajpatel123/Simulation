@@ -57,6 +57,16 @@
   --workshop-dim: rgba(45, 69, 86, 0.1);
   --workshop-shadow: rgba(45, 69, 86, 0.16);
 
+  /* Archive graph-paper grain — same frequencies as .paper-grain::before (projects index, dossier desk) */
+  --archive-grain-dot-a: rgba(26, 23, 20, 0.08);
+  --archive-grain-dot-b: rgba(26, 23, 20, 0.05);
+  --archive-grain-cell-a: 3px;
+  --archive-grain-cell-b: 7px;
+  --archive-grain-pos-b: 1px 2px;
+  /* Pressroom (dark bench) — same pitch, inverted ink */
+  --archive-grain-dot-a-dark: rgba(255, 255, 255, 0.07);
+  --archive-grain-dot-b-dark: rgba(255, 255, 255, 0.04);
+
   /* shadcn compat */
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -154,10 +164,11 @@ body.thecee-scroll-reveal {
   opacity: 0.35;
   mix-blend-mode: multiply;
   background-image:
-    radial-gradient(rgba(26,23,20,0.08) 1px, transparent 1px),
-    radial-gradient(rgba(26,23,20,0.05) 1px, transparent 1px);
-  background-size: 3px 3px, 7px 7px;
-  background-position: 0 0, 1px 2px;
+    radial-gradient(var(--archive-grain-dot-a) 1px, transparent 1px),
+    radial-gradient(var(--archive-grain-dot-b) 1px, transparent 1px);
+  background-size: var(--archive-grain-cell-a) var(--archive-grain-cell-a),
+    var(--archive-grain-cell-b) var(--archive-grain-cell-b);
+  background-position: 0 0, var(--archive-grain-pos-b);
 }
 
 /* Old-paper vignette, keeps centre bright. */
@@ -378,25 +389,18 @@ body.thecee-scroll-reveal::-webkit-scrollbar-thumb:hover {
     radial-gradient(ellipse 50% 40% at 0% 85%, rgba(192, 57, 43, 0.035), transparent 52%);
 }
 
-/* Hardware route — blueprint grid bench (not the warm sheet; that stays on TechnicalPlate only) */
-.hw-hardware-workbench {
-  background-color: #e4edf5;
-  background-image:
-    linear-gradient(rgba(45, 69, 86, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(45, 69, 86, 0.08) 1px, transparent 1px),
-    linear-gradient(rgba(45, 69, 86, 0.12) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(45, 69, 86, 0.12) 1px, transparent 1px);
-  background-size: 24px 24px, 24px 24px, 120px 120px, 120px 120px;
-}
-
-.hw-hardware-workbench-dark {
+/*
+ * Hardware route — daylight bench uses the app shell’s transparent main + .paper-grain (fixed).
+ * Pressroom only: local dark field with the same 3px / 7px micro-dot pitch as the archive.
+ */
+.hw-hardware-pressroom-bench {
   background-color: #0a0a0a;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
-  background-size: 24px 24px, 24px 24px, 120px 120px, 120px 120px;
+    radial-gradient(var(--archive-grain-dot-a-dark) 1px, transparent 1px),
+    radial-gradient(var(--archive-grain-dot-b-dark) 1px, transparent 1px);
+  background-size: var(--archive-grain-cell-a) var(--archive-grain-cell-a),
+    var(--archive-grain-cell-b) var(--archive-grain-cell-b);
+  background-position: 0 0, var(--archive-grain-pos-b);
 }
 
 /* Modal-open state: blur the whole app shell (header, sidebar, main). */

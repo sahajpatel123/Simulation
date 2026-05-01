@@ -57,8 +57,6 @@ export function TechnicalPlate({
 
   const sheetBg     = dark ? '#0f0f0f' : '#f5f0e8';
   const sheetBorder = dark ? '#222'    : '#1a1a1a';
-  const gridCol     = dark ? 'rgba(255,255,255,0.04)' : 'rgba(140,135,125,0.18)';
-  const gridStrong  = dark ? 'rgba(255,255,255,0.07)' : 'rgba(140,135,125,0.32)';
   const lblCol      = dark ? '#666'    : '#999';
   const valCol      = dark ? '#e8e4dc' : '#1a1a1a';
   const regCol      = dark ? '#3a3a3a' : '#999';
@@ -70,7 +68,7 @@ export function TechnicalPlate({
 
   return (
     <div
-      className={dark ? 'hw-hardware-workbench-dark' : undefined}
+      className={dark ? 'hw-hardware-pressroom-bench' : undefined}
       style={{
         position: 'relative',
         flex: 1,
@@ -94,20 +92,6 @@ export function TechnicalPlate({
         transition: 'all 0.5s cubic-bezier(0.4,0,0.2,1)',
         overflow: 'hidden',
       }}>
-
-        {/* GRID */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          backgroundImage: `
-            linear-gradient(${gridCol} 1px, transparent 1px),
-            linear-gradient(90deg, ${gridCol} 1px, transparent 1px),
-            linear-gradient(${gridStrong} 1px, transparent 1px),
-            linear-gradient(90deg, ${gridStrong} 1px, transparent 1px)
-          `,
-          backgroundSize: '24px 24px, 24px 24px, 120px 120px, 120px 120px',
-          pointerEvents: 'none',
-          transition: 'all 0.5s ease',
-        }} />
 
         {/* REGISTRATION MARKS */}
         {(['tl','tr','bl','br'] as const).map(pos => (
