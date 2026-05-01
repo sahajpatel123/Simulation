@@ -67,14 +67,38 @@ const inputStyle: CSSProperties = {
   transition: 'border-color 0.2s ease, background 0.2s ease',
 }
 
+const SELECT_CHEVRON =
+  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%231a1a1a' d='M2.5 4.5L6 8l3.5-3.5z'/%3E%3C/svg%3E\")"
+
+const selectStyle: CSSProperties = {
+  ...inputStyle,
+  cursor: 'pointer',
+  appearance: 'none',
+  WebkitAppearance: 'none',
+  MozAppearance: 'none',
+  backgroundColor: '#f5f0e8',
+  backgroundImage: SELECT_CHEVRON,
+  backgroundRepeat: 'no-repeat',
+  backgroundPosition: 'right 6px center',
+  paddingRight: 28,
+}
+
 const inputFocusHandlers = {
   onFocus: (e: FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     e.currentTarget.style.borderBottomColor = '#c0392b'
-    e.currentTarget.style.background = '#fff'
+    if (e.currentTarget instanceof HTMLSelectElement) {
+      e.currentTarget.style.backgroundColor = '#fff'
+    } else {
+      e.currentTarget.style.background = '#fff'
+    }
   },
   onBlur: (e: FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     e.currentTarget.style.borderBottomColor = '#1a1a1a'
-    e.currentTarget.style.background = '#f5f0e8'
+    if (e.currentTarget instanceof HTMLSelectElement) {
+      e.currentTarget.style.backgroundColor = '#f5f0e8'
+    } else {
+      e.currentTarget.style.background = '#f5f0e8'
+    }
   },
 }
 
@@ -339,7 +363,7 @@ function PressDispatchForm({
       }}>
         <FormField label="II. CATEGORY">
           <select
-            style={{ ...inputStyle, cursor: 'pointer' }}
+            style={selectStyle}
             {...inputFocusHandlers}
             value={form.category}
             onChange={(e) => onChange((f) => ({ ...f, category: e.target.value, product_type: e.target.value }))}
