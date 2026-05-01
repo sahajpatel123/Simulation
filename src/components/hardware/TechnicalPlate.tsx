@@ -72,7 +72,6 @@ export function TechnicalPlate({
     };
   }, [hasSpec]);
 
-  const bg          = dark ? '#0a0a0a' : '#f5f0e8';
   const sheetBg     = dark ? '#0f0f0f' : '#f5f0e8';
   const sheetBorder = dark ? '#222'    : '#1a1a1a';
   const gridCol     = dark ? 'rgba(255,255,255,0.04)' : 'rgba(140,135,125,0.18)';
@@ -88,15 +87,18 @@ export function TechnicalPlate({
   }).toUpperCase();
 
   return (
-    <div style={{
-      position: 'relative',
-      flex: 1,
-      padding: '32px 32px 96px 32px',
-      background: bg,
-      transition: 'background 0.5s cubic-bezier(0.4,0,0.2,1)',
-      overflow: 'hidden',
-      minHeight: 0,
-    }}>
+    <div
+      className={dark ? 'hw-hardware-workbench-dark' : undefined}
+      style={{
+        position: 'relative',
+        flex: 1,
+        padding: '32px 32px 96px 32px',
+        background: dark ? undefined : 'transparent',
+        transition: 'background-color 0.5s cubic-bezier(0.4,0,0.2,1)',
+        overflow: 'hidden',
+        minHeight: 0,
+      }}
+    >
       {/* DRAWING SHEET */}
       <div style={{
         position: 'relative',
@@ -280,7 +282,7 @@ export function TechnicalPlate({
         <div style={{
           display: 'flex',
           border: `0.5px solid ${dark ? '#333' : '#1a1a1a'}`,
-          background: dark ? '#0f0f0f' : '#f5f0e8',
+          background: dark ? '#0f0f0f' : 'rgba(255,255,255,0.35)',
           transition: 'all 0.5s ease',
         }}>
           <ToggleSeg active={true}  dark={dark}>BLUEPRINT</ToggleSeg>

@@ -158,10 +158,10 @@ export default function HardwareBuilderPage() {
 
   return (
     <div
+      className="hw-hardware-workbench"
       style={{
         display: 'flex',
         height: 'calc(100vh - 120px)',
-        background: '#f5f0e8',
         overflow: 'hidden',
       }}
     >

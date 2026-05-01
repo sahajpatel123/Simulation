@@ -378,6 +378,27 @@ body.thecee-scroll-reveal::-webkit-scrollbar-thumb:hover {
     radial-gradient(ellipse 50% 40% at 0% 85%, rgba(192, 57, 43, 0.035), transparent 52%);
 }
 
+/* Hardware route — blueprint grid bench (not the warm sheet; that stays on TechnicalPlate only) */
+.hw-hardware-workbench {
+  background-color: #e4edf5;
+  background-image:
+    linear-gradient(rgba(45, 69, 86, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(45, 69, 86, 0.08) 1px, transparent 1px),
+    linear-gradient(rgba(45, 69, 86, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(45, 69, 86, 0.12) 1px, transparent 1px);
+  background-size: 24px 24px, 24px 24px, 120px 120px, 120px 120px;
+}
+
+.hw-hardware-workbench-dark {
+  background-color: #0a0a0a;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 24px 24px, 24px 24px, 120px 120px, 120px 120px;
+}
+
 /* Modal-open state: blur the whole app shell (header, sidebar, main). */
 .app-shell { transition: filter 220ms ease; }
 body.modal-open .app-shell { filter: blur(5px); }
