@@ -54,7 +54,7 @@ const CATEGORIES = [
 
 const inputStyle: CSSProperties = {
   width: '100%',
-  background: '#fffbf3',
+  background: '#f5f0e8',
   border: 'none',
   borderBottom: '1px solid #1a1a1a',
   fontFamily: 'Georgia, serif',
@@ -74,7 +74,7 @@ const inputFocusHandlers = {
   },
   onBlur: (e: FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     e.currentTarget.style.borderBottomColor = '#1a1a1a'
-    e.currentTarget.style.background = '#fffbf3'
+    e.currentTarget.style.background = '#f5f0e8'
   },
 }
 
@@ -378,7 +378,7 @@ function PressDispatchForm({
             fontSize: 15,
             lineHeight: 1.6,
             fontStyle: 'italic',
-            background: '#fffbf3',
+            background: '#f5f0e8',
           }}
           onFocus={(e) => {
             e.currentTarget.style.borderColor = '#c0392b'
@@ -386,7 +386,7 @@ function PressDispatchForm({
           }}
           onBlur={(e) => {
             e.currentTarget.style.borderColor = '#1a1a1a'
-            e.currentTarget.style.background = '#fffbf3'
+            e.currentTarget.style.background = '#f5f0e8'
           }}
           value={form.description}
           onChange={(e) => onChange((f) => ({ ...f, description: e.target.value }))}
