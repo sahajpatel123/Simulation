@@ -263,19 +263,12 @@ function PressDispatchForm({
     <div className="relative">
       <PaperField />
       <div className="relative z-10 mx-auto max-w-3xl px-0 py-12">
-        <p className="font-mono text-[10px] uppercase tracking-[0.22em]" style={{ color: 'var(--workshop)' }}>
-          Build specification · intake
-        </p>
         <h2
           className="mt-3 font-serif italic text-[var(--ink)]"
           style={{ fontSize: 34, fontWeight: 900, letterSpacing: '-0.028em', lineHeight: 1.05 }}
         >
           Name the <span style={{ color: 'var(--red)' }}>solid</span> you want to prove.
         </h2>
-        <p className="mt-4 max-w-[52ch] text-[14px] font-light leading-relaxed text-[var(--ink-secondary)]">
-          Identity, category, shelf price, and a short engineering note. The bench returns a
-          dimensioned solid, a part tree, and a diagram you can interrogate — not a slide deck.
-        </p>
         <BuildSheetDatumLine />
 
         <div className="mt-10 grid grid-cols-1 gap-8 sm:grid-cols-[2fr_1fr_1fr] sm:gap-6">
