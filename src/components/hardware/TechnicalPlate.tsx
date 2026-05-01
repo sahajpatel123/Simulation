@@ -32,6 +32,9 @@ const DEFAULT_LAYERS: Layer[] = [
 
 const RED = '#c0392b';
 
+/** Uniform square graph paper inside the bordered drawing sheet only (not the page bench). */
+const DRAWING_SHEET_GRID_STEP_PX = 12;
+
 export function TechnicalPlate({
   productName = '—',
   category = '—',
@@ -92,6 +95,7 @@ export function TechnicalPlate({
         transition: 'all 0.5s cubic-bezier(0.4,0,0.2,1)',
         overflow: 'hidden',
       }}>
+        <DrawingSheetMathGrid dark={dark} />
 
         {/* REGISTRATION MARKS */}
         {(['tl','tr','bl','br'] as const).map(pos => (
@@ -253,6 +257,27 @@ export function TechnicalPlate({
         </PrimaryButton>
       </div>
     </div>
+  );
+}
+
+function DrawingSheetMathGrid({ dark }: { dark: boolean }) {
+  const line = dark ? 'rgba(255,255,255,0.07)' : 'rgba(26,23,20,0.1)';
+  const s = DRAWING_SHEET_GRID_STEP_PX;
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: 'absolute',
+        inset: 0,
+        zIndex: 0,
+        backgroundImage: `
+          linear-gradient(${line} 1px, transparent 1px),
+          linear-gradient(90deg, ${line} 1px, transparent 1px)
+        `,
+        backgroundSize: `${s}px ${s}px`,
+        pointerEvents: 'none',
+      }}
+    />
   );
 }
 
