@@ -24,7 +24,7 @@ export function createSimulationSocket(
 
   function connect() {
     if (destroyed) return
-    const url = `${WS_BASE}/ws/simulation/${simulationId}?token=${token}`
+    const url = `${WS_BASE}/ws/simulation/${simulationId}`
     ws        = new WebSocket(url)
 
     ws.onmessage = (e) => {
@@ -37,7 +37,11 @@ export function createSimulationSocket(
       } catch { /* ignore malformed messages */ }
     }
 
-    ws.onopen  = () => { retries = 0; ws?.send('ping') }
+    ws.onopen  = () => {
+      retries = 0
+      ws?.send(JSON.stringify({ type: 'auth', access_token: token }))
+      ws?.send('ping')
+    }
 
     ws.onclose = (e) => {
       if (destroyed) return

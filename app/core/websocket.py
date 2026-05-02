@@ -19,8 +19,11 @@ class ConnectionManager:
     def __init__(self) -> None:
         self._connections: dict[int, WebSocket] = {}
 
-    async def connect(self, websocket: WebSocket, simulation_id: int) -> None:
-        await websocket.accept()
+    async def connect(
+        self, websocket: WebSocket, simulation_id: int, *, skip_accept: bool = False
+    ) -> None:
+        if not skip_accept:
+            await websocket.accept()
         # Evict stale connection if present.
         if simulation_id in self._connections:
             try:

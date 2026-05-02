@@ -19,7 +19,10 @@ const USER_KEY    = 'thecee_user'
 function decodePayload(token: string): Record<string, unknown> | null {
   try {
     const base64 = token.split('.')[1]
-    const json   = atob(base64.replace(/-/g, '+').replace(/_/g, '/'))
+    if (!base64) return null
+    const normalized = base64.replace(/-/g, '+').replace(/_/g, '/')
+    const pad = normalized.length % 4 === 0 ? '' : '='.repeat(4 - (normalized.length % 4))
+    const json = atob(normalized + pad)
     return JSON.parse(json)
   } catch {
     return null

@@ -33,6 +33,10 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+# iCloud duplicate filenames
+* 2.env*
+* 2.local
+* 2.production
 
 # vercel
 .vercel

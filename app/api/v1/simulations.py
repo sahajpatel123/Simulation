@@ -367,7 +367,7 @@ def websocket_info():
     return {
         "active_connections": ws_manager.connection_count,
         "protocol": "ws",
-        "endpoint": "/api/v1/ws/simulation/{simulation_id}?token=<jwt>",
+        "endpoint": "/api/v1/ws/simulation/{simulation_id} — auth: first JSON frame {\"type\":\"auth\",\"access_token\":\"<jwt>\"}",
     }
 
 

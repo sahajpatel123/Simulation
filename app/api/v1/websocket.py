@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.core.database import SessionLocal
 from app.core.deps import user_from_access_sub
@@ -50,8 +52,30 @@ async def _verify_ownership(simulation_id: int, user_id: int) -> bool:
 async def websocket_simulation_progress(
     websocket: WebSocket,
     simulation_id: int,
-    token: str = Query(..., description="JWT access token"),
 ):
+    """Auth: first frame must be JSON `{"type":"auth","access_token":"<jwt>"}` (not in URL)."""
+    await websocket.accept()
+    try:
+        raw = await asyncio.wait_for(websocket.receive_text(), timeout=20.0)
+    except asyncio.TimeoutError:
+        await websocket.close(code=4001)
+        return
+    except Exception:
+        await websocket.close(code=4001)
+        return
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        await websocket.close(code=4001)
+        return
+    if payload.get("type") != "auth":
+        await websocket.close(code=4001)
+        return
+    token = payload.get("access_token") or payload.get("token")
+    if not token or not isinstance(token, str):
+        await websocket.close(code=4001)
+        return
+
     user = await _get_user_from_token(token)
     if user is None:
         await websocket.close(code=4001)
@@ -62,7 +86,7 @@ async def websocket_simulation_progress(
         await websocket.close(code=4003)
         return
 
-    await ws_manager.connect(websocket, simulation_id)
+    await ws_manager.connect(websocket, simulation_id, skip_accept=True)
 
     try:
         while True:

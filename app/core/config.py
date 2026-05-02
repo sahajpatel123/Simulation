@@ -1,3 +1,4 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -50,6 +51,22 @@ class Settings(BaseSettings):
     # Comma-separated admin emails; may access GET /api/v1/analytics/platform
     ADMIN_EMAILS: str = ""
     ALLOW_INDEXING: bool = False
+
+    @model_validator(mode="after")
+    def _reject_weak_jwt_secret_in_production(self) -> "Settings":
+        if self.ENVIRONMENT.lower() != "production":
+            return self
+        weak = {
+            "dev-secret-change-in-prod",
+            "change-this-to-a-long-random-string-in-production",
+        }
+        key = self.SECRET_KEY.strip()
+        if len(key) < 32 or key.lower() in weak or key.lower().startswith("change-"):
+            raise ValueError(
+                "SECRET_KEY must be a random string of at least 32 characters in production "
+                "(set via environment; do not use dev defaults)."
+            )
+        return self
 
     def cors_allowed_origins(self) -> list[str]:
         defaults = ["http://localhost:3000", "http://localhost:3001"]
