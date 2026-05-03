@@ -393,54 +393,96 @@ function PressDispatchForm({
       {/* GENERATE BUTTON */}
       <button
         type="button"
+        className="hw-build-sheet-cta"
         disabled={!canSubmit || generating}
+        aria-busy={generating}
         onClick={onSubmit}
         style={{
-          background: '#c0392b',
+          position: 'relative',
+          background:
+            'linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 42%), #c0392b',
           color: '#f5f0e8',
-          border: '0.5px solid #c0392b',
-          padding: '20px 28px',
+          border: '1px solid rgba(255,255,255,0.14)',
+          padding: '18px 24px',
           fontFamily: "'Courier New', monospace",
           fontSize: 12,
-          letterSpacing: '0.24em',
+          letterSpacing: '0.2em',
           fontWeight: 600,
           cursor: !canSubmit || generating ? 'not-allowed' : 'pointer',
-          display: 'flex',
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0,1fr) auto minmax(0,1fr)',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
+          columnGap: 12,
           width: '100%',
-          transition: 'all 0.2s ease',
+          borderRadius: 2,
           marginTop: 12,
-          boxShadow: '0 1px 0 rgba(0,0,0,0.04), 0 8px 20px rgba(192,57,43,0.18)',
+          textTransform: 'uppercase',
+          WebkitFontSmoothing: 'antialiased',
+          boxShadow:
+            'inset 0 1px 0 rgba(255,255,255,0.12), 0 1px 0 rgba(0,0,0,0.06), 0 10px 28px -6px rgba(192,57,43,0.45)',
           opacity: !canSubmit || generating ? 0.45 : 1,
+          transition:
+            'background 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease, transform 0.12s ease, opacity 0.2s ease',
         }}
         onMouseEnter={(e) => {
           if (!canSubmit || generating) return
-          e.currentTarget.style.background = '#1a1a1a'
-          e.currentTarget.style.borderColor = '#1a1a1a'
-          e.currentTarget.style.boxShadow = '0 1px 0 rgba(0,0,0,0.04), 0 8px 20px rgba(0,0,0,0.20)'
+          e.currentTarget.style.background =
+            'linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 45%), #1a1a1a'
+          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'
+          e.currentTarget.style.boxShadow =
+            'inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 0 rgba(0,0,0,0.12), 0 12px 32px -8px rgba(0,0,0,0.35)'
         }}
         onMouseLeave={(e) => {
           if (!canSubmit || generating) return
-          e.currentTarget.style.background = '#c0392b'
-          e.currentTarget.style.borderColor = '#c0392b'
-          e.currentTarget.style.boxShadow = '0 1px 0 rgba(0,0,0,0.04), 0 8px 20px rgba(192,57,43,0.18)'
+          e.currentTarget.style.background =
+            'linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 42%), #c0392b'
+          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.14)'
+          e.currentTarget.style.boxShadow =
+            'inset 0 1px 0 rgba(255,255,255,0.12), 0 1px 0 rgba(0,0,0,0.06), 0 10px 28px -6px rgba(192,57,43,0.45)'
         }}
       >
-        <span style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <span
+          style={{
+            justifySelf: 'end',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 22,
+          }}
+        >
           <span
             style={{
-              display: 'inline-block',
-              width: 8,
-              height: 8,
+              display: 'block',
+              width: 7,
+              height: 7,
               borderRadius: '50%',
               background: '#f5f0e8',
+              boxShadow: '0 0 0 1px rgba(26,26,26,0.12), inset 0 1px 0 rgba(255,255,255,0.35)',
             }}
           />
+        </span>
+        <span
+          style={{
+            textAlign: 'center',
+            textShadow: '0 1px 0 rgba(0,0,0,0.12)',
+            whiteSpace: 'nowrap',
+          }}
+        >
           {generating ? 'GENERATING SOLID…' : 'GENERATE BUILD SHEET'}
         </span>
-        <span style={{ fontSize: 16 }}>→</span>
+        <span
+          style={{
+            justifySelf: 'start',
+            fontSize: 15,
+            lineHeight: 1,
+            fontWeight: 500,
+            opacity: 0.92,
+            letterSpacing: '0.02em',
+            textShadow: '0 1px 0 rgba(0,0,0,0.12)',
+          }}
+        >
+          →
+        </span>
       </button>
 
     </div>

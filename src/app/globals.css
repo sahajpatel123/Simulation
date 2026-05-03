@@ -403,6 +403,15 @@ body.thecee-scroll-reveal::-webkit-scrollbar-thumb:hover {
   background-position: 0 0, var(--archive-grain-pos-b);
 }
 
+/* Hardware bench — primary CTA (keyboard + press affordance; base look stays inline on the page). */
+.hw-build-sheet-cta:focus-visible {
+  outline: 2px solid #1a1a1a;
+  outline-offset: 3px;
+}
+.hw-build-sheet-cta:not(:disabled):active {
+  transform: translateY(1px);
+}
+
 /* Modal-open state: blur the whole app shell (header, sidebar, main). */
 .app-shell { transition: filter 220ms ease; }
 body.modal-open .app-shell { filter: blur(5px); }
