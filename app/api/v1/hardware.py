@@ -14,6 +14,7 @@ from app.core.deps import get_current_user
 from app.hardware.competitive_analysis import HardwareCompetitiveAnalyser
 from app.hardware.manufacturing_cost import ManufacturingCostAnalyser
 from app.reports.hardware_report import HardwareReportGenerator
+from app.hardware.engineering_plate import compute_engineering_plate_labels
 from app.hardware.model_generator import HardwareModelGenerator
 from app.hardware.test_configs import TEST_DEFAULTS, TestConfigBuilder
 from app.models.project import Project
@@ -24,6 +25,7 @@ from app.models.user import User
 from app.schemas.hardware import (
     VALID_PRODUCT_TYPES,
     HardwareGenerateSpecRequest,
+    HardwareEngineeringPlateOut,
     HardwareGenerateSpecResponse,
     HardwareProductDetailResponse,
     HardwareProductListItem,
@@ -337,6 +339,54 @@ def get_hardware_product(
         spec=spec,
         render_hints=rh,
     )
+
+
+@router.post(
+    "/projects/{project_id}/hardware/{hw_id}/engineering-plate",
+    response_model=HardwareEngineeringPlateOut,
+    summary="AI labels for engineering title block (project, category, components, mass, scale)",
+)
+def post_engineering_plate_labels(
+    project_id: int,
+    hw_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _get_owned_project(db, project_id, current_user.id)
+    product = (
+        db.query(HardwareProduct)
+        .filter(
+            HardwareProduct.id == hw_id,
+            HardwareProduct.project_id == project_id,
+        )
+        .first()
+    )
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hardware product not found",
+        )
+    latest = (
+        db.query(Hardware3DModel)
+        .filter(Hardware3DModel.hardware_product_id == product.id)
+        .order_by(desc(Hardware3DModel.created_at))
+        .first()
+    )
+    if not latest or not latest.model_data_json:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No generated spec for this hardware product",
+        )
+    spec = latest.model_data_json
+    if isinstance(spec, str):
+        spec = json.loads(spec or "{}")
+    spec = dict(spec)
+    labels = compute_engineering_plate_labels(
+        spec,
+        product_name_fallback=product.name or "",
+        category_fallback=(product.category or product.product_type or ""),
+    )
+    return HardwareEngineeringPlateOut.model_validate(labels)
 
 
 @router.post(

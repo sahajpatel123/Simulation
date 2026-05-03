@@ -3,11 +3,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 interface TechnicalPlateProps {
-  productName?: string;
-  category?: string;
-  hasSpec?: boolean;
-  onRunPhysics?: () => void;
-  onBack?: () => void;
+  productName?: string
+  category?: string
+  hasSpec?: boolean
+  /** AI + server heuristics for the engineering strip (omit when no spec). */
+  plateLabels?: {
+    project: string
+    category: string
+    components: string
+    est_mass: string
+    scale: string
+  }
+  plateLabelsLoading?: boolean
+  onRunPhysics?: () => void
+  onBack?: () => void
 }
 
 const RED = '#c0392b';
@@ -22,6 +31,8 @@ export function TechnicalPlate({
   productName = '—',
   category = '—',
   hasSpec = false,
+  plateLabels,
+  plateLabelsLoading = false,
   onRunPhysics,
   onBack,
 }: TechnicalPlateProps) {
@@ -181,16 +192,16 @@ export function TechnicalPlate({
             ENGINEERING TITLE BLOCK
           </div>
           {[
-            ['PROJECT',  productName],
-            ['CATEGORY', category],
+            ['PROJECT', plateLabelsLoading ? '…' : (plateLabels?.project ?? productName)],
+            ['CATEGORY', plateLabelsLoading ? '…' : (plateLabels?.category ?? category)],
           ].map(([l, v]) => (
             <TitleRow key={l} label={l} value={v} lblCol={lblCol} valCol={valCol} />
           ))}
           <Divider dark={dark} />
           {[
-            ['COMPONENTS', '—'],
-            ['EST. MASS',  '—'],
-            ['SCALE',      '—'],
+            ['COMPONENTS', plateLabelsLoading ? '…' : (plateLabels?.components ?? '—')],
+            ['EST. MASS', plateLabelsLoading ? '…' : (plateLabels?.est_mass ?? '—')],
+            ['SCALE', plateLabelsLoading ? '…' : (plateLabels?.scale ?? '—')],
           ].map(([l, v]) => (
             <TitleRow key={l} label={l} value={v} lblCol={lblCol} valCol={valCol} />
           ))}

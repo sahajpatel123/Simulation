@@ -78,3 +78,13 @@ class HardwareProductDetailResponse(BaseModel):
     created_at: datetime
     spec: dict[str, Any]
     render_hints: HardwareRenderHintsOut
+
+
+class HardwareEngineeringPlateOut(BaseModel):
+    """Title-block rows (AI + heuristics). edition / filed stay client-side."""
+
+    project: str
+    category: str
+    components: str
+    est_mass: str
+    scale: str

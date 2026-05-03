@@ -44,6 +44,14 @@ type HwDetail = {
   }
 }
 
+type EngineeringPlateLabels = {
+  project: string
+  category: string
+  components: string
+  est_mass: string
+  scale: string
+}
+
 const CATEGORIES = [
   { value: 'consumer_hardware', label: 'Consumer hardware' },
   { value: 'health_hardware', label: 'Health hardware' },
@@ -183,6 +191,20 @@ export default function HardwareBuilderPage() {
     enabled: Boolean(projectId && hwId),
   })
 
+  const { data: plateLabels, isFetching: plateLabelsLoading } = useQuery<EngineeringPlateLabels>({
+    queryKey: ['engineering-plate', projectId, hwId],
+    queryFn: async (): Promise<EngineeringPlateLabels> => {
+      const r = await fetch(
+        `${api}/projects/${projectId}/hardware/${hwId}/engineering-plate`,
+        { method: 'POST', headers: authHeaders() }
+      )
+      if (!r.ok) throw new Error(await r.text())
+      return (await r.json()) as EngineeringPlateLabels
+    },
+    enabled: Boolean(projectId && hwId && specData),
+    staleTime: 60_000,
+  })
+
   const mergedSpec = (() => {
     if (!specData) return {} as Record<string, unknown>
     return {
@@ -212,6 +234,7 @@ export default function HardwareBuilderPage() {
       await refetchHw()
       setSelectedHwId(created.id)
       void queryClient.invalidateQueries({ queryKey: ['hw-spec', projectId, created.id] })
+      void queryClient.invalidateQueries({ queryKey: ['engineering-plate', projectId, created.id] })
     } finally {
       setGenerating(false)
     }
@@ -246,6 +269,8 @@ export default function HardwareBuilderPage() {
         productName={productNameForPlate}
         category={categoryForPlate}
         hasSpec={!!specData}
+        plateLabels={specData ? plateLabels : undefined}
+        plateLabelsLoading={Boolean(specData && plateLabelsLoading)}
         onBack={() => router.push(`/project/${projectId}`)}
         onRunPhysics={() => {}}
       />
