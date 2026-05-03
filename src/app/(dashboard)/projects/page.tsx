@@ -831,6 +831,8 @@ function DossierRow({ project, number }: { project: Project; number: number }) {
   const status = resolveStatus(project.status)
   const date = project.created_at ? new Date(project.created_at) : null
   const num = String(number).padStart(3, '0')
+  /** Same masthead source as lead dossier + dossier detail page. */
+  const heroHeadingText = (project.description ?? '').trim() || project.title
 
   return (
     <Link href={`/project/${project.id}`} style={{ textDecoration: 'none', color: 'var(--ink)', display: 'block' }}>
@@ -845,37 +847,39 @@ function DossierRow({ project, number }: { project: Project; number: number }) {
           <h3
             className="font-serif"
             style={{
-              fontSize: 26,
-              fontWeight: 800,
-              lineHeight: 1.1,
-              letterSpacing: '-0.02em',
+              fontSize: 'clamp(22px, 2.8vw, 36px)',
+              fontWeight: 900,
+              fontStyle: 'italic',
+              lineHeight: 1.12,
+              letterSpacing: '-0.03em',
               color: 'var(--ink)',
               marginBottom: 8,
               overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
             }}
           >
-            {project.title}
+            {editorialTruncate(heroHeadingText, 10)}
           </h3>
           <div style={{ marginBottom: 6 }}>
             <FolioAxisChip axis={project.dossier_axis} />
           </div>
           <p
-            className="font-serif"
+            className="lead-para"
             style={{
-              fontSize: 13.5,
+              margin: 0,
+              fontSize: 14,
               lineHeight: 1.65,
               color: 'var(--ink-secondary)',
               fontWeight: 300,
-              fontStyle: 'italic',
               display: '-webkit-box',
               WebkitLineClamp: 2,
               WebkitBoxOrient: 'vertical',
               overflow: 'hidden',
             }}
           >
-            {project.description}
+            {(project.description ?? '').trim() || project.title}
           </p>
         </div>
 
