@@ -189,7 +189,17 @@ function ProjectsPage() {
     return (
       <div style={{ padding: '80px 48px', display: 'flex', gap: 12, alignItems: 'center', color: 'var(--ink-secondary)' }}>
         <Loader2 className="animate-spin" style={{ width: 14, height: 14 }} />
-        <span style={{ fontSize: 10, letterSpacing: '0.24em', textTransform: 'uppercase' }}>Pulling the archive…</span>
+        <span
+          style={{
+            fontFamily: 'var(--font-mono), monospace',
+            fontSize: 10,
+            letterSpacing: '0.24em',
+            textTransform: 'uppercase',
+            fontWeight: 500,
+          }}
+        >
+          Pulling the archive…
+        </span>
       </div>
     )
   }
@@ -202,7 +212,9 @@ function ProjectsPage() {
         <h1 className="font-serif" style={{ fontSize: 40, fontWeight: 800, fontStyle: 'italic', color: 'var(--ink)' }}>
           The press is silent.
         </h1>
-        <p style={{ marginTop: 16, color: 'var(--ink-secondary)', maxWidth: 520 }}>{apiError(error)}</p>
+        <p className="lead-para" style={{ margin: '16px 0 0', color: 'var(--ink-secondary)', maxWidth: 520, fontSize: 15 }}>
+          {apiError(error)}
+        </p>
       </div>
     )
   }
@@ -244,6 +256,7 @@ function ProjectsPage() {
             style={{
               fontSize: 'clamp(52px, 7vw, 88px)',
               fontWeight: 900,
+              fontStyle: 'italic',
               lineHeight: 0.95,
               letterSpacing: '-0.035em',
               color: 'var(--ink)',
@@ -254,13 +267,13 @@ function ProjectsPage() {
           </h1>
 
           <p
+            className="lead-para"
             style={{
-              fontFamily: 'var(--font-body)',
-              fontSize: 15,
-              lineHeight: 1.7,
+              margin: '18px 0 0',
+              fontSize: 16,
+              lineHeight: 1.75,
               color: 'var(--ink-secondary)',
               maxWidth: 560,
-              marginTop: 18,
               fontWeight: 300,
             }}
           >
@@ -303,10 +316,18 @@ function ProjectsPage() {
               marginBottom: 0,
             }}
           >
-            <span className="kicker" style={{ color: 'var(--ink-secondary)' }}>№</span>
-            <span className="kicker" style={{ color: 'var(--ink-secondary)' }}>Title / Précis</span>
-            <span className="kicker" style={{ color: 'var(--ink-secondary)' }}>Filed</span>
-            <span className="kicker" style={{ color: 'var(--ink-secondary)' }}>Status</span>
+            <span className="kicker" style={{ color: 'var(--ink-secondary)', fontFamily: 'var(--font-mono), monospace' }}>
+              №
+            </span>
+            <span className="kicker" style={{ color: 'var(--ink-secondary)', fontFamily: 'var(--font-mono), monospace' }}>
+              Title / Précis
+            </span>
+            <span className="kicker" style={{ color: 'var(--ink-secondary)', fontFamily: 'var(--font-mono), monospace' }}>
+              Filed
+            </span>
+            <span className="kicker" style={{ color: 'var(--ink-secondary)', fontFamily: 'var(--font-mono), monospace' }}>
+              Status
+            </span>
             <span />
           </div>
 
@@ -317,11 +338,14 @@ function ProjectsPage() {
             ))}
             {rest.length === 0 && (
               <p
+                className="font-serif"
                 style={{
                   padding: '36px 0',
                   color: 'var(--ink-tertiary)',
-                  fontSize: 13,
+                  fontSize: 15,
                   fontStyle: 'italic',
+                  fontWeight: 300,
+                  lineHeight: 1.65,
                   borderTop: '0.5px solid var(--border-color)',
                   borderBottom: '0.5px solid var(--border-color)',
                 }}
@@ -433,6 +457,7 @@ function FilterRibbon({
               style={{
                 color: isActive ? 'rgba(242, 236, 224, 0.65)' : 'var(--ink-secondary)',
                 fontSize: 9,
+                fontFamily: 'var(--font-mono), monospace',
               }}
             >
               {tab.note}
@@ -502,7 +527,7 @@ function EmptyForFilter({ filter, onClear }: { filter: Filter; onClear: () => vo
         >
           {c.title}
         </h2>
-        <p style={{ fontSize: 14, lineHeight: 1.7, color: 'var(--ink-secondary)', maxWidth: 520, fontWeight: 300 }}>
+        <p className="lead-para" style={{ margin: '0 0 0', fontSize: 14, lineHeight: 1.7, color: 'var(--ink-secondary)', maxWidth: 520, fontWeight: 300 }}>
           {c.body}
         </p>
       </div>
@@ -604,6 +629,7 @@ function Folio() {
           textTransform: 'uppercase',
           color: 'var(--ink-secondary)',
           fontWeight: 600,
+          fontFamily: 'var(--font-mono), monospace',
         }}
       >
         File · Vacant
@@ -623,6 +649,7 @@ function Folio() {
           textTransform: 'uppercase',
           fontWeight: 700,
           opacity: 0.85,
+          fontFamily: 'var(--font-mono), monospace',
         }}
       >
         Awaiting Material
@@ -707,6 +734,7 @@ function FeaturedDossier({ project, index }: { project: Project; index: number }
           style={{
             fontSize: 'clamp(38px, 4.8vw, 64px)',
             fontWeight: 900,
+            fontStyle: 'italic',
             letterSpacing: '-0.03em',
             color: 'var(--ink)',
             marginBottom: 20,
@@ -717,13 +745,13 @@ function FeaturedDossier({ project, index }: { project: Project; index: number }
         </h2>
 
         <p
+          className="lead-para"
           style={{
-            fontFamily: 'var(--font-body)',
-            fontSize: 15,
+            margin: '0 0 28px',
+            fontSize: 16,
             lineHeight: 1.75,
             color: 'var(--ink-secondary)',
             maxWidth: 640,
-            marginBottom: 28,
             fontWeight: 300,
             display: '-webkit-box',
             WebkitLineClamp: 4,
@@ -737,6 +765,7 @@ function FeaturedDossier({ project, index }: { project: Project; index: number }
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, color: 'var(--ink)' }}>
           <span
             style={{
+              fontFamily: 'var(--font-mono), monospace',
               fontSize: 10,
               letterSpacing: '0.26em',
               textTransform: 'uppercase',
@@ -771,6 +800,7 @@ function FeaturedDossier({ project, index }: { project: Project; index: number }
             flexDirection: 'column',
             alignItems: 'flex-end',
             gap: 8,
+            fontFamily: 'var(--font-mono), monospace',
             fontSize: 10,
             letterSpacing: '0.22em',
             textTransform: 'uppercase',
@@ -832,11 +862,13 @@ function DossierRow({ project, number }: { project: Project; number: number }) {
             <FolioAxisChip axis={project.dossier_axis} />
           </div>
           <p
+            className="font-serif"
             style={{
               fontSize: 13.5,
               lineHeight: 1.65,
               color: 'var(--ink-secondary)',
               fontWeight: 300,
+              fontStyle: 'italic',
               display: '-webkit-box',
               WebkitLineClamp: 2,
               WebkitBoxOrient: 'vertical',
@@ -849,6 +881,7 @@ function DossierRow({ project, number }: { project: Project; number: number }) {
 
         <div
           style={{
+            fontFamily: 'var(--font-mono), monospace',
             fontSize: 11,
             letterSpacing: '0.18em',
             textTransform: 'uppercase',
@@ -871,6 +904,7 @@ function DossierRow({ project, number }: { project: Project; number: number }) {
 
         <div
           style={{
+            fontFamily: 'var(--font-mono), monospace',
             fontSize: 10,
             letterSpacing: '0.22em',
             textTransform: 'uppercase',
@@ -1015,7 +1049,7 @@ function FileDossierModal({
             >
               File a new<span style={{ fontStyle: 'italic', color: 'var(--red)' }}> dossier.</span>
             </h2>
-            <p style={{ fontSize: 13.5, lineHeight: 1.65, color: 'var(--ink-secondary)', marginBottom: 18, fontWeight: 300 }}>
+            <p className="lead-para" style={{ margin: '0 0 18px', fontSize: 13.5, lineHeight: 1.65, color: 'var(--ink-secondary)', fontWeight: 300 }}>
               Describe your idea in plain language — one paragraph. The press will read it as if a
               stranger handed it across a café table.
             </p>
@@ -1063,6 +1097,7 @@ function FileDossierModal({
           >
             <div
               style={{
+                fontFamily: 'var(--font-mono), monospace',
                 fontSize: 10,
                 letterSpacing: '0.22em',
                 textTransform: 'uppercase',
