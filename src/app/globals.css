@@ -142,19 +142,23 @@ body.thecee-scroll-reveal {
  * Applied on #app-shell (dashboard), auth + onboarding wrappers. Not used on `/` landing.
  */
 .editorial-workspace {
-  font-family: var(--font-serif, 'Playfair Display', Georgia, serif);
-  /* Must match a loaded Playfair weight (see layout.tsx); 300 was never bundled → Georgia fallback. */
-  font-weight: 400;
+  font-family: var(--font-serif, 'Playfair Display', Georgia, serif) !important;
+  font-weight: 400 !important;
 }
 
-.editorial-workspace header,
-.editorial-workspace aside,
 .editorial-workspace input,
 .editorial-workspace textarea,
 .editorial-workspace select,
-.editorial-workspace [role='tablist'],
-.editorial-workspace [role='tab'] {
-  font-family: var(--font-body, 'DM Sans', sans-serif);
+.editorial-workspace button,
+.editorial-workspace label {
+  font-family: var(--font-body, 'DM Sans', sans-serif) !important;
+  font-weight: 400 !important;
+}
+
+.editorial-workspace header,
+.editorial-workspace aside {
+  font-family: var(--font-body, 'DM Sans', sans-serif) !important;
+  font-weight: 500 !important;
 }
 
 .font-serif {
@@ -411,12 +415,21 @@ body.thecee-scroll-reveal::-webkit-scrollbar-thumb:hover {
   min-width: 0;
 }
 
-.hw-dossier-surface input,
-.hw-dossier-surface textarea,
-.hw-dossier-surface select,
-.hw-dossier-surface button,
-.hw-dossier-surface label {
-  font-family: var(--font-body, 'DM Sans', sans-serif);
+.editorial-workspace .hw-dossier-surface input,
+.editorial-workspace .hw-dossier-surface textarea,
+.editorial-workspace .hw-dossier-surface select {
+  font-family: var(--font-body, 'DM Sans', sans-serif) !important;
+  font-weight: 300 !important;
+}
+
+.editorial-workspace .hw-dossier-surface button {
+  font-family: var(--font-body, 'DM Sans', sans-serif) !important;
+  font-weight: 500 !important;
+}
+
+.editorial-workspace .hw-dossier-surface label {
+  font-family: var(--font-mono), monospace !important;
+  font-weight: 500 !important;
 }
 
 /*

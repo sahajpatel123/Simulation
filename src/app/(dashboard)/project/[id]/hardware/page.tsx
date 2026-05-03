@@ -474,7 +474,7 @@ function FormField({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <label style={{
-        fontFamily: 'var(--font-body)',
+        fontFamily: 'var(--font-mono), monospace',
         fontSize: 10,
         letterSpacing: '0.18em',
         color: 'var(--ink)',
