@@ -149,14 +149,13 @@ function SidebarInner({ collapsed, onCollapse, onExpand }: SidebarProps) {
                 background: 'none',
                 cursor: 'pointer',
                 textAlign: 'left',
-                fontFamily: 'var(--font-body)',
-                fontSize: 9,
-                fontWeight: 600,
-                fontStyle: 'normal',
-                letterSpacing: '0.3em',
-                textTransform: 'uppercase',
-                lineHeight: 1.2,
-                color: 'var(--ink-secondary)',
+                fontFamily: 'var(--font-serif)',
+                fontSize: 28,
+                fontWeight: 800,
+                fontStyle: 'italic',
+                lineHeight: 1,
+                letterSpacing: '-0.02em',
+                color: 'var(--ink)',
               }}
               className="sidebar-contents-trigger"
             >
