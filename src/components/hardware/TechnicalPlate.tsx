@@ -57,6 +57,7 @@ export function TechnicalPlate({
       style={{
         position: 'relative',
         flex: 1,
+        minWidth: 0,
         padding: '32px 32px 96px 32px',
         background: dark ? undefined : 'transparent',
         transition: 'background-color 0.5s cubic-bezier(0.4,0,0.2,1)',

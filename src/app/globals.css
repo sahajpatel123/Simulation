@@ -398,14 +398,24 @@ body.thecee-scroll-reveal::-webkit-scrollbar-thumb:hover {
 .rise-3 { animation-delay: 220ms; }
 .rise-4 { animation-delay: 340ms; }
 
-/* Hardware lab — bench atmosphere (page-scoped class on /project/.../hardware only) */
-.hw-workshop {
-  font-family: var(--font-body, 'DM Sans', sans-serif);
+/*
+ * Hardware atelier route — dossier stack + flex-safe min-width.
+ * (Scoped root on /project/.../hardware; keeps mono/serif on TechnicalPlate via inline styles.)
+ * Buttons/labels get DM Sans here; inline font-family on controls still wins when set.
+ */
+.hw-dossier-surface {
+  font-family: var(--font-serif, 'Playfair Display', Georgia, serif);
   font-weight: 300;
-  background-image:
-    radial-gradient(ellipse 95% 55% at 50% -8%, rgba(45, 69, 86, 0.09), transparent 58%),
-    radial-gradient(ellipse 70% 45% at 100% 100%, rgba(45, 69, 86, 0.05), transparent 55%),
-    radial-gradient(ellipse 50% 40% at 0% 85%, rgba(192, 57, 43, 0.035), transparent 52%);
+  color: var(--ink);
+  min-width: 0;
+}
+
+.hw-dossier-surface input,
+.hw-dossier-surface textarea,
+.hw-dossier-surface select,
+.hw-dossier-surface button,
+.hw-dossier-surface label {
+  font-family: var(--font-body, 'DM Sans', sans-serif);
 }
 
 /*

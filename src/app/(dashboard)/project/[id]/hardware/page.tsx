@@ -58,7 +58,7 @@ const inputStyle: CSSProperties = {
   backgroundColor: 'transparent',
   border: 'none',
   borderBottom: '1px solid #1a1a1a',
-  fontFamily: 'var(--font-sans), sans-serif',
+  fontFamily: 'var(--font-body)',
   fontStyle: 'normal',
   fontWeight: 300,
   fontSize: 18,
@@ -225,9 +225,12 @@ export default function HardwareBuilderPage() {
 
   return (
     <div
+      className="hw-dossier-surface"
       style={{
         display: 'flex',
         height: 'calc(100vh - 120px)',
+        width: '100%',
+        minWidth: 0,
         background: 'transparent',
         overflow: 'hidden',
       }}
@@ -273,7 +276,9 @@ function PressDispatchForm({
   return (
     <div style={{
       width: '38%',
-      minWidth: 460,
+      minWidth: 'min(460px, 100%)',
+      maxWidth: '100%',
+      flexShrink: 1,
       padding: '56px 48px 96px 56px',
       background: 'transparent',
       display: 'flex',
@@ -392,7 +397,7 @@ function PressDispatchForm({
 
       {/* HELP TEXT */}
       <div style={{
-        fontFamily: 'var(--font-sans), sans-serif',
+        fontFamily: 'var(--font-body)',
         fontSize: 13,
         fontStyle: 'italic',
         fontWeight: 300,
@@ -418,7 +423,7 @@ function PressDispatchForm({
           color: '#f5f0e8',
           border: '1px solid #1a1a1a',
           padding: '16px 20px',
-          fontFamily: 'var(--font-sans), sans-serif',
+          fontFamily: 'var(--font-body)',
           fontSize: 11,
           letterSpacing: '0.22em',
           fontWeight: 500,
@@ -468,7 +473,7 @@ function FormField({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <label style={{
-        fontFamily: 'var(--font-sans), sans-serif',
+        fontFamily: 'var(--font-body)',
         fontSize: 10,
         letterSpacing: '0.18em',
         color: 'var(--ink)',
