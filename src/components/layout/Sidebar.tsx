@@ -131,7 +131,7 @@ function SidebarInner({ collapsed, onCollapse, onExpand }: SidebarProps) {
         </div>
       ) : (
         <>
-          <div style={{ display: 'inline-block', maxWidth: '100%' }}>
+          <div style={{ width: 'max-content', maxWidth: '100%' }}>
             <button
               type="button"
               onClick={(e) => {
@@ -149,6 +149,8 @@ function SidebarInner({ collapsed, onCollapse, onExpand }: SidebarProps) {
                 background: 'none',
                 cursor: 'pointer',
                 textAlign: 'left',
+                width: 'max-content',
+                maxWidth: '100%',
                 fontFamily: 'var(--font-serif)',
                 fontSize: 28,
                 fontWeight: 800,
