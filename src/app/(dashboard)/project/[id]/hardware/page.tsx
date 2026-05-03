@@ -54,8 +54,7 @@ const CATEGORIES = [
 
 const inputStyle: CSSProperties = {
   width: '100%',
-  background: '#f5f0e8',
-  backgroundColor: '#f5f0e8',
+  backgroundColor: 'transparent',
   border: 'none',
   borderBottom: '1px solid #1a1a1a',
   fontFamily: 'Georgia, serif',
@@ -77,7 +76,7 @@ const selectStyle: CSSProperties = {
   appearance: 'none',
   WebkitAppearance: 'none',
   MozAppearance: 'none',
-  backgroundColor: '#f5f0e8',
+  backgroundColor: 'transparent',
   backgroundImage: SELECT_CHEVRON,
   backgroundRepeat: 'no-repeat',
   backgroundPosition: 'right 6px center',
@@ -87,7 +86,7 @@ const selectStyle: CSSProperties = {
 /** Number inputs ignore `background` in some WebKit builds; reinforce + textfield chrome. */
 const numberInputStyle: CSSProperties = {
   ...inputStyle,
-  backgroundColor: '#f5f0e8',
+  backgroundColor: 'transparent',
   MozAppearance: 'textfield',
   WebkitAppearance: 'textfield',
 }
@@ -96,17 +95,19 @@ const inputFocusHandlers = {
   onFocus: (e: FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     e.currentTarget.style.borderBottomColor = '#c0392b'
     if (e.currentTarget instanceof HTMLSelectElement || e.currentTarget instanceof HTMLInputElement) {
-      e.currentTarget.style.backgroundColor = '#fff'
+      e.currentTarget.style.backgroundColor = 'transparent'
     } else {
-      e.currentTarget.style.background = '#fff'
+      e.currentTarget.style.background = 'transparent'
+      e.currentTarget.style.backgroundColor = 'transparent'
     }
   },
   onBlur: (e: FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     e.currentTarget.style.borderBottomColor = '#1a1a1a'
     if (e.currentTarget instanceof HTMLSelectElement || e.currentTarget instanceof HTMLInputElement) {
-      e.currentTarget.style.backgroundColor = '#f5f0e8'
+      e.currentTarget.style.backgroundColor = 'transparent'
     } else {
-      e.currentTarget.style.background = '#f5f0e8'
+      e.currentTarget.style.background = 'transparent'
+      e.currentTarget.style.backgroundColor = 'transparent'
     }
   },
 }
@@ -360,15 +361,18 @@ function PressDispatchForm({
             fontSize: 15,
             lineHeight: 1.6,
             fontStyle: 'italic',
-            background: '#f5f0e8',
+            background: 'transparent',
+            backgroundColor: 'transparent',
           }}
           onFocus={(e) => {
             e.currentTarget.style.borderColor = '#c0392b'
-            e.currentTarget.style.background = '#fff'
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.backgroundColor = 'transparent'
           }}
           onBlur={(e) => {
             e.currentTarget.style.borderColor = '#1a1a1a'
-            e.currentTarget.style.background = '#f5f0e8'
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.backgroundColor = 'transparent'
           }}
           value={form.description}
           onChange={(e) => onChange((f) => ({ ...f, description: e.target.value }))}
