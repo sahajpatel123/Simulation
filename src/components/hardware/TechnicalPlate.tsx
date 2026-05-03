@@ -12,6 +12,9 @@ interface TechnicalPlateProps {
 
 const RED = '#c0392b';
 
+const FONT_BODY = 'var(--font-body), sans-serif';
+const FONT_SERIF = 'var(--font-serif), Georgia, serif';
+
 /** Uniform square graph paper inside the bordered drawing sheet only (not the page bench). */
 const DRAWING_SHEET_GRID_STEP_PX = 12;
 
@@ -99,7 +102,7 @@ export function TechnicalPlate({
           top: 22,
           left: '50%',
           transform: 'translateX(-50%)',
-          fontFamily: "'Courier New', monospace",
+          fontFamily: FONT_BODY,
           fontSize: 10,
           letterSpacing: '0.3em',
           color: RED,
@@ -121,7 +124,7 @@ export function TechnicalPlate({
             border: `0.5px solid ${dark ? '#444' : '#1a1a1a'}`,
             padding: '8px 14px',
             cursor: 'pointer',
-            fontFamily: "'Courier New', monospace",
+            fontFamily: FONT_BODY,
             fontSize: 9,
             letterSpacing: '0.18em',
             color: dark ? '#e8e4dc' : '#1a1a1a',
@@ -166,7 +169,7 @@ export function TechnicalPlate({
           transition: 'all 0.5s ease',
         }}>
           <div style={{
-            fontFamily: "'Courier New', monospace",
+            fontFamily: FONT_BODY,
             fontSize: 9,
             letterSpacing: '0.22em',
             color: RED,
@@ -350,7 +353,7 @@ function EmptyHologram({
       {/* CALL TO ACTION */}
       <div style={{ marginTop: 32 }}>
         <div style={{
-          fontFamily: "'Courier New', monospace",
+          fontFamily: FONT_BODY,
           fontSize: 11,
           letterSpacing: '0.32em',
           color: accent,
@@ -360,8 +363,9 @@ function EmptyHologram({
           AWAITING SPECIFICATION
         </div>
         <div style={{
-          fontFamily: 'Georgia, serif',
+          fontFamily: FONT_SERIF,
           fontStyle: 'italic',
+          fontWeight: 300,
           fontSize: 18,
           color: valCol,
           letterSpacing: '-0.01em',
@@ -373,7 +377,7 @@ function EmptyHologram({
           File the build sheet on the left. The bench will press a solid you can rotate, measure, and interrogate.
         </div>
         <div style={{
-          fontFamily: "'Courier New', monospace",
+          fontFamily: FONT_BODY,
           fontSize: 9,
           letterSpacing: '0.18em',
           color: subtleText,
@@ -443,13 +447,13 @@ function TitleRow({
       marginBottom: 4,
     }}>
       <span style={{
-        fontFamily: "'Courier New', monospace",
+        fontFamily: FONT_BODY,
         fontSize: 9, letterSpacing: '0.14em',
         color: lblCol,
         transition: 'color 0.5s ease',
       }}>{label}</span>
       <span style={{
-        fontFamily: "'Courier New', monospace",
+        fontFamily: FONT_BODY,
         fontSize: 9, color: valCol, textAlign: 'right',
         transition: 'color 0.5s ease',
       }}>{value}</span>
@@ -478,7 +482,7 @@ function ActionButton({
       background: 'transparent',
       border: `0.5px solid ${dark ? '#444' : '#1a1a1a'}`,
       padding: '12px 20px',
-      fontFamily: "'Courier New', monospace",
+      fontFamily: FONT_BODY,
       fontSize: 11,
       letterSpacing: '0.18em',
       color: dark ? '#e8e4dc' : '#1a1a1a',
@@ -510,7 +514,7 @@ function ToggleSeg({
       padding: '12px 22px',
       border: 'none',
       borderLeft: active ? 'none' : `0.5px solid ${dark ? '#333' : '#1a1a1a'}`,
-      fontFamily: "'Courier New', monospace",
+      fontFamily: FONT_BODY,
       fontSize: 11,
       letterSpacing: '0.18em',
       cursor: 'pointer',
@@ -536,7 +540,7 @@ function PrimaryButton({
         color: '#f5f0e8',
         border: enabled ? '0.5px solid #c0392b' : `0.5px solid ${dark ? '#333' : '#999'}`,
         padding: '14px 26px',
-        fontFamily: "'Courier New', monospace",
+        fontFamily: FONT_BODY,
         fontSize: 11,
         letterSpacing: '0.2em',
         cursor: enabled ? 'pointer' : 'not-allowed',

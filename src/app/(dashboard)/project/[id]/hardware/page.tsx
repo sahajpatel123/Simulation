@@ -58,10 +58,11 @@ const inputStyle: CSSProperties = {
   backgroundColor: 'transparent',
   border: 'none',
   borderBottom: '1px solid #1a1a1a',
-  fontFamily: 'Georgia, serif',
-  fontStyle: 'italic',
+  fontFamily: 'var(--font-body), sans-serif',
+  fontStyle: 'normal',
+  fontWeight: 300,
   fontSize: 18,
-  color: '#1a1a1a',
+  color: 'var(--ink)',
   padding: '12px 4px',
   outline: 'none',
   borderRadius: 0,
@@ -283,26 +284,28 @@ function PressDispatchForm({
 
       {/* HEADING */}
       <div>
-        <div style={{
-          fontFamily: "'Courier New', monospace",
-          fontSize: 10,
-          letterSpacing: '0.22em',
-          color: '#c0392b',
-          marginBottom: 16,
-        }}>
+        <div
+          className="kicker"
+          style={{
+            color: 'var(--red)',
+            marginBottom: 16,
+          }}
+        >
           BUILD SPECIFICATION · INTAKE
         </div>
-        <h1 style={{
-          fontFamily: 'Georgia, serif',
-          fontWeight: 700,
-          fontSize: 42,
-          lineHeight: 1.08,
-          letterSpacing: '-0.02em',
-          color: '#1a1a1a',
-          margin: 0,
-        }}>
+        <h1
+          className="font-serif"
+          style={{
+            fontWeight: 700,
+            fontSize: 42,
+            lineHeight: 1.08,
+            letterSpacing: '-0.02em',
+            color: 'var(--ink)',
+            margin: 0,
+          }}
+        >
           Name the{' '}
-          <em style={{ color: '#c0392b', fontStyle: 'italic' }}>
+          <em style={{ color: 'var(--red)', fontStyle: 'italic' }}>
             solid
           </em>{' '}
           you want to prove.
@@ -368,6 +371,7 @@ function PressDispatchForm({
             fontSize: 15,
             lineHeight: 1.6,
             fontStyle: 'italic',
+            fontWeight: 300,
             background: 'transparent',
             backgroundColor: 'transparent',
           }}
@@ -388,10 +392,11 @@ function PressDispatchForm({
 
       {/* HELP TEXT */}
       <div style={{
-        fontFamily: 'Georgia, serif',
+        fontFamily: 'var(--font-body), sans-serif',
         fontSize: 13,
         fontStyle: 'italic',
-        color: '#888',
+        fontWeight: 300,
+        color: 'var(--ink-secondary)',
         lineHeight: 1.6,
         paddingTop: 8,
         borderTop: '0.5px solid #c4bfb4',
@@ -413,10 +418,10 @@ function PressDispatchForm({
           color: '#f5f0e8',
           border: '1px solid #1a1a1a',
           padding: '16px 20px',
-          fontFamily: "'Courier New', monospace",
+          fontFamily: 'var(--font-body), sans-serif',
           fontSize: 11,
           letterSpacing: '0.22em',
-          fontWeight: 600,
+          fontWeight: 500,
           cursor: !canSubmit || generating ? 'not-allowed' : 'pointer',
           display: 'flex',
           alignItems: 'center',
@@ -463,10 +468,10 @@ function FormField({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <label style={{
-        fontFamily: "'Courier New', monospace",
+        fontFamily: 'var(--font-body), sans-serif',
         fontSize: 10,
         letterSpacing: '0.18em',
-        color: '#1a1a1a',
+        color: 'var(--ink)',
         fontWeight: 500,
       }}>
         {label}
