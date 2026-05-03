@@ -1,0 +1,96 @@
+# ── Node ──────────────────────────────
+node_modules/
+.pnp/
+.pnp.js
+
+# ── Python Virtual Environments ───────
+.venv/
+.venv2/
+.venv3/
+.venv_step86/
+venv/
+env/
+.env_python/
+thecee-backend/venv/
+thecee-backend/.venv/
+**/venv/
+**/.venv*/
+**/site-packages/
+*.egg-info/
+
+# ── Python Cache ──────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# ── Build Outputs ─────────────────────
+.next/
+.next.nosync/
+dist/
+build/
+out/
+.vercel/
+.output/
+.turbo/
+
+# ── Git ───────────────────────────────
+.git/
+
+# ── Lock Files ────────────────────────
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+bun.lockb
+poetry.lock
+Pipfile.lock
+
+# ── Source Maps & Minified ────────────
+*.map
+*.min.js
+*.min.css
+
+# ── Cache ─────────────────────────────
+.cache/
+.parcel-cache/
+redis-data/
+celerybeat-schedule
+celerybeat.pid
+
+# ── Logs ──────────────────────────────
+*.log
+logs/
+npm-debug.log*
+
+# ── Environment & Secrets ─────────────
+.env
+.env.*
+!.env.example
+
+# ── Media & Binary ────────────────────
+*.mp4
+*.mp3
+*.zip
+*.tar.gz
+*.rar
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.woff
+*.woff2
+*.ttf
+*.eot
+*.sqlite
+*.db
+
+# ── OS ────────────────────────────────
+.DS_Store
+Thumbs.db
