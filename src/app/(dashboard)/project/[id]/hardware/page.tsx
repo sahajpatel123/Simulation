@@ -390,7 +390,7 @@ function PressDispatchForm({
         without leaving the bench.
       </div>
 
-      {/* GENERATE BUTTON */}
+      {/* GENERATE BUTTON — flat editorial block, no chrome */}
       <button
         type="button"
         className="hw-build-sheet-cta"
@@ -398,89 +398,42 @@ function PressDispatchForm({
         aria-busy={generating}
         onClick={onSubmit}
         style={{
-          position: 'relative',
-          background:
-            'linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 42%), #c0392b',
+          background: '#c0392b',
           color: '#f5f0e8',
-          border: '1px solid rgba(255,255,255,0.14)',
-          padding: '18px 24px',
+          border: '1px solid #1a1a1a',
+          padding: '16px 20px',
           fontFamily: "'Courier New', monospace",
-          fontSize: 12,
-          letterSpacing: '0.2em',
+          fontSize: 11,
+          letterSpacing: '0.22em',
           fontWeight: 600,
           cursor: !canSubmit || generating ? 'not-allowed' : 'pointer',
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0,1fr) auto minmax(0,1fr)',
+          display: 'flex',
           alignItems: 'center',
-          columnGap: 12,
+          justifyContent: 'center',
+          gap: 10,
           width: '100%',
-          borderRadius: 2,
+          borderRadius: 0,
           marginTop: 12,
           textTransform: 'uppercase',
-          WebkitFontSmoothing: 'antialiased',
-          boxShadow:
-            'inset 0 1px 0 rgba(255,255,255,0.12), 0 1px 0 rgba(0,0,0,0.06), 0 10px 28px -6px rgba(192,57,43,0.45)',
+          boxShadow: 'none',
           opacity: !canSubmit || generating ? 0.45 : 1,
-          transition:
-            'background 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease, transform 0.12s ease, opacity 0.2s ease',
+          transition: 'background 0.15s ease, color 0.15s ease, opacity 0.15s ease',
         }}
         onMouseEnter={(e) => {
           if (!canSubmit || generating) return
-          e.currentTarget.style.background =
-            'linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 45%), #1a1a1a'
-          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'
-          e.currentTarget.style.boxShadow =
-            'inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 0 rgba(0,0,0,0.12), 0 12px 32px -8px rgba(0,0,0,0.35)'
+          e.currentTarget.style.background = '#1a1a1a'
+          e.currentTarget.style.color = '#f5f0e8'
         }}
         onMouseLeave={(e) => {
           if (!canSubmit || generating) return
-          e.currentTarget.style.background =
-            'linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 42%), #c0392b'
-          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.14)'
-          e.currentTarget.style.boxShadow =
-            'inset 0 1px 0 rgba(255,255,255,0.12), 0 1px 0 rgba(0,0,0,0.06), 0 10px 28px -6px rgba(192,57,43,0.45)'
+          e.currentTarget.style.background = '#c0392b'
+          e.currentTarget.style.color = '#f5f0e8'
         }}
       >
-        <span
-          style={{
-            justifySelf: 'end',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 22,
-          }}
-        >
-          <span
-            style={{
-              display: 'block',
-              width: 7,
-              height: 7,
-              borderRadius: '50%',
-              background: '#f5f0e8',
-              boxShadow: '0 0 0 1px rgba(26,26,26,0.12), inset 0 1px 0 rgba(255,255,255,0.35)',
-            }}
-          />
-        </span>
-        <span
-          style={{
-            textAlign: 'center',
-            textShadow: '0 1px 0 rgba(0,0,0,0.12)',
-            whiteSpace: 'nowrap',
-          }}
-        >
+        <span style={{ whiteSpace: 'nowrap' }}>
           {generating ? 'GENERATING SOLID…' : 'GENERATE BUILD SHEET'}
         </span>
-        <span
-          style={{
-            justifySelf: 'start',
-            fontSize: 15,
-            lineHeight: 1,
-            fontWeight: 500,
-            opacity: 0.92,
-            letterSpacing: '0.02em',
-            textShadow: '0 1px 0 rgba(0,0,0,0.12)',
-          }}
-        >
+        <span style={{ fontSize: 13, fontWeight: 500, letterSpacing: 0 }} aria-hidden>
           →
         </span>
       </button>
