@@ -54,6 +54,7 @@ const CATEGORIES = [
 
 const inputStyle: CSSProperties = {
   width: '100%',
+  background: 'transparent',
   backgroundColor: 'transparent',
   border: 'none',
   borderBottom: '1px solid #1a1a1a',
@@ -70,16 +71,16 @@ const inputStyle: CSSProperties = {
 const SELECT_CHEVRON =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%231a1a1a' d='M2.5 4.5L6 8l3.5-3.5z'/%3E%3C/svg%3E\")"
 
+/** One shorthand so WebKit does not paint the default grey select field behind the chevron. */
+const HARDWARE_SELECT_BACKGROUND = `transparent ${SELECT_CHEVRON} no-repeat right 6px center`
+
 const selectStyle: CSSProperties = {
   ...inputStyle,
   cursor: 'pointer',
   appearance: 'none',
   WebkitAppearance: 'none',
   MozAppearance: 'none',
-  backgroundColor: 'transparent',
-  backgroundImage: SELECT_CHEVRON,
-  backgroundRepeat: 'no-repeat',
-  backgroundPosition: 'right 6px center',
+  background: HARDWARE_SELECT_BACKGROUND,
   paddingRight: 28,
 }
 
@@ -94,7 +95,10 @@ const numberInputStyle: CSSProperties = {
 const inputFocusHandlers = {
   onFocus: (e: FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     e.currentTarget.style.borderBottomColor = '#c0392b'
-    if (e.currentTarget instanceof HTMLSelectElement || e.currentTarget instanceof HTMLInputElement) {
+    if (e.currentTarget instanceof HTMLSelectElement) {
+      e.currentTarget.style.background = HARDWARE_SELECT_BACKGROUND
+    } else if (e.currentTarget instanceof HTMLInputElement) {
+      e.currentTarget.style.background = 'transparent'
       e.currentTarget.style.backgroundColor = 'transparent'
     } else {
       e.currentTarget.style.background = 'transparent'
@@ -103,7 +107,10 @@ const inputFocusHandlers = {
   },
   onBlur: (e: FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     e.currentTarget.style.borderBottomColor = '#1a1a1a'
-    if (e.currentTarget instanceof HTMLSelectElement || e.currentTarget instanceof HTMLInputElement) {
+    if (e.currentTarget instanceof HTMLSelectElement) {
+      e.currentTarget.style.background = HARDWARE_SELECT_BACKGROUND
+    } else if (e.currentTarget instanceof HTMLInputElement) {
+      e.currentTarget.style.background = 'transparent'
       e.currentTarget.style.backgroundColor = 'transparent'
     } else {
       e.currentTarget.style.background = 'transparent'
