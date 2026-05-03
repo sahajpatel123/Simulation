@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { DM_Sans, DM_Serif_Display, Playfair_Display } from 'next/font/google'
+import { DM_Sans, DM_Serif_Display, JetBrains_Mono, Playfair_Display } from 'next/font/google'
 import { Toaster } from 'sonner'
 import Providers from './providers'
 import HydrateAuth from '@/components/layout/HydrateAuth'
@@ -25,6 +25,12 @@ const dmSerifDisplay = DM_Serif_Display({
   weight: '400',
 })
 
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-geist-mono',
+  display: 'swap',
+})
+
 const allowIndexing = process.env.NEXT_PUBLIC_ALLOW_INDEXING === 'true'
 
 export const metadata: Metadata = {
@@ -40,7 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="en"
       data-scroll-behavior="smooth"
-      className={`${playfair.variable} ${dmSans.variable} ${dmSerifDisplay.variable}`}
+      className={`${playfair.variable} ${dmSans.variable} ${dmSerifDisplay.variable} ${jetbrainsMono.variable}`}
     >
       <body>
         <ScrollChrome />
