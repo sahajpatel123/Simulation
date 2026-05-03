@@ -169,7 +169,7 @@ function SidebarInner({ collapsed, onCollapse, onExpand }: SidebarProps) {
               style={{
                 height: 3,
                 background: 'var(--red)',
-                width: '100%',
+                width: '30%',
                 marginTop: 10,
               }}
             />
