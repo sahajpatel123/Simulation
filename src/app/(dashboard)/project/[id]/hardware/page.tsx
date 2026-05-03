@@ -379,6 +379,7 @@ function PressDispatchForm({
             fontWeight: 300,
             background: 'transparent',
             backgroundColor: 'transparent',
+            fontFamily: 'var(--font-body)',
           }}
           onFocus={(e) => {
             e.currentTarget.style.borderColor = '#c0392b'

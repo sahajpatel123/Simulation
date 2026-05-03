@@ -366,7 +366,7 @@ function EmptyHologram({
         <div style={{
           fontFamily: FONT_SERIF,
           fontStyle: 'italic',
-          fontWeight: 300,
+          fontWeight: 400,
           fontSize: 18,
           color: valCol,
           letterSpacing: '-0.01em',

@@ -9,7 +9,8 @@ import './globals.css'
 const playfair = Playfair_Display({
   subsets: ['latin'],
   variable: '--font-serif',
-  weight: ['700', '800', '900'],
+  /** Body copy uses 400 in `.editorial-workspace`; headings use 700–900. Without 400, light weights fall back to Georgia. */
+  weight: ['400', '700', '800', '900'],
   style: ['normal', 'italic'],
 })
 
