@@ -131,7 +131,7 @@ function SidebarInner({ collapsed, onCollapse, onExpand }: SidebarProps) {
         </div>
       ) : (
         <>
-          <div>
+          <div style={{ display: 'inline-block', maxWidth: '100%' }}>
             <button
               type="button"
               onClick={(e) => {
@@ -156,12 +156,21 @@ function SidebarInner({ collapsed, onCollapse, onExpand }: SidebarProps) {
                 lineHeight: 1,
                 letterSpacing: '-0.02em',
                 color: 'var(--ink)',
+                textTransform: 'none',
               }}
-              className="sidebar-contents-trigger"
+              className="sidebar-contents-trigger font-serif"
             >
               Contents
             </button>
-            <div style={{ height: 2, background: 'var(--red)', width: 40, marginTop: 12 }} />
+            <div
+              aria-hidden
+              style={{
+                height: 3,
+                background: 'var(--ink)',
+                width: '100%',
+                marginTop: 10,
+              }}
+            />
           </div>
 
           <div id="sidebar-toc-nav">

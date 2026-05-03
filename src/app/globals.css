@@ -149,7 +149,7 @@ body.thecee-scroll-reveal {
 .editorial-workspace input,
 .editorial-workspace textarea,
 .editorial-workspace select,
-.editorial-workspace button,
+.editorial-workspace button:not(#sidebar-contents-toggle),
 .editorial-workspace label {
   font-family: var(--font-body, 'DM Sans', sans-serif) !important;
   font-weight: 400 !important;
