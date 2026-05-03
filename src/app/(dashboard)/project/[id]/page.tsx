@@ -556,7 +556,7 @@ export default function ProjectPage() {
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'translate(-2px, -2px)'
-                  e.currentTarget.style.boxShadow = '15px 15px 0 rgba(45, 69, 86, 0.38)'
+                  e.currentTarget.style.boxShadow = '16px 16px 0 rgba(0, 0, 0, 0.94)'
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.transform = 'translate(0, 0)'
