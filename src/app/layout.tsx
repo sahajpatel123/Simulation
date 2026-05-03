@@ -27,7 +27,7 @@ const dmSerifDisplay = DM_Serif_Display({
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
-  variable: '--font-geist-mono',
+  variable: '--font-mono',
   display: 'swap',
 })
 

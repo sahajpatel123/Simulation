@@ -58,7 +58,7 @@ const inputStyle: CSSProperties = {
   backgroundColor: 'transparent',
   border: 'none',
   borderBottom: '1px solid #1a1a1a',
-  fontFamily: 'var(--font-body), sans-serif',
+  fontFamily: 'var(--font-sans), sans-serif',
   fontStyle: 'normal',
   fontWeight: 300,
   fontSize: 18,
@@ -392,7 +392,7 @@ function PressDispatchForm({
 
       {/* HELP TEXT */}
       <div style={{
-        fontFamily: 'var(--font-body), sans-serif',
+        fontFamily: 'var(--font-sans), sans-serif',
         fontSize: 13,
         fontStyle: 'italic',
         fontWeight: 300,
@@ -418,7 +418,7 @@ function PressDispatchForm({
           color: '#f5f0e8',
           border: '1px solid #1a1a1a',
           padding: '16px 20px',
-          fontFamily: 'var(--font-body), sans-serif',
+          fontFamily: 'var(--font-sans), sans-serif',
           fontSize: 11,
           letterSpacing: '0.22em',
           fontWeight: 500,
@@ -468,7 +468,7 @@ function FormField({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <label style={{
-        fontFamily: 'var(--font-body), sans-serif',
+        fontFamily: 'var(--font-sans), sans-serif',
         fontSize: 10,
         letterSpacing: '0.18em',
         color: 'var(--ink)',
