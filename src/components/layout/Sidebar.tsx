@@ -168,7 +168,7 @@ function SidebarInner({ collapsed, onCollapse, onExpand }: SidebarProps) {
               aria-hidden
               style={{
                 height: 3,
-                background: 'var(--ink)',
+                background: 'var(--red)',
                 width: '100%',
                 marginTop: 10,
               }}
