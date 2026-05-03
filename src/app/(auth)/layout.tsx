@@ -1,5 +1,9 @@
 import type { ReactNode } from 'react'
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
-  return <>{children}</>
+  return (
+    <div className="editorial-workspace" style={{ minHeight: '100dvh' }}>
+      {children}
+    </div>
+  )
 }

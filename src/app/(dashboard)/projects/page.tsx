@@ -316,18 +316,10 @@ function ProjectsPage() {
               marginBottom: 0,
             }}
           >
-            <span className="kicker" style={{ color: 'var(--ink-secondary)', fontFamily: 'var(--font-mono), monospace' }}>
-              №
-            </span>
-            <span className="kicker" style={{ color: 'var(--ink-secondary)', fontFamily: 'var(--font-mono), monospace' }}>
-              Title / Précis
-            </span>
-            <span className="kicker" style={{ color: 'var(--ink-secondary)', fontFamily: 'var(--font-mono), monospace' }}>
-              Filed
-            </span>
-            <span className="kicker" style={{ color: 'var(--ink-secondary)', fontFamily: 'var(--font-mono), monospace' }}>
-              Status
-            </span>
+            <span className="kicker" style={{ color: 'var(--ink-secondary)' }}>№</span>
+            <span className="kicker" style={{ color: 'var(--ink-secondary)' }}>Title / Précis</span>
+            <span className="kicker" style={{ color: 'var(--ink-secondary)' }}>Filed</span>
+            <span className="kicker" style={{ color: 'var(--ink-secondary)' }}>Status</span>
             <span />
           </div>
 
@@ -457,7 +449,6 @@ function FilterRibbon({
               style={{
                 color: isActive ? 'rgba(242, 236, 224, 0.65)' : 'var(--ink-secondary)',
                 fontSize: 9,
-                fontFamily: 'var(--font-mono), monospace',
               }}
             >
               {tab.note}
@@ -992,6 +983,7 @@ function FileDossierModal({
       >
         <div
           onClick={(e) => e.stopPropagation()}
+          className="editorial-workspace"
           style={{
             width: 'min(640px, 100%)',
             maxHeight: 'calc(100vh - 48px)',

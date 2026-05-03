@@ -137,6 +137,25 @@ body.thecee-scroll-reveal {
   min-height: 100%;
 }
 
+/*
+ * Workspace default typography — dossier / galley stack (Playfair body, mono kickers).
+ * Applied on #app-shell (dashboard), auth + onboarding wrappers. Not used on `/` landing.
+ */
+.editorial-workspace {
+  font-family: var(--font-serif, 'Playfair Display', Georgia, serif);
+  font-weight: 300;
+}
+
+.editorial-workspace header,
+.editorial-workspace aside,
+.editorial-workspace input,
+.editorial-workspace textarea,
+.editorial-workspace select,
+.editorial-workspace [role='tablist'],
+.editorial-workspace [role='tab'] {
+  font-family: var(--font-body, 'DM Sans', sans-serif);
+}
+
 .font-serif {
   font-family: var(--font-serif, 'Playfair Display', Georgia, serif);
 }
@@ -191,9 +210,9 @@ body.thecee-scroll-reveal {
   font-feature-settings: 'lnum' 1, 'tnum' 1;
 }
 
-/* Uppercase editorial labels. */
+/* Uppercase editorial labels — mono caps (index rails, masthead ticks). */
 .kicker {
-  font-family: var(--font-body, 'DM Sans', sans-serif);
+  font-family: var(--font-mono), monospace;
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.22em;

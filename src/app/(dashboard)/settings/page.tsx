@@ -1124,6 +1124,7 @@ function Modal({
       >
         <div
           onClick={(e) => e.stopPropagation()}
+          className="editorial-workspace"
           style={{
             width: `min(${width}px, 100%)`,
             maxHeight: 'calc(100vh - 48px)',
