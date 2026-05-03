@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { motion } from 'framer-motion';
 
 interface TechnicalPlateProps {
   productName?: string
@@ -27,6 +28,10 @@ const FONT_SERIF = 'var(--font-serif), serif';
 /** Uniform square graph paper inside the bordered drawing sheet only (not the page bench). */
 const DRAWING_SHEET_GRID_STEP_PX = 12;
 
+const TITLE_BLOCK_AUTO_COLLAPSE_MS = 5000;
+const TITLE_BLOCK_DOT_PX = 14;
+const TITLE_BLOCK_PANEL_MIN_W = 280;
+
 export function TechnicalPlate({
   productName = '—',
   category = '—',
@@ -38,7 +43,33 @@ export function TechnicalPlate({
 }: TechnicalPlateProps) {
   const [dark, setDark] = useState(false);
   const [rotation, setRotation] = useState(0);
+  const [titleBlockCollapsed, setTitleBlockCollapsed] = useState(false);
   const rafRef = useRef<number | null>(null);
+  const titleCollapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearTitleCollapseTimer = useCallback(() => {
+    if (titleCollapseTimerRef.current != null) {
+      clearTimeout(titleCollapseTimerRef.current);
+      titleCollapseTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleTitleCollapse = useCallback(() => {
+    clearTitleCollapseTimer();
+    titleCollapseTimerRef.current = setTimeout(() => {
+      setTitleBlockCollapsed(true);
+      titleCollapseTimerRef.current = null;
+    }, TITLE_BLOCK_AUTO_COLLAPSE_MS);
+  }, [clearTitleCollapseTimer]);
+
+  useEffect(() => {
+    if (!titleBlockCollapsed) {
+      scheduleTitleCollapse();
+    }
+    return () => {
+      clearTitleCollapseTimer();
+    };
+  }, [titleBlockCollapsed, scheduleTitleCollapse, clearTitleCollapseTimer]);
 
   useEffect(() => {
     const animate = () => {
@@ -168,18 +199,61 @@ export function TechnicalPlate({
         {/* MAIN STAGE */}
         <EmptyHologram dark={dark} rotation={rotation} subtleText={subtleText} valCol={valCol} />
 
-        {/* TITLE BLOCK — BOTTOM RIGHT */}
-        <div style={{
-          position: 'absolute',
-          bottom: 28,
-          right: 28,
-          minWidth: 280,
-          background: dark ? 'rgba(15,15,15,0.92)' : 'rgba(245,240,232,0.94)',
-          border: `0.5px solid ${dark ? '#333' : '#1a1a1a'}`,
-          padding: '14px 18px',
-          backdropFilter: 'blur(2px)',
-          transition: 'all 0.5s ease',
-        }}>
+        {/* TITLE BLOCK — BOTTOM RIGHT (auto-collapses to red dot; click dot to expand) */}
+        <motion.div
+          initial={false}
+          animate={{
+            width: titleBlockCollapsed ? TITLE_BLOCK_DOT_PX : TITLE_BLOCK_PANEL_MIN_W,
+            height: titleBlockCollapsed ? TITLE_BLOCK_DOT_PX : 'auto',
+            borderRadius: titleBlockCollapsed ? TITLE_BLOCK_DOT_PX / 2 : 0,
+            backgroundColor: titleBlockCollapsed ? RED : (dark ? 'rgba(15,15,15,0.92)' : 'rgba(245,240,232,0.94)'),
+            border: titleBlockCollapsed
+              ? '1px solid rgba(26,23,20,0.2)'
+              : `0.5px solid ${dark ? '#333' : '#1a1a1a'}`,
+            backdropFilter: titleBlockCollapsed ? 'none' : 'blur(2px)',
+            boxShadow: titleBlockCollapsed ? '0 1px 3px rgba(0,0,0,0.18)' : undefined,
+          }}
+          transition={{ duration: 0.58, ease: [0.22, 1, 0.04, 1] }}
+          style={{
+            position: 'absolute',
+            bottom: 28,
+            right: 28,
+            minWidth: titleBlockCollapsed ? undefined : TITLE_BLOCK_PANEL_MIN_W,
+            overflow: 'hidden',
+            zIndex: 12,
+            cursor: titleBlockCollapsed ? 'pointer' : 'default',
+            boxSizing: 'border-box',
+          }}
+          role={titleBlockCollapsed ? 'button' : undefined}
+          tabIndex={titleBlockCollapsed ? 0 : undefined}
+          aria-expanded={titleBlockCollapsed ? false : true}
+          aria-label={titleBlockCollapsed ? 'Expand engineering title block' : undefined}
+          onClick={() => {
+            if (titleBlockCollapsed) {
+              setTitleBlockCollapsed(false);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (!titleBlockCollapsed) return;
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setTitleBlockCollapsed(false);
+            }
+          }}
+        >
+          <motion.div
+            initial={false}
+            animate={{
+              opacity: titleBlockCollapsed ? 0 : 1,
+              scale: titleBlockCollapsed ? 0.88 : 1,
+            }}
+            transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+            style={{
+              transformOrigin: '100% 100%',
+              padding: '14px 18px',
+              pointerEvents: titleBlockCollapsed ? 'none' : 'auto',
+            }}
+          >
           <div style={{
             fontFamily: FONT_MONO,
             fontSize: 9,
@@ -212,7 +286,8 @@ export function TechnicalPlate({
           ].map(([l, v]) => (
             <TitleRow key={l} label={l} value={v} lblCol={lblCol} valCol={valCol} />
           ))}
-        </div>
+          </motion.div>
+        </motion.div>
       </div>
 
       {/* ACTION BAR — BOTTOM */}
