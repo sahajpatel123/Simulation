@@ -219,7 +219,7 @@ export default function HardwareBuilderPage() {
       style={{
         display: 'flex',
         height: 'calc(100vh - 120px)',
-        background: '#f5f0e8',
+        background: 'transparent',
         overflow: 'hidden',
       }}
     >
@@ -266,7 +266,7 @@ function PressDispatchForm({
       width: '38%',
       minWidth: 460,
       padding: '56px 48px 96px 56px',
-      background: '#f5f0e8',
+      background: 'transparent',
       display: 'flex',
       flexDirection: 'column',
       gap: 32,
