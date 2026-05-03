@@ -10,8 +10,22 @@ interface EditorialExpandableProps {
 
 /** Seconds — matched to transitionend + fallback */
 const HEIGHT_DURATION_S = 0.58
-/** Smooth ease-out (decelerates gently at the end of expand/collapse) */
+/** Smooth ease-out */
 const HEIGHT_EASE = 'cubic-bezier(0.22, 1, 0.04, 1)'
+
+const dashSpanStyle: React.CSSProperties = {
+  display: 'inline-block',
+  width: '0.45em',
+  height: '0.06em',
+  backgroundColor: '#c0392b',
+  borderRadius: '2px',
+  cursor: 'pointer',
+  userSelect: 'none',
+  marginLeft: '0.1em',
+  marginBottom: '0.12em',
+  verticalAlign: 'middle',
+  transformOrigin: 'left center',
+}
 
 function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false)
@@ -37,6 +51,7 @@ export function EditorialExpandable({
   const [height, setHeight] = useState<string>('auto')
   const [isTransitioning, setIsTransitioning] = useState(false)
   const containerRef = useRef<HTMLSpanElement>(null)
+  const measureRef = useRef<HTMLSpanElement>(null)
   const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const transitionEndCleanupRef = useRef<(() => void) | null>(null)
   const prefersReducedMotion = usePrefersReducedMotion()
@@ -55,12 +70,17 @@ export function EditorialExpandable({
     transitionEndCleanupRef.current = null
   }, [])
 
-  const finishHeightTransition = useCallback(() => {
-    clearFallback()
-    clearTransitionEnd()
-    setHeight('auto')
-    setIsTransitioning(false)
-  }, [clearFallback, clearTransitionEnd])
+  /** Optional hook runs before height returns to auto (e.g. collapse: swap to truncated copy). */
+  const completeTransition = useCallback(
+    (beforeHeightAuto?: () => void) => {
+      clearFallback()
+      clearTransitionEnd()
+      beforeHeightAuto?.()
+      setHeight('auto')
+      setIsTransitioning(false)
+    },
+    [clearFallback, clearTransitionEnd]
+  )
 
   useEffect(
     () => () => {
@@ -70,62 +90,117 @@ export function EditorialExpandable({
     [clearFallback, clearTransitionEnd]
   )
 
-  const runHeightTransition = useCallback(
-    (nextExpanded: boolean) => {
-      const el = containerRef.current
-      if (!el) return
+  const runExpand = useCallback(() => {
+    const el = containerRef.current
+    if (!el || isTransitioning || expanded) return
 
-      if (prefersReducedMotion) {
-        clearFallback()
-        clearTransitionEnd()
-        setExpanded(nextExpanded)
-        setHeight('auto')
-        setIsTransitioning(false)
-        return
-      }
-
+    if (prefersReducedMotion) {
       clearFallback()
       clearTransitionEnd()
+      setExpanded(true)
+      setHeight('auto')
+      setIsTransitioning(false)
+      return
+    }
 
-      const fromHeight = el.scrollHeight
-      setHeight(`${fromHeight}px`)
-      setIsTransitioning(true)
-      setExpanded(nextExpanded)
+    clearFallback()
+    clearTransitionEnd()
 
-      const settle = () => {
-        const node = containerRef.current
-        if (!node) {
-          finishHeightTransition()
-          return
-        }
-        const toHeight = node.scrollHeight
-        setHeight(`${toHeight}px`)
+    const fromHeight = el.scrollHeight
+    setHeight(`${fromHeight}px`)
+    setIsTransitioning(true)
+    setExpanded(true)
 
-        const onEnd = (ev: TransitionEvent) => {
-          if (ev.target !== node || ev.propertyName !== 'height') return
-          node.removeEventListener('transitionend', onEnd)
-          finishHeightTransition()
-        }
+    const settle = () => {
+      const node = containerRef.current
+      if (!node) {
+        completeTransition()
+        return
+      }
+      const toHeight = node.scrollHeight
+      setHeight(`${toHeight}px`)
 
-        node.addEventListener('transitionend', onEnd)
-        transitionEndCleanupRef.current = () => {
-          node.removeEventListener('transitionend', onEnd)
-        }
-
-        fallbackTimerRef.current = setTimeout(() => {
-          finishHeightTransition()
-        }, HEIGHT_DURATION_S * 1000 + 120)
+      const onEnd = (ev: TransitionEvent) => {
+        if (ev.target !== node || ev.propertyName !== 'height') return
+        node.removeEventListener('transitionend', onEnd)
+        completeTransition()
       }
 
-      requestAnimationFrame(() => {
-        requestAnimationFrame(settle)
-      })
-    },
-    [clearFallback, clearTransitionEnd, finishHeightTransition, prefersReducedMotion]
-  )
+      node.addEventListener('transitionend', onEnd)
+      transitionEndCleanupRef.current = () => {
+        node.removeEventListener('transitionend', onEnd)
+      }
 
-  const handleExpand = useCallback(() => runHeightTransition(true), [runHeightTransition])
-  const handleCollapse = useCallback(() => runHeightTransition(false), [runHeightTransition])
+      fallbackTimerRef.current = setTimeout(() => {
+        completeTransition()
+      }, HEIGHT_DURATION_S * 1000 + 120)
+    }
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(settle)
+    })
+  }, [clearFallback, clearTransitionEnd, completeTransition, expanded, isTransitioning, prefersReducedMotion])
+
+  /**
+   * Collapse: keep full title + control visible while height animates down (overflow clips excess).
+   * Only then set expanded=false so layout and copy stay in sync — avoids “text jumps, page follows later”.
+   */
+  const runCollapse = useCallback(() => {
+    const el = containerRef.current
+    const measureEl = measureRef.current
+    if (!el || isTransitioning || !expanded) return
+
+    if (prefersReducedMotion) {
+      clearFallback()
+      clearTransitionEnd()
+      setExpanded(false)
+      setHeight('auto')
+      setIsTransitioning(false)
+      return
+    }
+
+    clearFallback()
+    clearTransitionEnd()
+
+    const fromHeight = el.scrollHeight
+    const collapsedH = measureEl?.offsetHeight ?? 0
+    const targetH = collapsedH > 0 ? collapsedH : Math.min(fromHeight, fromHeight * 0.45)
+
+    setHeight(`${fromHeight}px`)
+    setIsTransitioning(true)
+    /* expanded stays true until transition completes */
+
+    const settle = () => {
+      const node = containerRef.current
+      if (!node) {
+        completeTransition(() => setExpanded(false))
+        return
+      }
+      setHeight(`${targetH}px`)
+
+      const onEnd = (ev: TransitionEvent) => {
+        if (ev.target !== node || ev.propertyName !== 'height') return
+        node.removeEventListener('transitionend', onEnd)
+        completeTransition(() => setExpanded(false))
+      }
+
+      node.addEventListener('transitionend', onEnd)
+      transitionEndCleanupRef.current = () => {
+        node.removeEventListener('transitionend', onEnd)
+      }
+
+      fallbackTimerRef.current = setTimeout(() => {
+        completeTransition(() => setExpanded(false))
+      }, HEIGHT_DURATION_S * 1000 + 120)
+    }
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(settle)
+    })
+  }, [clearFallback, clearTransitionEnd, completeTransition, expanded, isTransitioning, prefersReducedMotion])
+
+  const handleExpand = useCallback(() => runExpand(), [runExpand])
+  const handleCollapse = useCallback(() => runCollapse(), [runCollapse])
 
   if (!needsTruncation) {
     return <span className={className}>{text}</span>
@@ -135,95 +210,111 @@ export function EditorialExpandable({
     'transform 0.45s cubic-bezier(0.22, 1, 0.04, 1), opacity 0.35s ease, background-color 0.25s ease'
 
   return (
-    <span
-      ref={containerRef}
-      className={className}
-      style={{
-        display: 'block',
-        overflow: 'hidden',
-        height,
-        transition: isTransitioning ? `height ${HEIGHT_DURATION_S}s ${HEIGHT_EASE}` : 'none',
-        willChange: isTransitioning ? 'height' : undefined,
-        paddingBottom: '0.25em',
-        marginBottom: '-0.25em',
-      }}
-    >
-      {!expanded ? (
-        <>
-          {visibleText}
-          <span
-            onClick={handleExpand}
-            role="button"
-            aria-label="Read full title"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                handleExpand()
-              }
-            }}
-            style={{
-              display: 'inline-block',
-              width: '0.45em',
-              height: '0.06em',
-              backgroundColor: '#c0392b',
-              borderRadius: '2px',
-              cursor: 'pointer',
-              userSelect: 'none',
-              marginLeft: '0.1em',
-              marginBottom: '0.12em',
-              verticalAlign: 'middle',
-              transition: dashTransition,
-              transformOrigin: 'left center',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.opacity = '0.92'
-              e.currentTarget.style.transform = 'scaleX(1.08) scaleY(1.25)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.opacity = '1'
-              e.currentTarget.style.transform = 'scaleX(1) scaleY(1)'
-            }}
-          />
-        </>
-      ) : (
-        <>
-          {text}
-          <span
-            onClick={handleCollapse}
-            role="button"
-            aria-label="Collapse title"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                handleCollapse()
-              }
-            }}
-            style={{
-              color: '#c0392b',
-              cursor: 'pointer',
-              userSelect: 'none',
-              marginLeft: '0.15em',
-              fontSize: '0.75em',
-              verticalAlign: 'middle',
-              lineHeight: 1,
-              display: 'inline-block',
-              transition: 'opacity 0.4s ease, transform 0.5s cubic-bezier(0.22, 1, 0.04, 1)',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.opacity = '0.85'
-              e.currentTarget.style.transform = 'translateY(-1px)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.opacity = '1'
-              e.currentTarget.style.transform = 'translateY(0)'
-            }}
-          >
-            ↑
-          </span>
-        </>
-      )}
+    <span style={{ position: 'relative', display: 'block' }}>
+      {/* In-flow copy: width source for the hidden measurer */}
+      <span
+        ref={containerRef}
+        className={className}
+        style={{
+          display: 'block',
+          overflow: 'hidden',
+          height,
+          transition: isTransitioning ? `height ${HEIGHT_DURATION_S}s ${HEIGHT_EASE}` : 'none',
+          willChange: isTransitioning ? 'height' : undefined,
+          paddingBottom: '0.25em',
+          marginBottom: '-0.25em',
+        }}
+      >
+        {!expanded ? (
+          <>
+            {visibleText}
+            <span
+              onClick={handleExpand}
+              role="button"
+              aria-label="Read full title"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  handleExpand()
+                }
+              }}
+              style={{
+                ...dashSpanStyle,
+                transition: dashTransition,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.opacity = '0.92'
+                e.currentTarget.style.transform = 'scaleX(1.08) scaleY(1.25)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.opacity = '1'
+                e.currentTarget.style.transform = 'scaleX(1) scaleY(1)'
+              }}
+            />
+          </>
+        ) : (
+          <>
+            {text}
+            <span
+              onClick={handleCollapse}
+              role="button"
+              aria-label="Collapse title"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  handleCollapse()
+                }
+              }}
+              style={{
+                color: '#c0392b',
+                cursor: 'pointer',
+                userSelect: 'none',
+                marginLeft: '0.15em',
+                fontSize: '0.75em',
+                verticalAlign: 'middle',
+                lineHeight: 1,
+                display: 'inline-block',
+                transition: 'opacity 0.4s ease, transform 0.5s cubic-bezier(0.22, 1, 0.04, 1)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.opacity = '0.85'
+                e.currentTarget.style.transform = 'translateY(-1px)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.opacity = '1'
+                e.currentTarget.style.transform = 'translateY(0)'
+              }}
+            >
+              ↑
+            </span>
+          </>
+        )}
+      </span>
+
+      {/* Hidden: same width & type as masthead — target height for collapse (truncated + dash) */}
+      <span
+        ref={measureRef}
+        aria-hidden
+        className={className}
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          top: 0,
+          visibility: 'hidden',
+          pointerEvents: 'none',
+          display: 'block',
+          overflow: 'hidden',
+          height: 'auto',
+          paddingBottom: '0.25em',
+          marginBottom: '-0.25em',
+        }}
+      >
+        {visibleText}
+        <span style={{ ...dashSpanStyle, cursor: 'default' }} />
+      </span>
     </span>
   )
 }
