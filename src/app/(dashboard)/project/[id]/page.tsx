@@ -2,14 +2,14 @@
 
 import { useMemo } from "react";
 import { motion } from "framer-motion";
-import { ArrowUpRight, Loader2, RefreshCcw } from "lucide-react";
+import { ArrowUpRight, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
 import { EditorialExpandable } from "@/components/EditorialExpandable";
 import { FolioAxisChip, LegacyFolioSlip } from "@/components/FolioAxisChip";
 import { useAssumptions } from "@/hooks/useAssumptions";
-import { useProject, useRegenerateIntelligence } from "@/hooks/useProjects";
+import { useProject } from "@/hooks/useProjects";
 import { useSimulations } from "@/hooks/useSimulation";
 import type { Assumption } from "@/types";
 
@@ -93,8 +93,6 @@ export default function ProjectPage() {
   const { data: project, isLoading: pLoading } = useProject(projectId);
   const { data: assumptions, isLoading: aLoading } = useAssumptions(projectId);
   const { data: simulations, isLoading: sLoading } = useSimulations(projectId);
-  const { mutate: regenerateIntelligence, isPending: isRegenerating } =
-    useRegenerateIntelligence();
 
   const assumptionList = useMemo<Assumption[]>(
     () => assumptions ?? [],
@@ -514,47 +512,18 @@ export default function ProjectPage() {
               marginBottom: 8,
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <h2
-                className="font-serif"
-                style={{
-                  fontSize: 34,
-                  fontWeight: 900,
-                  fontStyle: "italic",
-                  letterSpacing: "-0.02em",
-                  color: "var(--ink)",
-                }}
-              >
-                The Readings
-              </h2>
-              <button
-                onClick={() => regenerateIntelligence(projectId)}
-                disabled={isRegenerating}
-                title="Regenerate Précis and Readings"
-                style={{
-                  background: "none",
-                  border: "none",
-                  padding: 0,
-                  cursor: isRegenerating ? "not-allowed" : "pointer",
-                  opacity: isRegenerating ? 0.4 : 0.8,
-                  display: "flex",
-                  alignItems: "center",
-                  color: "var(--red)",
-                  transition: "opacity 0.2s",
-                }}
-                onMouseEnter={(e) => {
-                  if (!isRegenerating) e.currentTarget.style.opacity = "1";
-                }}
-                onMouseLeave={(e) => {
-                  if (!isRegenerating) e.currentTarget.style.opacity = "0.8";
-                }}
-              >
-                <RefreshCcw
-                  className={isRegenerating ? "animate-spin" : ""}
-                  style={{ width: 15, height: 15 }}
-                />
-              </button>
-            </div>
+            <h2
+              className="font-serif"
+              style={{
+                fontSize: 34,
+                fontWeight: 900,
+                fontStyle: "italic",
+                letterSpacing: "-0.02em",
+                color: "var(--ink)",
+              }}
+            >
+              The Readings
+            </h2>
             <div className="kicker" style={{ color: "var(--ink-secondary)" }}>
               {pLoading ? "Being read…" : `${readings.length} SURFACED`}
             </div>
@@ -583,66 +552,18 @@ export default function ProjectPage() {
               >
                 The readers are still turning the first page.
               </p>
-              <div
+              <p
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 14,
+                  fontFamily: "var(--font-mono), monospace",
+                  fontSize: 11,
+                  color: "#999",
+                  letterSpacing: "0.12em",
                   marginTop: 12,
+                  marginBottom: 0,
                 }}
               >
-                <p
-                  style={{
-                    fontFamily: "var(--font-mono), monospace",
-                    fontSize: 11,
-                    color: "#999",
-                    letterSpacing: "0.12em",
-                    margin: 0,
-                  }}
-                >
-                  ASSUMPTIONS WILL SURFACE AS THE PROOF IS READ.
-                </p>
-                <button
-                  onClick={() => regenerateIntelligence(projectId)}
-                  disabled={isRegenerating}
-                  style={{
-                    background: "none",
-                    border: "0.5px solid var(--border-color)",
-                    padding: "4px 10px",
-                    fontSize: 10,
-                    fontFamily: "var(--font-mono), monospace",
-                    letterSpacing: "0.1em",
-                    textTransform: "uppercase",
-                    color: "var(--ink-secondary)",
-                    cursor: isRegenerating ? "not-allowed" : "pointer",
-                    opacity: isRegenerating ? 0.5 : 1,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    transition: "all 0.2s",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isRegenerating) {
-                      e.currentTarget.style.borderColor = "var(--ink)";
-                      e.currentTarget.style.color = "var(--ink)";
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isRegenerating) {
-                      e.currentTarget.style.borderColor = "var(--border-color)";
-                      e.currentTarget.style.color = "var(--ink-secondary)";
-                    }
-                  }}
-                >
-                  {isRegenerating && (
-                    <Loader2
-                      className="animate-spin"
-                      style={{ width: 10, height: 10 }}
-                    />
-                  )}
-                  Force reading
-                </button>
-              </div>
+                ASSUMPTIONS WILL SURFACE AS THE PROOF IS READ.
+              </p>
             </div>
           ) : (
             <ul
