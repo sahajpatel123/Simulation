@@ -383,21 +383,6 @@ export default function ProjectPage() {
               Filed
             </div>
 
-            <div
-              style={{
-                fontSize: 10,
-                letterSpacing: "0.2em",
-                textTransform: "uppercase",
-                color: "var(--ink-tertiary)",
-                marginBottom: 12,
-                fontFamily: "var(--font-mono), monospace",
-                fontWeight: 500,
-                lineHeight: 1.35,
-              }}
-            >
-              {(ledger?.deck_line || project.title || "").trim()}
-            </div>
-
             <p
               className="dropcap"
               style={{
