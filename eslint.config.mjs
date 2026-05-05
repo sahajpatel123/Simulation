@@ -17,7 +17,7 @@ const eslintConfig = defineConfig([
     "node_modules 2/**",
     // Python backend + any venv (never lint third-party JS)
     "thecee-backend/**",
-    "app/**",
+    "backend/app/**",
     ".venv/**",
     ".venv2/**",
     "**/venv/**",

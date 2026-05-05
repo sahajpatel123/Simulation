@@ -8,6 +8,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+# Python package `app` lives under ./backend; keep it importable as `app.*`
+ENV PYTHONPATH=/app/backend
+
 # Install Python dependencies (cached layer — only re-runs if requirements.txt changes)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

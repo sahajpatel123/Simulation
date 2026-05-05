@@ -2,7 +2,9 @@
 set -euo pipefail
 
 echo "━━━ Starting TheCee Celery Worker ━━━"
-cd "$(dirname "$0")"
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+cd "$ROOT"
+export PYTHONPATH="${ROOT}/backend${PYTHONPATH:+:${PYTHONPATH}}"
 
 if ! command -v redis-cli &> /dev/null; then
     echo "⚠️  redis-cli not found — make sure Redis is running"

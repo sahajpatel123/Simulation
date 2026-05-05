@@ -2,7 +2,9 @@
 set -euo pipefail
 
 echo "━━━ Starting TheCee Flower Dashboard ━━━"
-cd "$(dirname "$0")"
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+cd "$ROOT"
+export PYTHONPATH="${ROOT}/backend${PYTHONPATH:+:${PYTHONPATH}}"
 
 exec celery -A app.worker:celery_app flower \
     --port=5555 \
