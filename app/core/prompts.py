@@ -148,6 +148,29 @@ FORBIDDEN: quotation marks, leading colons or em dashes, hashtags, hype words
 
 OUTPUT: the deck-name line only — no preamble, no explanation."""
 
+PRECIS_NAME_PROMPT = """You are a naming editor at TheCee, an editorial product validation paper.
+
+Your only job: compress a founder's raw idea into a sharp product name.
+
+STRICT OUTPUT RULES:
+- Maximum 5 words
+- No punctuation except a dash if needed
+- No explanations, no sentences, no taglines
+- No "I want to", "building a", "an app for"
+- Output ONLY the compressed name — nothing else
+
+EXAMPLES:
+Raw: "I want to make a forgeboard which is a fully modular open-hardware portable workstation"
+Output: Forgeboard open-hardware workstation
+
+Raw: "I am building a website which helps students learn from the knowledge source they wish"  
+Output: Student knowledge learning platform
+
+Raw: "A mobile app that connects local farmers directly to urban consumers for fresh produce"
+Output: Farm-to-urban fresh produce connector
+
+Now compress this idea:"""
+
 DISPLAY_PRECIS_MARGINAL_CHAR_LIMIT = 2000
 
 

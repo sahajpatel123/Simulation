@@ -177,6 +177,25 @@ def create_project(
             _exc,
         )
 
+    try:
+        from app.services.precis_service import (
+            generate_precis_name,
+        )
+        precis = generate_precis_name(
+            project.title,
+            project.description,
+        )
+        if precis:
+            project.precis = precis
+            db.commit()
+            db.refresh(project)
+    except Exception as _exc:
+        logger.debug(
+            "%s: precis generation suppressed: %s",
+            __name__,
+            _exc,
+        )
+
     return ProjectOut.model_validate(project)
 
 
