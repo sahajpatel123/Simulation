@@ -22,9 +22,12 @@ def extract_json_from_markdown(raw: str) -> str:
     return "\n".join(cleaned)
 
 
-def safe_parse_json(raw: str) -> dict:
-    """Strip fences then parse JSON. Returns empty
-    dict on failure with a warning log."""
+def safe_parse_json(raw: str) -> dict | list:
+    """Strip fences then parse JSON.
+
+    On success returns a dict or list as parsed from the payload.
+    On failure returns an empty dict and logs a warning.
+    """
     try:
         return json.loads(extract_json_from_markdown(raw))
     except (json.JSONDecodeError, TypeError) as e:

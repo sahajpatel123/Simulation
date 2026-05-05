@@ -20,6 +20,8 @@ class ProjectOut(BaseModel):
     description: str
     status: str
     dossier_axis: str | None = None
+    precis: str | None = None
+    readings_json: str | None = None
 
     model_config = {"from_attributes": True}
 

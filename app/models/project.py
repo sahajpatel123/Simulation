@@ -24,6 +24,8 @@ class Project(Base, TimestampMixin):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
+    precis: Mapped[str | None] = mapped_column(Text, nullable=True)
+    readings_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="DRAFT")
     intake_mode: Mapped[str] = mapped_column(String(20), default="IDEA", nullable=False)
     landing_page_url: Mapped[str | None] = mapped_column(Text, nullable=True)

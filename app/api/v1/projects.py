@@ -131,6 +131,24 @@ def create_project(
     db.add(project)
     db.commit()
     db.refresh(project)
+    # Fire-and-store dossier intelligence
+    try:
+        from app.services.dossier_intelligence import generate_both
+
+        intel = generate_both(project.title, project.description)
+        project.precis = intel["precis"] or None
+        project.readings_json = (
+            json.dumps(intel["readings"]) if intel["readings"] else None
+        )
+        db.commit()
+        db.refresh(project)
+    except Exception as _exc:
+        logger.debug(
+            "%s precis/readings on create suppressed: %s",
+            __name__,
+            _exc,
+        )
+
     return ProjectOut.model_validate(project)
 
 
@@ -2065,3 +2083,41 @@ def get_competitive_software_analysis(
             "message": "No competitive analysis yet. POST to /competitive-software-analysis."
         }
     return comp
+
+
+@router.post(
+    "/{project_id}/regenerate-intelligence",
+    response_model=ProjectOut,
+    summary="Regenerate Précis and Readings for a project",
+)
+def regenerate_intelligence(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(
+            Project.id == project_id,
+            Project.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found",
+        )
+
+    from app.services.dossier_intelligence import generate_both
+
+    intel = generate_both(project.title, project.description)
+
+    if intel["precis"]:
+        project.precis = intel["precis"]
+    if intel["readings"]:
+        project.readings_json = json.dumps(intel["readings"])
+
+    db.commit()
+    db.refresh(project)
+    return ProjectOut.model_validate(project)

@@ -134,18 +134,19 @@ def create_project(
     # Fire-and-store dossier intelligence
     try:
         from app.services.dossier_intelligence import generate_both
+
         intel = generate_both(project.title, project.description)
         project.precis = intel["precis"] or None
         project.readings_json = (
-            json.dumps(intel["readings"])
-            if intel["readings"] else None
+            json.dumps(intel["readings"]) if intel["readings"] else None
         )
         db.commit()
         db.refresh(project)
     except Exception as _exc:
         logger.debug(
             "%s precis/readings on create suppressed: %s",
-            __name__, _exc,
+            __name__,
+            _exc,
         )
 
     return ProjectOut.model_validate(project)
@@ -2109,6 +2110,7 @@ def regenerate_intelligence(
         )
 
     from app.services.dossier_intelligence import generate_both
+
     intel = generate_both(project.title, project.description)
 
     if intel["precis"]:
