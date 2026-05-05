@@ -13,6 +13,53 @@ import { useProject, useRegenerateIntelligence } from "@/hooks/useProjects";
 import { useSimulations } from "@/hooks/useSimulation";
 import type { Assumption } from "@/types";
 
+/** AI folio rubrics stored alongside readings in ``readings_json``. */
+type ReadingsLedger = {
+  deck_line?: string;
+  section_rubric?: string;
+  status_rubric?: string;
+  folio_blurb?: string;
+};
+
+function parseReadingsBundle(readingsJson: string | null | undefined): {
+  readings: { label: string; body: string }[];
+  ledger: ReadingsLedger | null;
+} {
+  if (!readingsJson || !String(readingsJson).trim()) {
+    return { readings: [], ledger: null };
+  }
+  try {
+    let raw: unknown = JSON.parse(String(readingsJson));
+    if (typeof raw === "string") {
+      try {
+        raw = JSON.parse(raw);
+      } catch {
+        return { readings: [], ledger: null };
+      }
+    }
+    if (Array.isArray(raw)) {
+      return { readings: raw as { label: string; body: string }[], ledger: null };
+    }
+    if (raw && typeof raw === "object") {
+      const o = raw as {
+        readings?: { label: string; body: string }[];
+        ledger?: ReadingsLedger;
+      };
+      const r = Array.isArray(o.readings) ? o.readings : [];
+      const led = o.ledger ?? null;
+      if (
+        r.length > 0 ||
+        (led && Object.values(led).some((v) => typeof v === "string" && v.trim()))
+      ) {
+        return { readings: r, ledger: led };
+      }
+    }
+  } catch {
+    /* invalid JSON */
+  }
+  return { readings: [], ledger: null };
+}
+
 /* ── Editorial status taxonomy ───────────────────────────────────── */
 const statusMeta: Record<
   string,
@@ -58,19 +105,11 @@ export default function ProjectPage() {
   ).length;
   const simulationCount = simulations?.length ?? 0;
 
-  // Parse readings for display
-  const readings = useMemo(() => {
-    try {
-      return project?.readings_json
-        ? (JSON.parse(project.readings_json) as {
-            label: string;
-            body: string;
-          }[])
-        : [];
-    } catch {
-      return [];
-    }
-  }, [project]);
+  // Parse readings + optional précis ledger (legacy: bare JSON array)
+  const { readings, ledger } = useMemo(
+    () => parseReadingsBundle(project?.readings_json),
+    [project?.readings_json],
+  );
 
   /* ── Loading ──────────────────────────────────────────────────── */
   if (pLoading) {
@@ -346,6 +385,21 @@ export default function ProjectPage() {
               Filed
             </div>
 
+            <div
+              style={{
+                fontSize: 10,
+                letterSpacing: "0.2em",
+                textTransform: "uppercase",
+                color: "var(--ink-tertiary)",
+                marginBottom: 12,
+                fontFamily: "var(--font-mono), monospace",
+                fontWeight: 500,
+                lineHeight: 1.35,
+              }}
+            >
+              {(ledger?.deck_line || project.title || "").trim()}
+            </div>
+
             <p
               className="dropcap"
               style={{
@@ -388,8 +442,15 @@ export default function ProjectPage() {
                     : "—"
                 }
               />
-              <Meta label="Section" value="Idea Review" accent="var(--red)" />
-              <Meta label="Status" value={status.label} />
+              <Meta
+                label="Section"
+                value={ledger?.section_rubric?.trim() || "Idea Review"}
+                accent="var(--red)"
+              />
+              <Meta
+                label="Status"
+                value={ledger?.status_rubric?.trim() || status.label}
+              />
               <Meta label="Reader&rsquo;s mark" value={`№ ${issueNumber}`} />
               <dt
                 className="kicker"
@@ -416,11 +477,12 @@ export default function ProjectPage() {
                     fontFamily: "var(--font-body)",
                   }}
                 >
-                  {!axis && "Both workshop routes remain open for this entry."}
-                  {axis === "software" &&
-                    "Only the software prototype plate is in play for this issue."}
-                  {axis === "hardware" &&
-                    "Only the hardware atelier is in play for this issue."}
+                  {ledger?.folio_blurb?.trim() ||
+                    (!axis
+                      ? "Both workshop routes remain open for this entry."
+                      : axis === "software"
+                        ? "Only the software prototype plate is in play for this issue."
+                        : "Only the hardware atelier is in play for this issue.")}
                 </span>
               </dd>
             </dl>

@@ -133,12 +133,13 @@ def create_project(
     db.refresh(project)
     # Fire-and-store dossier intelligence
     try:
-        from app.services.dossier_intelligence import generate_both
+        from app.services.dossier_intelligence import generate_both, readings_json_payload
 
         intel = generate_both(project.title, project.description)
         project.precis = intel["precis"] or None
-        project.readings_json = (
-            json.dumps(intel["readings"]) if intel["readings"] else None
+        project.readings_json = readings_json_payload(
+            intel["readings"],
+            intel.get("ledger") or {},
         )
         db.commit()
         db.refresh(project)
@@ -2109,14 +2110,18 @@ def regenerate_intelligence(
             detail="Project not found",
         )
 
-    from app.services.dossier_intelligence import generate_both
+    from app.services.dossier_intelligence import generate_both, readings_json_payload
 
     intel = generate_both(project.title, project.description)
 
     if intel["precis"]:
         project.precis = intel["precis"]
-    if intel["readings"]:
-        project.readings_json = json.dumps(intel["readings"])
+    bundle = readings_json_payload(
+        intel["readings"],
+        intel.get("ledger") or {},
+    )
+    if bundle:
+        project.readings_json = bundle
 
     db.commit()
     db.refresh(project)

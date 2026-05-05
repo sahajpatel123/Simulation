@@ -5,12 +5,33 @@ import type { Project } from '@/types'
 
 type ProjectListResponse = { projects: Project[]; total: number }
 
-const normalizeProject = (project: Project): Project => ({
-  ...project,
-  dossier_axis: project.dossier_axis ?? null,
-  created_at: project.created_at ?? (project.createdAt ? new Date(project.createdAt).toISOString() : undefined),
-  updated_at: project.updated_at ?? (project.updatedAt ? new Date(project.updatedAt).toISOString() : undefined),
-})
+const normalizeProject = (project: Project): Project => {
+  const p = project as unknown as Record<string, unknown>
+  const readingsFromApi =
+    typeof p.readings_json === "string"
+      ? p.readings_json
+      : typeof p.readingsJson === "string"
+        ? p.readingsJson
+        : undefined
+  const precisFromApi =
+    typeof p.precis === "string" ? p.precis : undefined
+  return {
+    ...project,
+    readings_json: readingsFromApi ?? project.readings_json,
+    precis: precisFromApi ?? project.precis,
+    dossier_axis: project.dossier_axis ?? null,
+    created_at:
+      project.created_at ??
+      (project.createdAt
+        ? new Date(project.createdAt).toISOString()
+        : undefined),
+    updated_at:
+      project.updated_at ??
+      (project.updatedAt
+        ? new Date(project.updatedAt).toISOString()
+        : undefined),
+  }
+}
 
 export const useProjects = () =>
   useQuery<Project[]>({
@@ -77,9 +98,11 @@ export const useRegenerateIntelligence = () => {
     mutationFn: (id: number | string) =>
       api
         .post(`/projects/${id}/regenerate-intelligence`)
-        .then((r) => r.data),
-    onSuccess: (_data, id) => {
-      qc.invalidateQueries({ queryKey: ['project', id] })
+        .then((r) => r.data as Project),
+    onSuccess: (data, id) => {
+      const normalized = normalizeProject(data)
+      const nid = typeof id === 'string' ? Number(id) : id
+      qc.setQueryData(['project', nid], normalized)
       qc.invalidateQueries({ queryKey: ['projects'] })
     },
   })
