@@ -15,10 +15,18 @@ const normalizeProject = (project: Project): Project => {
         : undefined
   const precisFromApi =
     typeof p.precis === "string" ? p.precis : undefined
+  const fingerprintFromApi =
+    typeof p.precis_title_fingerprint === "string"
+      ? p.precis_title_fingerprint
+      : typeof p.precisTitleFingerprint === "string"
+        ? p.precisTitleFingerprint
+        : undefined
   return {
     ...project,
     readings_json: readingsFromApi ?? project.readings_json,
     precis: precisFromApi ?? project.precis,
+    precis_title_fingerprint:
+      fingerprintFromApi ?? project.precis_title_fingerprint,
     dossier_axis: project.dossier_axis ?? null,
     created_at:
       project.created_at ??
@@ -95,5 +103,36 @@ export const useDeleteProject = () => {
   return useMutation({
     mutationFn: (id: number) => api.delete(`/projects/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
+  })
+}
+
+type UpdateProjectPayload = {
+  id: number | string
+  title?: string
+  description?: string
+}
+
+export const useUpdateProject = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      id,
+      title,
+      description,
+    }: UpdateProjectPayload) => {
+      const body: { title?: string; description?: string } = {}
+      if (title !== undefined) body.title = title
+      if (description !== undefined) body.description = description
+      if (Object.keys(body).length === 0) {
+        throw new Error("updateProject: title or description required")
+      }
+      const { data } = await api.patch<Project>(`/projects/${id}`, body)
+      return data
+    },
+    onSuccess: (data) => {
+      const normalized = normalizeProject(data)
+      qc.setQueryData(['project', Number(normalized.id)], normalized)
+      qc.invalidateQueries({ queryKey: ['projects'] })
+    },
   })
 }

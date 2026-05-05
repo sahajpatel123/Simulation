@@ -26,6 +26,8 @@ class Project(Base, TimestampMixin):
     description: Mapped[str] = mapped_column(Text, nullable=False)
     precis: Mapped[str | None] = mapped_column(Text, nullable=True)
     readings_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Last dossier title we used to mint ``precis`` (lazy backfill + rename detection).
+    precis_title_fingerprint: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="DRAFT")
     intake_mode: Mapped[str] = mapped_column(String(20), default="IDEA", nullable=False)
     landing_page_url: Mapped[str | None] = mapped_column(Text, nullable=True)

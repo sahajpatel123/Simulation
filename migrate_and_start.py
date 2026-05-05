@@ -61,6 +61,7 @@ def run_migrations():
             ("projects", "competitive_json", "JSONB"),
             ("projects", "precis", "TEXT"),
             ("projects", "readings_json", "TEXT"),
+            ("projects", "precis_title_fingerprint", "TEXT"),
             ("simulations", "results_json", "TEXT"),
             ("simulations", "confidence_score", "FLOAT"),
             ("simulations", "task_id", "VARCHAR(255)"),
@@ -657,6 +658,14 @@ def run_migrations():
                     """
                     ALTER TABLE projects
                     ADD COLUMN IF NOT EXISTS readings_json TEXT;
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE projects
+                    ADD COLUMN IF NOT EXISTS precis_title_fingerprint TEXT;
                     """
                 )
             )

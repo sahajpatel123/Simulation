@@ -3,6 +3,13 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class ProjectPatch(BaseModel):
+    """Partial update for a dossier (title rename, description edits)."""
+
+    title: str | None = None
+    description: str | None = None
+
+
 class ProjectCreate(BaseModel):
     title: str = "Untitled"
     description: str
@@ -22,6 +29,7 @@ class ProjectOut(BaseModel):
     dossier_axis: str | None = None
     precis: str | None = None
     readings_json: str | None = None
+    precis_title_fingerprint: str | None = None
 
     model_config = {"from_attributes": True}
 

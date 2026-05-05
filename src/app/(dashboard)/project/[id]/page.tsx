@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowUpRight, Loader2 } from "lucide-react";
 import Link from "next/link";
@@ -9,7 +9,7 @@ import { useParams } from "next/navigation";
 import { EditorialExpandable } from "@/components/EditorialExpandable";
 import { FolioAxisChip, LegacyFolioSlip } from "@/components/FolioAxisChip";
 import { useAssumptions } from "@/hooks/useAssumptions";
-import { useProject } from "@/hooks/useProjects";
+import { useProject, useUpdateProject } from "@/hooks/useProjects";
 import { useSimulations } from "@/hooks/useSimulation";
 import type { Assumption } from "@/types";
 
@@ -268,6 +268,8 @@ export default function ProjectPage() {
               </span>
             )}
           </div>
+
+          <DossierTitleEditor projectId={projectId} initialTitle={project.title} />
 
           <h1
             className="font-serif"
@@ -978,6 +980,155 @@ export default function ProjectPage() {
 }
 
 /* ── Sub-components ──────────────────────────────────────────────── */
+
+function DossierTitleEditor({
+  projectId,
+  initialTitle,
+}: {
+  projectId: number;
+  initialTitle: string;
+}) {
+  const updateProject = useUpdateProject();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(initialTitle);
+
+  useEffect(() => {
+    setValue(initialTitle);
+  }, [initialTitle]);
+
+  if (editing) {
+    return (
+      <form
+        style={{ marginBottom: 10 }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          const t = value.trim();
+          if (!t) return;
+          if (t === initialTitle) {
+            setEditing(false);
+            return;
+          }
+          updateProject.mutate(
+            { id: projectId, title: t },
+            {
+              onSuccess: () => setEditing(false),
+            },
+          );
+        }}
+      >
+        <div
+          className="kicker"
+          style={{
+            color: "var(--ink-tertiary)",
+            letterSpacing: "0.14em",
+            marginBottom: 6,
+          }}
+        >
+          Dossier name
+        </div>
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          maxLength={500}
+          autoFocus
+          disabled={updateProject.isPending}
+          style={{
+            fontSize: 13,
+            width: "100%",
+            maxWidth: 520,
+            padding: "8px 12px",
+            border: "0.5px solid var(--border-strong)",
+            fontFamily: "var(--font-body)",
+            background: "var(--paper)",
+          }}
+        />
+        <div style={{ marginTop: 8, display: "flex", gap: 10, alignItems: "center" }}>
+          <button
+            type="submit"
+            disabled={updateProject.isPending}
+            style={{
+              fontSize: 11,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              padding: "6px 14px",
+              border: "0.5px solid var(--ink)",
+              background: "var(--ink)",
+              color: "var(--paper)",
+              cursor: updateProject.isPending ? "wait" : "pointer",
+            }}
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            disabled={updateProject.isPending}
+            onClick={() => {
+              setValue(initialTitle);
+              setEditing(false);
+            }}
+            style={{
+              fontSize: 11,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              padding: "6px 12px",
+              border: "0.5px solid var(--border-color)",
+              background: "transparent",
+              cursor: "pointer",
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      style={{
+        display: "block",
+        width: "100%",
+        maxWidth: 520,
+        background: "none",
+        border: "none",
+        padding: "2px 0 10px",
+        cursor: "pointer",
+        textAlign: "left",
+      }}
+    >
+      <span
+        className="kicker"
+        style={{ color: "var(--ink-tertiary)", letterSpacing: "0.14em" }}
+      >
+        Dossier name
+      </span>
+      <span
+        style={{
+          display: "block",
+          fontSize: 14,
+          color: "var(--ink)",
+          marginTop: 4,
+          fontWeight: 500,
+          lineHeight: 1.35,
+        }}
+      >
+        {initialTitle}
+      </span>
+      <span
+        style={{
+          fontSize: 10,
+          color: "var(--red)",
+          marginTop: 4,
+          letterSpacing: "0.08em",
+        }}
+      >
+        Click to rename · mints a new précis line once
+      </span>
+    </button>
+  );
+}
 
 function Meta({
   label,

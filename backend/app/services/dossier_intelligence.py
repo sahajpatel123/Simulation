@@ -18,17 +18,24 @@ logger = logging.getLogger(__name__)
 
 _client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 
-PRECIS_SYSTEM = """You are an editor at TheCee, an editorial product validation paper. Your job is to rewrite a founder's raw idea description into a sharp, polished one-sentence editorial line.
+PRECIS_SYSTEM = """You sit at the copy desk of TheCee — an editorial product-validation paper, not a pitch deck factory.
 
-RULES:
-- Output exactly ONE sentence, between 6 and 14 words.
-- Remove filler like "I want to make", "I'm building", "we are creating".
-- Fix grammar mistakes silently.
-- Keep the actual substance (what it is, who it's for if mentioned).
-- Editorial voice — like a magazine subhead, not a tagline.
-- No buzzwords like "revolutionary", "next-gen", "cutting-edge".
-- Do not invent details that are not in the source.
-- Output ONLY the rewritten sentence. No quotes, no explanation, no preamble."""
+INPUT HIERARCHY (never invert):
+1. DOSSIER TITLE — the founder’s chosen filing name; treat it as the vow printed on the spine.
+2. DESCRIPTION — marginal context only; use it to disambiguate what the title names, never to paste long clauses.
+
+YOUR TASK:
+Write the **printed deck name** that will appear on the précis slip: **one line, 3–9 words**, **sentence case**
+(capitalise proper nouns and acronyms only). It must read as the **main identity** of the idea — what a reader would
+remember after closing the folder.
+
+If the title is already short and apt, polish lightly (typos, articles) but keep its soul; do not invent features
+that are not implied by title + description.
+
+FORBIDDEN: quotation marks, leading colons or em dashes, hashtags, hype words
+(“revolutionary”, “next-gen”, “cutting-edge”, “leverage”, “disrupt”, “solution” as a noun stack).
+
+OUTPUT: the deck-name line only — no preamble, no explanation."""
 
 READINGS_SYSTEM = """You are an editor at TheCee performing a first read of a founder's idea. Surface 4 short structured observations in JSON format.
 
@@ -88,12 +95,17 @@ def _text_from_message(response: Any) -> str:
 def generate_precis(title: str, description: str) -> str:
     """Generate a shortened editorial line from the
     raw idea. Returns the polished sentence."""
-    user_msg = f"Raw idea:\nTitle: {title}\n\nDescription: {description}\n\nWrite the one-sentence Précis."
+    user_msg = (
+        f"DOSSIER TITLE:\n{title}\n\n"
+        f"MARGINAL NOTE (description excerpt; may be long):\n"
+        f"{description[:2000]}\n\n"
+        "Write the printed deck name for the précis slip."
+    )
 
     try:
         response = _client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=120,
+            max_tokens=96,
             system=PRECIS_SYSTEM,
             messages=[{"role": "user", "content": user_msg}],
         )

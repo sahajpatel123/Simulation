@@ -13,7 +13,7 @@ from app.core.claude_client import claude_call_with_fallback
 from app.core.intake_processor import adjust_assumption_confidence, build_enriched_description
 from app.core.deps import get_current_user, get_db
 from app.core.rate_limiter import rate_limit
-from app.core.sanitiser import sanitise_assumption, sanitise_description
+from app.core.sanitiser import sanitise_assumption, sanitise_description, sanitise_text
 from app.core.prompts import (
     ASSUMPTION_EXTRACTION_PROMPT,
     COMPETITIVE_ANALYSIS_PROMPT,
@@ -50,7 +50,7 @@ from app.schemas.environment import (
 )
 from app.schemas.intervention import Intervention, InterventionOut, InterventionRequest
 from app.schemas.premortem import FailureMode, PremortemOut, PremortemRequest
-from app.schemas.project import ProjectCreate, ProjectListResponse, ProjectOut
+from app.schemas.project import ProjectCreate, ProjectListResponse, ProjectOut, ProjectPatch
 from app.schemas.prototype import FunnelEdge, FunnelGraph, FunnelNode, PrototypeOut
 from app.schemas.stress_test import (
     AssumptionStressResult,
@@ -97,6 +97,32 @@ def _software_benchmark_key(pt: ProductType) -> str:
     return pt.value if pt in _SOFTWARE_PRODUCT_TYPES else "saas"
 
 
+def _title_fingerprint(title: str) -> str:
+    """Normalised dossier title used to detect rename vs last précis mint."""
+    return (title or "").strip()[:500]
+
+
+def _backfill_display_precis_lazy(db: Session, project: Project) -> None:
+    """One-time mint of display précis for legacy rows (fingerprint unset)."""
+    if project.precis_title_fingerprint is not None:
+        return
+    try:
+        from app.services.dossier_intelligence import generate_precis
+
+        line = generate_precis(project.title, project.description)
+        if line:
+            project.precis = line
+        project.precis_title_fingerprint = _title_fingerprint(project.title)
+        db.add(project)
+        db.commit()
+        db.refresh(project)
+    except Exception as exc:
+        logger.warning(
+            "lazy précis backfill failed for project %s: %s",
+            project.id,
+            exc,
+        )
+        db.rollback()
 @router.post(
     "",
     response_model=ProjectOut,
@@ -141,6 +167,7 @@ def create_project(
             intel["readings"],
             intel.get("ledger") or {},
         )
+        project.precis_title_fingerprint = _title_fingerprint(project.title)
         db.commit()
         db.refresh(project)
     except Exception as _exc:
@@ -172,6 +199,62 @@ def list_projects(
         projects=[ProjectOut.model_validate(p) for p in projects],
         total=len(projects),
     )
+
+
+@router.patch(
+    "/{project_id}",
+    response_model=ProjectOut,
+    summary="Update dossier title or description",
+)
+def patch_project(
+    project_id: int,
+    payload: ProjectPatch,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if payload.title is None and payload.description is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide title and/or description to update",
+        )
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    title_changed = False
+    if payload.title is not None:
+        new_title = sanitise_text(payload.title.strip(), max_length=500)
+        if not new_title:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Title cannot be empty",
+            )
+        if new_title != project.title:
+            project.title = new_title
+            title_changed = True
+
+    if payload.description is not None:
+        project.description = sanitise_description(payload.description)
+
+    if title_changed:
+        try:
+            from app.services.dossier_intelligence import generate_precis
+
+            line = generate_precis(project.title, project.description)
+            if line:
+                project.precis = line
+        except Exception as exc:
+            logger.warning("precis refresh on dossier rename failed: %s", exc)
+        project.precis_title_fingerprint = _title_fingerprint(project.title)
+
+    db.add(project)
+    db.commit()
+    db.refresh(project)
+    return ProjectOut.model_validate(project)
 
 
 @router.get(
@@ -1722,6 +1805,8 @@ def get_project(
     )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    _backfill_display_precis_lazy(db, project)
+    db.refresh(project)
     return ProjectOut.model_validate(project)
 
 
@@ -2122,6 +2207,7 @@ def regenerate_intelligence(
     )
     if bundle:
         project.readings_json = bundle
+    project.precis_title_fingerprint = _title_fingerprint(project.title)
 
     db.commit()
     db.refresh(project)

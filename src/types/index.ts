@@ -37,6 +37,8 @@ export interface Project {
   dossier_axis?: string | null
   precis?: string | null
   readings_json?: string | null
+  /** Title snapshot after last display-précis mint (rename detection). */
+  precis_title_fingerprint?: string | null
   created_at?: string
   updated_at?: string
   /* legacy compatibility */
