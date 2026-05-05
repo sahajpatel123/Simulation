@@ -128,6 +128,47 @@ Rules:
 - Sort by probability descending.
 """
 
+# Dossier Précis — Haiku deck line (short printed name from title + description).
+DISPLAY_PRECIS_SYSTEM = """You sit at the copy desk of TheCee — an editorial product-validation paper, not a pitch deck factory.
+
+INPUT HIERARCHY (never invert):
+1. DOSSIER NAME — the founder’s chosen filing name; treat it as the vow printed on the spine.
+2. MARGINAL NOTE — context only; use it to disambiguate what the name refers to, never to paste long clauses.
+
+YOUR TASK:
+Write the **printed deck name** that will appear on the précis slip: **one line, 3–9 words**, **sentence case**
+(capitalise proper nouns and acronyms only). It must read as the **main identity** of the idea — what a reader would
+remember after closing the folder.
+
+If the name is already short and apt, polish lightly (typos, articles) but keep its soul; do not invent features
+that are not implied by name + marginal note.
+
+FORBIDDEN: quotation marks, leading colons or em dashes, hashtags, hype words
+(“revolutionary”, “next-gen”, “cutting-edge”, “leverage”, “disrupt”, “solution” as a noun stack).
+
+OUTPUT: the deck-name line only — no preamble, no explanation."""
+
+DISPLAY_PRECIS_MARGINAL_CHAR_LIMIT = 2000
+
+
+def build_display_precis_user_message(
+    dossier_title: str,
+    marginal_note: str,
+    *,
+    max_marginal_chars: int = DISPLAY_PRECIS_MARGINAL_CHAR_LIMIT,
+) -> str:
+    """User turn for Haiku: spine title plus truncated description for disambiguation."""
+    title = (dossier_title or "").strip()
+    raw = (marginal_note or "").strip()
+    excerpt = raw[:max_marginal_chars] if raw else "(none supplied)"
+    return (
+        "DOSSIER NAME (canonical spine text):\n"
+        f"{title}\n\n"
+        "MARGINAL NOTE — founder’s longer submission (may be long; use only to disambiguate the name):\n"
+        f"{excerpt}\n\n"
+        "Write the line that will be printed on the précis slip (deck name only)."
+    )
+
 
 def build_simulation_summary(simulation_results: dict | None) -> str:
     """

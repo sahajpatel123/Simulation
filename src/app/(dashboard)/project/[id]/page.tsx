@@ -60,21 +60,6 @@ function parseReadingsBundle(readingsJson: string | null | undefined): {
   return { readings: [], ledger: null };
 }
 
-/* ── Editorial status taxonomy ───────────────────────────────────── */
-const statusMeta: Record<
-  string,
-  { bucket: "draft" | "ready" | "running" | "done" | "failed"; label: string }
-> = {
-  DRAFT: { bucket: "draft", label: "In notes" },
-  ASSUMPTIONS_EXTRACTED: { bucket: "ready", label: "Outline ready" },
-  PROTOTYPE_GENERATED: { bucket: "ready", label: "Draft typeset" },
-  ENVIRONMENT_SET: { bucket: "ready", label: "Cast assembled" },
-  QUEUED: { bucket: "running", label: "At press" },
-  RUNNING: { bucket: "running", label: "At press" },
-  COMPLETED: { bucket: "done", label: "Filed" },
-  FAILED: { bucket: "failed", label: "Returned" },
-};
-
 /* Sensitivity taxonomy — editorial, not SaaS. */
 const sensitivityMeta: Record<
   string,
@@ -175,10 +160,6 @@ export default function ProjectPage() {
     );
   }
 
-  const status = statusMeta[project.status] ?? {
-    bucket: "draft" as const,
-    label: project.status?.toLowerCase() ?? "in notes",
-  };
   const filedDate = project.created_at ? new Date(project.created_at) : null;
   const issueNumber = String(
     Number.isFinite(projectId) ? projectId : 1,
@@ -429,12 +410,12 @@ export default function ProjectPage() {
               />
               <Meta
                 label="Section"
-                value={ledger?.section_rubric?.trim() || "Idea Review"}
+                value={ledger?.section_rubric?.trim() || "—"}
                 accent="var(--red)"
               />
               <Meta
                 label="Status"
-                value={ledger?.status_rubric?.trim() || status.label}
+                value={ledger?.status_rubric?.trim() || "—"}
               />
               <Meta label="Reader&rsquo;s mark" value={`№ ${issueNumber}`} />
               <dt
@@ -462,30 +443,11 @@ export default function ProjectPage() {
                     fontFamily: "var(--font-body)",
                   }}
                 >
-                  {ledger?.folio_blurb?.trim() ||
-                    (!axis
-                      ? "Both workshop routes remain open for this entry."
-                      : axis === "software"
-                        ? "Only the software prototype plate is in play for this issue."
-                        : "Only the hardware atelier is in play for this issue.")}
+                  {ledger?.folio_blurb?.trim() || "—"}
                 </span>
               </dd>
             </dl>
           </div>
-
-          {/* Footnote */}
-          <p
-            style={{
-              marginTop: 14,
-              fontSize: 11,
-              lineHeight: 1.65,
-              color: "var(--ink-tertiary)",
-              fontStyle: "italic",
-              fontFamily: "var(--font-serif)",
-            }}
-          >
-            — typeset from the submission; unedited.
-          </p>
         </aside>
 
         {/* ─── Readings ledger ───────────────────────────── */}
