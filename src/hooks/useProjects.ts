@@ -97,19 +97,3 @@ export const useDeleteProject = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
   })
 }
-
-export const useRegenerateIntelligence = () => {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: number | string) =>
-      api
-        .post(`/projects/${id}/regenerate-intelligence`)
-        .then((r) => r.data as Project),
-    onSuccess: (data, id) => {
-      const normalized = normalizeProject(data)
-      const nid = typeof id === 'string' ? Number(id) : id
-      qc.setQueryData(['project', nid], normalized)
-      qc.invalidateQueries({ queryKey: ['projects'] })
-    },
-  })
-}
