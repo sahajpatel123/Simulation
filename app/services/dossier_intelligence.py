@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from anthropic import Anthropic
@@ -71,8 +72,15 @@ def _text_from_message(response: Any) -> str:
     """
     chunks: list[str] = []
     for block in getattr(response, "content", None) or []:
-        text = getattr(block, "text", None)
-        if isinstance(text, str) and text:
+        text: str | None = None
+        if isinstance(block, dict):
+            if block.get("type") in (None, "text"):
+                raw = block.get("text")
+                text = raw if isinstance(raw, str) else None
+        else:
+            raw = getattr(block, "text", None)
+            text = raw if isinstance(raw, str) else None
+        if text:
             chunks.append(text)
     return "".join(chunks).strip()
 
@@ -188,10 +196,18 @@ def readings_json_payload(
 
 
 def generate_both(title: str, description: str) -> dict[str, Any]:
-    """Returns precis, readings list, and ledger dict (any may be empty)."""
-    precis = generate_precis(title, description)
-    readings = generate_readings(title, description)
-    ledger = generate_ledger(title, description)
+    """Returns precis, readings list, and ledger dict (any may be empty).
+
+    Runs the three Haiku calls concurrently to keep dossier create/regenerate
+    latency closer to a single round-trip.
+    """
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        fut_precis = pool.submit(generate_precis, title, description)
+        fut_readings = pool.submit(generate_readings, title, description)
+        fut_ledger = pool.submit(generate_ledger, title, description)
+        precis = fut_precis.result()
+        readings = fut_readings.result()
+        ledger = fut_ledger.result()
     return {
         "precis": precis,
         "readings": readings,

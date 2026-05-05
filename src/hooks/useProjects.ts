@@ -78,9 +78,15 @@ export const useCreateProject = () => {
           existing_product_description: raw.existing_product_description,
           dossier_axis: raw.dossier_axis ?? 'software',
         })
-        .then((r) => r.data)
+        .then((r) => r.data as Project)
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['projects'] })
+      if (data && typeof data === 'object' && data.id != null) {
+        const normalized = normalizeProject(data)
+        qc.setQueryData(['project', Number(normalized.id)], normalized)
+      }
+    },
   })
 }
 
