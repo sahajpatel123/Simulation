@@ -45,15 +45,16 @@ export default function ProjectPage() {
   const hiddenCount = assumptionList.filter((a) => Boolean(a.isHidden ?? a.is_hidden)).length
   const simulationCount = simulations?.length ?? 0
 
-  /* ── Loading ──────────────────────────────────────────────────── */
-  if (pLoading) {
-    return (
-      <div style={{ padding: '80px 48px', display: 'flex', gap: 12, alignItems: 'center', color: 'var(--ink-secondary)' }}>
-        <Loader2 className="animate-spin" style={{ width: 14, height: 14 }} />
-        <span className="kicker">Pulling the galley…</span>
-      </div>
-    )
-  }
+  // Parse readings for display
+  const readings = useMemo(() => {
+    try {
+      return project?.readings_json
+        ? JSON.parse(project.readings_json) as { label: string; body: string }[]
+        : []
+    } catch {
+      return []
+    }
+  }, [project])
 
   /* ── Not found ────────────────────────────────────────────────── */
   if (!project) {
@@ -262,7 +263,7 @@ export default function ProjectPage() {
                 fontFamily: 'var(--font-body)',
               }}
             >
-              {project.description}
+              {project.precis || project.description}
             </p>
 
             <div style={{ height: 0.5, background: 'var(--border-color)', margin: '22px 0 14px' }} />
@@ -333,26 +334,78 @@ export default function ProjectPage() {
               The Readings
             </h2>
             <div className="kicker" style={{ color: 'var(--ink-secondary)' }}>
-              {aLoading ? 'Being read…' : `${assumptionList.length} surfaced`}
+              {pLoading ? 'Being read…' : `${readings.length} SURFACED`}
             </div>
           </div>
           <div style={{ height: 2, background: 'var(--ink)', marginBottom: 4 }} />
           <div style={{ height: 0.5, background: 'var(--border-color)', marginBottom: 20 }} />
 
-          <p
-            style={{
-              fontSize: 13,
-              lineHeight: 1.75,
-              color: 'var(--ink-secondary)',
-              maxWidth: 620,
-              marginBottom: 28,
-              fontStyle: 'italic',
-              fontFamily: 'var(--font-serif)',
-            }}
-          >
-            Every dossier carries hidden assumptions. Below is what the first reading has
-            brought to the surface — a marginal ledger, in the reader&rsquo;s own hand.
-          </p>
+          {readings.length === 0 ? (
+            <div>
+              <p
+                style={{
+                  fontFamily: 'var(--font-serif), serif',
+                  fontStyle: 'italic',
+                  fontSize: 16,
+                  color: '#666',
+                  lineHeight: 1.6,
+                }}
+              >
+                The readers are still turning the first page.
+              </p>
+              <p
+                style={{
+                  fontFamily: 'var(--font-mono), monospace',
+                  fontSize: 11,
+                  color: '#999',
+                  letterSpacing: '0.12em',
+                  marginTop: 12,
+                }}
+              >
+                ASSUMPTIONS WILL SURFACE AS THE PROOF IS READ.
+              </p>
+            </div>
+          ) : (
+            <ul style={{
+              listStyle: 'none',
+              padding: 0,
+              margin: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 18,
+            }}>
+              {readings.map((r, i) => (
+                <li key={i} style={{
+                  display: 'grid',
+                  gridTemplateColumns: '160px 1fr',
+                  gap: 24,
+                  alignItems: 'baseline',
+                  paddingBottom: 14,
+                  borderBottom: i < readings.length - 1
+                    ? '0.5px solid rgba(0,0,0,0.08)'
+                    : 'none',
+                }}>
+                  <span style={{
+                    fontFamily: 'var(--font-mono), monospace',
+                    fontSize: 11,
+                    letterSpacing: '0.16em',
+                    color: '#c0392b',
+                    fontWeight: 500,
+                  }}>
+                    {r.label}
+                  </span>
+                  <span style={{
+                    fontFamily: 'var(--font-serif), serif',
+                    fontSize: 17,
+                    color: '#1a1a1a',
+                    lineHeight: 1.5,
+                  }}>
+                    {r.body}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
 
           {/* Ledger */}
           {aLoading ? (

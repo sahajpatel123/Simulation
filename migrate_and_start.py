@@ -1,3 +1,10 @@
+from pathlib import Path
+import sys
+
+_backend = Path(__file__).resolve().parent / "backend"
+if _backend.is_dir():
+    sys.path.insert(0, str(_backend))
+
 from sqlalchemy import text
 
 from app.core.database import engine
@@ -52,6 +59,8 @@ def run_migrations():
             ("projects", "stress_test_json", "JSONB"),
             ("projects", "interventions_json", "JSONB"),
             ("projects", "competitive_json", "JSONB"),
+            ("projects", "precis", "TEXT"),
+            ("projects", "readings_json", "TEXT"),
             ("simulations", "results_json", "TEXT"),
             ("simulations", "confidence_score", "FLOAT"),
             ("simulations", "task_id", "VARCHAR(255)"),
@@ -632,6 +641,22 @@ def run_migrations():
                     """
                     ALTER TABLE projects
                     ADD COLUMN IF NOT EXISTS dossier_axis VARCHAR(20);
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE projects
+                    ADD COLUMN IF NOT EXISTS precis TEXT;
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE projects
+                    ADD COLUMN IF NOT EXISTS readings_json TEXT;
                     """
                 )
             )
