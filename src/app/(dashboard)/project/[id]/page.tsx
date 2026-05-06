@@ -366,18 +366,10 @@ export default function ProjectPage() {
               Filed
             </div>
 
-            <p
-              className={project.precis ? '' : 'dropcap'}
-              style={{
-                fontSize: 15,
-                lineHeight: 1.8,
-                color: "var(--ink)",
-                fontWeight: 300,
-                fontFamily: "var(--font-body)",
-              }}
-            >
-              {project.precis || project.description}
-            </p>
+            <PrecisDisplay 
+              precis={project.precis} 
+              description={project.description} 
+            />
 
             <div
               style={{
@@ -942,6 +934,99 @@ export default function ProjectPage() {
 }
 
 /* ── Sub-components ──────────────────────────────────────────────── */
+
+function PrecisDisplay({ 
+  precis, 
+  description 
+}: { 
+  precis?: string | null; 
+  description: string; 
+}) {
+  if (!precis) {
+    return (
+      <div className="dropcap">
+        {description}
+      </div>
+    );
+  }
+
+  const words = precis.trim().split(/\s+/);
+  const wordCount = words.length;
+
+  if (wordCount === 1) {
+    return (
+      <div style={{
+        fontFamily: 'var(--font-serif), serif',
+        fontSize: 'clamp(42px, 6vw, 72px)',
+        fontWeight: 700,
+        lineHeight: 0.95,
+        letterSpacing: '-0.03em',
+        color: '#1a1a1a',
+        paddingBottom: 8,
+      }}>
+        {precis}
+      </div>
+    );
+  }
+
+  if (wordCount <= 3) {
+    return (
+      <div style={{
+        fontFamily: 'var(--font-serif), serif',
+        fontSize: 'clamp(28px, 3.5vw, 46px)',
+        fontWeight: 700,
+        lineHeight: 1.05,
+        letterSpacing: '-0.025em',
+        color: '#1a1a1a',
+      }}>
+        {precis}
+      </div>
+    );
+  }
+
+  if (wordCount <= 5) {
+    const firstWord = words[0];
+    const rest = words.slice(1).join(' ');
+    return (
+      <div>
+        <div style={{
+          fontFamily: 'var(--font-serif), serif',
+          fontSize: 'clamp(36px, 4.5vw, 58px)',
+          fontWeight: 700,
+          lineHeight: 0.95,
+          letterSpacing: '-0.03em',
+          color: '#1a1a1a',
+          marginBottom: 4,
+        }}>
+          {firstWord}
+        </div>
+        <div style={{
+          fontFamily: 'var(--font-serif), serif',
+          fontSize: 'clamp(16px, 2vw, 22px)',
+          fontWeight: 400,
+          lineHeight: 1.3,
+          letterSpacing: '-0.01em',
+          color: '#3a3a3a',
+          fontStyle: 'italic',
+        }}>
+          {rest}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      fontFamily: 'var(--font-serif), serif',
+      fontSize: 'clamp(15px, 1.8vw, 19px)',
+      fontWeight: 400,
+      lineHeight: 1.55,
+      color: '#1a1a1a',
+    }}>
+      {precis}
+    </div>
+  );
+}
 
 function Meta({
   label,
