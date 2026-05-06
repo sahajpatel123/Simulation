@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import { ArrowUpRight, Loader2 } from "lucide-react";
 import Link from "next/link";
@@ -350,20 +350,17 @@ export default function ProjectPage() {
                 position: "absolute",
                 top: -14,
                 right: 18,
-                transform: "rotate(6deg)",
-                border: "1.5px solid var(--red)",
-                color: "var(--red)",
-                padding: "3px 10px",
-                fontSize: 9,
-                letterSpacing: "0.28em",
-                textTransform: "uppercase",
-                fontWeight: 700,
-                background: "var(--paper)",
-                opacity: 0.9,
               }}
-              aria-hidden
             >
-              Filed
+              <FiledStamp 
+                projectId={project.id}
+                onEdit={() => {
+                  /* edit handler — wire later */
+                }}
+                onWithdraw={() => {
+                  /* withdraw handler — wire later */
+                }}
+              />
             </div>
 
             <PrecisDisplay 
@@ -934,6 +931,158 @@ export default function ProjectPage() {
 }
 
 /* ── Sub-components ──────────────────────────────────────────────── */
+
+function FiledStamp({
+  projectId,
+  onEdit,
+  onWithdraw,
+}: {
+  projectId: number | string;
+  onEdit: () => void;
+  onWithdraw: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && 
+          !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => 
+      document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  const isActive = hovered || open;
+
+  return (
+    <div
+      ref={ref}
+      style={{ position: 'relative', display: 'inline-block' }}
+    >
+      {/* THE STAMP — position unchanged */}
+      <div
+        onClick={() => setOpen(o => !o)}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '3px 10px',
+          border: '1.5px solid #c0392b',
+          background: isActive ? '#c0392b' : 'transparent',
+          cursor: 'pointer',
+          userSelect: 'none',
+          transition: 
+            'background 0.18s ease, color 0.18s ease',
+          transform: 'rotate(-2deg)',
+        }}
+      >
+        <span style={{
+          fontFamily: 'var(--font-mono), monospace',
+          fontSize: 10,
+          letterSpacing: '0.22em',
+          fontWeight: 600,
+          color: isActive ? '#f5f0e8' : '#c0392b',
+          transition: 'color 0.18s ease',
+        }}>
+          FILED
+        </span>
+      </div>
+
+      {/* ACTION MENU — appears below stamp on click */}
+      {open && (
+        <div style={{
+          position: 'absolute',
+          top: 'calc(100% + 8px)',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: '#f5f0e8',
+          border: '0.5px solid #1a1a1a',
+          zIndex: 50,
+          minWidth: 148,
+          boxShadow: 
+            '0 4px 16px rgba(0,0,0,0.10)',
+        }}>
+          {/* EDIT */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+              onEdit();
+            }}
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '10px 14px',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: '0.5px solid #e8e3d8',
+              fontFamily: 'var(--font-mono), monospace',
+              fontSize: 10,
+              letterSpacing: '0.18em',
+              color: '#1a1a1a',
+              cursor: 'pointer',
+              textAlign: 'left',
+              transition: 'background 0.15s ease',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = '#1a1a1a';
+              e.currentTarget.style.color = '#f5f0e8';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 
+                'transparent';
+              e.currentTarget.style.color = '#1a1a1a';
+            }}
+          >
+            EDIT DOSSIER
+          </button>
+
+          {/* WITHDRAW */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+              onWithdraw();
+            }}
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '10px 14px',
+              background: 'transparent',
+              border: 'none',
+              fontFamily: 'var(--font-mono), monospace',
+              fontSize: 10,
+              letterSpacing: '0.18em',
+              color: '#c0392b',
+              cursor: 'pointer',
+              textAlign: 'left',
+              transition: 'background 0.15s ease',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = '#c0392b';
+              e.currentTarget.style.color = '#f5f0e8';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 
+                'transparent';
+              e.currentTarget.style.color = '#c0392b';
+            }}
+          >
+            WITHDRAW
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function PrecisDisplay({ 
   precis, 
