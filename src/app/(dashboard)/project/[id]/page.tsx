@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { ArrowUpRight, Loader2 } from "lucide-react";
 import Link from "next/link";
@@ -977,22 +978,35 @@ function ModalOverlay({
 }: {
   children: React.ReactNode;
 }) {
-  return (
+  /** Portals escape transformed ancestors (motion / layouts) so `fixed` is viewport-locked. */
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted || typeof document === "undefined") {
+    return null;
+  }
+
+  return createPortal(
     <div
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 100,
+        zIndex: 9999,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
+        padding: "max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))",
         backdropFilter: "blur(4px)",
         WebkitBackdropFilter: "blur(4px)",
         background: "rgba(245,240,232,0.55)",
       }}
     >
       {children}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
