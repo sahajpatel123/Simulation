@@ -1,15 +1,19 @@
 "use client";
 
-import { useMemo, useState, useRef, useEffect } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import { ArrowUpRight, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 import { EditorialExpandable } from "@/components/EditorialExpandable";
 import { FolioAxisChip, LegacyFolioSlip } from "@/components/FolioAxisChip";
 import { useAssumptions } from "@/hooks/useAssumptions";
-import { useProject } from "@/hooks/useProjects";
+import {
+  useDeleteProject,
+  usePatchProject,
+  useProject,
+} from "@/hooks/useProjects";
 import { useSimulations } from "@/hooks/useSimulation";
 import type { Assumption } from "@/types";
 
@@ -78,6 +82,13 @@ export default function ProjectPage() {
   const { data: project, isLoading: pLoading } = useProject(projectId);
   const { data: assumptions, isLoading: aLoading } = useAssumptions(projectId);
   const { data: simulations, isLoading: sLoading } = useSimulations(projectId);
+
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+
+  const patchProject = usePatchProject();
+  const deleteProject = useDeleteProject();
+  const router = useRouter();
 
   const assumptionList = useMemo<Assumption[]>(
     () => assumptions ?? [],
@@ -352,14 +363,10 @@ export default function ProjectPage() {
                 right: 18,
               }}
             >
-              <FiledStamp 
+              <FiledStamp
                 projectId={project.id}
-                onEdit={() => {
-                  /* edit handler — wire later */
-                }}
-                onWithdraw={() => {
-                  /* withdraw handler — wire later */
-                }}
+                onEdit={() => setShowEditModal(true)}
+                onWithdraw={() => setShowWithdrawModal(true)}
               />
             </div>
 
@@ -926,7 +933,307 @@ export default function ProjectPage() {
           End of galley · The editor&rsquo;s desk awaits the next pull.
         </div>
       </div>
+
+      {showEditModal && (
+        <EditModal
+          currentTitle={project.title}
+          loading={patchProject.isPending}
+          onCancel={() => setShowEditModal(false)}
+          onConfirm={async (newTitle) => {
+            try {
+              await patchProject.mutateAsync({
+                id: project.id,
+                title: newTitle,
+              });
+              setShowEditModal(false);
+            } catch {
+              setShowEditModal(false);
+            }
+          }}
+        />
+      )}
+
+      {showWithdrawModal && (
+        <WithdrawModal
+          dossierTitle={project.title}
+          loading={deleteProject.isPending}
+          onCancel={() => setShowWithdrawModal(false)}
+          onConfirm={async () => {
+            try {
+              await deleteProject.mutateAsync(Number(project.id));
+              router.push("/projects");
+            } catch {
+              setShowWithdrawModal(false);
+            }
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function ModalOverlay({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 100,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        backdropFilter: "blur(4px)",
+        WebkitBackdropFilter: "blur(4px)",
+        background: "rgba(245,240,232,0.55)",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function EditModal({
+  currentTitle,
+  onConfirm,
+  onCancel,
+  loading,
+}: {
+  currentTitle: string;
+  onConfirm: (newTitle: string) => void;
+  onCancel: () => void;
+  loading: boolean;
+}) {
+  const [value, setValue] = useState(currentTitle);
+
+  return (
+    <ModalOverlay>
+      <div
+        style={{
+          background: "#f5f0e8",
+          border: "1px solid #1a1a1a",
+          padding: "40px 44px",
+          width: "100%",
+          maxWidth: 520,
+          position: "relative",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: "var(--font-mono), monospace",
+            fontSize: 9,
+            letterSpacing: "0.24em",
+            color: "#c0392b",
+            marginBottom: 20,
+          }}
+        >
+          EDIT DOSSIER · RENAME
+        </div>
+        <div
+          style={{
+            fontFamily: "var(--font-serif), serif",
+            fontSize: 22,
+            fontWeight: 700,
+            color: "#1a1a1a",
+            marginBottom: 28,
+            lineHeight: 1.15,
+            letterSpacing: "-0.02em",
+          }}
+        >
+          What is the new name for this dossier?
+        </div>
+        <input
+          autoFocus
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && value.trim() && !loading) {
+              onConfirm(value.trim());
+            }
+            if (e.key === "Escape") onCancel();
+          }}
+          placeholder="Enter new dossier name..."
+          style={{
+            width: "100%",
+            background: "transparent",
+            border: "none",
+            borderBottom: "1px solid #1a1a1a",
+            fontFamily: "var(--font-serif), serif",
+            fontStyle: "italic",
+            fontSize: 18,
+            color: "#1a1a1a",
+            padding: "10px 0",
+            outline: "none",
+            marginBottom: 32,
+            boxSizing: "border-box",
+          }}
+        />
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            justifyContent: "flex-end",
+          }}
+        >
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            style={{
+              background: "transparent",
+              border: "0.5px solid #1a1a1a",
+              padding: "10px 22px",
+              fontFamily: "var(--font-mono), monospace",
+              fontSize: 10,
+              letterSpacing: "0.18em",
+              color: "#1a1a1a",
+              cursor: "pointer",
+              opacity: loading ? 0.5 : 1,
+            }}
+          >
+            CANCEL
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (value.trim() && !loading) {
+                onConfirm(value.trim());
+              }
+            }}
+            disabled={!value.trim() || loading}
+            style={{
+              background:
+                value.trim() && !loading ? "#1a1a1a" : "#888",
+              border: "none",
+              padding: "10px 22px",
+              fontFamily: "var(--font-mono), monospace",
+              fontSize: 10,
+              letterSpacing: "0.18em",
+              color: "#f5f0e8",
+              cursor:
+                value.trim() && !loading ? "pointer" : "not-allowed",
+              transition: "background 0.15s ease",
+            }}
+          >
+            {loading ? "SAVING..." : "CONFIRM"}
+          </button>
+        </div>
+      </div>
+    </ModalOverlay>
+  );
+}
+
+function WithdrawModal({
+  dossierTitle,
+  onConfirm,
+  onCancel,
+  loading,
+}: {
+  dossierTitle: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  loading: boolean;
+}) {
+  return (
+    <ModalOverlay>
+      <div
+        style={{
+          background: "#f5f0e8",
+          border: "1px solid #1a1a1a",
+          padding: "40px 44px",
+          width: "100%",
+          maxWidth: 480,
+          position: "relative",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: "var(--font-mono), monospace",
+            fontSize: 9,
+            letterSpacing: "0.24em",
+            color: "#c0392b",
+            marginBottom: 20,
+          }}
+        >
+          WITHDRAW DOSSIER · PERMANENT
+        </div>
+        <div
+          style={{
+            fontFamily: "var(--font-serif), serif",
+            fontSize: 22,
+            fontWeight: 700,
+            color: "#1a1a1a",
+            marginBottom: 12,
+            lineHeight: 1.15,
+            letterSpacing: "-0.02em",
+          }}
+        >
+          Withdraw this dossier from the archive?
+        </div>
+        <div
+          style={{
+            fontFamily: "var(--font-serif), serif",
+            fontStyle: "italic",
+            fontSize: 15,
+            color: "#888",
+            lineHeight: 1.6,
+            marginBottom: 32,
+          }}
+        >
+          &ldquo;{dossierTitle}&rdquo; will be permanently removed. This cannot be
+          undone.
+        </div>
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            justifyContent: "flex-end",
+          }}
+        >
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            style={{
+              background: "transparent",
+              border: "0.5px solid #1a1a1a",
+              padding: "10px 22px",
+              fontFamily: "var(--font-mono), monospace",
+              fontSize: 10,
+              letterSpacing: "0.18em",
+              color: "#1a1a1a",
+              cursor: "pointer",
+              opacity: loading ? 0.5 : 1,
+            }}
+          >
+            CANCEL
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!loading) onConfirm();
+            }}
+            disabled={loading}
+            style={{
+              background: loading ? "#888" : "#c0392b",
+              border: "none",
+              padding: "10px 22px",
+              fontFamily: "var(--font-mono), monospace",
+              fontSize: 10,
+              letterSpacing: "0.18em",
+              color: "#f5f0e8",
+              cursor: loading ? "not-allowed" : "pointer",
+              transition: "background 0.15s ease",
+            }}
+          >
+            {loading ? "WITHDRAWING..." : "WITHDRAW"}
+          </button>
+        </div>
+      </div>
+    </ModalOverlay>
   );
 }
 

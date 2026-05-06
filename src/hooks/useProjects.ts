@@ -136,3 +136,6 @@ export const useUpdateProject = () => {
     },
   })
 }
+
+/** Alias for rename/patch flows — same behavior as {@link useUpdateProject}. */
+export const usePatchProject = useUpdateProject
