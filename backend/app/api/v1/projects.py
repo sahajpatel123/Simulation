@@ -171,10 +171,11 @@ def create_project(
         db.commit()
         db.refresh(project)
     except Exception as _exc:
-        logger.debug(
-            "%s precis/readings on create suppressed: %s",
+        logger.warning(
+            "%s precis/readings on create failed: %s",
             __name__,
             _exc,
+            exc_info=True,
         )
 
     return ProjectOut.model_validate(project)

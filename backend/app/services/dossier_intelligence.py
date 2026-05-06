@@ -197,6 +197,8 @@ def generate_both(title: str, description: str) -> dict[str, Any]:
         precis = fut_precis.result()
         readings = fut_readings.result()
         ledger = fut_ledger.result()
+    if not readings:
+        readings = generate_readings(title, description)
     return {
         "precis": precis,
         "readings": readings,
