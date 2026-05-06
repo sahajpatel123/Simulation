@@ -342,10 +342,18 @@ function FeaturedLead({ project }: { project: Project }) {
           background: 'var(--paper)',
           padding: 32,
           boxShadow: '16px 16px 0 rgba(26,23,20,0.08)',
-          transition: 'box-shadow 200ms ease, transform 200ms ease',
+          transition: 'transform 260ms ease, box-shadow 260ms ease',
           overflow: 'visible',
         }}
         className="rise rise-1"
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'translate(-3px, -3px)'
+          e.currentTarget.style.boxShadow = '15px 15px 0 var(--ink)'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'translate(0, 0)'
+          e.currentTarget.style.boxShadow = '16px 16px 0 rgba(26,23,20,0.08)'
+        }}
       >
         <div className="kicker" style={{ color: 'var(--red)', marginBottom: 10, display: 'flex', gap: 10, alignItems: 'center' }}>
           This Issue
