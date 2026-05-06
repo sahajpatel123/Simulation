@@ -367,7 +367,7 @@ export default function ProjectPage() {
             </div>
 
             <p
-              className="dropcap"
+              className={project.precis ? '' : 'dropcap'}
               style={{
                 fontSize: 15,
                 lineHeight: 1.8,
