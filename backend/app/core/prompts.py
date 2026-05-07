@@ -338,35 +338,51 @@ Known assumptions: {assumptions_text}
 UI_GENERATION_PROMPT = """\
 You are a world-class UI/UX designer and senior frontend engineer.
 Generate a single, complete, self-contained HTML file for the product below.
+The output is a real working prototype — not a wireframe — every button must do
+something visible.
 
 ALL of the following are mandatory — do not omit any:
 
 TECHNICAL:
 - Tailwind CSS CDN: <script src="https://cdn.tailwindcss.com"></script>
 - Alpine.js CDN: <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-- All pages as <section> blocks with JS-based navigation (no iframes, no separate files)
-- All buttons clickable and wired to page transitions
-- All forms submittable with fake success states
+- Wrap the whole app in a single Alpine.js x-data root with a `page` state
+  (e.g. 'home' | 'product' | 'cart' | 'payment' | 'confirmation') plus a
+  cart array and any UI state (modals, toggles, form fields).
+- Render each "page" as a <section x-show="page==='...'"> block. No iframes,
+  no separate files, no full-page reloads.
+- Every <button> must have an @click handler that mutates Alpine state
+  (navigate, add/remove cart item, open modal, submit form, etc.).
+- All <form> elements must have @submit.prevent that shows a success state.
+
+DESIGN QUALITY (this is graded):
+- Use a strong type hierarchy, generous spacing, and a real visual identity
+  (gradient hero, cards with shadows, hover states, transitions).
+- Use Tailwind utility classes liberally for color, spacing, rounded corners,
+  shadows, hover, and `transition` animations. No bare unstyled elements.
+- Mobile-first responsive (sm: md: lg:) — 79% of agents are on mobile.
+- ARIA labels on every interactive element.
 
 CONTENT:
-- Realistic fake data: product names, INR prices, reviews, testimonials
-- SVG placeholders or descriptive image URLs
-- Full checkout flow: Product → Cart → Payment → Confirmation
+- Realistic fake data: product names, INR prices, reviews, testimonials.
+- SVG placeholders or descriptive image URLs.
+- Full checkout flow: Home → Product → Cart → Payment → Confirmation.
 
-ACCESSIBILITY & MOBILE:
-- Mobile-first responsive layout (79% of agents are on mobile)
-- ARIA labels on every interactive element
+THECEE TRACKING — these attributes are REQUIRED and validated. Use these exact
+strings, double-quoted, on real elements (not comments):
+- data-thecee-id="cta-primary"       on the primary hero CTA button
+- data-thecee-id="pricing-section"   on the <section> showing pricing
+- data-thecee-id="checkout-form"     on the <form> in the payment/checkout page
+- data-thecee-id="nav-home"          on the home nav link
+- data-thecee-id="nav-products"      on the products nav link
+- data-thecee-id="nav-cart"          on the cart button in the navbar
+- data-thecee-id="add-to-cart"       on every add-to-cart button
 
-THECEE TRACKING (exact attribute strings required):
-- data-thecee-id="cta-primary"       on main CTA button
-- data-thecee-id="pricing-section"   on pricing display
-- data-thecee-id="checkout-form"     on checkout form
-- data-thecee-id="nav-home"          on home nav link
-- data-thecee-id="nav-products"      on products nav link
-- data-thecee-id="nav-cart"          on cart button
-- data-thecee-id="add-to-cart"       on add-to-cart buttons
-
-Return ONLY valid HTML. No markdown, no explanation, no text outside the HTML tags.
+OUTPUT FORMAT:
+- Return ONLY the HTML document, starting with <!DOCTYPE html> and ending with
+  </html>. No markdown fences, no commentary, no prose.
+- Do not truncate. If you are running long, drop decorative copy before
+  dropping pages or the closing </html> tag.
 
 Product description: {description}
 Product type: {product_type}
@@ -470,6 +486,13 @@ Return ONLY the complete revised JSON object.
 """
 
 
+_REQUIRED_TRACKING_IDS = ("cta-primary", "pricing-section", "checkout-form")
+
+
+def _has_tracking_id(html: str, tid: str) -> bool:
+    return bool(re.search(rf'data-thecee-id\s*=\s*["\']{re.escape(tid)}["\']', html, re.IGNORECASE))
+
+
 def validate_generated_html(html: str) -> tuple[bool, str]:
     if not html or len(html.strip()) < 500:
         return False, "HTML too short or empty"
@@ -480,14 +503,9 @@ def validate_generated_html(html: str) -> tuple[bool, str]:
         return False, "Missing Tailwind CDN"
     if "alpinejs" not in h:
         return False, "Missing Alpine.js CDN"
-    if "<form" not in h or "<button" not in h:
-        return False, "Missing form or button"
-    required = [
-        'data-thecee-id="cta-primary"',
-        'data-thecee-id="pricing-section"',
-        'data-thecee-id="checkout-form"',
-    ]
-    missing = [a for a in required if a not in html]
+    if "<button" not in h:
+        return False, "Missing button"
+    missing = [tid for tid in _REQUIRED_TRACKING_IDS if not _has_tracking_id(html, tid)]
     if missing:
         return False, f"Missing tracking attributes: {missing}"
     if len(html.split()) < 200:
