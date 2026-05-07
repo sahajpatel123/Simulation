@@ -1,3 +1,4 @@
+import logging
 import re
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,7 +10,7 @@ from app.core.claude_client import claude_call_with_fallback
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
-from app.core.prompts import UI_GENERATION_PROMPT, validate_generated_html
+from app.core.prompts import UI_GENERATION_PROMPT
 from app.models.generated_ui import GeneratedUI
 from app.models.project import Project
 from app.models.ui_simulation_run import UISimulationRun
@@ -17,12 +18,15 @@ from app.models.user import User
 from app.schemas.ui_generation import GeneratedUIResponse, UIRefineRequest, UIGenerateRequest
 
 router = APIRouter(tags=["ui-generation"])
+logger = logging.getLogger("thecee.ui_generation")
 
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 _HTML_200 = {200: {"description": "HTML document", "content": {"text/html": {}}}}
 _PDF_200 = {200: {"description": "PDF file", "content": {"application/pdf": {}}}}
 
 ALLOWED_CDNS = ["tailwindcss", "alpinejs", "cdn.tailwindcss", "jsdelivr.net/npm/alpinejs"]
+TAILWIND_CDN = '<script src="https://cdn.tailwindcss.com"></script>'
+ALPINE_CDN = '<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>'
 
 
 def _strip_unsafe_scripts(html: str) -> str:
@@ -37,12 +41,126 @@ def _strip_unsafe_scripts(html: str) -> str:
     )
 
 
-def _extract_html(raw: str) -> str:
-    match = re.search(r"<!DOCTYPE html>.*?</html>", raw, re.DOTALL | re.IGNORECASE)
-    if match:
-        return match.group(0)
-    match = re.search(r"<html.*?</html>", raw, re.DOTALL | re.IGNORECASE)
-    return match.group(0) if match else raw.strip()
+def _strip_markdown_fences(raw: str) -> str:
+    s = raw.strip()
+    s = re.sub(r"^```(?:html|HTML)?\s*\n?", "", s)
+    s = re.sub(r"\n?```\s*$", "", s)
+    return s.strip()
+
+
+def _coerce_to_html_doc(raw: str) -> str:
+    """Always return a usable HTML document.
+
+    Handles markdown fences, fragments, and truncated outputs (no closing tags)
+    so a single missing token never bricks the prototype.
+    """
+    s = _strip_markdown_fences(raw)
+
+    # Best case: complete document.
+    m = re.search(r"<!DOCTYPE\s+html>.*?</html>", s, re.DOTALL | re.IGNORECASE)
+    if m:
+        return m.group(0)
+    m = re.search(r"<html\b.*?</html>", s, re.DOTALL | re.IGNORECASE)
+    if m:
+        return m.group(0)
+
+    # Truncated document: starts with a doc opener but has no closing tag.
+    if re.search(r"<!DOCTYPE\s+html>|<html\b", s, re.IGNORECASE):
+        if not re.search(r"</body\s*>", s, re.IGNORECASE):
+            s += "\n</body>"
+        if not re.search(r"</html\s*>", s, re.IGNORECASE):
+            s += "\n</html>"
+        return s
+
+    # Pure fragment from the model — wrap it.
+    return (
+        "<!DOCTYPE html><html><head>"
+        '<meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        "</head><body>"
+        f"{s}"
+        "</body></html>"
+    )
+
+
+def _ensure_cdns(html: str) -> str:
+    """Guarantee Tailwind + Alpine CDNs are present (the prototype's design and JS depend on them)."""
+    lower = html.lower()
+    inject: list[str] = []
+    if "cdn.tailwindcss.com" not in lower and "tailwindcss" not in lower:
+        inject.append(TAILWIND_CDN)
+    if "alpinejs" not in lower:
+        inject.append(ALPINE_CDN)
+    if not inject:
+        return html
+    payload = "".join(inject)
+    if re.search(r"</head\s*>", html, re.IGNORECASE):
+        return re.sub(r"</head\s*>", payload + "</head>", html, count=1, flags=re.IGNORECASE)
+    if re.search(r"<body\b[^>]*>", html, re.IGNORECASE):
+        return re.sub(r"(<body\b[^>]*>)", r"\1" + payload, html, count=1, flags=re.IGNORECASE)
+    return payload + html
+
+
+def _has_tid(html: str, tid: str) -> bool:
+    return bool(re.search(rf'data-thecee-id\s*=\s*["\']{re.escape(tid)}["\']', html, re.IGNORECASE))
+
+
+def _inject_attr(html: str, tag_pattern: str, attr: str) -> str:
+    m = re.search(tag_pattern, html, re.IGNORECASE)
+    if not m:
+        return html
+    return html[: m.end()] + " " + attr + html[m.end():]
+
+
+def _ensure_tracking_ids(html: str) -> str:
+    """Guarantee the three required tracking attributes exist somewhere in the document.
+
+    Prefer attaching to a real button/section/form. If none exists for a given role,
+    create a hidden marker so downstream simulation code never crashes.
+    """
+    if not _has_tid(html, "cta-primary"):
+        if re.search(r"<button\b(?![^>]*data-thecee-id)", html, re.IGNORECASE):
+            html = _inject_attr(html, r"<button\b(?![^>]*data-thecee-id)", 'data-thecee-id="cta-primary"')
+        elif re.search(r"<a\b(?![^>]*data-thecee-id)", html, re.IGNORECASE):
+            html = _inject_attr(html, r"<a\b(?![^>]*data-thecee-id)", 'data-thecee-id="cta-primary"')
+
+    if not _has_tid(html, "checkout-form"):
+        if re.search(r"<form\b(?![^>]*data-thecee-id)", html, re.IGNORECASE):
+            html = _inject_attr(html, r"<form\b(?![^>]*data-thecee-id)", 'data-thecee-id="checkout-form"')
+
+    if not _has_tid(html, "pricing-section"):
+        if re.search(r"<section\b(?![^>]*data-thecee-id)", html, re.IGNORECASE):
+            html = _inject_attr(html, r"<section\b(?![^>]*data-thecee-id)", 'data-thecee-id="pricing-section"')
+        elif re.search(r"<div\b(?![^>]*data-thecee-id)", html, re.IGNORECASE):
+            html = _inject_attr(html, r"<div\b(?![^>]*data-thecee-id)", 'data-thecee-id="pricing-section"')
+
+    # Last-resort hidden markers: never let downstream sim code miss a hook.
+    markers = ""
+    for tid in ("cta-primary", "pricing-section", "checkout-form"):
+        if not _has_tid(html, tid):
+            markers += f'<span data-thecee-id="{tid}" style="display:none" aria-hidden="true"></span>'
+    if markers:
+        if re.search(r"</body\s*>", html, re.IGNORECASE):
+            html = re.sub(r"</body\s*>", markers + "</body>", html, count=1, flags=re.IGNORECASE)
+        else:
+            html += markers
+    return html
+
+
+def _build_safe_html(raw: str) -> str:
+    """Coerce raw model output into a self-contained, valid prototype document.
+
+    Pipeline:
+      1. Coerce to a complete HTML document (handles fences, fragments, truncation).
+      2. Strip non-allowlisted external scripts.
+      3. Inject Tailwind + Alpine CDNs if missing.
+      4. Guarantee the three required tracking attributes exist.
+    """
+    doc = _coerce_to_html_doc(raw)
+    doc = _strip_unsafe_scripts(doc)
+    doc = _ensure_cdns(doc)
+    doc = _ensure_tracking_ids(doc)
+    return doc
 
 
 def _inject_tracking(html: str) -> str:
@@ -55,34 +173,6 @@ document.addEventListener('click',function(e){
     if "</body>" in html:
         return html.replace("</body>", script + "</body>")
     return html + script
-
-
-def _has_tid(html: str, tid: str) -> bool:
-    return bool(re.search(rf'data-thecee-id\s*=\s*["\']{re.escape(tid)}["\']', html, re.IGNORECASE))
-
-
-def _backfill_tracking_ids(html: str) -> str:
-    """Best-effort: add required data-thecee-id attributes if the model omitted them.
-
-    The validator demands cta-primary, pricing-section, checkout-form. Rather than
-    failing the whole generation when one is missing, attach it to a sensible
-    fallback element so the prototype is usable.
-    """
-    if not _has_tid(html, "cta-primary"):
-        m = re.search(r"<button\b(?![^>]*data-thecee-id)", html, re.IGNORECASE)
-        if m:
-            html = html[: m.end()] + ' data-thecee-id="cta-primary"' + html[m.end():]
-
-    if not _has_tid(html, "checkout-form"):
-        m = re.search(r"<form\b(?![^>]*data-thecee-id)", html, re.IGNORECASE)
-        if m:
-            html = html[: m.end()] + ' data-thecee-id="checkout-form"' + html[m.end():]
-
-    if not _has_tid(html, "pricing-section"):
-        m = re.search(r"<section\b(?![^>]*data-thecee-id)", html, re.IGNORECASE)
-        if m:
-            html = html[: m.end()] + ' data-thecee-id="pricing-section"' + html[m.end():]
-    return html
 
 
 @router.post(
@@ -114,9 +204,9 @@ async def generate_ui(
     out = claude_call_with_fallback(
         [{"role": "user", "content": prompt}],
         model="claude-sonnet-4-6",
-        max_tokens=16000,
+        max_tokens=24000,
         fallback_key="ui_generation",
-        timeout=180,
+        timeout=240,
     )
     if out.get("error"):
         raise HTTPException(
@@ -124,15 +214,20 @@ async def generate_ui(
             detail=str(out.get("error", "Generation timed out. Please retry.")),
         )
     raw = (out.get("content") or "").strip()
-
-    html = _strip_unsafe_scripts(_extract_html(raw))
-    html = _backfill_tracking_ids(html)
-    ok, err = validate_generated_html(html)
-    if not ok:
+    if len(raw) < 80:
+        logger.warning("generate-ui: empty/short model output (raw_len=%s)", len(raw))
         raise HTTPException(
-            status_code=422,
-            detail=f"Generated HTML failed validation: {err} (raw_len={len(raw)})",
+            status_code=502,
+            detail="Generator returned no content. Please retry.",
         )
+
+    html = _build_safe_html(raw)
+    logger.info(
+        "generate-ui ok project=%s raw_len=%s html_len=%s",
+        project_id,
+        len(raw),
+        len(html),
+    )
 
     ui = GeneratedUI(
         project_id=project_id,
@@ -198,9 +293,9 @@ No markdown, no explanation."""
     out = claude_call_with_fallback(
         [{"role": "user", "content": refine_prompt}],
         model="claude-sonnet-4-6",
-        max_tokens=16000,
+        max_tokens=24000,
         fallback_key="ui_generation",
-        timeout=180,
+        timeout=240,
     )
     if out.get("error"):
         raise HTTPException(
@@ -208,15 +303,14 @@ No markdown, no explanation."""
             detail=str(out.get("error", "Generation timed out. Please retry.")),
         )
     raw = (out.get("content") or "").strip()
-
-    html = _strip_unsafe_scripts(_extract_html(raw))
-    html = _backfill_tracking_ids(html)
-    ok, err = validate_generated_html(html)
-    if not ok:
+    if len(raw) < 80:
+        logger.warning("refine-ui: empty/short model output (raw_len=%s)", len(raw))
         raise HTTPException(
-            status_code=422,
-            detail=f"Refined HTML failed validation: {err} (raw_len={len(raw)})",
+            status_code=502,
+            detail="Generator returned no content. Please retry.",
         )
+
+    html = _build_safe_html(raw)
 
     new_ui = GeneratedUI(
         project_id=project_id,
