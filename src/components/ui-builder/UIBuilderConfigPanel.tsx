@@ -2,7 +2,7 @@
 
 import type { Dispatch, SetStateAction } from 'react'
 
-import { PRODUCT_TYPES, formatProductTypeLabel } from './constants'
+import { SOFTWARE_TYPES, formatProductTypeLabel } from './constants'
 
 type Props = {
   productType: string
@@ -53,7 +53,7 @@ export default function UIBuilderConfigPanel(props: Props) {
             onChange={(e) => setProductType(e.target.value)}
             className="w-full rounded border border-slate-700/80 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500/40"
           >
-            {PRODUCT_TYPES.map((pt) => (
+            {SOFTWARE_TYPES.map((pt) => (
               <option key={pt} value={pt}>
                 {formatProductTypeLabel(pt)}
               </option>

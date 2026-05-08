@@ -15,20 +15,7 @@ const PRODUCT_TYPES = [
   { value: 'mobile_app', label: 'Mobile App', icon: '📱' },
   { value: 'developer_tool', label: 'Developer Tool', icon: '⚙️' },
   { value: 'enterprise_software', label: 'Enterprise Software', icon: '🏛️' },
-  { value: 'consumer_hardware', label: 'Consumer Hardware', icon: '📦' },
-  { value: 'health_hardware', label: 'Health Hardware', icon: '❤️' },
-  { value: 'iot_hardware', label: 'IoT Hardware', icon: '🌐' },
-  { value: 'wearable', label: 'Wearable', icon: '⌚' },
-  { value: 'b2b_hardware', label: 'B2B Hardware', icon: '🔧' },
 ]
-
-const HW_TYPES = new Set([
-  'consumer_hardware',
-  'health_hardware',
-  'iot_hardware',
-  'wearable',
-  'b2b_hardware',
-])
 
 const STORAGE_KEY = 'thecee_onboarding'
 const ONBOARDING_DONE_KEY = 'thecee_onboarding_complete'
@@ -135,7 +122,7 @@ export default function OnboardingPage() {
     setLoading(true)
     setError('')
     try {
-      const axis = HW_TYPES.has(productType) ? 'hardware' : 'software'
+      const axis = 'software'
       const desc =
         productType.trim().length > 0
           ? `${description.trim()}\n\n(Product type: ${productType.replace(/_/g, ' ')})`

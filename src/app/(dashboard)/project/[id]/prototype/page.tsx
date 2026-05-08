@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
-import { formatProductTypeLabel, PRODUCT_TYPES } from '@/components/ui-builder/constants'
+import { formatProductTypeLabel, SOFTWARE_TYPES } from '@/components/ui-builder/constants'
 import type { GeneratedUI, UIGenerateRequest } from '@/components/ui-builder/types'
 import { previewAbsoluteUrl } from '@/components/ui-builder/preview-absolute-url'
 import { useProject } from '@/hooks/useProjects'
@@ -449,7 +449,7 @@ export default function PrototypePage() {
                     cursor: generateMutation.isPending ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  {PRODUCT_TYPES.map((pt) => (
+                  {SOFTWARE_TYPES.map((pt) => (
                     <option key={pt} value={pt}>
                       {formatProductTypeLabel(pt)}
                     </option>
