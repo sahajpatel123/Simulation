@@ -73,11 +73,15 @@ app.add_middleware(
 async def set_security_headers(request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     if settings.ENVIRONMENT.lower() == "production":
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+    # Generated-UI serve endpoints are intentionally embedded in iframes on the
+    # frontend.  They control framing via Content-Security-Policy: frame-ancestors
+    # set in the route handler itself, so we skip the global DENY here.
+    if not request.url.path.rstrip("/").endswith("/serve"):
+        response.headers["X-Frame-Options"] = "DENY"
     return response
 
 

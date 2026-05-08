@@ -419,7 +419,36 @@ async def serve_generated_ui(
     ui = db.query(GeneratedUI).filter(GeneratedUI.id == ui_id).first()
     if not ui:
         raise HTTPException(status_code=404, detail="UI not found")
-    return HTMLResponse(content=_inject_tracking(ui.html_content))
+
+    # Allow the frontend to embed this document in an iframe while blocking
+    # all other origins.  frame-ancestors supersedes X-Frame-Options in all
+    # modern browsers; the global middleware skips X-Frame-Options: DENY for
+    # /serve paths so older browsers are also covered.
+    frontend_origin = settings.FRONTEND_URL.rstrip("/")
+    csp_parts = [
+        "default-src 'self' https:",
+        # Tailwind Play CDN and Alpine.js both rely on eval/inline execution.
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
+        "https://cdn.tailwindcss.com https://unpkg.com "
+        "https://cdn.jsdelivr.net https://esm.sh",
+        "style-src 'self' 'unsafe-inline' "
+        "https://cdn.tailwindcss.com https://fonts.googleapis.com "
+        "https://cdn.jsdelivr.net",
+        "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net",
+        "img-src * data: blob:",
+        "connect-src 'self' https:",
+        # Only the TheCee frontend (and the API itself for direct opens) may frame this document.
+        f"frame-ancestors 'self' {frontend_origin}",
+        "object-src 'none'",
+        "base-uri 'self'",
+    ]
+    headers = {
+        "Content-Security-Policy": "; ".join(csp_parts),
+        "X-Content-Type-Options": "nosniff",
+        # Cache generated UIs aggressively — content is immutable per version.
+        "Cache-Control": "public, max-age=3600, immutable",
+    }
+    return HTMLResponse(content=_inject_tracking(ui.html_content), headers=headers)
 
 
 @router.post(

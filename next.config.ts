@@ -11,7 +11,7 @@ const contentSecurityPolicy = [
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "connect-src 'self' https: wss:",
   "worker-src 'self' blob:",
-  "frame-src 'self'",
+  "frame-src 'self' https:",
   "object-src 'none'",
   "form-action 'self'",
   'upgrade-insecure-requests',
