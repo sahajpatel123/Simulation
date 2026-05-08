@@ -23,10 +23,10 @@ export const useAssumptions = (projectId: number | string | null) =>
       return (response.data.assumptions ?? []).map(normalizeAssumption)
     },
     enabled: !!projectId,
-    refetchInterval: (data) => {
-      // If no assumptions yet, poll faster to catch the results of an extraction
+    refetchInterval: (query) => {
+      const data = query.state.data
       if (!data || data.length === 0) return 3000
-      return 10000 // Otherwise poll every 10s
+      return 10000
     },
   })
 
