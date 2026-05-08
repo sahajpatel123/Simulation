@@ -61,6 +61,36 @@ class Settings(BaseSettings):
     ALLOW_INDEXING: bool = False
 
     @model_validator(mode="after")
+    def _coerce_openai_env_aliases(self) -> "Settings":
+        """Accept OPENAI_* env vars as fallbacks when NVIDIA_* are unset.
+
+        NVIDIA NIM uses an OpenAI-compatible API, so tooling and profile
+        configs (e.g. .openclaude-profile.json) commonly set OPENAI_API_KEY,
+        OPENAI_BASE_URL, and OPENAI_MODEL instead of the NVIDIA_* equivalents.
+        Without this, a missing NVIDIA_API_KEY raises RuntimeError inside
+        _get_client(), which the LLM fallback path swallows as a generic
+        timeout — making misconfiguration invisible.
+        """
+        import os
+
+        if not self.NVIDIA_API_KEY:
+            v = os.environ.get("OPENAI_API_KEY", "").strip()
+            if v:
+                self.NVIDIA_API_KEY = v
+
+        openai_base = os.environ.get("OPENAI_BASE_URL", "").strip()
+        if openai_base and openai_base != self.NVIDIA_BASE_URL:
+            self.NVIDIA_BASE_URL = openai_base
+
+        openai_model = os.environ.get("OPENAI_MODEL", "").strip()
+        if openai_model and self.NVIDIA_MODEL == "nvidia/nemotron-3-super-120b-a12b":
+            self.NVIDIA_MODEL = openai_model
+            if not self.NVIDIA_FAST_MODEL or self.NVIDIA_FAST_MODEL == "nvidia/nemotron-3-super-120b-a12b":
+                self.NVIDIA_FAST_MODEL = openai_model
+
+        return self
+
+    @model_validator(mode="after")
     def _reject_weak_jwt_secret_in_production(self) -> "Settings":
         if self.ENVIRONMENT.lower() != "production":
             return self

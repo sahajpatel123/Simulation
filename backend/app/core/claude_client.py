@@ -42,6 +42,20 @@ TIMEOUT_FALLBACK: dict[str, dict[str, Any]] = {
 }
 
 
+def _error_fallback(fallback_key: str, error_msg: str) -> dict[str, Any]:
+    """Build a response that preserves the registered fallback structure but
+    injects the *real* error message instead of the generic timeout string.
+
+    Without this, TIMEOUT_FALLBACK.get(key, default) silently discards the
+    default whenever the key exists — so auth errors (401), validation errors
+    (422), and a missing API key all surface as "Generation timed out." to the
+    frontend, making them impossible to diagnose.
+    """
+    base = dict(TIMEOUT_FALLBACK.get(fallback_key, {}))
+    base["error"] = error_msg
+    return base or {"error": error_msg}
+
+
 _client: OpenAI | None = None
 
 
@@ -125,7 +139,7 @@ def claude_call_with_fallback(
         client = _get_client()
     except RuntimeError as exc:
         logger.error("LLM client init failed: %s", exc)
-        return TIMEOUT_FALLBACK.get(fallback_key, {"error": str(exc)})
+        return _error_fallback(fallback_key, str(exc))
 
     nim_model = _resolve_model(model)
     chat_messages = _build_messages(messages, system)
@@ -147,9 +161,8 @@ def claude_call_with_fallback(
     except APIError as e:
         sc = getattr(e, "status_code", None)
         logger.error("NIM API error on %s: status=%s err=%s", fallback_key, sc, e)
-        return TIMEOUT_FALLBACK.get(
-            fallback_key, {"error": str(sc) if sc is not None else str(e)}
-        )
+        error_msg = f"API error {sc}: {e}" if sc is not None else str(e)
+        return _error_fallback(fallback_key, error_msg)
     except Exception as e:  # noqa: BLE001 — last-resort: never let the LLM crash a request.
         logger.exception("NIM unexpected error on %s: %s", fallback_key, e)
-        return TIMEOUT_FALLBACK.get(fallback_key, {"error": str(e)})
+        return _error_fallback(fallback_key, str(e))

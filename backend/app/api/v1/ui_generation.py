@@ -204,7 +204,7 @@ async def generate_ui(
     out = claude_call_with_fallback(
         [{"role": "user", "content": prompt}],
         model="claude-sonnet-4-6",
-        max_tokens=24000,
+        max_tokens=8192,
         fallback_key="ui_generation",
         timeout=240,
     )
@@ -293,7 +293,7 @@ No markdown, no explanation."""
     out = claude_call_with_fallback(
         [{"role": "user", "content": refine_prompt}],
         model="claude-sonnet-4-6",
-        max_tokens=24000,
+        max_tokens=8192,
         fallback_key="ui_generation",
         timeout=240,
     )
