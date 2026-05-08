@@ -104,7 +104,7 @@ def compute_engineering_plate_labels(
         product_name_fallback=product_name_fallback,
         category_fallback=category_fallback,
     )
-    if not (settings.ANTHROPIC_API_KEY or "").strip():
+    if not (settings.NVIDIA_API_KEY or "").strip():
         return base
     brief = _truncate_spec_json(spec)
     system = (

@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     ANTHROPIC_API_KEY: str = ""
+
+    # NVIDIA NIMs (OpenAI-compatible). Used as the active LLM provider while in
+    # development. Set NVIDIA_API_KEY in the deployment environment; the rest
+    # have sensible defaults for the public NIM endpoint.
+    NVIDIA_API_KEY: str = ""
+    NVIDIA_BASE_URL: str = "https://integrate.api.nvidia.com/v1"
+    NVIDIA_MODEL: str = "meta/llama-3.3-70b-instruct"
+    NVIDIA_FAST_MODEL: str = "meta/llama-3.3-70b-instruct"
     FRONTEND_URL: str = "http://localhost:3000"
     PUBLIC_API_BASE_URL: str = "http://127.0.0.1:8000"
     REDIS_URL: str = "redis://localhost:6379/0"

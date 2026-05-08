@@ -1,6 +1,10 @@
-"""Dossier intelligence generation using Claude
-Haiku 4.5. Generates the editorial Précis, structured
-Readings, and a small précis-ledger (deck line + rubrics)."""
+"""Dossier intelligence generation. Generates the editorial Précis, structured
+Readings, and a small précis-ledger (deck line + rubrics).
+
+While in development, all LLM calls are routed through NVIDIA NIMs via
+``claude_call_with_fallback`` (the historical helper name is preserved across
+the codebase to avoid touching every call site).
+"""
 
 from __future__ import annotations
 
@@ -9,15 +13,11 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from anthropic import Anthropic
-
-from app.core.config import settings
+from app.core.claude_client import claude_call_with_fallback
 from app.core.prompts import DISPLAY_PRECIS_SYSTEM, build_display_precis_user_message
 from app.core.utils import safe_parse_json
 
 logger = logging.getLogger(__name__)
-
-_client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 
 READINGS_SYSTEM = """You are an editor at TheCee performing a first read of a founder's idea. Surface 4 short structured observations in JSON format.
 
@@ -52,76 +52,65 @@ RULES:
 - Values must be plain strings (no nested objects)."""
 
 
-def _text_from_message(response: Any) -> str:
-    """Concatenate all text blocks from an Anthropic message response.
-
-    The SDK returns a list of typed blocks; older code assumed
-    ``content[0].text``, which fails when the first block is not text
-    or when the attribute layout differs.
-    """
-    chunks: list[str] = []
-    for block in getattr(response, "content", None) or []:
-        text: str | None = None
-        if isinstance(block, dict):
-            if block.get("type") in (None, "text"):
-                raw = block.get("text")
-                text = raw if isinstance(raw, str) else None
-        else:
-            raw = getattr(block, "text", None)
-            text = raw if isinstance(raw, str) else None
-        if text:
-            chunks.append(text)
-    return "".join(chunks).strip()
+def _llm_text(
+    *,
+    system: str,
+    user_msg: str,
+    max_tokens: int,
+    fallback_key: str,
+    timeout: int = 30,
+) -> str:
+    """Single-turn LLM call returning trimmed text or ''."""
+    out = claude_call_with_fallback(
+        [{"role": "user", "content": user_msg}],
+        system=system,
+        model="claude-haiku-4-5",  # symbolic; routed to NVIDIA NIM by the client
+        max_tokens=max_tokens,
+        fallback_key=fallback_key,
+        timeout=timeout,
+    )
+    if out.get("error"):
+        return ""
+    return (out.get("content") or "").strip()
 
 
 def generate_precis(title: str, description: str) -> str:
-    """Generate a shortened editorial line from the
-    raw idea. Returns the polished sentence."""
+    """Generate a shortened editorial line from the raw idea."""
     user_msg = build_display_precis_user_message(title, description)
-
     try:
-        response = _client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=96,
+        text = _llm_text(
             system=DISPLAY_PRECIS_SYSTEM,
-            messages=[{"role": "user", "content": user_msg}],
+            user_msg=user_msg,
+            max_tokens=96,
+            fallback_key="intake_landing",
         )
-        text = _text_from_message(response)
-        text = text.strip('"').strip("'").strip()
-        return text
+        return text.strip('"').strip("'").strip()
     except Exception as exc:
         logger.warning("precis generation failed: %s", exc)
         return ""
 
 
 def generate_readings(title: str, description: str) -> list[dict[str, str]]:
-    """Generate structured readings as a list of
-    {label, body} dicts. Returns empty list on
-    failure."""
+    """Generate structured readings as a list of {label, body} dicts."""
     user_msg = f"Idea:\nTitle: {title}\n\nDescription: {description}\n\nReturn the JSON array of 4 readings."
-
     try:
-        response = _client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=400,
+        text = _llm_text(
             system=READINGS_SYSTEM,
-            messages=[{"role": "user", "content": user_msg}],
+            user_msg=user_msg,
+            max_tokens=400,
+            fallback_key="intake_landing",
         )
-        text = _text_from_message(response)
         parsed = safe_parse_json(text)
         if isinstance(parsed, list) and all(
-            isinstance(p, dict) and "label" in p and "body" in p
-            for p in parsed
+            isinstance(p, dict) and "label" in p and "body" in p for p in parsed
         ):
-            out: list[dict[str, str]] = []
-            for p in parsed[:4]:
-                out.append(
-                    {
-                        "label": str(p.get("label", "")).strip(),
-                        "body": str(p.get("body", "")).strip(),
-                    }
-                )
-            return out
+            return [
+                {
+                    "label": str(p.get("label", "")).strip(),
+                    "body": str(p.get("body", "")).strip(),
+                }
+                for p in parsed[:4]
+            ]
         if isinstance(parsed, dict) and "readings" in parsed:
             inner = parsed["readings"]
             if isinstance(inner, list) and all(
@@ -147,13 +136,12 @@ def generate_ledger(title: str, description: str) -> dict[str, str]:
     )
     keys = ("deck_line", "section_rubric", "status_rubric", "folio_blurb")
     try:
-        response = _client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=220,
+        text = _llm_text(
             system=LEDGER_SYSTEM,
-            messages=[{"role": "user", "content": user_msg}],
+            user_msg=user_msg,
+            max_tokens=220,
+            fallback_key="intake_landing",
         )
-        text = _text_from_message(response)
         parsed = safe_parse_json(text)
         if not isinstance(parsed, dict):
             return {}
