@@ -9,7 +9,7 @@ import { useParams, useRouter } from "next/navigation";
 
 import { EditorialExpandable } from "@/components/EditorialExpandable";
 import { FolioAxisChip, LegacyFolioSlip } from "@/components/FolioAxisChip";
-import { useAssumptions } from "@/hooks/useAssumptions";
+import { useAssumptions, useExtractAssumptions } from "@/hooks/useAssumptions";
 import {
   useDeleteProject,
   usePatchProject,
@@ -89,12 +89,37 @@ export default function ProjectPage() {
 
   const patchProject = usePatchProject();
   const deleteProject = useDeleteProject();
+  const extractAssumptions = useExtractAssumptions();
   const router = useRouter();
 
   const assumptionList = useMemo<Assumption[]>(
     () => assumptions ?? [],
     [assumptions],
   );
+
+  // Auto-trigger extraction if project is DRAFT and has no assumptions
+  useEffect(() => {
+    if (
+      project &&
+      project.status === "DRAFT" &&
+      !aLoading &&
+      assumptionList.length === 0 &&
+      !extractAssumptions.isPending
+    ) {
+      extractAssumptions.mutate(projectId);
+    }
+  }, [
+    project,
+    aLoading,
+    assumptionList.length,
+    extractAssumptions,
+    projectId,
+  ]);
+
+  const latestAssumptionText = assumptionList.length > 0 
+    ? assumptionList[0].text 
+    : undefined;
+
   const hiddenCount = assumptionList.filter((a) =>
     Boolean(a.isHidden ?? a.is_hidden),
   ).length;
@@ -365,7 +390,6 @@ export default function ProjectPage() {
               }}
             >
               <FiledStamp
-                projectId={project.id}
                 onEdit={() => setShowEditModal(true)}
                 onWithdraw={() => setShowWithdrawModal(true)}
               />
@@ -564,10 +588,10 @@ export default function ProjectPage() {
           )}
 
           {/* Ledger */}
-          {aLoading ? (
+          {aLoading && assumptionList.length === 0 ? (
             <LedgerSkeleton />
           ) : assumptionList.length === 0 ? (
-            <EmptyReadings />
+            <EmptyReadings description={project.description} />
           ) : (
             <ol
               style={{
@@ -608,7 +632,16 @@ export default function ProjectPage() {
           >
             <ChaseCounter
               label="Assumptions surfaced"
-              value={assumptionList.length}
+              value={
+                extractAssumptions.isPending || (aLoading && assumptionList.length === 0)
+                  ? "..."
+                  : assumptionList.length
+              }
+              detail={
+                extractAssumptions.isPending || (aLoading && assumptionList.length === 0)
+                  ? "Scanning intake..."
+                  : latestAssumptionText
+              }
             />
             <ChaseDivider />
             <ChaseCounter
@@ -1254,11 +1287,9 @@ function WithdrawModal({
 /* ── Sub-components ──────────────────────────────────────────────── */
 
 function FiledStamp({
-  projectId,
   onEdit,
   onWithdraw,
 }: {
-  projectId: number | string;
   onEdit: () => void;
   onWithdraw: () => void;
 }) {
@@ -1698,10 +1729,12 @@ function TypographicMeter({ value }: { value: number }) {
 function ChaseCounter({
   label,
   value,
+  detail,
   tone,
 }: {
   label: string;
   value: number | string;
+  detail?: string;
   tone?: "red";
   mono?: boolean;
 }) {
@@ -1712,21 +1745,41 @@ function ChaseCounter({
         flexDirection: "column",
         gap: 6,
         minWidth: 120,
+        maxWidth: 240,
       }}
     >
       <span className="kicker" style={{ color: "var(--ink-tertiary)" }}>
         {label}
       </span>
-      <span
-        className="numeral"
-        style={{
-          fontSize: 28,
-          color: tone === "red" ? "var(--red)" : "var(--ink)",
-          lineHeight: 1,
-        }}
-      >
-        {value}
-      </span>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+        <span
+          className="numeral"
+          style={{
+            fontSize: 28,
+            color: tone === "red" ? "var(--red)" : "var(--ink)",
+            lineHeight: 1,
+          }}
+        >
+          {value}
+        </span>
+        {detail && (
+          <span
+            style={{
+              fontSize: 10,
+              color: "var(--ink-secondary)",
+              fontStyle: "italic",
+              fontFamily: "var(--font-serif)",
+              lineHeight: 1.2,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              maxWidth: 140,
+            }}
+          >
+            {detail}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -1779,7 +1832,7 @@ function LedgerSkeleton() {
   );
 }
 
-function EmptyReadings() {
+function EmptyReadings({ description }: { description?: string | null }) {
   return (
     <div
       style={{
@@ -1819,6 +1872,22 @@ function EmptyReadings() {
       >
         &ldquo;The readers are still turning the first page.&rdquo;
       </p>
+      {description && (
+        <p
+          style={{
+            marginTop: 20,
+            fontSize: 14,
+            color: "var(--ink-secondary)",
+            fontFamily: "var(--font-serif)",
+            maxWidth: 500,
+            margin: "20px auto 0",
+            lineHeight: 1.6,
+            opacity: 0.8,
+          }}
+        >
+          Analyzing: &ldquo;{description.length > 120 ? description.slice(0, 120) + '...' : description}&rdquo;
+        </p>
+      )}
       <p
         style={{
           marginTop: 14,
