@@ -246,6 +246,7 @@ async def generate_ui(
         project_id=project_id,
         version=ui.version,
         html_preview_url=f"/api/v1/generated-uis/{ui.id}/serve",
+        html_content=html,
         pages_detected=body.pages_required,
     )
 
@@ -329,6 +330,7 @@ No markdown, no explanation."""
         project_id=project_id,
         version=new_ui.version,
         html_preview_url=f"/api/v1/generated-uis/{new_ui.id}/serve",
+        html_content=html,
         pages_detected=["home", "product", "checkout"],
     )
 
@@ -366,6 +368,7 @@ async def list_generated_uis(
                 "product_type": ui.product_type,
                 "pages_generated": ui.pages_generated,
                 "html_preview_url": f"/api/v1/generated-uis/{ui.id}/serve",
+                "html_content": ui.html_content,
                 "created_at": ui.created_at.isoformat() if ui.created_at else None,
             }
             for ui in uis

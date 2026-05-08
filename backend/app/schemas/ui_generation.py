@@ -21,5 +21,6 @@ class GeneratedUIResponse(BaseModel):
     project_id: int
     version: int
     html_preview_url: str
+    html_content: str
     pages_detected: list[str]
     message: str = "UI generated successfully"

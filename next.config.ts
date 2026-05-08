@@ -1,6 +1,21 @@
 import type { NextConfig } from 'next'
 
 const isProduction = process.env.NODE_ENV === 'production'
+
+// Derive the API origin so local dev (http://localhost:8000) is allowed in
+// frame-src alongside the production HTTPS wildcard.  In prod both app and
+// API are HTTPS so https: already covers it, but including the origin
+// explicitly is harmless and keeps dev and prod parity.
+const apiOrigin = (() => {
+  const raw = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000/api/v1'
+  try {
+    const url = new URL(raw.startsWith('http') ? raw : `https://${raw}`)
+    return url.origin
+  } catch {
+    return 'http://localhost:8000'
+  }
+})()
+
 const contentSecurityPolicy = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -11,7 +26,9 @@ const contentSecurityPolicy = [
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "connect-src 'self' https: wss:",
   "worker-src 'self' blob:",
-  "frame-src 'self' https:",
+  // Include the API origin so generated-UI preview iframes (/serve endpoint)
+  // are allowed regardless of whether the API is on HTTP (dev) or HTTPS (prod).
+  `frame-src 'self' https: ${apiOrigin}`,
   "object-src 'none'",
   "form-action 'self'",
   'upgrade-insecure-requests',

@@ -43,6 +43,7 @@ export default function UIBuilderHistory({ rows, onPreview, onSimulate, simulate
                       version: ui.version,
                       product_type: ui.product_type,
                       html_preview_url: ui.html_preview_url,
+                      html_content: ui.html_content,
                       pages_detected: [],
                     })
                   }
