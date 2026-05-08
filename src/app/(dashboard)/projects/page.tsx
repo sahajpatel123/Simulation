@@ -147,15 +147,20 @@ function ProjectsPage() {
   const countsByBucket = useMemo(() => {
     const c: Record<Filter, number> = { all: 0, draft: 0, ready: 0, running: 0, done: 0, failed: 0 }
     sortedList.forEach((p) => {
-      c.all += 1
-      c[resolveStatus(p.status).bucket] += 1
+      if (p.is_archived) {
+        c.done += 1
+      } else {
+        c.all += 1
+        c[resolveStatus(p.status).bucket] += 1
+      }
     })
     return c
   }, [sortedList])
 
   const filteredList = useMemo(() => {
-    if (activeFilter === 'all') return sortedList
-    return sortedList.filter((p) => resolveStatus(p.status).bucket === activeFilter)
+    if (activeFilter === 'done') return sortedList.filter((p) => p.is_archived)
+    if (activeFilter === 'all') return sortedList.filter((p) => !p.is_archived)
+    return sortedList.filter((p) => !p.is_archived && resolveStatus(p.status).bucket === activeFilter)
   }, [sortedList, activeFilter])
 
   const handleCreate = async () => {

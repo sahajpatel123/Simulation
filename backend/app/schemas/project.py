@@ -30,6 +30,7 @@ class ProjectOut(BaseModel):
     precis: str | None = None
     readings_json: str | None = None
     precis_title_fingerprint: str | None = None
+    is_archived: bool = False
 
     model_config = {"from_attributes": True}
 

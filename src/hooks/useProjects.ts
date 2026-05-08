@@ -139,3 +139,29 @@ export const useUpdateProject = () => {
 
 /** Alias for rename/patch flows — same behavior as {@link useUpdateProject}. */
 export const usePatchProject = useUpdateProject
+
+export const useArchiveProject = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) =>
+      api.patch<Project>(`/projects/${id}/archive`).then((r) => r.data),
+    onSuccess: (data) => {
+      const normalized = normalizeProject(data)
+      qc.setQueryData(['project', Number(normalized.id)], normalized)
+      qc.invalidateQueries({ queryKey: ['projects'] })
+    },
+  })
+}
+
+export const useUnarchiveProject = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) =>
+      api.patch<Project>(`/projects/${id}/unarchive`).then((r) => r.data),
+    onSuccess: (data) => {
+      const normalized = normalizeProject(data)
+      qc.setQueryData(['project', Number(normalized.id)], normalized)
+      qc.invalidateQueries({ queryKey: ['projects'] })
+    },
+  })
+}

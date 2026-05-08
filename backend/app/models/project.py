@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -35,6 +35,7 @@ class Project(Base, TimestampMixin):
     existing_product_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     # software | hardware — NULL = legacy dossier (show both workshop paths in UI)
     dossier_axis: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="FALSE")
     prototype_html: Mapped[str | None] = mapped_column(Text)
     funnel_graph_json: Mapped[str | None] = mapped_column(Text)
     premortem_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

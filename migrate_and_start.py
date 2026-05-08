@@ -62,6 +62,7 @@ def run_migrations():
             ("projects", "precis", "TEXT"),
             ("projects", "readings_json", "TEXT"),
             ("projects", "precis_title_fingerprint", "TEXT"),
+            ("projects", "is_archived", "BOOLEAN DEFAULT FALSE NOT NULL"),
             ("simulations", "results_json", "TEXT"),
             ("simulations", "confidence_score", "FLOAT"),
             ("simulations", "task_id", "VARCHAR(255)"),

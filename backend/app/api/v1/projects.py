@@ -258,6 +258,54 @@ def patch_project(
     return ProjectOut.model_validate(project)
 
 
+@router.patch(
+    "/{project_id}/archive",
+    response_model=ProjectOut,
+    summary="Move dossier to the archive",
+)
+def archive_project(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project.is_archived = True
+    db.add(project)
+    db.commit()
+    db.refresh(project)
+    return ProjectOut.model_validate(project)
+
+
+@router.patch(
+    "/{project_id}/unarchive",
+    response_model=ProjectOut,
+    summary="Restore dossier from the archive",
+)
+def unarchive_project(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project.is_archived = False
+    db.add(project)
+    db.commit()
+    db.refresh(project)
+    return ProjectOut.model_validate(project)
+
+
 @router.get(
     "/{project_id}/clusters",
     summary="Cluster-level conversion from the latest completed simulation",

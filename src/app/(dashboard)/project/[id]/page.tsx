@@ -11,9 +11,11 @@ import { EditorialExpandable } from "@/components/EditorialExpandable";
 import { FolioAxisChip, LegacyFolioSlip } from "@/components/FolioAxisChip";
 import { useAssumptions, useExtractAssumptions } from "@/hooks/useAssumptions";
 import {
+  useArchiveProject,
   useDeleteProject,
   usePatchProject,
   useProject,
+  useUnarchiveProject,
 } from "@/hooks/useProjects";
 import { useSimulations } from "@/hooks/useSimulation";
 import type { Assumption } from "@/types";
@@ -86,9 +88,12 @@ export default function ProjectPage() {
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
 
   const patchProject = usePatchProject();
   const deleteProject = useDeleteProject();
+  const archiveProject = useArchiveProject();
+  const unarchiveProject = useUnarchiveProject();
   const extractAssumptions = useExtractAssumptions();
   const router = useRouter();
 
@@ -392,6 +397,12 @@ export default function ProjectPage() {
               <FiledStamp
                 onEdit={() => setShowEditModal(true)}
                 onWithdraw={() => setShowWithdrawModal(true)}
+                onArchive={() => setShowArchiveModal(true)}
+                onUnarchive={async () => {
+                  await unarchiveProject.mutateAsync(projectId);
+                }}
+                isArchived={project.is_archived ?? false}
+                isUnarchiving={unarchiveProject.isPending}
               />
             </div>
 
@@ -1002,6 +1013,23 @@ export default function ProjectPage() {
           }}
         />
       )}
+
+      {showArchiveModal && (
+        <ArchiveModal
+          dossierTitle={project.title}
+          loading={archiveProject.isPending}
+          onCancel={() => setShowArchiveModal(false)}
+          onConfirm={async () => {
+            try {
+              await archiveProject.mutateAsync(Number(project.id));
+              setShowArchiveModal(false);
+              router.push("/projects?filter=done");
+            } catch {
+              setShowArchiveModal(false);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1284,14 +1312,133 @@ function WithdrawModal({
   );
 }
 
+function ArchiveModal({
+  dossierTitle,
+  onConfirm,
+  onCancel,
+  loading,
+}: {
+  dossierTitle: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  loading: boolean;
+}) {
+  return (
+    <ModalOverlay>
+      <div
+        style={{
+          background: "#f5f0e8",
+          border: "1px solid #1a1a1a",
+          padding: "40px 44px",
+          width: "100%",
+          maxWidth: 480,
+          position: "relative",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: "var(--font-mono), monospace",
+            fontSize: 9,
+            letterSpacing: "0.24em",
+            color: "#8B6914",
+            marginBottom: 20,
+          }}
+        >
+          ARCHIVE DOSSIER · REVERSIBLE
+        </div>
+        <div
+          style={{
+            fontFamily: "var(--font-serif), serif",
+            fontSize: 22,
+            fontWeight: 700,
+            color: "#1a1a1a",
+            marginBottom: 12,
+            lineHeight: 1.15,
+            letterSpacing: "-0.02em",
+          }}
+        >
+          Send this dossier to the archive?
+        </div>
+        <div
+          style={{
+            fontFamily: "var(--font-serif), serif",
+            fontStyle: "italic",
+            fontSize: 15,
+            color: "#888",
+            lineHeight: 1.6,
+            marginBottom: 32,
+          }}
+        >
+          &ldquo;{dossierTitle}&rdquo; will be moved to the archive and removed
+          from your main index. You can restore it at any time.
+        </div>
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            justifyContent: "flex-end",
+          }}
+        >
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            style={{
+              background: "transparent",
+              border: "0.5px solid #1a1a1a",
+              padding: "10px 22px",
+              fontFamily: "var(--font-mono), monospace",
+              fontSize: 10,
+              letterSpacing: "0.18em",
+              color: "#1a1a1a",
+              cursor: "pointer",
+              opacity: loading ? 0.5 : 1,
+            }}
+          >
+            CANCEL
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!loading) onConfirm();
+            }}
+            disabled={loading}
+            style={{
+              background: loading ? "#888" : "#8B6914",
+              border: "none",
+              padding: "10px 22px",
+              fontFamily: "var(--font-mono), monospace",
+              fontSize: 10,
+              letterSpacing: "0.18em",
+              color: "#f5f0e8",
+              cursor: loading ? "not-allowed" : "pointer",
+              transition: "background 0.15s ease",
+            }}
+          >
+            {loading ? "ARCHIVING..." : "ARCHIVE"}
+          </button>
+        </div>
+      </div>
+    </ModalOverlay>
+  );
+}
+
 /* ── Sub-components ──────────────────────────────────────────────── */
 
 function FiledStamp({
   onEdit,
   onWithdraw,
+  onArchive,
+  onUnarchive,
+  isArchived,
+  isUnarchiving,
 }: {
   onEdit: () => void;
   onWithdraw: () => void;
+  onArchive: () => void;
+  onUnarchive: () => void;
+  isArchived: boolean;
+  isUnarchiving: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -1300,24 +1447,25 @@ function FiledStamp({
   useEffect(() => {
     if (!open) return;
     function handleClick(e: MouseEvent) {
-      if (ref.current && 
+      if (ref.current &&
           !ref.current.contains(e.target as Node)) {
         setOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClick);
-    return () => 
+    return () =>
       document.removeEventListener('mousedown', handleClick);
   }, [open]);
 
   const isActive = hovered || open;
+  const stampColor = isArchived ? '#8B6914' : '#c0392b';
 
   return (
     <div
       ref={ref}
       style={{ position: 'relative', display: 'inline-block' }}
     >
-      {/* THE STAMP — position unchanged */}
+      {/* THE STAMP */}
       <div
         onClick={() => setOpen(o => !o)}
         onMouseEnter={() => setHovered(true)}
@@ -1327,12 +1475,11 @@ function FiledStamp({
           alignItems: 'center',
           justifyContent: 'center',
           padding: '3px 10px',
-          border: '1.5px solid #c0392b',
-          background: isActive ? '#c0392b' : 'transparent',
+          border: `1.5px solid ${stampColor}`,
+          background: isActive ? stampColor : 'transparent',
           cursor: 'pointer',
           userSelect: 'none',
-          transition: 
-            'background 0.18s ease, color 0.18s ease',
+          transition: 'background 0.18s ease, color 0.18s ease',
           transform: 'rotate(-2deg)',
         }}
       >
@@ -1341,14 +1488,14 @@ function FiledStamp({
           fontSize: 10,
           letterSpacing: '0.22em',
           fontWeight: 600,
-          color: isActive ? '#f5f0e8' : '#c0392b',
+          color: isActive ? '#f5f0e8' : stampColor,
           transition: 'color 0.18s ease',
         }}>
-          FILED
+          {isArchived ? 'ARCHIVED' : 'FILED'}
         </span>
       </div>
 
-      {/* ACTION MENU — appears below stamp on click */}
+      {/* ACTION MENU */}
       {open && (
         <div style={{
           position: 'absolute',
@@ -1358,78 +1505,148 @@ function FiledStamp({
           background: '#f5f0e8',
           border: '0.5px solid #1a1a1a',
           zIndex: 50,
-          minWidth: 148,
-          boxShadow: 
-            '0 4px 16px rgba(0,0,0,0.10)',
+          minWidth: 160,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
         }}>
-          {/* EDIT */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpen(false);
-              onEdit();
-            }}
-            style={{
-              display: 'block',
-              width: '100%',
-              padding: '10px 14px',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: '0.5px solid #e8e3d8',
-              fontFamily: 'var(--font-mono), monospace',
-              fontSize: 10,
-              letterSpacing: '0.18em',
-              color: '#1a1a1a',
-              cursor: 'pointer',
-              textAlign: 'left',
-              transition: 'background 0.15s ease',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = '#1a1a1a';
-              e.currentTarget.style.color = '#f5f0e8';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 
-                'transparent';
-              e.currentTarget.style.color = '#1a1a1a';
-            }}
-          >
-            EDIT DOSSIER
-          </button>
+          {isArchived ? (
+            /* ARCHIVED STATE — only restore option */
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(false);
+                onUnarchive();
+              }}
+              disabled={isUnarchiving}
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '10px 14px',
+                background: 'transparent',
+                border: 'none',
+                fontFamily: 'var(--font-mono), monospace',
+                fontSize: 10,
+                letterSpacing: '0.18em',
+                color: '#8B6914',
+                cursor: isUnarchiving ? 'not-allowed' : 'pointer',
+                textAlign: 'left',
+                transition: 'background 0.15s ease',
+                opacity: isUnarchiving ? 0.6 : 1,
+              }}
+              onMouseEnter={e => {
+                if (!isUnarchiving) {
+                  e.currentTarget.style.background = '#8B6914';
+                  e.currentTarget.style.color = '#f5f0e8';
+                }
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = '#8B6914';
+              }}
+            >
+              {isUnarchiving ? 'RESTORING...' : 'RESTORE DOSSIER'}
+            </button>
+          ) : (
+            /* ACTIVE STATE — edit, archive, withdraw */
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpen(false);
+                  onEdit();
+                }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '10px 14px',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: '0.5px solid #e8e3d8',
+                  fontFamily: 'var(--font-mono), monospace',
+                  fontSize: 10,
+                  letterSpacing: '0.18em',
+                  color: '#1a1a1a',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'background 0.15s ease',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = '#1a1a1a';
+                  e.currentTarget.style.color = '#f5f0e8';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = '#1a1a1a';
+                }}
+              >
+                EDIT DOSSIER
+              </button>
 
-          {/* WITHDRAW */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpen(false);
-              onWithdraw();
-            }}
-            style={{
-              display: 'block',
-              width: '100%',
-              padding: '10px 14px',
-              background: 'transparent',
-              border: 'none',
-              fontFamily: 'var(--font-mono), monospace',
-              fontSize: 10,
-              letterSpacing: '0.18em',
-              color: '#c0392b',
-              cursor: 'pointer',
-              textAlign: 'left',
-              transition: 'background 0.15s ease',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = '#c0392b';
-              e.currentTarget.style.color = '#f5f0e8';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 
-                'transparent';
-              e.currentTarget.style.color = '#c0392b';
-            }}
-          >
-            WITHDRAW
-          </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpen(false);
+                  onArchive();
+                }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '10px 14px',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: '0.5px solid #e8e3d8',
+                  fontFamily: 'var(--font-mono), monospace',
+                  fontSize: 10,
+                  letterSpacing: '0.18em',
+                  color: '#8B6914',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'background 0.15s ease',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = '#8B6914';
+                  e.currentTarget.style.color = '#f5f0e8';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = '#8B6914';
+                }}
+              >
+                ARCHIVE
+              </button>
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpen(false);
+                  onWithdraw();
+                }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '10px 14px',
+                  background: 'transparent',
+                  border: 'none',
+                  fontFamily: 'var(--font-mono), monospace',
+                  fontSize: 10,
+                  letterSpacing: '0.18em',
+                  color: '#c0392b',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'background 0.15s ease',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = '#c0392b';
+                  e.currentTarget.style.color = '#f5f0e8';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = '#c0392b';
+                }}
+              >
+                WITHDRAW
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
