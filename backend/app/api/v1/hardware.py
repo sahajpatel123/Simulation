@@ -104,10 +104,10 @@ def generate_hardware_spec(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if not settings.NVIDIA_API_KEY:
+    if not settings.GROK_API_KEY:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="NVIDIA_API_KEY is not configured",
+            detail="GROK_API_KEY is not configured",
         )
     pt = body.product_type.strip().lower()
     if pt not in VALID_PRODUCT_TYPES:
@@ -193,10 +193,10 @@ def refine_hardware_spec(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if not settings.NVIDIA_API_KEY:
+    if not settings.GROK_API_KEY:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="NVIDIA_API_KEY is not configured",
+            detail="GROK_API_KEY is not configured",
         )
 
     _get_owned_project(db, project_id, current_user.id)

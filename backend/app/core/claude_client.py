@@ -1,14 +1,14 @@
 """LLM client.
 
-This module is named ``claude_client`` for historical reasons; while in the
-development phase the project routes every call through NVIDIA NIMs (OpenAI-
-compatible). The public function ``claude_call_with_fallback`` keeps its
-original signature so all call sites continue to work unchanged.
+This module is named ``claude_client`` for historical reasons; the project
+routes every call through xAI Grok (OpenAI-compatible API). The public
+function ``claude_call_with_fallback`` keeps its original signature so all
+call sites continue to work unchanged.
 
 Environment:
-- NVIDIA_API_KEY  (required)
-- NVIDIA_BASE_URL (default: https://integrate.api.nvidia.com/v1)
-- NVIDIA_MODEL    (default: meta/llama-3.3-70b-instruct)
+- GROK_API_KEY   (required)
+- GROK_BASE_URL  (default: https://api.x.ai/v1)
+- GROK_MODEL     (default: grok-3-mini)
 """
 
 from __future__ import annotations
@@ -60,36 +60,36 @@ _client: OpenAI | None = None
 
 
 def _get_client() -> OpenAI:
-    """Lazy-construct the OpenAI client pointed at NVIDIA NIM.
+    """Lazy-construct the OpenAI client pointed at xAI Grok.
 
     Lazy so a missing key at import time doesn't crash the worker; the call
     site gets a clean error string via the fallback path instead.
     """
     global _client
     if _client is None:
-        api_key = (settings.NVIDIA_API_KEY or "").strip()
+        api_key = (settings.GROK_API_KEY or "").strip()
         if not api_key:
             raise RuntimeError(
-                "NVIDIA_API_KEY is not configured. Set it in the deployment environment."
+                "GROK_API_KEY is not configured. Set it in the deployment environment."
             )
-        base_url = (settings.NVIDIA_BASE_URL or "https://integrate.api.nvidia.com/v1").strip()
+        base_url = (settings.GROK_BASE_URL or "https://api.x.ai/v1").strip()
         _client = OpenAI(api_key=api_key, base_url=base_url)
     return _client
 
 
 def _resolve_model(model: str) -> str:
-    """Map legacy Anthropic model strings to the configured NVIDIA NIM model.
+    """Map legacy Anthropic model strings to the configured Grok model.
 
     Callers across the codebase still pass ``claude-sonnet-4-…`` /
     ``claude-haiku-4-5-…`` model names. Rather than touching every call site,
-    we route them all to the configured NVIDIA model. Pass-through for any
-    name that already looks like a NIM model id (contains ``/``).
+    we route them all to the configured Grok model. Pass-through for any
+    name that already looks like a provider model id (contains ``/`` or ``grok``).
     """
-    if model and "/" in model:
+    if model and ("/" in model or "grok" in model.lower()):
         return model
     if model and model.lower().startswith("claude-haiku"):
-        return settings.NVIDIA_FAST_MODEL or settings.NVIDIA_MODEL
-    return settings.NVIDIA_MODEL
+        return settings.GROK_FAST_MODEL or settings.GROK_MODEL
+    return settings.GROK_MODEL
 
 
 def _build_messages(
@@ -130,7 +130,7 @@ def claude_call_with_fallback(
     fallback_key: str = "assumption_extraction",
     timeout: int = 30,
 ) -> dict[str, Any]:
-    """Call the configured LLM provider (NVIDIA NIM) and return ``{"content": str, "error": None}``.
+    """Call the configured LLM provider (xAI Grok) and return ``{"content": str, "error": None}``.
 
     On timeout or API error returns the static fallback registered under
     ``fallback_key`` so call sites can degrade gracefully.
@@ -141,12 +141,12 @@ def claude_call_with_fallback(
         logger.error("LLM client init failed: %s", exc)
         return _error_fallback(fallback_key, str(exc))
 
-    nim_model = _resolve_model(model)
+    grok_model = _resolve_model(model)
     chat_messages = _build_messages(messages, system)
 
     try:
         resp = client.chat.completions.create(
-            model=nim_model,
+            model=grok_model,
             messages=chat_messages,
             max_tokens=max_tokens,
             timeout=float(timeout),
@@ -156,13 +156,13 @@ def claude_call_with_fallback(
             text = (resp.choices[0].message.content or "").strip()
         return {"content": text, "error": None}
     except APITimeoutError:
-        logger.warning("NIM timeout on %s (model=%s)", fallback_key, nim_model)
+        logger.warning("Grok timeout on %s (model=%s)", fallback_key, grok_model)
         return TIMEOUT_FALLBACK.get(fallback_key, {"error": "timeout"})
     except APIError as e:
         sc = getattr(e, "status_code", None)
-        logger.error("NIM API error on %s: status=%s err=%s", fallback_key, sc, e)
+        logger.error("Grok API error on %s: status=%s err=%s", fallback_key, sc, e)
         error_msg = f"API error {sc}: {e}" if sc is not None else str(e)
         return _error_fallback(fallback_key, error_msg)
     except Exception as e:  # noqa: BLE001 — last-resort: never let the LLM crash a request.
-        logger.exception("NIM unexpected error on %s: %s", fallback_key, e)
+        logger.exception("Grok unexpected error on %s: %s", fallback_key, e)
         return _error_fallback(fallback_key, str(e))

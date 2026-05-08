@@ -22,13 +22,12 @@ class Settings(BaseSettings):
 
     ANTHROPIC_API_KEY: str = ""
 
-    # NVIDIA NIMs (OpenAI-compatible). Used as the active LLM provider while in
-    # development. Set NVIDIA_API_KEY in the deployment environment; the rest
-    # have sensible defaults for the public NIM endpoint.
-    NVIDIA_API_KEY: str = ""
-    NVIDIA_BASE_URL: str = "https://integrate.api.nvidia.com/v1"
-    NVIDIA_MODEL: str = "nvidia/nemotron-3-super-120b-a12b"
-    NVIDIA_FAST_MODEL: str = "nvidia/nemotron-3-super-120b-a12b"
+    # xAI Grok (OpenAI-compatible). Active LLM provider for development.
+    # Set GROK_API_KEY in the deployment environment; the rest have sensible defaults.
+    GROK_API_KEY: str = ""
+    GROK_BASE_URL: str = "https://api.x.ai/v1"
+    GROK_MODEL: str = "grok-3-mini"
+    GROK_FAST_MODEL: str = "grok-3-mini"
     FRONTEND_URL: str = "http://localhost:3000"
     PUBLIC_API_BASE_URL: str = "http://127.0.0.1:8000"
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -61,32 +60,32 @@ class Settings(BaseSettings):
     ALLOW_INDEXING: bool = False
 
     @model_validator(mode="after")
-    def _coerce_openai_env_aliases(self) -> "Settings":
-        """Accept OPENAI_* env vars as fallbacks when NVIDIA_* are unset.
+    def _coerce_llm_env_aliases(self) -> "Settings":
+        """Accept OPENAI_* env vars as fallbacks when GROK_* are unset.
 
-        NVIDIA NIM uses an OpenAI-compatible API, so tooling and profile
-        configs (e.g. .openclaude-profile.json) commonly set OPENAI_API_KEY,
-        OPENAI_BASE_URL, and OPENAI_MODEL instead of the NVIDIA_* equivalents.
-        Without this, a missing NVIDIA_API_KEY raises RuntimeError inside
-        _get_client(), which the LLM fallback path swallows as a generic
-        timeout — making misconfiguration invisible.
+        xAI Grok uses an OpenAI-compatible API, so tooling and profile configs
+        (e.g. .openclaude-profile.json) may set OPENAI_API_KEY / OPENAI_BASE_URL
+        / OPENAI_MODEL instead of the GROK_* equivalents. Accept both so a
+        missing key doesn't silently surface as a timeout.
         """
         import os
 
-        if not self.NVIDIA_API_KEY:
-            v = os.environ.get("OPENAI_API_KEY", "").strip()
-            if v:
-                self.NVIDIA_API_KEY = v
+        if not self.GROK_API_KEY:
+            for env_var in ("OPENAI_API_KEY", "XAI_API_KEY"):
+                v = os.environ.get(env_var, "").strip()
+                if v:
+                    self.GROK_API_KEY = v
+                    break
 
         openai_base = os.environ.get("OPENAI_BASE_URL", "").strip()
-        if openai_base and openai_base != self.NVIDIA_BASE_URL:
-            self.NVIDIA_BASE_URL = openai_base
+        if openai_base and openai_base != self.GROK_BASE_URL:
+            self.GROK_BASE_URL = openai_base
 
         openai_model = os.environ.get("OPENAI_MODEL", "").strip()
-        if openai_model and self.NVIDIA_MODEL == "nvidia/nemotron-3-super-120b-a12b":
-            self.NVIDIA_MODEL = openai_model
-            if not self.NVIDIA_FAST_MODEL or self.NVIDIA_FAST_MODEL == "nvidia/nemotron-3-super-120b-a12b":
-                self.NVIDIA_FAST_MODEL = openai_model
+        if openai_model and self.GROK_MODEL == "grok-3-mini":
+            self.GROK_MODEL = openai_model
+            if self.GROK_FAST_MODEL == "grok-3-mini":
+                self.GROK_FAST_MODEL = openai_model
 
         return self
 

@@ -1,9 +1,9 @@
 """Dossier intelligence generation. Generates the editorial Précis, structured
 Readings, and a small précis-ledger (deck line + rubrics).
 
-While in development, all LLM calls are routed through NVIDIA NIMs via
-``claude_call_with_fallback`` (the historical helper name is preserved across
-the codebase to avoid touching every call site).
+All LLM calls are routed through xAI Grok via ``claude_call_with_fallback``
+(the historical helper name is preserved across the codebase to avoid
+touching every call site).
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ def _llm_text(
     out = claude_call_with_fallback(
         [{"role": "user", "content": user_msg}],
         system=system,
-        model="claude-haiku-4-5",  # symbolic; routed to NVIDIA NIM by the client
+        model="claude-haiku-4-5",  # symbolic; routed to Grok by the client
         max_tokens=max_tokens,
         fallback_key=fallback_key,
         timeout=timeout,
