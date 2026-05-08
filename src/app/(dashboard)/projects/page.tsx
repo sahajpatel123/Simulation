@@ -144,6 +144,17 @@ function ProjectsPage() {
     })
   }, [projects])
 
+  // Permanent serial numbers: oldest project = 1, newest = N.
+  // Derived from the full list so archiving/filtering never shifts any number.
+  const serialNumbers = useMemo(() => {
+    const asc = [...sortedList].sort((a, b) => {
+      const ad = a.created_at ? new Date(a.created_at).getTime() : 0
+      const bd = b.created_at ? new Date(b.created_at).getTime() : 0
+      return ad - bd
+    })
+    return new Map(asc.map((p, i) => [p.id, i + 1]))
+  }, [sortedList])
+
   const countsByBucket = useMemo(() => {
     const c: Record<Filter, number> = { all: 0, draft: 0, ready: 0, running: 0, done: 0, failed: 0 }
     sortedList.forEach((p) => {
@@ -307,7 +318,7 @@ function ProjectsPage() {
       {/* ─── Featured (lead) + index ──────────────────────────── */}
       {count > 0 && featured && (
         <>
-          <FeaturedDossier project={featured} index={count} />
+          <FeaturedDossier project={featured} index={serialNumbers.get(featured.id) ?? 1} />
           <div style={{ height: 0.5, background: 'var(--border-color)', margin: '56px 0 40px' }} />
 
           {/* Index header */}
@@ -330,8 +341,8 @@ function ProjectsPage() {
 
           {/* Index rows */}
           <div>
-            {rest.map((project, i) => (
-              <DossierRow key={project.id} project={project} number={count - 1 - i} />
+            {rest.map((project) => (
+              <DossierRow key={project.id} project={project} number={serialNumbers.get(project.id) ?? 0} />
             ))}
             {rest.length === 0 && (
               <p
