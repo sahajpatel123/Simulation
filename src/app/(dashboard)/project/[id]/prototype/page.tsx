@@ -321,9 +321,13 @@ export default function PrototypePage() {
   }
 
   const hasRevised = revisions.length > 0
+  const appliedRevisionCount = revisions.filter(r => r.status === 'applied').length
+  const isRefining = revisions[0]?.status === 'pending'
+  const canApplyEdit = editPrompt.trim().length > 0 && !isRefining
+  const editCharOverSoftLimit = editPrompt.length > 400
 
   const handleApplyEdit = () => {
-    if (!editPrompt.trim() || generatedUiId == null || revisions[0]?.status === 'pending') return
+    if (!editPrompt.trim() || generatedUiId == null || isRefining) return
     const submittedPrompt = editPrompt.trim()
     setRevisions(prev => [{
       prompt: submittedPrompt,
@@ -672,14 +676,14 @@ export default function PrototypePage() {
           </motion.div>
         )}
 
-        {/* ═══ EDIT MODE ════════════════════════════════════════════ */}
+        {/* ═══ EDIT MODE (Modern Studio) ════════════════════════════ */}
         {editMode && (
           <motion.div
             key="edit"
             initial={PAGE_HIDDEN}
             animate={PAGE_ENTER}
             exit={PAGE_GONE}
-            transition={{ duration: 0.42, ease: EASE_IN }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
             style={{
               position: 'fixed',
               inset: 0,
@@ -687,161 +691,189 @@ export default function PrototypePage() {
               display: 'flex',
               flexDirection: 'column',
               zIndex: 40,
-              background: 'var(--ink)',
-              borderTop: '1px solid var(--red)',
+              background: '#0a0a0a',
+              borderTop: '1px solid rgba(192,57,43,0.3)',
             }}
           >
             {/* ── Split body ───────────────────────────────────────── */}
-            <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', background: 'linear-gradient(90deg, #0a0a0a 0%, #0a0a0a 34%, var(--paper) 34%, var(--paper) 100%)' }}>
 
-              {/* ── Left panel ───────────────────────────────────── */}
+              {/* ── Left panel (Compositor Desk) ───────────────────────────────────── */}
               <div
                 style={{
-                  width: '32%',
+                  width: '34%',
+                  minWidth: 440,
+                  maxWidth: 540,
                   flexShrink: 0,
-                  background: 'var(--ink)',
+                  background: '#0a0a0a',
                   display: 'flex',
                   flexDirection: 'column',
-                  borderRight: '0.5px solid rgba(242,236,224,0.08)',
-                  overflow: 'hidden',
                   position: 'relative',
+                  borderRight: '1px solid rgba(255,255,255,0.06)',
+                  zIndex: 10,
+                  boxShadow: '24px 0 60px rgba(0,0,0,0.5)',
+                  overflow: 'hidden',
                 }}
               >
+                {/* Atmospheric Glows */}
+                <div aria-hidden="true" style={{ position: 'absolute', top: -100, right: -100, width: 400, height: 400, background: 'var(--red)', filter: 'blur(140px)', opacity: 0.12, borderRadius: '50%', pointerEvents: 'none' }} />
+                <div aria-hidden="true" style={{ position: 'absolute', bottom: -50, left: -50, width: 300, height: 300, background: '#4a4540', filter: 'blur(120px)', opacity: 0.15, borderRadius: '50%', pointerEvents: 'none' }} />
+                
+                {/* Grain overlay */}
+                <div aria-hidden="true" style={{ position: 'absolute', inset: 0, opacity: 0.04, pointerEvents: 'none', backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noise%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.85%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noise)%22/%3E%3C/svg%3E")' }} />
+
                 <AnimatePresence mode="wait" initial={false}>
 
-                  {/* ── FRESH STATE — shown before first revision ── */}
+                  {/* ── FRESH STATE ── */}
                   {!hasRevised && (
                     <motion.div
                       key="fresh"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0, y: -16 }}
-                      transition={{ duration: 0.3, ease: EASE_OUT }}
-                      style={{ overflowY: 'auto', scrollbarWidth: 'none', flex: 1 }}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -10 }}
+                      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                      style={{ overflowY: 'auto', scrollbarWidth: 'none', flex: 1, position: 'relative', zIndex: 1 }}
                     >
-                      {/* Section I — Brief */}
-                      <div style={{ padding: '32px 32px 28px' }}>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 20 }}>
-                          <span className="font-serif" style={{ fontSize: 28, fontWeight: 900, fontStyle: 'italic', color: 'rgba(242,236,224,0.12)', lineHeight: 1, flexShrink: 0, marginTop: 2, letterSpacing: '-0.02em' }}>
-                            I.
-                          </span>
-                          <div>
-                            <div style={{ fontSize: 9, letterSpacing: '0.32em', textTransform: 'uppercase', color: 'var(--red)', fontWeight: 700, fontFamily: 'var(--font-body)', marginBottom: 6 }}>
-                              Revision instruction
-                            </div>
-                            <p className="font-serif" style={{ fontSize: 12, fontStyle: 'italic', fontWeight: 500, color: 'rgba(242,236,224,0.4)', lineHeight: 1.6, margin: 0 }}>
-                              Tell the compositor what to change — copy, colours, sections, layout.
-                            </p>
-                          </div>
+                      {/* Desk Header */}
+                      <div style={{ padding: '36px 40px 10px' }}>
+                        <div style={{ fontSize: 10, letterSpacing: '0.4em', textTransform: 'uppercase', color: 'var(--red)', fontWeight: 800, fontFamily: 'var(--font-body)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div style={{ width: 6, height: 6, background: 'var(--red)', borderRadius: '50%', boxShadow: '0 0 10px var(--red)' }} />
+                          Editor&apos;s Desk
                         </div>
-                        <textarea
-                          value={editPrompt}
-                          onChange={(e) => setEditPrompt(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleApplyEdit() } }}
-                          placeholder="e.g. Change the hero headline to focus on price. Make the CTA button dark red. Add a testimonials section with three quotes from Indian founders…"
-                          rows={6}
-                          style={{ width: '100%', resize: 'none', padding: '14px 16px', background: 'rgba(242,236,224,0.04)', border: '0.5px solid rgba(242,236,224,0.12)', borderLeft: '2px solid rgba(192,57,43,0.5)', color: 'rgba(242,236,224,0.88)', fontFamily: 'var(--font-body)', fontSize: 13, lineHeight: 1.7, outline: 'none', boxSizing: 'border-box', letterSpacing: '0.01em', transition: 'border-color 200ms ease' }}
-                          onFocus={(e) => { e.currentTarget.style.borderLeftColor = 'var(--red)'; e.currentTarget.style.background = 'rgba(242,236,224,0.06)' }}
-                          onBlur={(e) => { e.currentTarget.style.borderLeftColor = 'rgba(192,57,43,0.5)'; e.currentTarget.style.background = 'rgba(242,236,224,0.04)' }}
-                        />
-                        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span style={{ fontSize: 9, color: 'rgba(242,236,224,0.2)', fontFamily: 'var(--font-body)', letterSpacing: '0.06em' }}>⌘ Return to apply</span>
-                          <span style={{ fontSize: 9, color: editPrompt.length > 400 ? 'rgba(192,57,43,0.7)' : 'rgba(242,236,224,0.18)', fontFamily: 'var(--font-body)', fontVariantNumeric: 'tabular-nums' }}>{editPrompt.length}/600</span>
-                        </div>
+                        <h2 className="font-serif" style={{ fontSize: 28, fontWeight: 500, color: 'rgba(255,255,255,0.95)', lineHeight: 1.25, margin: 0, letterSpacing: '-0.02em' }}>
+                          Draft a <em style={{ color: 'var(--red)', fontStyle: 'italic' }}>directive</em> for the compositor.
+                        </h2>
                       </div>
 
-                      <div style={{ height: '0.5px', background: 'rgba(242,236,224,0.07)', marginInline: 32 }} />
-
-                      {/* Section II — Quick revisions (first-time hint) */}
-                      <div style={{ padding: '24px 32px 28px' }}>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
-                          <span className="font-serif" style={{ fontSize: 28, fontWeight: 900, fontStyle: 'italic', color: 'rgba(242,236,224,0.12)', lineHeight: 1, flexShrink: 0, marginTop: 2, letterSpacing: '-0.02em' }}>
-                            II.
-                          </span>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 9, letterSpacing: '0.32em', textTransform: 'uppercase', color: 'rgba(242,236,224,0.35)', fontWeight: 700, fontFamily: 'var(--font-body)', marginBottom: 12 }}>
-                              Quick revisions
+                      {/* Section I — Instruction Input Card */}
+                      <div style={{ padding: '24px 40px 16px' }}>
+                        <div
+                          style={{
+                            background: 'rgba(255,255,255,0.03)',
+                            border: '1px solid',
+                            borderColor: editPrompt.trim() ? 'rgba(192,57,43,0.4)' : 'rgba(255,255,255,0.08)',
+                            borderRadius: 16,
+                            padding: 2,
+                            position: 'relative',
+                            transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                            boxShadow: editPrompt.trim() ? '0 12px 30px rgba(192,57,43,0.15)' : '0 8px 24px rgba(0,0,0,0.2)',
+                          }}
+                        >
+                          <textarea
+                            value={editPrompt}
+                            onChange={(e) => setEditPrompt(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleApplyEdit() } }}
+                            placeholder="e.g. Turn the hero black. Make the CTA pulse. Add 3 Indian founder testimonials..."
+                            rows={5}
+                            style={{
+                              width: '100%', resize: 'none', padding: '18px 20px',
+                              background: 'transparent', border: 'none',
+                              color: 'rgba(255,255,255,0.95)', fontFamily: 'var(--font-body)',
+                              fontSize: 14, lineHeight: 1.6, outline: 'none',
+                              letterSpacing: '0.01em', boxSizing: 'border-box'
+                            }}
+                          />
+                          <div style={{ padding: '0 20px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: editPrompt.trim() ? 1 : 0.4, transition: 'opacity 0.2s' }}>
+                              <kbd style={{ background: 'rgba(255,255,255,0.1)', padding: '4px 8px', borderRadius: 4, fontSize: 10, fontFamily: 'var(--font-body)', color: '#fff', border: '1px solid rgba(255,255,255,0.05)' }}>⌘</kbd>
+                              <kbd style={{ background: 'rgba(255,255,255,0.1)', padding: '4px 8px', borderRadius: 4, fontSize: 10, fontFamily: 'var(--font-body)', color: '#fff', border: '1px solid rgba(255,255,255,0.05)' }}>↵</kbd>
+                              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginLeft: 4, textTransform: 'uppercase', letterSpacing: '0.1em' }}>to apply</span>
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                              {EDIT_SUGGESTIONS.map((s) => (
-                                <button
-                                  key={s}
-                                  type="button"
-                                  onClick={() => setEditPrompt(s)}
-                                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', background: 'transparent', border: '0.5px solid rgba(242,236,224,0.08)', color: 'rgba(242,236,224,0.45)', fontFamily: 'var(--font-body)', fontSize: 11, letterSpacing: '0.02em', cursor: 'pointer', textAlign: 'left', transition: 'all 160ms ease', lineHeight: 1.4 }}
-                                  onMouseEnter={(e) => { const el = e.currentTarget as HTMLButtonElement; el.style.background = 'rgba(192,57,43,0.08)'; el.style.borderColor = 'rgba(192,57,43,0.25)'; el.style.color = 'rgba(242,236,224,0.8)' }}
-                                  onMouseLeave={(e) => { const el = e.currentTarget as HTMLButtonElement; el.style.background = 'transparent'; el.style.borderColor = 'rgba(242,236,224,0.08)'; el.style.color = 'rgba(242,236,224,0.45)' }}
-                                >
-                                  <div style={{ width: 3, height: 3, borderRadius: '50%', background: 'var(--red)', flexShrink: 0, opacity: 0.6 }} />
-                                  {s}
-                                </button>
-                              ))}
-                            </div>
+                            <span style={{ fontSize: 10, color: editPrompt.length > 400 ? 'var(--red)' : 'rgba(255,255,255,0.3)', fontFamily: 'var(--font-mono)' }}>
+                              {editPrompt.length}<span style={{ opacity: 0.5 }}>/600</span>
+                            </span>
                           </div>
                         </div>
+                        
+                        {/* Apply Button */}
+                        <motion.button
+                          type="button"
+                          onClick={handleApplyEdit}
+                          disabled={!editPrompt.trim()}
+                          initial={false}
+                          animate={{ 
+                            opacity: editPrompt.trim() ? 1 : 0.5,
+                            y: editPrompt.trim() ? 0 : 4,
+                            scale: editPrompt.trim() ? 1 : 0.98
+                          }}
+                          style={{
+                            width: '100%', marginTop: 20, padding: '16px 24px',
+                            background: editPrompt.trim() ? 'var(--red)' : 'rgba(255,255,255,0.04)',
+                            color: editPrompt.trim() ? '#fff' : 'rgba(255,255,255,0.3)',
+                            border: editPrompt.trim() ? '1px solid rgba(192,57,43,0.8)' : '1px solid rgba(255,255,255,0.06)',
+                            borderRadius: 12, fontFamily: 'var(--font-body)', fontSize: 11,
+                            fontWeight: 800, letterSpacing: '0.2em', textTransform: 'uppercase',
+                            cursor: editPrompt.trim() ? 'pointer' : 'not-allowed',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                            boxShadow: editPrompt.trim() ? '0 10px 24px rgba(192,57,43,0.3), inset 0 1px 0 rgba(255,255,255,0.2)' : 'none',
+                            transition: 'all 0.2s',
+                          }}
+                        >
+                          <Pencil style={{ width: 14, height: 14 }} />
+                          Run the Press
+                        </motion.button>
                       </div>
 
-                      <div style={{ height: '0.5px', background: 'rgba(242,236,224,0.07)', marginInline: 32 }} />
-
-                      {/* Section III — Apply */}
-                      <div style={{ padding: '24px 32px 36px' }}>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
-                          <span className="font-serif" style={{ fontSize: 28, fontWeight: 900, fontStyle: 'italic', color: 'rgba(242,236,224,0.12)', lineHeight: 1, flexShrink: 0, marginTop: 2, letterSpacing: '-0.02em' }}>
-                            III.
-                          </span>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 9, letterSpacing: '0.32em', textTransform: 'uppercase', color: 'rgba(242,236,224,0.35)', fontWeight: 700, fontFamily: 'var(--font-body)', marginBottom: 14 }}>
-                              Run the press
-                            </div>
+                      {/* Section II — Suggestion Chips */}
+                      <div style={{ padding: '10px 40px 40px' }}>
+                        <div style={{ fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', fontWeight: 700, fontFamily: 'var(--font-body)', marginBottom: 16 }}>
+                          Quick Marks
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                          {EDIT_SUGGESTIONS.map((s) => (
                             <button
+                              key={s}
                               type="button"
-                              onClick={handleApplyEdit}
-                              disabled={!editPrompt.trim()}
-                              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '14px 20px', background: editPrompt.trim() ? 'var(--red)' : 'rgba(242,236,224,0.06)', color: editPrompt.trim() ? '#fff' : 'rgba(242,236,224,0.25)', border: editPrompt.trim() ? 'none' : '0.5px solid rgba(242,236,224,0.1)', fontFamily: 'var(--font-body)', fontSize: 9, fontWeight: 700, letterSpacing: '0.26em', textTransform: 'uppercase', cursor: editPrompt.trim() ? 'pointer' : 'not-allowed', transition: 'background 200ms ease, color 200ms ease' }}
+                              onClick={() => setEditPrompt(s)}
+                              style={{
+                                padding: '10px 16px', background: 'rgba(255,255,255,0.03)',
+                                border: '1px solid rgba(255,255,255,0.08)', borderRadius: 20,
+                                color: 'rgba(255,255,255,0.6)', fontFamily: 'var(--font-body)',
+                                fontSize: 12, cursor: 'pointer', textAlign: 'left',
+                                transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)', display: 'flex', alignItems: 'center', gap: 8
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(192,57,43,0.1)'; e.currentTarget.style.borderColor = 'rgba(192,57,43,0.3)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'rgba(255,255,255,0.6)'; e.currentTarget.style.transform = 'translateY(0)' }}
                             >
-                              <Pencil style={{ width: 10, height: 10 }} />
-                              Apply revision
+                              <span style={{ color: 'var(--red)', opacity: 0.8, fontSize: 14, fontWeight: 300 }}>+</span> {s}
                             </button>
-                            <p style={{ margin: '10px 0 0', fontSize: 9, color: 'rgba(242,236,224,0.15)', fontFamily: 'var(--font-body)', letterSpacing: '0.06em', textAlign: 'center' }}>
-                              Revisions are saved automatically — iterate freely
-                            </p>
-                          </div>
+                          ))}
                         </div>
                       </div>
                     </motion.div>
                   )}
 
-                  {/* ── WORKING STATE — shown after first revision ─ */}
+                  {/* ── WORKING STATE ── */}
                   {hasRevised && (
                     <motion.div
                       key="log"
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0 }}
-                      transition={{ duration: 0.36, ease: EASE_IN }}
-                      style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}
+                      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                      style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, position: 'relative', zIndex: 1 }}
                     >
                       {/* Log header */}
-                      <div style={{ padding: '20px 32px 16px', borderBottom: '0.5px solid rgba(242,236,224,0.08)', flexShrink: 0 }}>
+                      <div style={{ padding: '36px 40px 20px', flexShrink: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <div>
-                            <div style={{ fontSize: 8, letterSpacing: '0.35em', textTransform: 'uppercase', color: 'var(--red)', fontWeight: 700, fontFamily: 'var(--font-body)', marginBottom: 3 }}>
-                              Press log
+                            <div style={{ fontSize: 10, letterSpacing: '0.4em', textTransform: 'uppercase', color: 'var(--red)', fontWeight: 800, fontFamily: 'var(--font-body)', marginBottom: 8 }}>
+                              Press Log
                             </div>
-                            <p style={{ margin: 0, fontSize: 11, color: 'rgba(242,236,224,0.28)', fontStyle: 'italic', fontFamily: 'var(--font-serif)' }}>
-                              {revisions.filter(r => r.status === 'applied').length} revision{revisions.filter(r => r.status === 'applied').length !== 1 ? 's' : ''} applied to the plate
-                            </p>
+                            <h2 className="font-serif" style={{ fontSize: 24, fontWeight: 500, color: 'rgba(255,255,255,0.95)', lineHeight: 1.2, margin: 0, letterSpacing: '-0.01em' }}>
+                              {revisions.filter(r => r.status === 'applied').length} revision{revisions.filter(r => r.status === 'applied').length !== 1 ? 's' : ''} applied
+                            </h2>
                           </div>
                           <AnimatePresence>
                             {revisions[0]?.status === 'pending' && (
                               <motion.div
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                                initial={{ opacity: 0, scale: 0.8 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.8 }}
+                                style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(192,57,43,0.15)', padding: '8px 14px', borderRadius: 20, border: '1px solid rgba(192,57,43,0.3)', boxShadow: '0 0 20px rgba(192,57,43,0.2)' }}
                               >
-                                <Loader2 className="animate-spin" style={{ width: 8, height: 8, color: 'var(--red)', opacity: 0.85 }} />
-                                <span style={{ fontSize: 7, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(192,57,43,0.85)', fontWeight: 700, fontFamily: 'var(--font-body)' }}>
+                                <Loader2 className="animate-spin" style={{ width: 12, height: 12, color: 'var(--red)' }} />
+                                <span style={{ fontSize: 9, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--red)', fontWeight: 800 }}>
                                   Live
                                 </span>
                               </motion.div>
@@ -850,104 +882,107 @@ export default function PrototypePage() {
                         </div>
                       </div>
 
-                      {/* Revision entries — newest first, scrollable */}
-                      <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'none' }}>
+                      {/* Revision entries */}
+                      <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'none', padding: '0 40px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
                         <AnimatePresence initial={false}>
-                          {revisions.map((rev) => (
+                          {revisions.map((rev, index) => (
                             <motion.div
                               key={`rev-${rev.version}`}
-                              initial={{ opacity: 0, y: -10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ duration: 0.28 }}
-                              style={{ borderBottom: '0.5px solid rgba(242,236,224,0.05)', position: 'relative' }}
+                              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              transition={{ duration: 0.4, delay: index * 0.05, ease: [0.16, 1, 0.3, 1] }}
+                              style={{
+                                background: rev.status === 'pending' ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.02)',
+                                border: '1px solid',
+                                borderColor: rev.status === 'pending' ? 'rgba(192,57,43,0.4)' : 'rgba(255,255,255,0.06)',
+                                borderRadius: 16,
+                                padding: '20px',
+                                position: 'relative',
+                                overflow: 'hidden',
+                                boxShadow: rev.status === 'pending' ? '0 12px 30px rgba(192,57,43,0.1)' : 'none',
+                              }}
                             >
-                              {/* Left status stripe */}
-                              <div style={{
-                                position: 'absolute', left: 0, top: 14, bottom: 14, width: 2,
-                                background: rev.status === 'applied' ? 'rgba(74,222,128,0.45)' : rev.status === 'error' ? 'rgba(192,57,43,0.55)' : 'rgba(192,57,43,0.22)',
-                                transition: 'background 500ms ease',
-                              }} />
-                              <div style={{ padding: '16px 32px 16px 18px' }}>
-                                {/* Meta row */}
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <span style={{ fontSize: 8, letterSpacing: '0.26em', textTransform: 'uppercase', fontWeight: 700, color: 'rgba(242,236,224,0.35)', fontFamily: 'var(--font-body)' }}>
-                                      Rev. {rev.version}
-                                    </span>
-                                    <div style={{ width: 1, height: 8, background: 'rgba(242,236,224,0.1)' }} />
-                                    <span style={{ fontSize: 8, color: 'rgba(242,236,224,0.2)', fontFamily: 'var(--font-body)', letterSpacing: '0.04em' }}>
-                                      {rev.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                    </span>
-                                  </div>
-                                  {rev.status === 'pending' && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                                      <Loader2 className="animate-spin" style={{ width: 8, height: 8, color: 'rgba(192,57,43,0.65)' }} />
-                                      <span style={{ fontSize: 7, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(192,57,43,0.65)', fontWeight: 700, fontFamily: 'var(--font-body)' }}>Working</span>
-                                    </div>
-                                  )}
-                                  {rev.status === 'applied' && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                                      <Check style={{ width: 8, height: 8, color: 'rgba(74,222,128,0.75)' }} />
-                                      <span style={{ fontSize: 7, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(74,222,128,0.75)', fontWeight: 700, fontFamily: 'var(--font-body)' }}>Applied</span>
-                                    </div>
-                                  )}
-                                  {rev.status === 'error' && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                                      <X style={{ width: 8, height: 8, color: 'var(--red)' }} />
-                                      <span style={{ fontSize: 7, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--red)', fontWeight: 700, fontFamily: 'var(--font-body)' }}>Failed</span>
-                                    </div>
-                                  )}
+                              {rev.status === 'pending' && (
+                                <motion.div 
+                                  animate={{ x: ['-100%', '100%'] }} 
+                                  transition={{ duration: 2, repeat: Infinity, ease: 'linear' }} 
+                                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: 2, background: 'linear-gradient(90deg, transparent, var(--red), transparent)' }} 
+                                />
+                              )}
+                              
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                  <span style={{ background: rev.status === 'applied' ? 'rgba(255,255,255,0.1)' : 'rgba(192,57,43,0.2)', color: rev.status === 'applied' ? '#fff' : 'var(--red)', fontSize: 10, fontWeight: 800, padding: '4px 8px', borderRadius: 6, fontFamily: 'var(--font-mono)' }}>
+                                    v{rev.version}
+                                  </span>
+                                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', fontFamily: 'var(--font-body)' }}>
+                                    {rev.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
                                 </div>
-                                {/* Prompt text */}
-                                <p style={{ margin: 0, fontSize: 12, fontStyle: 'italic', fontFamily: 'var(--font-serif)', color: rev.status === 'pending' ? 'rgba(242,236,224,0.38)' : 'rgba(242,236,224,0.62)', lineHeight: 1.6, transition: 'color 400ms ease' }}>
-                                  &ldquo;{rev.prompt}&rdquo;
-                                </p>
-                                {rev.status === 'error' && rev.errorMsg && (
-                                  <p style={{ margin: '6px 0 0', fontSize: 10, color: 'rgba(192,57,43,0.65)', fontFamily: 'var(--font-body)', lineHeight: 1.45 }}>
+                                {rev.status === 'pending' && <span style={{ fontSize: 9, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--red)', fontWeight: 800 }}>Working</span>}
+                                {rev.status === 'applied' && <Check style={{ width: 14, height: 14, color: 'rgba(74,222,128,0.8)' }} />}
+                                {rev.status === 'error' && <X style={{ width: 14, height: 14, color: 'var(--red)' }} />}
+                              </div>
+                              <p style={{ margin: 0, fontSize: 14, fontFamily: 'var(--font-body)', color: rev.status === 'pending' ? '#fff' : 'rgba(255,255,255,0.7)', lineHeight: 1.6 }}>
+                                {rev.prompt}
+                              </p>
+                              {rev.status === 'error' && rev.errorMsg && (
+                                <div style={{ marginTop: 14, padding: '12px 16px', background: 'rgba(192,57,43,0.1)', borderRadius: 8, border: '1px solid rgba(192,57,43,0.2)' }}>
+                                  <p style={{ margin: 0, fontSize: 12, color: 'var(--red)', fontFamily: 'var(--font-body)' }}>
                                     {rev.errorMsg}
                                   </p>
-                                )}
-                              </div>
+                                </div>
+                              )}
                             </motion.div>
                           ))}
                         </AnimatePresence>
                       </div>
 
-                      {/* Bottom input — sticky */}
-                      <div style={{ borderTop: '0.5px solid rgba(242,236,224,0.1)', padding: '18px 32px 26px', flexShrink: 0, background: 'rgba(0,0,0,0.18)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                          <div style={{ fontSize: 8, letterSpacing: '0.32em', textTransform: 'uppercase', color: 'rgba(242,236,224,0.22)', fontWeight: 700, fontFamily: 'var(--font-body)' }}>
-                            New instruction
+                      {/* Sticky input */}
+                      <div style={{ padding: '20px 40px 30px', background: 'linear-gradient(0deg, #0a0a0a 80%, transparent 100%)', flexShrink: 0 }}>
+                        <div
+                          style={{
+                            background: 'rgba(255,255,255,0.04)',
+                            border: '1px solid',
+                            borderColor: editPrompt.trim() ? 'rgba(192,57,43,0.4)' : 'rgba(255,255,255,0.1)',
+                            borderRadius: 16,
+                            padding: 2,
+                            transition: 'all 0.3s ease',
+                          }}
+                        >
+                          <textarea
+                            value={editPrompt}
+                            onChange={(e) => setEditPrompt(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleApplyEdit() } }}
+                            placeholder="Next instruction..."
+                            disabled={revisions[0]?.status === 'pending'}
+                            rows={3}
+                            style={{
+                              width: '100%', resize: 'none', padding: '16px 20px',
+                              background: 'transparent', border: 'none',
+                              color: 'rgba(255,255,255,0.95)', fontFamily: 'var(--font-body)',
+                              fontSize: 14, lineHeight: 1.6, outline: 'none',
+                              opacity: revisions[0]?.status === 'pending' ? 0.5 : 1
+                            }}
+                          />
+                          <div style={{ padding: '0 16px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={handleApplyEdit}
+                              disabled={!editPrompt.trim() || revisions[0]?.status === 'pending'}
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px',
+                                background: editPrompt.trim() && revisions[0]?.status !== 'pending' ? 'var(--red)' : 'rgba(255,255,255,0.1)',
+                                color: editPrompt.trim() && revisions[0]?.status !== 'pending' ? '#fff' : 'rgba(255,255,255,0.4)',
+                                border: 'none', borderRadius: 8, fontFamily: 'var(--font-body)', fontSize: 10,
+                                fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer',
+                                transition: 'all 0.2s',
+                              }}
+                            >
+                              {revisions[0]?.status === 'pending' ? <><Loader2 className="animate-spin" style={{ width: 12, height: 12 }} /> Sending</> : <><Pencil style={{ width: 12, height: 12 }} /> Apply</>}
+                            </button>
+                            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', fontFamily: 'var(--font-mono)' }}>{editPrompt.length}/600</span>
                           </div>
-                          <span style={{ fontSize: 9, color: editPrompt.length > 400 ? 'rgba(192,57,43,0.7)' : 'rgba(242,236,224,0.16)', fontFamily: 'var(--font-body)', fontVariantNumeric: 'tabular-nums', transition: 'color 200ms' }}>
-                            {editPrompt.length}/600
-                          </span>
-                        </div>
-                        <textarea
-                          value={editPrompt}
-                          onChange={(e) => setEditPrompt(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleApplyEdit() } }}
-                          placeholder="Another instruction for the compositor…"
-                          disabled={revisions[0]?.status === 'pending'}
-                          rows={3}
-                          style={{ width: '100%', resize: 'none', padding: '11px 14px', background: 'rgba(242,236,224,0.04)', border: '0.5px solid rgba(242,236,224,0.1)', borderLeft: '2px solid rgba(192,57,43,0.4)', color: 'rgba(242,236,224,0.85)', fontFamily: 'var(--font-body)', fontSize: 12, lineHeight: 1.65, outline: 'none', boxSizing: 'border-box', transition: 'border-color 200ms ease, background 200ms ease', opacity: revisions[0]?.status === 'pending' ? 0.45 : 1 }}
-                          onFocus={(e) => { e.currentTarget.style.borderLeftColor = 'var(--red)'; e.currentTarget.style.background = 'rgba(242,236,224,0.06)' }}
-                          onBlur={(e) => { e.currentTarget.style.borderLeftColor = 'rgba(192,57,43,0.4)'; e.currentTarget.style.background = 'rgba(242,236,224,0.04)' }}
-                        />
-                        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span style={{ fontSize: 9, color: 'rgba(242,236,224,0.16)', fontFamily: 'var(--font-body)', letterSpacing: '0.06em' }}>⌘ Return to apply</span>
-                          <button
-                            type="button"
-                            onClick={handleApplyEdit}
-                            disabled={!editPrompt.trim() || revisions[0]?.status === 'pending'}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 18px', background: editPrompt.trim() && revisions[0]?.status !== 'pending' ? 'var(--red)' : 'rgba(242,236,224,0.06)', color: editPrompt.trim() && revisions[0]?.status !== 'pending' ? '#fff' : 'rgba(242,236,224,0.2)', border: editPrompt.trim() && revisions[0]?.status !== 'pending' ? 'none' : '0.5px solid rgba(242,236,224,0.1)', fontFamily: 'var(--font-body)', fontSize: 8, fontWeight: 700, letterSpacing: '0.24em', textTransform: 'uppercase', cursor: editPrompt.trim() && revisions[0]?.status !== 'pending' ? 'pointer' : 'not-allowed', transition: 'all 200ms ease' }}
-                          >
-                            {revisions[0]?.status === 'pending' ? (
-                              <><Loader2 className="animate-spin" style={{ width: 9, height: 9 }} /> Working…</>
-                            ) : (
-                              <><Pencil style={{ width: 9, height: 9 }} /> Apply</>
-                            )}
-                          </button>
                         </div>
                       </div>
                     </motion.div>
@@ -956,7 +991,7 @@ export default function PrototypePage() {
                 </AnimatePresence>
               </div>
 
-              {/* ── Right panel — live preview ──────────────────── */}
+              {/* ── Right panel (The Proofing Mat) ──────────────────── */}
               <div
                 style={{
                   flex: 1,
@@ -964,173 +999,127 @@ export default function PrototypePage() {
                   display: 'flex',
                   flexDirection: 'column',
                   position: 'relative',
-                  background: 'var(--paper-dark)',
+                  background: 'var(--paper)',
+                  overflow: 'hidden',
                 }}
               >
-                {/* Preview bar */}
+                {/* Cutting Mat Grain */}
+                <div
+                  aria-hidden="true"
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    pointerEvents: 'none',
+                    backgroundImage: 'radial-gradient(var(--archive-grain-dot-a) 1px, transparent 1px)',
+                    backgroundSize: '24px 24px',
+                    opacity: 0.8,
+                    zIndex: 0
+                  }}
+                />
+
+                {/* Floating Header */}
                 <div
                   style={{
-                    padding: '10px 20px 8px',
-                    borderBottom: '0.5px solid rgba(26,23,20,0.1)',
-                    background: 'var(--paper)',
+                    position: 'absolute',
+                    top: 24,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    zIndex: 20,
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexShrink: 0,
-                    height: 50,
-                    boxSizing: 'border-box',
+                    gap: 16,
+                    background: 'rgba(255,255,255,0.95)',
+                    backdropFilter: 'blur(8px)',
+                    padding: '6px 6px 6px 24px',
+                    borderRadius: 40,
+                    boxShadow: '0 12px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)',
+                    border: '1px solid rgba(0,0,0,0.05)',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                    <span
-                      className="font-serif"
-                      style={{
-                        fontSize: 17,
-                        fontWeight: 900,
-                        fontStyle: 'italic',
-                        color: 'var(--ink)',
-                        letterSpacing: '-0.03em',
-                        lineHeight: 1,
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      Edit Room
-                    </span>
-                    <div style={{ width: 0.5, height: 15, background: 'var(--border-color)' }} />
-                    {/* Traffic-light dots matching the chrome bar */}
-                    {['var(--red)', '#b88a3a', '#3d7a4a'].map((c) => (
-                      <span key={c} style={{ width: 8, height: 8, borderRadius: '50%', background: c, opacity: 0.7, flexShrink: 0 }} />
-                    ))}
-                    <span
-                      style={{
-                        fontSize: 9,
-                        letterSpacing: '0.24em',
-                        textTransform: 'uppercase',
-                        color: 'var(--ink-tertiary)',
-                        fontWeight: 600,
-                        fontFamily: 'var(--font-body)',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      Reader&apos;s view
-                    </span>
-                    <AnimatePresence>
-                      {editApplied && (
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.92 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          exit={{ opacity: 0 }}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 5,
-                            padding: '3px 10px',
-                            background: 'rgba(192,57,43,0.08)',
-                            border: '0.5px solid rgba(192,57,43,0.2)',
-                            flexShrink: 0,
-                          }}
-                        >
-                          <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--red)' }} />
-                          <span
-                            style={{
-                              fontSize: 8,
-                              letterSpacing: '0.22em',
-                              textTransform: 'uppercase',
-                              color: 'var(--red)',
-                              fontWeight: 700,
-                              fontFamily: 'var(--font-body)',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            Revised proof
-                          </span>
-                        </motion.div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    {/* Pulsing live dot */}
+                    <div style={{ position: 'relative', width: 8, height: 8 }}>
+                      {refineMutation.isPending ? (
+                        <>
+                          <motion.div animate={{ scale: [1, 2.5], opacity: [0.6, 0] }} transition={{ duration: 1.5, repeat: Infinity }} style={{ position: 'absolute', inset: 0, background: 'var(--red)', borderRadius: '50%' }} />
+                          <div style={{ position: 'absolute', inset: 0, background: 'var(--red)', borderRadius: '50%' }} />
+                        </>
+                      ) : (
+                        <div style={{ position: 'absolute', inset: 0, background: 'var(--ink)', borderRadius: '50%', opacity: 0.5 }} />
                       )}
-                    </AnimatePresence>
+                    </div>
+                    <span className="font-serif" style={{ fontSize: 16, fontWeight: 700, fontStyle: 'italic', color: 'var(--ink)' }}>
+                      Reader&apos;s View
+                    </span>
                   </div>
+
+                  <div style={{ width: 1, height: 20, background: 'var(--border-color)' }} />
 
                   <button
                     type="button"
                     onClick={handleExitEdit}
                     style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      padding: '10px 22px',
-                      background: editApplied ? 'var(--red)' : 'rgba(192,57,43,0.88)',
-                      color: '#fff',
-                      border: 'none',
-                      fontFamily: 'var(--font-body)',
-                      fontSize: 9,
-                      fontWeight: 700,
-                      letterSpacing: '0.24em',
-                      textTransform: 'uppercase',
-                      cursor: 'pointer',
-                      boxShadow: '0 8px 22px rgba(192,57,43,0.16)',
-                      transition: 'background 300ms ease, transform 180ms ease, box-shadow 180ms ease',
-                      flexShrink: 0,
+                      display: 'inline-flex', alignItems: 'center', gap: 8,
+                      padding: '10px 24px', borderRadius: 30,
+                      background: editApplied ? 'var(--red)' : '#1a1714',
+                      color: '#fff', border: 'none', fontFamily: 'var(--font-body)',
+                      fontSize: 10, fontWeight: 800, letterSpacing: '0.15em',
+                      textTransform: 'uppercase', cursor: 'pointer',
+                      transition: 'all 0.3s ease',
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 10px 26px rgba(192,57,43,0.22)' }}
-                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 8px 22px rgba(192,57,43,0.16)' }}
                   >
-                    {editApplied ? 'Save & close' : 'Close'}
-                    <Check style={{ width: 10, height: 10 }} />
+                    {editApplied ? 'Save & Close' : 'Close'}
+                    <Check style={{ width: 12, height: 12 }} />
                   </button>
                 </div>
 
-                {/* Refine loading overlay */}
-                {refineMutation.isPending && (
+                {/* Magical Compositor Glow (Stitch inspired) */}
+                <AnimatePresence>
+                  {refineMutation.isPending && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      style={{
+                        position: 'absolute', inset: 0, zIndex: 10,
+                        background: 'radial-gradient(circle at center, rgba(255,255,255,0.7) 0%, rgba(242,236,224,0.4) 100%)',
+                        backdropFilter: 'blur(4px)',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >
+                      <motion.div
+                        animate={{ scale: [0.9, 1.1, 0.9], opacity: [0.4, 0.8, 0.4], rotate: [0, 90, 180] }}
+                        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                        style={{ width: 180, height: 180, background: 'conic-gradient(from 0deg, transparent, rgba(192,57,43,0.2), transparent)', borderRadius: '50%', filter: 'blur(10px)', position: 'absolute' }}
+                      />
+                      <Loader2 className="animate-spin" style={{ width: 36, height: 36, color: 'var(--red)', position: 'relative', zIndex: 2 }} />
+                      <h3 className="font-serif" style={{ fontSize: 26, fontStyle: 'italic', fontWeight: 500, color: 'var(--ink)', marginTop: 28, position: 'relative', zIndex: 2 }}>
+                        Stitching layout...
+                      </h3>
+                      <p style={{ fontSize: 11, letterSpacing: '0.24em', textTransform: 'uppercase', color: 'var(--ink-secondary)', fontWeight: 800, fontFamily: 'var(--font-body)', marginTop: 10, position: 'relative', zIndex: 2 }}>
+                        Compositor active
+                      </p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* The Floating iFrame */}
+                <div style={{ flex: 1, padding: '100px 48px 48px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 5 }}>
                   <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
+                    animate={{ scale: refineMutation.isPending ? 0.97 : 1, y: refineMutation.isPending ? 10 : 0 }}
+                    transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
                     style={{
-                      position: 'absolute',
-                      inset: 0,
-                      top: 50,
-                      zIndex: 2,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 18,
-                      background: 'rgba(242,236,224,0.9)',
-                      backdropFilter: 'blur(4px)',
+                      width: '100%', height: '100%', maxWidth: 1200,
+                      background: '#fff', borderRadius: 16, overflow: 'hidden',
+                      boxShadow: refineMutation.isPending ? '0 12px 30px rgba(0,0,0,0.05)' : '0 30px 80px rgba(0,0,0,0.1), 0 4px 16px rgba(0,0,0,0.06)',
+                      border: '1px solid rgba(0,0,0,0.08)',
+                      display: 'flex', flexDirection: 'column',
                     }}
                   >
-                    <Loader2 className="animate-spin" style={{ width: 28, height: 28, color: 'var(--red)' }} />
-                    <div style={{ textAlign: 'center' }}>
-                      <p
-                        className="font-serif"
-                        style={{
-                          fontSize: 16,
-                          fontStyle: 'italic',
-                          fontWeight: 700,
-                          color: 'var(--ink)',
-                          marginBottom: 6,
-                        }}
-                      >
-                        Resetting the type…
-                      </p>
-                      <p
-                        style={{
-                          fontSize: 11,
-                          letterSpacing: '0.18em',
-                          textTransform: 'uppercase',
-                          color: 'var(--ink-secondary)',
-                          fontFamily: 'var(--font-body)',
-                          fontWeight: 600,
-                        }}
-                      >
-                        Compositor is working
-                      </p>
-                    </div>
+                    {previewIframe}
                   </motion.div>
-                )}
-
-                {/* iframe */}
-                <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                  {previewIframe}
                 </div>
+
               </div>
             </div>
           </motion.div>
