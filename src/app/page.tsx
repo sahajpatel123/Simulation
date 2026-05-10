@@ -209,140 +209,125 @@ function NarrativeScroll() {
   )
 }
 
-/* ─── THE DIRECTIVE (3D STACKED SCROLL) ──────────────────────────────────────────── */
+/* ─── THE DIRECTIVE (SYMMETRICAL GLASS SPREAD) ──────────────────────────────────────────── */
 function DirectiveFeatures() {
   const ref = React.useRef(null)
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] })
 
-  // Left text fades
-  const o1 = useTransform(scrollYProgress, [0, 0.15, 0.25, 0.35], [0, 1, 1, 0])
-  const y1 = useTransform(scrollYProgress, [0, 0.15, 0.25, 0.35], [20, 0, 0, -20])
+  // Spread animations
+  // Progress 0.1 to 0.4: Fanning out
+  const spreadProgress = useTransform(scrollYProgress, [0.1, 0.5], [0, 1])
 
-  const o2 = useTransform(scrollYProgress, [0.35, 0.45, 0.55, 0.65], [0, 1, 1, 0])
-  const y2 = useTransform(scrollYProgress, [0.35, 0.45, 0.55, 0.65], [20, 0, 0, -20])
+  const leftX = useTransform(spreadProgress, [0, 1], [0, -380])
+  const leftRotate = useTransform(spreadProgress, [0, 1], [0, -8])
+  const leftY = useTransform(spreadProgress, [0, 1], [0, 40])
 
-  const o3 = useTransform(scrollYProgress, [0.65, 0.75, 0.85, 1], [0, 1, 1, 0])
-  const y3 = useTransform(scrollYProgress, [0.65, 0.75, 0.85, 1], [20, 0, 0, -20])
+  const rightX = useTransform(spreadProgress, [0, 1], [0, 380])
+  const rightRotate = useTransform(spreadProgress, [0, 1], [0, 8])
+  const rightY = useTransform(spreadProgress, [0, 1], [0, 40])
 
-  // Right card stack animations
-  // Card 1
-  const c1Scale = useTransform(scrollYProgress, [0, 0.35, 0.65], [1, 0.95, 0.9])
-  const c1Y = useTransform(scrollYProgress, [0, 0.35, 0.65], [0, 0, -20])
-  const c1Opacity = useTransform(scrollYProgress, [0, 0.15], [0, 1])
+  const centerScale = useTransform(spreadProgress, [0, 1], [0.95, 1.05])
+  const centerY = useTransform(spreadProgress, [0, 1], [0, -20])
 
-  // Card 2
-  const c2Y = useTransform(scrollYProgress, [0.35, 0.45, 0.65], ['100vh', '40px', '20px'])
-  const c2Scale = useTransform(scrollYProgress, [0.45, 0.65], [1, 0.95])
-  
-  // Card 3
-  const c3Y = useTransform(scrollYProgress, [0.65, 0.75], ['100vh', '80px'])
+  const textOpacity = useTransform(scrollYProgress, [0, 0.1], [0, 1])
+  const headerY = useTransform(scrollYProgress, [0, 0.2], [40, 0])
+
+  const cardShadow = useTransform(
+    spreadProgress,
+    [0, 1],
+    ['0 10px 30px rgba(0,0,0,0.05)', '0 40px 80px rgba(0,0,0,0.12)']
+  )
+
+  const detailsOpacity = useTransform(scrollYProgress, [0.4, 0.6], [0, 1])
 
   return (
-    <section ref={ref} style={{ height: '400vh', background: 'var(--paper)', position: 'relative' }}>
-      <div style={{ position: 'sticky', top: 0, height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 5%', overflow: 'hidden' }}>
+    <section ref={ref} style={{ height: '300vh', background: '#f9f8f6', position: 'relative' }}>
+      <div style={{ position: 'sticky', top: 0, height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
         
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 100, width: '100%', maxWidth: 1400, alignItems: 'center' }}>
+        {/* Header */}
+        <motion.div style={{ opacity: textOpacity, y: headerY, textAlign: 'center', position: 'absolute', top: '12%', zIndex: 10 }}>
+          <div style={{ fontSize: 11, letterSpacing: '0.3em', textTransform: 'uppercase', color: 'var(--red)', fontWeight: 800, marginBottom: 16 }}>
+            The Output
+          </div>
+          <h2 className="font-serif" style={{ fontSize: 'clamp(40px, 6vw, 80px)', fontWeight: 900, color: 'var(--ink)', letterSpacing: '-0.03em', lineHeight: 1 }}>
+            A clear <span style={{ color: 'var(--red)', fontStyle: 'italic' }}>directive.</span>
+          </h2>
+        </motion.div>
+
+        {/* The Deck of Cards */}
+        <div style={{ position: 'relative', width: 340, height: 460, marginTop: '5%' }}>
           
-          {/* Left Content (Sticky Crossfades) */}
-          <div style={{ position: 'relative', height: 400 }}>
-            {/* Header always stays */}
-            <div style={{ position: 'absolute', top: -80, left: 0 }}>
-              <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--ink-secondary)', fontWeight: 800, marginBottom: 16 }}>
-                The Output
-              </div>
-              <h2 className="font-serif" style={{ fontSize: 'clamp(40px, 5vw, 64px)', fontWeight: 900, color: 'var(--ink)', letterSpacing: '-0.03em', lineHeight: 1 }}>
-                A clear <span style={{ color: 'var(--red)', fontStyle: 'italic' }}>directive.</span>
-              </h2>
+          {/* Card 1: Left (Validation) */}
+          <motion.div 
+            style={{ 
+              position: 'absolute', inset: 0, x: leftX, y: leftY, rotate: leftRotate, 
+              background: 'var(--paper)', borderRadius: 24, padding: 40,
+              boxShadow: cardShadow, border: '0.5px solid rgba(0,0,0,0.08)',
+              display: 'flex', flexDirection: 'column', zIndex: 1
+            }}
+          >
+            <div style={{ padding: 12, background: 'rgba(192,57,43,0.1)', borderRadius: 12, color: 'var(--red)', display: 'inline-block', width: 'fit-content', marginBottom: 24 }}>
+              <Database size={24} />
             </div>
-
-            {/* Slide 1 Text */}
-            <motion.div style={{ position: 'absolute', top: '20%', left: 0, opacity: o1, y: y1 }}>
-              <div style={{ padding: 12, background: 'rgba(192,57,43,0.1)', borderRadius: 12, color: 'var(--red)', display: 'inline-block', marginBottom: 24 }}>
-                <Database size={24} />
-              </div>
-              <h3 className="font-serif" style={{ fontSize: 40, fontWeight: 900, marginBottom: 24, lineHeight: 1.1, letterSpacing: '-0.02em' }}>
-                Hyper-targeted<br/>Validation.
-              </h3>
-              <p style={{ fontSize: 18, color: 'var(--ink-secondary)', lineHeight: 1.6, fontWeight: 400, maxWidth: 500 }}>
-                We don&apos;t ask generalized focus groups. Your idea is exposed to 52 distinct behavioral clusters instantly, measuring exact willingness to pay and feature prioritization before you write a single line of code.
+            <h3 className="font-serif" style={{ fontSize: 32, fontWeight: 900, marginBottom: 16, lineHeight: 1.1, letterSpacing: '-0.02em', color: 'var(--ink)' }}>
+              Targeted<br/>Validation.
+            </h3>
+            <motion.div style={{ opacity: detailsOpacity, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+              <p style={{ fontSize: 14, color: 'var(--ink-secondary)', lineHeight: 1.6, fontWeight: 500, margin: 0 }}>
+                Tested across 52 distinct behavioral clusters instantly. Real willingness to pay.
               </p>
             </motion.div>
+          </motion.div>
 
-            {/* Slide 2 Text */}
-            <motion.div style={{ position: 'absolute', top: '20%', left: 0, opacity: o2, y: y2 }}>
-              <div style={{ padding: 12, background: 'rgba(26,23,20,0.05)', borderRadius: 12, color: 'var(--ink)', display: 'inline-block', marginBottom: 24 }}>
-                <Crosshair size={24} />
-              </div>
-              <h3 className="font-serif" style={{ fontSize: 40, fontWeight: 900, marginBottom: 24, lineHeight: 1.1, letterSpacing: '-0.02em' }}>
-                Absolute<br/>Channel Fit.
-              </h3>
-              <p style={{ fontSize: 18, color: 'var(--ink-secondary)', lineHeight: 1.6, fontWeight: 400, maxWidth: 500 }}>
-                We trace exactly where your target readers live, click, and buy. Stop guessing with ads and start placing your product precisely where the conversion probability is structurally highest.
+          {/* Card 3: Right (Pre-Mortem) */}
+          <motion.div 
+            style={{ 
+              position: 'absolute', inset: 0, x: rightX, y: rightY, rotate: rightRotate, 
+              background: 'var(--paper)', borderRadius: 24, padding: 40,
+              boxShadow: cardShadow, border: '0.5px solid rgba(0,0,0,0.08)',
+              display: 'flex', flexDirection: 'column', zIndex: 1
+            }}
+          >
+            <div style={{ padding: 12, background: 'rgba(192,57,43,0.1)', borderRadius: 12, color: 'var(--red)', display: 'inline-block', width: 'fit-content', marginBottom: 24 }}>
+              <Activity size={24} />
+            </div>
+            <h3 className="font-serif" style={{ fontSize: 32, fontWeight: 900, marginBottom: 16, lineHeight: 1.1, letterSpacing: '-0.02em', color: 'var(--ink)' }}>
+              The<br/>Pre-Mortem.
+            </h3>
+            <motion.div style={{ opacity: detailsOpacity, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+              <p style={{ fontSize: 14, color: 'var(--ink-secondary)', lineHeight: 1.6, fontWeight: 500, margin: 0 }}>
+                Structural failure modes exposed. Fix the vital flaws before they become code.
               </p>
             </motion.div>
+          </motion.div>
 
-            {/* Slide 3 Text */}
-            <motion.div style={{ position: 'absolute', top: '20%', left: 0, opacity: o3, y: y3 }}>
-              <div style={{ padding: 12, background: 'rgba(192,57,43,0.1)', borderRadius: 12, color: 'var(--red)', display: 'inline-block', marginBottom: 24 }}>
-                <Activity size={24} />
+          {/* Card 2: Center (Channel Fit) - Highest Z-Index */}
+          <motion.div 
+            style={{ 
+              position: 'absolute', inset: 0, scale: centerScale, y: centerY,
+              background: 'var(--ink)', color: 'var(--paper)', borderRadius: 24, padding: 40,
+              boxShadow: cardShadow, border: '0.5px solid rgba(255,255,255,0.15)',
+              display: 'flex', flexDirection: 'column', zIndex: 10
+            }}
+          >
+            <div style={{ padding: 12, background: 'rgba(255,255,255,0.1)', borderRadius: 12, color: '#fff', display: 'inline-block', width: 'fit-content', marginBottom: 24 }}>
+              <Crosshair size={24} />
+            </div>
+            <h3 className="font-serif" style={{ fontSize: 36, fontWeight: 900, marginBottom: 16, lineHeight: 1.1, letterSpacing: '-0.02em' }}>
+              Absolute<br/>Channel Fit.
+            </h3>
+            <motion.div style={{ opacity: detailsOpacity, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+              <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden', marginBottom: 16 }}>
+                <div style={{ width: '85%', height: '100%', background: 'var(--red)' }} />
               </div>
-              <h3 className="font-serif" style={{ fontSize: 40, fontWeight: 900, marginBottom: 24, lineHeight: 1.1, letterSpacing: '-0.02em' }}>
-                The<br/>Pre-Mortem.
-              </h3>
-              <p style={{ fontSize: 18, color: 'var(--ink-secondary)', lineHeight: 1.6, fontWeight: 400, maxWidth: 500 }}>
-                We expose the exact structural reasons your product will fail. From onboarding friction to long-term defection rates, see the autopsy report and fix the vital flaws before they become code.
+              <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.7)', lineHeight: 1.6, fontWeight: 500, margin: 0 }}>
+                <span style={{ color: '#fff', fontWeight: 800 }}>85% conversion</span> probability on visual networks. Traced instantly.
               </p>
             </motion.div>
-          </div>
-
-          {/* Right Content (3D Stacking Cards) */}
-          <div style={{ position: 'relative', height: 500, perspective: 1500 }}>
-            
-            {/* Card 1 */}
-            <motion.div style={{ position: 'absolute', top: 0, left: 0, right: 0, opacity: c1Opacity, y: c1Y, scale: c1Scale, transformOrigin: 'top center', zIndex: 1 }}>
-              <div style={{ background: '#fff', padding: 48, borderRadius: 24, boxShadow: '0 30px 60px rgba(0,0,0,0.06), 0 10px 20px rgba(0,0,0,0.03)', border: '0.5px solid rgba(0,0,0,0.05)', height: 420 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: 16, marginBottom: 24 }}>
-                  <div className="font-serif" style={{ fontSize: 24, fontWeight: 800, fontStyle: 'italic' }}>Rural D2C cold-press</div>
-                  <div style={{ color: 'var(--red)', fontSize: 14, letterSpacing: '0.1em', fontWeight: 800 }}>$14.99 / mo</div>
-                </div>
-                <div style={{ padding: 24, background: 'var(--paper)', borderRadius: 16, marginBottom: 24 }}>
-                  <DossierSpecimen />
-                </div>
-                <div style={{ display: 'flex', gap: 12 }}>
-                  <span style={{ padding: '8px 16px', background: 'rgba(26,23,20,0.04)', borderRadius: 20, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 800 }}>High Intent</span>
-                  <span style={{ padding: '8px 16px', background: 'rgba(26,23,20,0.04)', borderRadius: 20, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 800 }}>Price Sensitive</span>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Card 2 */}
-            <motion.div style={{ position: 'absolute', top: 0, left: 0, right: 0, y: c2Y, scale: c2Scale, transformOrigin: 'top center', zIndex: 2 }}>
-              <div style={{ background: 'var(--ink)', color: 'var(--paper)', padding: 48, borderRadius: 24, boxShadow: '0 40px 80px rgba(0,0,0,0.15)', border: '0.5px solid rgba(255,255,255,0.1)', height: 420, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <div style={{ fontSize: 12, letterSpacing: '0.2em', textTransform: 'uppercase', opacity: 0.5, marginBottom: 24, fontWeight: 800 }}>Channel Analysis</div>
-                <div style={{ fontSize: 48, fontWeight: 900, fontFamily: 'var(--font-serif)', letterSpacing: '-0.02em', marginBottom: 40 }}>Instagram <span style={{ opacity: 0.5 }}>vs</span> LinkedIn</div>
-                <div style={{ height: 6, background: 'rgba(255,255,255,0.1)', borderRadius: 3, overflow: 'hidden', marginBottom: 24 }}>
-                  <motion.div style={{ width: '85%', height: '100%', background: 'var(--red)' }} />
-                </div>
-                <div style={{ fontSize: 16, opacity: 0.7, fontWeight: 400, lineHeight: 1.5 }}>
-                  <span style={{ color: '#fff', fontWeight: 700 }}>85% conversion probability</span> on visual networks due to high aesthetic dependency.
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Card 3 */}
-            <motion.div style={{ position: 'absolute', top: 0, left: 0, right: 0, y: c3Y, transformOrigin: 'top center', zIndex: 3 }}>
-              <div style={{ background: 'var(--red)', color: 'var(--paper)', padding: 48, borderRadius: 24, boxShadow: '0 40px 80px rgba(192,57,43,0.3)', border: '0.5px solid rgba(255,255,255,0.2)', height: 420, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <div style={{ fontSize: 12, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)', marginBottom: 24, fontWeight: 800 }}>Critical Failure Mode</div>
-                <div style={{ fontSize: 48, fontWeight: 900, fontFamily: 'var(--font-serif)', letterSpacing: '-0.02em', marginBottom: 32 }}>Day 7 Defection Risk</div>
-                <p style={{ fontSize: 18, color: 'rgba(255,255,255,0.9)', lineHeight: 1.6, margin: 0, fontWeight: 500 }}>
-                  Simulation shows <span style={{ background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: 4 }}>68% of cohort abandons</span> due to lack of immediate utility in the onboarding flow. Structural intervention required.
-                </p>
-              </div>
-            </motion.div>
-
-          </div>
+          </motion.div>
 
         </div>
+
       </div>
     </section>
   )
