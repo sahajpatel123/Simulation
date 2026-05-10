@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useRef, useState } from 'react'
-import { motion, useScroll, useTransform, MotionValue } from 'framer-motion'
+import React, { useRef, useState, useEffect } from 'react'
+import { motion, useScroll, useTransform, useSpring, MotionValue } from 'framer-motion'
 import Link from 'next/link'
 import { ArrowRight, Activity, Crosshair, Database } from 'lucide-react'
 
@@ -23,9 +23,9 @@ function Masthead({
   isHydrated: boolean
 }) {
   const { scrollY } = useScroll()
-  const bg = useTransform(scrollY, [0, 100], ['rgba(242,236,224,0)', 'rgba(242,236,224,0.9)'])
-  const blur = useTransform(scrollY, [0, 100], ['blur(0px)', 'blur(10px)'])
-  const border = useTransform(scrollY, [0, 100], ['0px solid rgba(0,0,0,0)', '1px solid rgba(0,0,0,0.1)'])
+  const bg = useTransform(scrollY, [0, 100], ['rgba(242,236,224,0)', 'rgba(242,236,224,0.85)'])
+  const blur = useTransform(scrollY, [0, 100], ['blur(0px)', 'blur(16px)'])
+  const border = useTransform(scrollY, [0, 100], ['0px solid rgba(26,23,20,0)', '0.5px solid rgba(26,23,20,0.08)'])
 
   return (
     <motion.header
@@ -38,31 +38,35 @@ function Masthead({
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: '24px 48px',
+        padding: '20px 48px',
         background: bg,
         backdropFilter: blur,
         WebkitBackdropFilter: blur,
         borderBottom: border,
       }}
     >
-      <div className="font-serif" style={{ fontSize: 24, fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.02em', color: 'var(--ink)' }}>
+      <div className="font-serif" style={{ fontSize: 22, fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.02em', color: 'var(--ink)' }}>
         TheCee
       </div>
-      <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 32, alignItems: 'center' }}>
         {isHydrated && isAuthed ? (
           <Link
             href="/projects"
             style={{
-              fontSize: 11,
+              fontSize: 10,
               color: 'var(--paper)',
               background: 'var(--ink)',
-              padding: '10px 24px',
+              padding: '12px 28px',
               textTransform: 'uppercase',
-              letterSpacing: '0.1em',
-              fontWeight: 700,
+              letterSpacing: '0.15em',
+              fontWeight: 800,
               textDecoration: 'none',
               borderRadius: 40,
+              transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease',
+              boxShadow: '0 8px 24px rgba(26,23,20,0.15)',
             }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 32px rgba(26,23,20,0.2)' }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(26,23,20,0.15)' }}
           >
             Enter Press
           </Link>
@@ -73,14 +77,15 @@ function Masthead({
               setAuthOpen(true)
             }}
             style={{
-              fontSize: 11,
+              fontSize: 10,
               color: 'var(--ink)',
               background: 'none',
               border: 'none',
               textTransform: 'uppercase',
-              letterSpacing: '0.1em',
-              fontWeight: 700,
+              letterSpacing: '0.15em',
+              fontWeight: 800,
               cursor: 'pointer',
+              position: 'relative',
             }}
           >
             Sign In
@@ -91,42 +96,73 @@ function Masthead({
   )
 }
 
-/* ─── SCROLL HERO ──────────────────────────────────────────── */
+/* ─── PREMIUM SCROLL HERO ──────────────────────────────────────────── */
 function Hero() {
   const ref = useRef(null)
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] })
-  const y = useTransform(scrollYProgress, [0, 1], ['0%', '40%'])
-  const opacity = useTransform(scrollYProgress, [0, 0.8], [1, 0])
-  const scale = useTransform(scrollYProgress, [0, 1], [1, 0.9])
+  const y = useTransform(scrollYProgress, [0, 1], ['0%', '30%'])
+  const opacity = useTransform(scrollYProgress, [0, 0.6], [1, 0])
+  const blur = useTransform(scrollYProgress, [0, 0.8], ['blur(0px)', 'blur(20px)'])
+  const scale = useTransform(scrollYProgress, [0, 1], [1, 0.95])
 
   return (
     <section ref={ref} style={{ height: '100vh', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--paper)', overflow: 'hidden' }}>
-      <motion.div style={{ y, opacity, scale, textAlign: 'center', zIndex: 10, padding: '0 40px' }}>
-        <div style={{ fontSize: 12, letterSpacing: '0.3em', textTransform: 'uppercase', color: 'var(--red)', fontWeight: 800, marginBottom: 40 }}>
+      {/* Subtle Grain Overlay for texture */}
+      <div style={{ position: 'absolute', inset: 0, opacity: 0.4, backgroundImage: 'radial-gradient(var(--archive-grain-dot-a) 1px, transparent 1px)', backgroundSize: '32px 32px', pointerEvents: 'none' }} />
+
+      <motion.div style={{ y, opacity, scale, filter: blur, WebkitFilter: blur, textAlign: 'center', zIndex: 10, padding: '0 40px' }}>
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+          style={{ fontSize: 11, letterSpacing: '0.3em', textTransform: 'uppercase', color: 'var(--red)', fontWeight: 800, marginBottom: 40 }}
+        >
           The Behavioral Simulation Engine
-        </div>
-        <h1 className="font-serif" style={{ fontSize: 'clamp(60px, 10vw, 160px)', fontWeight: 900, color: 'var(--ink)', lineHeight: 0.9, letterSpacing: '-0.04em' }}>
-          Stop guessing.<br />
-          <span style={{ fontStyle: 'italic', color: 'var(--ink-secondary)' }}>Start simulating.</span>
+        </motion.div>
+        
+        <h1 className="font-serif" style={{ fontSize: 'clamp(60px, 10vw, 150px)', fontWeight: 900, color: 'var(--ink)', lineHeight: 0.9, letterSpacing: '-0.04em' }}>
+          <motion.span initial={{ opacity: 0, y: 30, filter: 'blur(10px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }} transition={{ duration: 1.4, delay: 0.1, ease: [0.16, 1, 0.3, 1] }} style={{ display: 'inline-block' }}>
+            Stop guessing.
+          </motion.span>
+          <br />
+          <motion.span initial={{ opacity: 0, y: 30, filter: 'blur(10px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }} transition={{ duration: 1.4, delay: 0.3, ease: [0.16, 1, 0.3, 1] }} style={{ display: 'inline-block', fontStyle: 'italic', color: 'var(--ink-secondary)' }}>
+            Start simulating.
+          </motion.span>
         </h1>
+
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 2, delay: 1 }}
+          style={{ position: 'absolute', bottom: -120, left: '50%', transform: 'translateX(-50%)', width: 1, height: 80, background: 'linear-gradient(to bottom, var(--ink), transparent)' }}
+        />
       </motion.div>
     </section>
   )
 }
 
-/* ─── NARRATIVE SCROLL ──────────────────────────────────────────── */
+/* ─── NARRATIVE SCROLL (APPLE STYLE BLUR FADES) ──────────────────────────────────────────── */
 function NarrativeScroll() {
   const ref = useRef(null)
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] })
 
-  const o1 = useTransform(scrollYProgress, [0, 0.15, 0.25, 0.35], [0, 1, 1, 0])
-  const y1 = useTransform(scrollYProgress, [0, 0.15, 0.25, 0.35], [40, 0, 0, -40])
+  // Slide 1
+  const o1 = useTransform(scrollYProgress, [0, 0.1, 0.25, 0.35], [0, 1, 1, 0])
+  const b1 = useTransform(scrollYProgress, [0, 0.1, 0.25, 0.35], ['blur(20px)', 'blur(0px)', 'blur(0px)', 'blur(20px)'])
+  const y1 = useTransform(scrollYProgress, [0, 0.1, 0.25, 0.35], [60, 0, 0, -60])
+  const s1 = useTransform(scrollYProgress, [0, 0.1, 0.25, 0.35], [0.95, 1, 1, 1.05])
 
+  // Slide 2
   const o2 = useTransform(scrollYProgress, [0.35, 0.45, 0.55, 0.65], [0, 1, 1, 0])
-  const y2 = useTransform(scrollYProgress, [0.35, 0.45, 0.55, 0.65], [40, 0, 0, -40])
+  const b2 = useTransform(scrollYProgress, [0.35, 0.45, 0.55, 0.65], ['blur(20px)', 'blur(0px)', 'blur(0px)', 'blur(20px)'])
+  const y2 = useTransform(scrollYProgress, [0.35, 0.45, 0.55, 0.65], [60, 0, 0, -60])
+  const s2 = useTransform(scrollYProgress, [0.35, 0.45, 0.55, 0.65], [0.95, 1, 1, 1.05])
 
+  // Slide 3
   const o3 = useTransform(scrollYProgress, [0.65, 0.75, 0.85, 1], [0, 1, 1, 0])
-  const y3 = useTransform(scrollYProgress, [0.65, 0.75, 0.85, 1], [40, 0, 0, -40])
+  const b3 = useTransform(scrollYProgress, [0.65, 0.75, 0.85, 1], ['blur(20px)', 'blur(0px)', 'blur(0px)', 'blur(20px)'])
+  const y3 = useTransform(scrollYProgress, [0.65, 0.75, 0.85, 1], [60, 0, 0, -60])
+  const s3 = useTransform(scrollYProgress, [0.65, 0.75, 0.85, 1], [0.95, 1, 1, 1.05])
 
   const textStyle: React.CSSProperties = {
     position: 'absolute',
@@ -136,28 +172,28 @@ function NarrativeScroll() {
     width: '100%',
     maxWidth: 1000,
     textAlign: 'center',
-    fontSize: 'clamp(32px, 5vw, 64px)',
+    fontSize: 'clamp(40px, 6vw, 80px)',
     fontFamily: 'var(--font-serif)',
     fontWeight: 500,
-    color: 'var(--paper)',
+    color: '#fff',
     lineHeight: 1.1,
     letterSpacing: '-0.02em',
   }
 
   return (
-    <section ref={ref} style={{ height: '400vh', background: 'var(--ink)', position: 'relative' }}>
+    <section ref={ref} style={{ height: '400vh', background: '#050505', position: 'relative' }}>
       <div style={{ position: 'sticky', top: 0, height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-        <motion.div style={{ ...textStyle, opacity: o1, y: y1 }}>
+        <motion.div style={{ ...textStyle, opacity: o1, y: y1, scale: s1, filter: b1, WebkitFilter: b1 }}>
           You have an idea.<br />You build it for six months.<br />
           <span style={{ color: 'var(--red)', fontStyle: 'italic' }}>Then you find out nobody wants it.</span>
         </motion.div>
 
-        <motion.div style={{ ...textStyle, opacity: o2, y: y2 }}>
+        <motion.div style={{ ...textStyle, opacity: o2, y: y2, scale: s2, filter: b2, WebkitFilter: b2 }}>
           What if you could put <br />your idea in front of <br />
           <span style={{ fontStyle: 'italic' }}>10,000 synthetic readers</span> today?
         </motion.div>
 
-        <motion.div style={{ ...textStyle, opacity: o3, y: y3 }}>
+        <motion.div style={{ ...textStyle, opacity: o3, y: y3, scale: s3, filter: b3, WebkitFilter: b3 }}>
           We print the autopsy<br />before the burial.<br />
           <span style={{ color: 'var(--red)', fontStyle: 'italic' }}>In exactly two minutes.</span>
         </motion.div>
@@ -166,77 +202,94 @@ function NarrativeScroll() {
   )
 }
 
-/* ─── THE ANATOMY (SCROLL-JACKED DOSSIER) ──────────────────────────────────────────── */
+/* ─── THE ANATOMY (TECHNICAL BLUEPRINT WITH CONNECTING LINES) ──────────────────────────────────────────── */
 function Anatomy() {
   const ref = useRef(null)
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] })
 
-  const scale = useTransform(scrollYProgress, [0, 0.2], [0.8, 1])
+  const scale = useTransform(scrollYProgress, [0, 0.2], [0.85, 1])
   const opacity = useTransform(scrollYProgress, [0, 0.2], [0, 1])
+  const blur = useTransform(scrollYProgress, [0, 0.2], ['blur(20px)', 'blur(0px)'])
 
-  const a1 = useTransform(scrollYProgress, [0.2, 0.3], [0, 1])
-  const a2 = useTransform(scrollYProgress, [0.4, 0.5], [0, 1])
-  const a3 = useTransform(scrollYProgress, [0.6, 0.7], [0, 1])
+  // Triggers for annotations
+  const a1 = useTransform(scrollYProgress, [0.25, 0.35], [0, 1])
+  const a2 = useTransform(scrollYProgress, [0.45, 0.55], [0, 1])
+  const a3 = useTransform(scrollYProgress, [0.65, 0.75], [0, 1])
 
   return (
-    <section ref={ref} style={{ height: '300vh', background: 'var(--paper-dark)', position: 'relative' }}>
+    <section ref={ref} style={{ height: '350vh', background: 'var(--paper)', position: 'relative' }}>
       <div style={{ position: 'sticky', top: 0, height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', top: '10%', textAlign: 'center', zIndex: 10 }}>
-          <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--ink-secondary)', fontWeight: 800, marginBottom: 12 }}>
-            The Specimen
+        {/* Title */}
+        <div style={{ position: 'absolute', top: 40, textAlign: 'center', zIndex: 10 }}>
+          <div style={{ fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--ink-secondary)', fontWeight: 800, marginBottom: 12 }}>
+            The Architecture
           </div>
-          <h2 className="font-serif" style={{ fontSize: 'clamp(32px, 4vw, 48px)', fontWeight: 900, color: 'var(--ink)', letterSpacing: '-0.02em' }}>
+          <h2 className="font-serif" style={{ fontSize: 'clamp(28px, 3vw, 40px)', fontWeight: 900, color: 'var(--ink)', letterSpacing: '-0.02em' }}>
             The output is a clear directive.
           </h2>
         </div>
 
-        <motion.div style={{ scale, opacity, width: '100%', maxWidth: 1000, position: 'relative' }}>
-          <div style={{ pointerEvents: 'none' }}>
+        <motion.div style={{ scale, opacity, filter: blur, WebkitFilter: blur, width: '100%', maxWidth: 1000, position: 'relative' }}>
+          
+          {/* Main Specimen wrapped elegantly */}
+          <div style={{ pointerEvents: 'none', background: '#fff', padding: 40, borderRadius: 24, boxShadow: '0 40px 100px rgba(0,0,0,0.08), 0 10px 40px rgba(0,0,0,0.04)', border: '0.5px solid rgba(0,0,0,0.05)', position: 'relative', zIndex: 5 }}>
             <DossierSpecimen />
           </div>
 
-          <motion.div style={{ opacity: a1, position: 'absolute', top: '10%', left: '-15%', background: 'var(--paper)', padding: 24, border: '1px solid var(--border-color)', boxShadow: '0 20px 40px rgba(0,0,0,0.05)', width: 280, borderRadius: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              <div style={{ padding: 8, background: 'rgba(192,57,43,0.1)', borderRadius: 8, color: 'var(--red)' }}>
-                <Database size={16} />
+          {/* SVG Connecting Lines - acts as a structural grid */}
+          <svg style={{ position: 'absolute', inset: -100, width: 'calc(100% + 200px)', height: 'calc(100% + 200px)', pointerEvents: 'none', zIndex: 0 }}>
+            {/* Validation Line */}
+            <motion.path d="M 50,300 L 250,300" fill="transparent" stroke="var(--ink)" strokeWidth="0.5" strokeDasharray="4 4" style={{ pathLength: a1, opacity: a1 }} />
+            {/* Channel Fit Line */}
+            <motion.path d="M 1150,450 L 950,450" fill="transparent" stroke="var(--ink)" strokeWidth="0.5" strokeDasharray="4 4" style={{ pathLength: a2, opacity: a2 }} />
+            {/* Pre-mortem Line */}
+            <motion.path d="M 50,600 L 250,600" fill="transparent" stroke="var(--ink)" strokeWidth="0.5" strokeDasharray="4 4" style={{ pathLength: a3, opacity: a3 }} />
+          </svg>
+
+          {/* Annotations */}
+          <motion.div style={{ opacity: a1, y: useTransform(scrollYProgress, [0.25, 0.35], [20, 0]), position: 'absolute', top: 200, left: -220, background: 'rgba(242,236,224,0.9)', backdropFilter: 'blur(10px)', padding: 24, border: '0.5px solid var(--border-color)', width: 280, borderRadius: 16, zIndex: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <div style={{ padding: 6, background: 'var(--red)', borderRadius: 8, color: '#fff' }}>
+                <Database size={14} />
               </div>
-              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 800 }}>Validation</div>
+              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: 800 }}>Validation</div>
             </div>
-            <div style={{ fontSize: 14, color: 'var(--ink-secondary)', lineHeight: 1.5 }}>
+            <div style={{ fontSize: 13, color: 'var(--ink-secondary)', lineHeight: 1.6, fontWeight: 500 }}>
               Tests willingness to pay across 52 behavioral clusters instantly.
             </div>
           </motion.div>
 
-          <motion.div style={{ opacity: a2, position: 'absolute', top: '45%', right: '-15%', background: 'var(--paper)', padding: 24, border: '1px solid var(--border-color)', boxShadow: '0 20px 40px rgba(0,0,0,0.05)', width: 280, borderRadius: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              <div style={{ padding: 8, background: 'rgba(192,57,43,0.1)', borderRadius: 8, color: 'var(--red)' }}>
-                <Crosshair size={16} />
+          <motion.div style={{ opacity: a2, y: useTransform(scrollYProgress, [0.45, 0.55], [20, 0]), position: 'absolute', top: 350, right: -220, background: 'rgba(242,236,224,0.9)', backdropFilter: 'blur(10px)', padding: 24, border: '0.5px solid var(--border-color)', width: 280, borderRadius: 16, zIndex: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <div style={{ padding: 6, background: 'var(--ink)', borderRadius: 8, color: '#fff' }}>
+                <Crosshair size={14} />
               </div>
-              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 800 }}>Channel Fit</div>
+              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: 800 }}>Channel Fit</div>
             </div>
-            <div style={{ fontSize: 14, color: 'var(--ink-secondary)', lineHeight: 1.5 }}>
+            <div style={{ fontSize: 13, color: 'var(--ink-secondary)', lineHeight: 1.6, fontWeight: 500 }}>
               Identifies exactly where your audience lives, clicks, and buys.
             </div>
           </motion.div>
 
-          <motion.div style={{ opacity: a3, position: 'absolute', bottom: '15%', left: '-10%', background: 'var(--paper)', padding: 24, border: '1px solid var(--border-color)', boxShadow: '0 20px 40px rgba(0,0,0,0.05)', width: 280, borderRadius: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              <div style={{ padding: 8, background: 'rgba(192,57,43,0.1)', borderRadius: 8, color: 'var(--red)' }}>
-                <Activity size={16} />
+          <motion.div style={{ opacity: a3, y: useTransform(scrollYProgress, [0.65, 0.75], [20, 0]), position: 'absolute', top: 500, left: -220, background: 'rgba(242,236,224,0.9)', backdropFilter: 'blur(10px)', padding: 24, border: '0.5px solid var(--border-color)', width: 280, borderRadius: 16, zIndex: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <div style={{ padding: 6, background: 'var(--ink)', borderRadius: 8, color: '#fff' }}>
+                <Activity size={14} />
               </div>
-              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 800 }}>Pre-mortem</div>
+              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: 800 }}>Pre-mortem</div>
             </div>
-            <div style={{ fontSize: 14, color: 'var(--ink-secondary)', lineHeight: 1.5 }}>
+            <div style={{ fontSize: 13, color: 'var(--ink-secondary)', lineHeight: 1.6, fontWeight: 500 }}>
               Exposes the exact structural reasons your product will fail.
             </div>
           </motion.div>
+
         </motion.div>
       </div>
     </section>
   )
 }
 
-/* ─── THE DISTRIBUTION (SCROLL BAR CHART) ──────────────────────────────────────────── */
+/* ─── THE DISTRIBUTION (PREMIUM SCROLL BAR CHART) ──────────────────────────────────────────── */
 function DistributionRow({
   d,
   i,
@@ -250,21 +303,22 @@ function DistributionRow({
   const end = 0.4 + i * 0.1
   const width = useTransform(scrollYProgress, [start, end], ['0%', `${d.pct}%`])
   const opacity = useTransform(scrollYProgress, [start, end], [0, 1])
+  const y = useTransform(scrollYProgress, [start, end], [20, 0])
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 40 }}>
-      <div style={{ width: 200 }}>
-        <div style={{ fontSize: 14, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.15em', color: d.color }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 60, padding: '24px 0', borderBottom: '0.5px solid rgba(26,23,20,0.05)' }}>
+      <div style={{ width: 240 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.15em', color: d.color }}>
           {d.label}
         </div>
-        <div style={{ fontSize: 12, color: 'var(--ink-secondary)', marginTop: 4 }}>{d.sub}</div>
+        <div style={{ fontSize: 12, color: 'var(--ink-secondary)', marginTop: 8, fontWeight: 500 }}>{d.sub}</div>
       </div>
-      <div style={{ flex: 1, position: 'relative', height: 40 }}>
-        <div style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', left: 0, right: 0, height: 2, background: 'var(--border-color)' }} />
-        <motion.div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, background: d.color, width, borderRadius: 4 }} />
+      <div style={{ flex: 1, position: 'relative', height: 16 }}>
+        <div style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', left: 0, right: 0, height: 1, background: 'rgba(26,23,20,0.08)' }} />
+        <motion.div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, background: d.color, width, borderRadius: 8, boxShadow: `0 4px 12px ${d.color}33` }} />
       </div>
-      <motion.div style={{ opacity, width: 80, textAlign: 'right', fontSize: 40, fontWeight: 900, fontFamily: 'var(--font-serif)', color: d.color, fontStyle: 'italic' }}>
-        {d.pct}%
+      <motion.div style={{ opacity, y, width: 100, textAlign: 'right', fontSize: 48, fontWeight: 900, fontFamily: 'var(--font-serif)', color: d.color, fontStyle: 'italic', letterSpacing: '-0.02em' }}>
+        {d.pct}<span style={{ fontSize: 24, opacity: 0.5 }}>%</span>
       </motion.div>
     </div>
   )
@@ -283,15 +337,18 @@ function Distribution() {
   ]
 
   return (
-    <section ref={ref} style={{ padding: '200px 48px', background: 'var(--paper)', maxWidth: 1000, margin: '0 auto' }}>
-      <div style={{ textAlign: 'center', marginBottom: 120 }}>
-        <h2 className="font-serif" style={{ fontSize: 'clamp(40px, 6vw, 80px)', fontWeight: 900, letterSpacing: '-0.02em', color: 'var(--ink)', lineHeight: 1.1 }}>
+    <section ref={ref} style={{ padding: '240px 48px', background: 'var(--paper)', maxWidth: 1100, margin: '0 auto' }}>
+      <div style={{ textAlign: 'center', marginBottom: 140 }}>
+        <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--ink-secondary)', fontWeight: 800, marginBottom: 16 }}>
+          The Futures
+        </div>
+        <h2 className="font-serif" style={{ fontSize: 'clamp(40px, 6vw, 88px)', fontWeight: 900, letterSpacing: '-0.03em', color: 'var(--ink)', lineHeight: 1.05 }}>
           Every idea has a shape.<br />
           <span style={{ fontStyle: 'italic', color: 'var(--red)' }}>We show you yours.</span>
         </h2>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
         {data.map((d, i) => (
           <DistributionRow key={d.label} d={d} i={i} scrollYProgress={scrollYProgress} />
         ))}
@@ -300,7 +357,7 @@ function Distribution() {
   )
 }
 
-/* ─── TIERS & FINAL CTA ──────────────────────────────────────────── */
+/* ─── TIERS & FINAL CTA (ULTRA PREMIUM STYLING) ──────────────────────────────────────────── */
 function SubscriptionsAndCTA({
   setAuthMode,
   setAuthOpen,
@@ -314,23 +371,23 @@ function SubscriptionsAndCTA({
   ]
 
   return (
-    <section style={{ borderTop: '1px solid var(--border-color)' }}>
+    <section style={{ borderTop: '0.5px solid var(--border-color)', background: '#fcfcfc' }}>
       {/* Tiers */}
-      <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', maxWidth: 1400, margin: '0 auto' }}>
         {TIERS.map((t, i) => (
-          <div key={t.name} style={{ flex: 1, minWidth: 300, padding: '120px 80px', borderRight: i === 0 ? '1px solid var(--border-color)' : 'none', background: i === 1 ? 'var(--ink)' : 'var(--paper)', color: i === 1 ? 'var(--paper)' : 'var(--ink)' }}>
-            <h3 className="font-serif" style={{ fontSize: 32, fontWeight: 900, fontStyle: 'italic', marginBottom: 20 }}>
-              {t.name}
-            </h3>
-            <div className="font-serif" style={{ fontSize: 64, fontWeight: 900, letterSpacing: '-0.04em', lineHeight: 1 }}>
-              {t.price}
-            </div>
-            <div style={{ fontSize: 12, letterSpacing: '0.2em', textTransform: 'uppercase', opacity: 0.6, marginTop: 10, marginBottom: 40, fontWeight: 800 }}>
+          <div key={t.name} style={{ flex: 1, minWidth: 340, padding: '140px 100px', position: 'relative', borderRight: i === 0 ? '0.5px solid var(--border-color)' : 'none', background: i === 1 ? 'var(--ink)' : 'transparent', color: i === 1 ? 'var(--paper)' : 'var(--ink)' }}>
+            <div style={{ fontSize: 11, letterSpacing: '0.15em', textTransform: 'uppercase', opacity: 0.5, marginBottom: 16, fontWeight: 800 }}>
               {t.sub}
             </div>
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0, marginBottom: 60 }}>
+            <h3 className="font-serif" style={{ fontSize: 40, fontWeight: 900, fontStyle: 'italic', marginBottom: 24, letterSpacing: '-0.02em' }}>
+              {t.name}
+            </h3>
+            <div className="font-serif" style={{ fontSize: 72, fontWeight: 900, letterSpacing: '-0.04em', lineHeight: 1, marginBottom: 60 }}>
+              {t.price}
+            </div>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, marginBottom: 80 }}>
               {t.bullets.map((b) => (
-                <li key={b} style={{ padding: '16px 0', borderBottom: `1px solid ${i === 1 ? 'rgba(255,255,255,0.1)' : 'var(--border-color)'}`, fontSize: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <li key={b} style={{ padding: '18px 0', borderBottom: `0.5px solid ${i === 1 ? 'rgba(255,255,255,0.1)' : 'var(--border-color)'}`, fontSize: 15, display: 'flex', alignItems: 'center', gap: 16, fontWeight: 500, opacity: 0.9 }}>
                   <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--red)' }} /> {b}
                 </li>
               ))}
@@ -341,13 +398,13 @@ function SubscriptionsAndCTA({
                 setAuthOpen(true)
               }}
               style={{
-                padding: '20px 40px',
+                padding: '24px 48px',
                 width: '100%',
                 background: i === 1 ? 'var(--red)' : 'var(--ink)',
                 color: 'var(--paper)',
                 border: 'none',
-                borderRadius: 8,
-                fontSize: 12,
+                borderRadius: 40,
+                fontSize: 11,
                 letterSpacing: '0.2em',
                 textTransform: 'uppercase',
                 fontWeight: 800,
@@ -356,7 +413,11 @@ function SubscriptionsAndCTA({
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 12,
+                transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                boxShadow: i === 1 ? '0 12px 32px rgba(192,57,43,0.2)' : '0 12px 32px rgba(26,23,20,0.1)',
               }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)' }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0) scale(1)' }}
             >
               {t.cta} <ArrowRight size={16} />
             </button>
@@ -365,18 +426,25 @@ function SubscriptionsAndCTA({
       </div>
 
       {/* Footer */}
-      <footer style={{ background: '#0a0a0a', padding: '100px 48px', color: 'var(--paper)' }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+      <footer style={{ background: '#050505', padding: '120px 64px', color: 'var(--paper)', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+        <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 40 }}>
           <div>
-            <h2 className="font-serif" style={{ fontSize: 48, fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.02em', marginBottom: 20 }}>
+            <h2 className="font-serif" style={{ fontSize: 56, fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.02em', marginBottom: 24 }}>
               TheCee
             </h2>
-            <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', maxWidth: 300, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.4)', maxWidth: 360, lineHeight: 1.6, fontWeight: 400 }}>
               The simulation broadsheet. Filed quarterly, on the Internet, since 2026.
             </div>
           </div>
-          <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', fontWeight: 700 }}>
-            © 2026 TheCee — Set in Playfair & DM Sans
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ display: 'flex', gap: 40, marginBottom: 40, fontSize: 12, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)', fontWeight: 600 }}>
+              <a href="#" style={{ color: 'inherit', textDecoration: 'none' }}>About</a>
+              <a href="#" style={{ color: 'inherit', textDecoration: 'none' }}>Methodology</a>
+              <a href="#" style={{ color: 'inherit', textDecoration: 'none' }}>Press</a>
+            </div>
+            <div style={{ fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', fontWeight: 700 }}>
+              © 2026 TheCee — Printed in IST
+            </div>
           </div>
         </div>
       </footer>
@@ -394,7 +462,7 @@ export default function LandingPage() {
   const isAuthed = Boolean(user) || (isHydrated && typeof window !== 'undefined' && authLib.isAuthenticated())
 
   return (
-    <div style={{ background: 'var(--paper)', minHeight: '100vh' }}>
+    <div style={{ background: 'var(--paper)', minHeight: '100vh', selection: { background: 'var(--red)', color: 'var(--paper)' } }}>
       <Masthead setAuthOpen={setAuthOpen} setAuthMode={setAuthMode} isAuthed={isAuthed} isHydrated={isHydrated} />
       <Hero />
       <NarrativeScroll />
