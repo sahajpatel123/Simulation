@@ -690,122 +690,13 @@ export default function PrototypePage() {
               background: 'var(--ink)',
             }}
           >
-            {/* ── Masthead bar ─────────────────────────────────────── */}
-            <div
-              style={{
-                height: 3,
-                background: 'var(--red)',
-                flexShrink: 0,
-              }}
-            />
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '0 32px',
-                height: 52,
-                background: 'var(--ink)',
-                borderBottom: '0.5px solid rgba(242,236,224,0.08)',
-                flexShrink: 0,
-              }}
-            >
-              {/* Left: folio label */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span
-                    className="font-serif"
-                    style={{
-                      fontSize: 18,
-                      fontWeight: 900,
-                      fontStyle: 'italic',
-                      color: 'var(--paper)',
-                      letterSpacing: '-0.03em',
-                      opacity: 0.9,
-                    }}
-                  >
-                    Edit Room
-                  </span>
-                </div>
-                <div style={{ width: 0.5, height: 16, background: 'rgba(242,236,224,0.15)' }} />
-                <span
-                  style={{
-                    fontSize: 9,
-                    letterSpacing: '0.3em',
-                    textTransform: 'uppercase',
-                    color: 'rgba(242,236,224,0.35)',
-                    fontWeight: 600,
-                    fontFamily: 'var(--font-body)',
-                  }}
-                >
-                  Compositor's desk
-                </span>
-                <AnimatePresence>
-                  {editApplied && (
-                    <motion.div
-                      initial={{ opacity: 0, x: -8 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0 }}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        padding: '3px 10px',
-                        border: '0.5px solid rgba(74,222,128,0.3)',
-                        background: 'rgba(74,222,128,0.08)',
-                      }}
-                    >
-                      <Check style={{ width: 9, height: 9, color: 'rgb(74,222,128)' }} />
-                      <span
-                        style={{
-                          fontSize: 8,
-                          letterSpacing: '0.22em',
-                          textTransform: 'uppercase',
-                          color: 'rgb(74,222,128)',
-                          fontWeight: 700,
-                          fontFamily: 'var(--font-body)',
-                        }}
-                      >
-                        Plate updated
-                      </span>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* Right: Done */}
-              <button
-                type="button"
-                onClick={handleExitEdit}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '9px 22px',
-                  background: editApplied ? 'var(--red)' : 'rgba(242,236,224,0.08)',
-                  color: editApplied ? '#fff' : 'rgba(242,236,224,0.5)',
-                  border: editApplied ? 'none' : '0.5px solid rgba(242,236,224,0.15)',
-                  fontFamily: 'var(--font-body)',
-                  fontSize: 9,
-                  fontWeight: 700,
-                  letterSpacing: '0.24em',
-                  textTransform: 'uppercase',
-                  cursor: 'pointer',
-                  transition: 'background 300ms ease, color 300ms ease, border-color 300ms ease',
-                }}
-              >
-                {editApplied ? 'Save & close' : 'Close'}
-                <Check style={{ width: 10, height: 10 }} />
-              </button>
-            </div>
-
             {/* ── Split body ───────────────────────────────────────── */}
             <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
 
               {/* ── Left panel ───────────────────────────────────── */}
               <div
                 style={{
-                  width: '36%',
+                  width: '32%',
                   flexShrink: 0,
                   background: 'var(--ink)',
                   display: 'flex',
@@ -1078,23 +969,37 @@ export default function PrototypePage() {
                 {/* Preview bar */}
                 <div
                   style={{
-                    padding: '10px 20px',
+                    padding: '8px 20px',
                     borderBottom: '0.5px solid rgba(26,23,20,0.1)',
                     background: 'var(--paper)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     flexShrink: 0,
-                    height: 40,
+                    height: 48,
                     boxSizing: 'border-box',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                    <span
+                      className="font-serif"
+                      style={{
+                        fontSize: 17,
+                        fontWeight: 900,
+                        fontStyle: 'italic',
+                        color: 'var(--ink)',
+                        letterSpacing: '-0.03em',
+                        lineHeight: 1,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Edit Room
+                    </span>
+                    <div style={{ width: 0.5, height: 15, background: 'var(--border-color)' }} />
                     {/* Traffic-light dots matching the chrome bar */}
                     {['var(--red)', '#b88a3a', '#3d7a4a'].map((c) => (
-                      <span key={c} style={{ width: 8, height: 8, borderRadius: '50%', background: c, opacity: 0.7 }} />
+                      <span key={c} style={{ width: 8, height: 8, borderRadius: '50%', background: c, opacity: 0.7, flexShrink: 0 }} />
                     ))}
-                    <div style={{ width: 0.5, height: 12, background: 'var(--border-color)', marginLeft: 4 }} />
                     <span
                       style={{
                         fontSize: 9,
@@ -1103,43 +1008,73 @@ export default function PrototypePage() {
                         color: 'var(--ink-tertiary)',
                         fontWeight: 600,
                         fontFamily: 'var(--font-body)',
+                        whiteSpace: 'nowrap',
                       }}
                     >
-                      Reader's view
+                      Reader&apos;s view
                     </span>
-                  </div>
-
-                  <AnimatePresence>
-                    {editApplied && (
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.92 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0 }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 5,
-                          padding: '3px 10px',
-                          background: 'rgba(192,57,43,0.08)',
-                          border: '0.5px solid rgba(192,57,43,0.2)',
-                        }}
-                      >
-                        <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--red)' }} />
-                        <span
+                    <AnimatePresence>
+                      {editApplied && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.92 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0 }}
                           style={{
-                            fontSize: 8,
-                            letterSpacing: '0.22em',
-                            textTransform: 'uppercase',
-                            color: 'var(--red)',
-                            fontWeight: 700,
-                            fontFamily: 'var(--font-body)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            padding: '3px 10px',
+                            background: 'rgba(192,57,43,0.08)',
+                            border: '0.5px solid rgba(192,57,43,0.2)',
+                            flexShrink: 0,
                           }}
                         >
-                          Revised proof
-                        </span>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                          <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--red)' }} />
+                          <span
+                            style={{
+                              fontSize: 8,
+                              letterSpacing: '0.22em',
+                              textTransform: 'uppercase',
+                              color: 'var(--red)',
+                              fontWeight: 700,
+                              fontFamily: 'var(--font-body)',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            Revised proof
+                          </span>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleExitEdit}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '10px 22px',
+                      background: editApplied ? 'var(--red)' : 'rgba(192,57,43,0.88)',
+                      color: '#fff',
+                      border: 'none',
+                      fontFamily: 'var(--font-body)',
+                      fontSize: 9,
+                      fontWeight: 700,
+                      letterSpacing: '0.24em',
+                      textTransform: 'uppercase',
+                      cursor: 'pointer',
+                      boxShadow: '0 8px 22px rgba(192,57,43,0.16)',
+                      transition: 'background 300ms ease, transform 180ms ease, box-shadow 180ms ease',
+                      flexShrink: 0,
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 10px 26px rgba(192,57,43,0.22)' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 8px 22px rgba(192,57,43,0.16)' }}
+                  >
+                    {editApplied ? 'Save & close' : 'Close'}
+                    <Check style={{ width: 10, height: 10 }} />
+                  </button>
                 </div>
 
                 {/* Refine loading overlay */}
@@ -1150,7 +1085,7 @@ export default function PrototypePage() {
                     style={{
                       position: 'absolute',
                       inset: 0,
-                      top: 40,
+                      top: 48,
                       zIndex: 2,
                       display: 'flex',
                       flexDirection: 'column',
