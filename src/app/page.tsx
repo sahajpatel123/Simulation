@@ -386,98 +386,31 @@ function Distribution() {
   )
 }
 
-/* ─── TIERS & FINAL CTA (ULTRA PREMIUM STYLING) ──────────────────────────────────────────── */
-function SubscriptionsAndCTA({
-  setAuthMode,
-  setAuthOpen,
-}: {
-  setAuthMode: (m: 'login' | 'signup') => void
-  setAuthOpen: (o: boolean) => void
-}) {
-  const TIERS = [
-    { name: 'Single Issue', price: 'Free', sub: 'Forever', bullets: ['1 active dossier', '500 simulated readers', 'Pre-mortem report'], cta: 'Run your first' },
-    { name: 'Quarterly', price: '₹1,200', sub: 'Per month', bullets: ['10 active dossiers', '10,000 readers', 'Decision Studio', 'Cross-validation'], cta: 'Open a quarterly' },
-  ]
-
+/* ─── FOOTER ──────────────────────────────────────────── */
+function FooterSection() {
   return (
-    <section style={{ borderTop: '0.5px solid var(--border-color)', background: '#fcfcfc' }}>
-      {/* Tiers */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', maxWidth: 1400, margin: '0 auto' }}>
-        {TIERS.map((t, i) => (
-          <div key={t.name} style={{ flex: 1, minWidth: 340, padding: '100px clamp(48px, 6vw, 80px)', position: 'relative', borderRight: i === 0 ? '0.5px solid var(--border-color)' : 'none', background: i === 1 ? 'var(--ink)' : 'transparent', color: i === 1 ? 'var(--paper)' : 'var(--ink)' }}>
-            <div style={{ fontSize: 11, letterSpacing: '0.15em', textTransform: 'uppercase', opacity: 0.5, marginBottom: 16, fontWeight: 800 }}>
-              {t.sub}
-            </div>
-            <h3 className="font-serif" style={{ fontSize: 40, fontWeight: 900, fontStyle: 'italic', marginBottom: 24, letterSpacing: '-0.02em' }}>
-              {t.name}
-            </h3>
-            <div className="font-serif" style={{ fontSize: 72, fontWeight: 900, letterSpacing: '-0.04em', lineHeight: 1, marginBottom: 60 }}>
-              {t.price}
-            </div>
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0, marginBottom: 80 }}>
-              {t.bullets.map((b) => (
-                <li key={b} style={{ padding: '18px 0', borderBottom: `0.5px solid ${i === 1 ? 'rgba(255,255,255,0.1)' : 'var(--border-color)'}`, fontSize: 15, display: 'flex', alignItems: 'center', gap: 16, fontWeight: 500, opacity: 0.9 }}>
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--red)' }} /> {b}
-                </li>
-              ))}
-            </ul>
-            <button
-              onClick={() => {
-                setAuthMode('signup')
-                setAuthOpen(true)
-              }}
-              style={{
-                padding: '24px 48px',
-                width: '100%',
-                background: i === 1 ? 'var(--red)' : 'var(--ink)',
-                color: 'var(--paper)',
-                border: 'none',
-                borderRadius: 40,
-                fontSize: 11,
-                letterSpacing: '0.2em',
-                textTransform: 'uppercase',
-                fontWeight: 800,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 12,
-                transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-                boxShadow: i === 1 ? '0 12px 32px rgba(192,57,43,0.2)' : '0 12px 32px rgba(26,23,20,0.1)',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)' }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0) scale(1)' }}
-            >
-              {t.cta} <ArrowRight size={16} />
-            </button>
-          </div>
-        ))}
-      </div>
-
-      {/* Footer */}
-      <footer style={{ background: '#050505', padding: '120px 64px', color: 'var(--paper)', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-        <div style={{ maxWidth: 1400, margin: '0 auto', width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 40 }}>
-          <div>
-            <h2 className="font-serif" style={{ fontSize: 56, fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.02em', marginBottom: 24 }}>
-              TheCee
-            </h2>
-            <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.4)', maxWidth: 360, lineHeight: 1.6, fontWeight: 400 }}>
-              The simulation broadsheet. Filed quarterly, on the Internet, since 2026.
-            </div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ display: 'flex', gap: 40, marginBottom: 40, fontSize: 12, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)', fontWeight: 600 }}>
-              <a href="#" style={{ color: 'inherit', textDecoration: 'none' }}>About</a>
-              <a href="#" style={{ color: 'inherit', textDecoration: 'none' }}>Methodology</a>
-              <a href="#" style={{ color: 'inherit', textDecoration: 'none' }}>Press</a>
-            </div>
-            <div style={{ fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', fontWeight: 700 }}>
-              © 2026 TheCee — Printed in IST
-            </div>
+    <footer style={{ background: '#050505', padding: '120px 64px', color: 'var(--paper)', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+      <div style={{ maxWidth: 1400, margin: '0 auto', width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 40 }}>
+        <div>
+          <h2 className="font-serif" style={{ fontSize: 56, fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.02em', marginBottom: 24 }}>
+            TheCee
+          </h2>
+          <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.4)', maxWidth: 360, lineHeight: 1.6, fontWeight: 400 }}>
+            The simulation broadsheet. Filed quarterly, on the Internet, since 2026.
           </div>
         </div>
-      </footer>
-    </section>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ display: 'flex', gap: 40, marginBottom: 40, fontSize: 12, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)', fontWeight: 600 }}>
+            <a href="#" style={{ color: 'inherit', textDecoration: 'none' }}>About</a>
+            <a href="#" style={{ color: 'inherit', textDecoration: 'none' }}>Methodology</a>
+            <a href="#" style={{ color: 'inherit', textDecoration: 'none' }}>Press</a>
+          </div>
+          <div style={{ fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', fontWeight: 700 }}>
+            © 2026 TheCee — Printed in IST
+          </div>
+        </div>
+      </div>
+    </footer>
   )
 }
 
@@ -497,7 +430,7 @@ export default function LandingPage() {
       <NarrativeScroll />
       <DirectiveFeatures />
       <Distribution />
-      <SubscriptionsAndCTA setAuthMode={setAuthMode} setAuthOpen={setAuthOpen} />
+      <FooterSection />
       <InlineAuth open={authOpen} onClose={() => setAuthOpen(false)} initialMode={authMode} />
     </div>
   )
