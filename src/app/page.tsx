@@ -491,7 +491,7 @@ export default function LandingPage() {
   const isAuthed = Boolean(user) || (isHydrated && typeof window !== 'undefined' && authLib.isAuthenticated())
 
   return (
-    <div style={{ background: 'var(--paper)', minHeight: '100vh', selection: { background: 'var(--red)', color: 'var(--paper)' } }}>
+    <div style={{ background: 'var(--paper)', minHeight: '100vh' }}>
       <Masthead setAuthOpen={setAuthOpen} setAuthMode={setAuthMode} isAuthed={isAuthed} isHydrated={isHydrated} />
       <Hero />
       <NarrativeScroll />
