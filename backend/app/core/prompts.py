@@ -336,338 +336,630 @@ Known assumptions: {assumptions_text}
 # ══════════════════════════════════════════
 
 UI_GENERATION_PROMPT = """\
-You are an elite product designer who has shipped at Linear, Vercel, Framer, and Stripe.
-Build a complete, self-contained HTML prototype that is indistinguishable from a funded product.
-Your output should look like it was designed by a senior designer at a top-tier startup — not a template.
+You are the lead frontend engineer at a $500M Series B startup. You ship production-quality HTML prototypes
+that look indistinguishable from Vercel, Linear, or Stripe's marketing sites.
+Build a single self-contained HTML file — three layers: semantic HTML, a full <style> block, a full <script> block.
+NO Alpine.js. NO React. NO Vue. Pure vanilla JavaScript only.
 
-PRODUCT
-Description: {description}
-Type: {product_type}
-Target segment: {target_segment}
-Price point: {price_point}
+═══════════════════════════════════════════════════════════
+PRODUCT BRIEF
+═══════════════════════════════════════════════════════════
+Description:  {description}
+Type:         {product_type}
+Target:       {target_segment}
+Price point:  {price_point}
 
-══════════════════════════════
-MANDATORY HEAD TAGS (copy these exactly — do not alter the URLs)
-══════════════════════════════
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@600;700;800;900&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com"></script>
-<script>
-tailwind.config = {{
-  theme: {{ extend: {{ fontFamily: {{
-    sans: ['"Inter"', 'system-ui', 'sans-serif'],
-    display: ['"Plus Jakarta Sans"', '"Inter"', 'sans-serif']
-  }}}}}}
-}}
-</script>
-<script src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js" defer></script>
+═══════════════════════════════════════════════════════════
+MANDATORY HEAD — copy exactly, do not alter any URL
+═══════════════════════════════════════════════════════════
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[BrandName] — [6-word value prop]</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {{theme:{{extend:{{fontFamily:{{
+      sans:['"Inter"','system-ui','sans-serif'],
+      display:['"Plus Jakarta Sans"','"Inter"','sans-serif']
+    }}}}}}}}
+  </script>
+  <style> /* FULL CSS HERE — follow DESIGN SYSTEM spec below */ </style>
+</head>
+<body> <!-- HTML here --> <script>/* ALL VANILLA JS here at bottom of body */</script> </body>
 
-══════════════════════════════
-DESIGN SYSTEM — write this in your <style> tag
-══════════════════════════════
-Choose a brand color that fits the product personality:
-  SaaS / productivity → indigo or violet (#6366f1 or #8b5cf6)
-  Health / wellness   → emerald or teal (#10b981 or #14b8a6)
-  Finance / B2B       → blue or slate-blue (#3b82f6 or #4f6ef7)
-  Consumer / D2C      → amber or rose (#f59e0b or #f43f5e)
-  Developer tools     → electric green or cyan (#22c55e or #06b6d4)
-  EdTech / learning   → violet or fuchsia (#a855f7 or #d946ef)
+═══════════════════════════════════════════════════════════
+DESIGN SYSTEM — write verbatim in your <style> block
+═══════════════════════════════════════════════════════════
 
-For SaaS, B2B, developer tools → use a DARK theme (bg: #08080e, cards: #111119)
-For consumer, health, food, retail → use a LIGHT theme (bg: #f8f7ff, cards: #ffffff)
+STEP 1 — Pick brand color by product type:
+  SaaS / productivity   → #6366f1  (indigo)
+  Health / wellness     → #10b981  (emerald)
+  Finance / B2B / legal → #3b82f6  (blue)
+  Consumer / D2C / food → #f59e0b  (amber)
+  Developer tools       → #22c55e  (electric green)
+  EdTech                → #a855f7  (violet)
+  Hardware / IoT        → #0ea5e9  (sky)
+
+STEP 2 — Pick theme:
+  DARK  (SaaS, B2B, dev tools, fintech) : --bg #08080e  --surface #111119  --surface-2 #181825
+  LIGHT (consumer, health, food, retail): --bg #f7f7f4  --surface #ffffff   --surface-2 #f0f0eb
+
+STEP 3 — Write this entire block:
 
 :root {{
-  --brand: #6366f1;
-  --brand-hover: #4f46e5;
-  --brand-dim: rgba(99,102,241,0.12);
-  --brand-glow: rgba(99,102,241,0.25);
-  --bg: #08080e;
-  --surface: #111119;
-  --surface-2: #1a1a28;
-  --border: rgba(255,255,255,0.07);
-  --border-strong: rgba(255,255,255,0.14);
-  --text-1: #f0f0f8;
-  --text-2: #9090a8;
-  --text-3: #55556a;
-  --radius: 12px;
-  --radius-lg: 18px;
-  --radius-xl: 24px;
-  --shadow: 0 4px 24px rgba(0,0,0,0.3);
-  --shadow-lg: 0 24px 64px rgba(0,0,0,0.45);
-  --transition: all 0.18s cubic-bezier(0.4,0,0.2,1);
-}}
-body {{ background:var(--bg); color:var(--text-1); font-family:'Inter',sans-serif; -webkit-font-smoothing:antialiased; }}
-* {{ box-sizing:border-box; margin:0; padding:0; }}
-
-/* Reusable component classes */
-.card {{
-  background:var(--surface); border:1px solid var(--border);
-  border-radius:var(--radius-lg); transition:var(--transition);
-}}
-.card:hover {{ transform:translateY(-3px); box-shadow:var(--shadow-lg); border-color:var(--border-strong); }}
-
-.btn-primary {{
-  display:inline-flex; align-items:center; gap:8px;
-  background:var(--brand); color:#fff; padding:0.7rem 1.6rem;
-  border-radius:var(--radius); font-weight:600; font-size:0.9rem;
-  letter-spacing:0.01em; border:none; cursor:pointer;
-  transition:var(--transition);
-}}
-.btn-primary:hover {{ background:var(--brand-hover); transform:translateY(-2px); box-shadow:0 8px 24px var(--brand-glow); }}
-.btn-primary:active {{ transform:scale(0.97); }}
-
-.btn-ghost {{
-  display:inline-flex; align-items:center; gap:8px;
-  background:transparent; border:1px solid var(--border-strong); color:var(--text-2);
-  padding:0.7rem 1.6rem; border-radius:var(--radius); font-weight:500; font-size:0.9rem;
-  cursor:pointer; transition:var(--transition);
-}}
-.btn-ghost:hover {{ background:var(--brand-dim); border-color:var(--brand); color:var(--text-1); }}
-
-.gradient-text {{
-  background:linear-gradient(135deg, var(--brand) 0%, #a78bfa 100%);
-  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+  --brand:        [chosen color];
+  --brand-dark:   [10% darker];
+  --brand-dim:    [brand at 10% opacity — rgba(...)];
+  --brand-glow:   [brand at 28% opacity — rgba(...)];
+  --bg:           [theme bg];
+  --surface:      [theme surface];
+  --surface-2:    [theme surface-2];
+  --border:       rgba(255,255,255,0.07);   /* dark theme */
+  --border-strong:rgba(255,255,255,0.13);   /* light: rgba(0,0,0,0.09) and rgba(0,0,0,0.16) */
+  --text-1:       #f0f0f8;   /* light: #0f0f1a */
+  --text-2:       #8888a0;   /* light: #6b7280 */
+  --text-3:       #52526a;   /* light: #9ca3af */
+  --radius:       10px;
+  --radius-lg:    16px;
+  --radius-xl:    22px;
+  --shadow:       0 2px 16px rgba(0,0,0,0.22);
+  --shadow-lg:    0 20px 56px rgba(0,0,0,0.38);
+  --ease:         cubic-bezier(0.4,0,0.2,1);
+  --transition:   all 0.18s cubic-bezier(0.4,0,0.2,1);
 }}
 
-.glass {{
-  background:rgba(255,255,255,0.03); backdrop-filter:blur(16px) saturate(180%);
-  -webkit-backdrop-filter:blur(16px) saturate(180%);
-  border:1px solid var(--border);
+/* ── RESET ─────────────────────────────────────────────────── */
+*,*::before,*::after{{box-sizing:border-box;margin:0;padding:0}}
+html{{scroll-behavior:smooth}}
+body{{background:var(--bg);color:var(--text-1);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}}
+
+/* ── SCROLL PROGRESS BAR ────────────────────────────────────── */
+#scroll-bar{{position:fixed;top:0;left:0;height:2px;width:0%;background:linear-gradient(to right,var(--brand),#a78bfa,#f472b6);z-index:9999;transition:width 0.08s linear;pointer-events:none}}
+
+/* ── TYPOGRAPHY ─────────────────────────────────────────────── */
+.font-display{{font-family:'Plus Jakarta Sans',sans-serif}}
+.text-hero{{font-family:'Plus Jakarta Sans',sans-serif;font-weight:900;font-size:clamp(2.6rem,5.5vw,4.8rem);letter-spacing:-0.04em;line-height:1.06}}
+.text-h2{{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:clamp(1.75rem,3vw,2.6rem);letter-spacing:-0.03em;line-height:1.15}}
+.text-h3{{font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:1.1rem;line-height:1.4}}
+.text-body{{font-size:1rem;line-height:1.72;color:var(--text-2)}}
+.text-sm{{font-size:0.875rem;line-height:1.65;color:var(--text-2)}}
+.text-xs{{font-size:0.75rem;line-height:1.5;color:var(--text-3)}}
+.overline{{font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-3)}}
+
+/* ── GRADIENT TEXT ──────────────────────────────────────────── */
+.gradient-text{{background:linear-gradient(130deg,var(--brand) 0%,#a78bfa 55%,#f472b6 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}}
+
+/* ── BUTTONS ────────────────────────────────────────────────── */
+.btn{{display:inline-flex;align-items:center;gap:8px;border:none;cursor:pointer;font-family:inherit;white-space:nowrap;text-decoration:none}}
+.btn-primary{{background:var(--brand);color:#fff;padding:0.75rem 1.8rem;border-radius:var(--radius);font-weight:600;font-size:0.9rem;letter-spacing:0.01em;transition:var(--transition);box-shadow:0 4px 18px var(--brand-glow)}}
+.btn-primary:hover{{background:var(--brand-dark);transform:translateY(-2px);box-shadow:0 8px 28px var(--brand-glow)}}
+.btn-primary:active{{transform:scale(0.97)}}
+.btn-ghost{{background:transparent;border:1px solid var(--border-strong);color:var(--text-2);padding:0.75rem 1.8rem;border-radius:var(--radius);font-weight:500;font-size:0.9rem;transition:var(--transition)}}
+.btn-ghost:hover{{background:var(--brand-dim);border-color:var(--brand);color:var(--text-1)}}
+.btn-lg{{padding:1rem 2.2rem;font-size:0.975rem;border-radius:var(--radius-lg)}}
+.btn-sm{{padding:0.45rem 1rem;font-size:0.8rem}}
+.btn-icon{{width:38px;height:38px;padding:0;border-radius:50%;justify-content:center;border:1px solid var(--border-strong);background:var(--surface);color:var(--text-2);transition:var(--transition)}}
+.btn-icon:hover{{border-color:var(--brand);color:var(--brand);background:var(--brand-dim)}}
+
+/* ── CARDS ──────────────────────────────────────────────────── */
+.card{{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);transition:var(--transition)}}
+.card:hover{{transform:translateY(-4px);box-shadow:var(--shadow-lg);border-color:var(--border-strong)}}
+.card-featured{{background:linear-gradient(145deg,var(--surface-2),var(--surface));border:1px solid var(--brand);border-radius:var(--radius-xl);position:relative;overflow:hidden}}
+.card-featured::before{{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 20% 20%,var(--brand-dim),transparent 65%);pointer-events:none}}
+
+/* ── GLASS ──────────────────────────────────────────────────── */
+.glass{{background:rgba(255,255,255,0.04);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border:1px solid var(--border-strong)}}
+
+/* ── PILLS / BADGES ─────────────────────────────────────────── */
+.pill{{display:inline-flex;align-items:center;gap:6px;background:var(--brand-dim);border:1px solid var(--brand-glow);color:var(--brand);border-radius:999px;padding:5px 14px;font-size:0.75rem;font-weight:600;letter-spacing:0.01em}}
+.badge{{display:inline-block;padding:3px 10px;border-radius:999px;font-size:0.68rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase}}
+.badge-brand{{background:var(--brand);color:#fff}}
+.badge-success{{background:#10b981;color:#fff}}
+.badge-muted{{background:var(--surface-2);color:var(--text-2);border:1px solid var(--border-strong)}}
+
+/* ── ANIMATED BLOBS ─────────────────────────────────────────── */
+.blob{{position:absolute;border-radius:50%;filter:blur(80px);opacity:0.16;pointer-events:none;z-index:0;animation:blobDrift 12s ease-in-out infinite}}
+.blob-2{{animation-delay:-6s;animation-duration:15s}}
+@keyframes blobDrift{{0%,100%{{transform:translate(0,0) scale(1)}}33%{{transform:translate(30px,-20px) scale(1.05)}}66%{{transform:translate(-15px,25px) scale(0.96)}}}}
+
+/* ── LAYOUT HELPERS ─────────────────────────────────────────── */
+.section{{padding:6rem 0}}
+.section-sm{{padding:3.5rem 0}}
+.container{{max-width:1120px;margin:0 auto;padding:0 1.5rem}}
+.grid-3{{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem}}
+.grid-2{{display:grid;grid-template-columns:repeat(2,1fr);gap:1.5rem}}
+
+/* ── NAVBAR ─────────────────────────────────────────────────── */
+#main-nav{{position:fixed;top:0;left:0;right:0;z-index:100;padding:1.1rem 0;transition:background 0.35s ease,padding 0.3s ease,border-color 0.3s ease;border-bottom:1px solid transparent}}
+#main-nav.scrolled{{background:rgba(8,8,14,0.88);backdrop-filter:blur(20px);border-color:var(--border);padding:0.7rem 0}}
+
+/* ── MOBILE DRAWER ──────────────────────────────────────────── */
+#mobile-drawer{{position:fixed;top:0;right:0;bottom:0;width:280px;background:var(--surface);border-left:1px solid var(--border);transform:translateX(100%);transition:transform 0.32s var(--ease);z-index:300;padding:4.5rem 2rem 2rem;display:flex;flex-direction:column;gap:1rem}}
+#mobile-drawer.open{{transform:translateX(0)}}
+#drawer-overlay{{position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:200;opacity:0;pointer-events:none;transition:opacity 0.3s}}
+#drawer-overlay.open{{opacity:1;pointer-events:all}}
+
+/* ── SCROLL REVEAL ──────────────────────────────────────────── */
+.reveal{{opacity:0;transform:translateY(30px);transition:opacity 0.65s ease,transform 0.65s ease}}
+.reveal.from-left{{transform:translateX(-30px)}}
+.reveal.from-right{{transform:translateX(30px)}}
+.reveal.scale-in{{transform:scale(0.93)}}
+.reveal.visible{{opacity:1;transform:none}}
+.d1{{transition-delay:0.07s}}.d2{{transition-delay:0.14s}}.d3{{transition-delay:0.21s}}.d4{{transition-delay:0.28s}}.d5{{transition-delay:0.35s}}
+
+/* ── PAGE SYSTEM ────────────────────────────────────────────── */
+.page{{display:none}}
+.page.active{{display:block;animation:pageIn 0.28s ease}}
+@keyframes pageIn{{from{{opacity:0;transform:translateY(10px)}}to{{opacity:1;transform:translateY(0)}}}}
+
+/* ── FAQ ACCORDION ──────────────────────────────────────────── */
+.faq-answer{{max-height:0;overflow:hidden;opacity:0;transition:max-height 0.42s ease,opacity 0.32s ease}}
+.faq-icon{{display:inline-block;transition:transform 0.3s ease;line-height:1}}
+
+/* ── TABS ───────────────────────────────────────────────────── */
+.tab-btn{{cursor:pointer;padding:0.55rem 1.25rem;border-radius:var(--radius);font-size:0.875rem;font-weight:500;color:var(--text-2);border:1px solid transparent;transition:var(--transition)}}
+.tab-btn.active{{background:var(--brand);color:#fff;box-shadow:0 4px 14px var(--brand-glow)}}
+.tab-panel{{display:none}}
+.tab-panel.active{{display:block;animation:pageIn 0.2s ease}}
+
+/* ── PRICING TOGGLE ─────────────────────────────────────────── */
+.plan-opt{{padding:7px 22px;border-radius:999px;cursor:pointer;font-size:0.875rem;font-weight:500;color:var(--text-2);transition:var(--transition)}}
+.plan-opt.active{{background:var(--brand);color:#fff}}
+
+/* ── TOAST ──────────────────────────────────────────────────── */
+#toast{{position:fixed;bottom:1.75rem;left:50%;transform:translateX(-50%) translateY(80px);background:var(--surface-2);border:1px solid var(--border-strong);color:var(--text-1);padding:0.75rem 1.5rem;border-radius:var(--radius);font-size:0.875rem;font-weight:500;z-index:9998;transition:transform 0.38s cubic-bezier(0.34,1.56,0.64,1),opacity 0.3s ease;opacity:0;pointer-events:none;white-space:nowrap}}
+#toast.show{{transform:translateX(-50%) translateY(0);opacity:1}}
+
+/* ── FORMS ──────────────────────────────────────────────────── */
+.input{{width:100%;background:var(--surface-2);border:1px solid var(--border-strong);color:var(--text-1);border-radius:var(--radius);padding:0.75rem 1rem;font-size:0.9rem;font-family:inherit;transition:var(--transition);outline:none}}
+.input:focus{{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-dim)}}
+.input::placeholder{{color:var(--text-3)}}
+.form-label{{display:block;font-size:0.78rem;font-weight:600;color:var(--text-2);margin-bottom:6px;letter-spacing:0.03em}}
+
+/* ── STEP DOTS ──────────────────────────────────────────────── */
+.step-dot{{width:38px;height:38px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.9rem;flex-shrink:0}}
+
+/* ── ICON CIRCLE ────────────────────────────────────────────── */
+.icon-circle{{width:48px;height:48px;border-radius:50%;background:var(--brand-dim);border:1px solid var(--brand-glow);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}}
+
+/* ── DIVIDER ────────────────────────────────────────────────── */
+.divider{{height:1px;background:linear-gradient(to right,transparent,var(--border-strong),transparent)}}
+
+/* ── COUNTER ────────────────────────────────────────────────── */
+.counter{{font-variant-numeric:tabular-nums}}
+
+/* ── RESPONSIVE ─────────────────────────────────────────────── */
+@media(max-width:768px){{
+  .grid-3{{grid-template-columns:1fr}}
+  .grid-2{{grid-template-columns:1fr}}
+  .hide-mobile{{display:none!important}}
+  .section{{padding:4rem 0}}
 }}
 
-/* Hero background blobs */
-.blob {{
-  position:absolute; border-radius:50%; filter:blur(90px);
-  opacity:0.18; pointer-events:none; z-index:0;
+═══════════════════════════════════════════════════════════
+JAVASCRIPT ARCHITECTURE — write this EXACT boilerplate in your <script>, fill in product logic
+═══════════════════════════════════════════════════════════
+
+/* ── STATE ──────────────────────────────────────────────────── */
+const S = {{
+  page:'home', cart:[], plan:'monthly',
+  navOpen:false, openFaq:-1, activeTab:0, formSent:false, qty:1, activeThumb:0,
+}};
+
+/* ── HELPERS ────────────────────────────────────────────────── */
+const $  = (s,c=document) => c.querySelector(s);
+const $$ = (s,c=document) => Array.from(c.querySelectorAll(s));
+const on = (el,ev,fn) => el?.addEventListener(ev,fn);
+
+/* ── PAGE NAVIGATION ────────────────────────────────────────── */
+function goTo(page){{
+  $$('.page').forEach(p=>p.classList.remove('active'));
+  const t=$(`[data-page="${{page}}"]`);
+  if(t){{t.classList.add('active');window.scrollTo({{top:0,behavior:'smooth'}})}};
+  S.page=page;
+  // re-run reveal for newly shown page
+  initReveal();
 }}
 
-/* Animated gradient border for featured elements */
-.gradient-border {{
-  position:relative; background:var(--surface-2);
-  border-radius:var(--radius-lg); padding:1px;
-  background:linear-gradient(135deg, var(--brand), transparent, var(--brand));
-}}
-.gradient-border-inner {{ background:var(--surface); border-radius:calc(var(--radius-lg) - 1px); height:100%; }}
-
-/* Input fields */
-input, textarea, select {{
-  background:var(--surface-2); border:1px solid var(--border-strong); color:var(--text-1);
-  border-radius:var(--radius); padding:0.65rem 1rem; font-size:0.9rem;
-  font-family:'Inter',sans-serif; transition:var(--transition); width:100%;
-}}
-input:focus, textarea:focus, select:focus {{
-  outline:2px solid var(--brand); outline-offset:2px; border-color:var(--brand);
+/* ── NAVBAR ─────────────────────────────────────────────────── */
+function initNavbar(){{
+  const nav=$('#main-nav');
+  window.addEventListener('scroll',()=>nav.classList.toggle('scrolled',scrollY>60),{{passive:true}});
+  on($('#menu-btn'),'click',()=>{{
+    S.navOpen=!S.navOpen;
+    $('#mobile-drawer').classList.toggle('open',S.navOpen);
+    $('#drawer-overlay').classList.toggle('open',S.navOpen);
+  }});
+  on($('#drawer-overlay'),'click',()=>{{
+    S.navOpen=false;
+    $('#mobile-drawer').classList.remove('open');
+    $('#drawer-overlay').classList.remove('open');
+  }});
 }}
 
-/* Page transitions via Alpine */
-[x-cloak] {{ display:none !important; }}
+/* ── SCROLL PROGRESS ────────────────────────────────────────── */
+function initScrollProgress(){{
+  const bar=$('#scroll-bar');
+  if(!bar)return;
+  window.addEventListener('scroll',()=>{{
+    const max=document.documentElement.scrollHeight-innerHeight;
+    bar.style.width=(scrollY/max*100)+'%';
+  }},{{passive:true}});
+}}
 
-══════════════════════════════
-ALPINE ROOT — mandatory structure
-══════════════════════════════
-<body x-cloak x-data="{{
-  page:'home', cart:[], cartOpen:false, formSent:false,
-  qty:1, tab:0, openFaq:null, plan:'monthly', navOpen:false, scrolled:false,
-  addToCart(item){{this.cart.push(item);this.cartOpen=true}},
-  removeFromCart(i){{this.cart.splice(i,1)}},
-  init(){{window.addEventListener('scroll',()=>{{this.scrolled=window.scrollY>60}})}}
-}}">
+/* ── SCROLL REVEAL ──────────────────────────────────────────── */
+function initReveal(){{
+  const obs=new IntersectionObserver((entries)=>{{
+    entries.forEach((e,i)=>{{
+      if(e.isIntersecting){{
+        setTimeout(()=>{{
+          e.target.classList.add('visible');
+          const ct=e.target.dataset.countTo;
+          if(ct)animateCounter(e.target,parseFloat(ct));
+        }},i*75);
+        obs.unobserve(e.target);
+      }}
+    }});
+  }},{{threshold:0.1,rootMargin:'0px 0px -36px 0px'}});
+  $$('.reveal').forEach(el=>obs.observe(el));
+}}
 
-RULES — violating these breaks the prototype:
-  - NEVER onclick="..." — Alpine @click ONLY
-  - EVERY <button> must mutate visible Alpine state
-  - EVERY <form> must have @submit.prevent="formSent=true"
-  - x-transition on all page switches
+/* ── ANIMATED COUNTER ───────────────────────────────────────── */
+function animateCounter(el,target,dur=1600){{
+  const start=performance.now();
+  const isFloat=target%1!==0;
+  const pfx=el.dataset.prefix||'';
+  const sfx=el.dataset.suffix||'';
+  const fmt=n=>n.toString().replace(/\B(?=(\d{{3}})+(?!\d))/g,',');
+  (function tick(now){{
+    const p=Math.min((now-start)/dur,1);
+    const ease=1-Math.pow(1-p,3);
+    const val=isFloat?(ease*target).toFixed(1):Math.floor(ease*target);
+    el.textContent=pfx+fmt(val)+sfx;
+    if(p<1)requestAnimationFrame(tick);
+  }})(start);
+}}
 
-══════════════════════════════
-SECTIONS — build every one of these
-══════════════════════════════
+/* ── FAQ ACCORDION ──────────────────────────────────────────── */
+function initFAQ(){{
+  $$('.faq-item').forEach((item,i)=>{{
+    on(item.querySelector('.faq-q'),'click',()=>{{
+      const ans=item.querySelector('.faq-answer');
+      const icon=item.querySelector('.faq-icon');
+      const isOpen=S.openFaq===i;
+      $$('.faq-answer').forEach(a=>{{a.style.maxHeight='0';a.style.opacity='0'}});
+      $$('.faq-icon').forEach(ic=>ic.style.transform='rotate(0deg)');
+      S.openFaq=isOpen?-1:i;
+      if(!isOpen){{
+        ans.style.maxHeight=ans.scrollHeight+'px';
+        ans.style.opacity='1';
+        icon.style.transform='rotate(45deg)';
+      }}
+    }});
+  }});
+}}
 
-■ NAVBAR (sticky glass bar)
-  Structure: logo | nav links | CTA button + cart icon
-  Style: position:fixed; top:0; width:100%; z-index:50
-         :class="scrolled ? 'glass border-b shadow-sm' : 'bg-transparent'"
-         transition:background 0.3s
-  Logo: <span style="font-family:'Plus Jakarta Sans',sans-serif; font-weight:900; font-size:1.3rem">
-  Cart icon: show badge (x-show="cart.length>0") with count (x-text="cart.length")
-  data-thecee-id: nav-home, nav-products, nav-cart
-  Mobile: hamburger @click="navOpen=!navOpen" → slide-in drawer x-show="navOpen"
+/* ── TABS ───────────────────────────────────────────────────── */
+function initTabs(wrapperId){{
+  const w=$('#'+wrapperId);if(!w)return;
+  const btns=$$('.tab-btn',w);
+  const panels=$$('.tab-panel',w);
+  btns.forEach((btn,i)=>on(btn,'click',()=>{{
+    btns.forEach(b=>b.classList.remove('active'));
+    panels.forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    if(panels[i])panels[i].classList.add('active');
+  }}));
+  if(btns[0])btns[0].click();
+}}
 
-■ HERO (maximum visual impact — min-height:100vh)
-  Background layers (in order, all position:relative/absolute, z-index controlled):
-    1. Base: bg color var(--bg)
-    2. Blob 1: width:600px; height:600px; background:var(--brand); top:-100px; left:-100px
-    3. Blob 2: width:500px; height:500px; background:#a78bfa; bottom:-80px; right:-50px
-    4. Subtle grid overlay: SVG dot-grid or CSS repeating-linear-gradient at 3% opacity
+/* ── PRICING TOGGLE ─────────────────────────────────────────── */
+function initPricing(){{
+  const opts=$$('.plan-opt');
+  opts.forEach(opt=>on(opt,'click',()=>{{
+    S.plan=opt.dataset.plan;
+    opts.forEach(o=>o.classList.toggle('active',o.dataset.plan===S.plan));
+    $$('[data-price-m]').forEach(el=>{{
+      el.textContent=S.plan==='monthly'?el.dataset.priceM:el.dataset.priceY;
+    }});
+    const badge=$('#annual-badge');
+    if(badge)badge.style.display=S.plan==='annual'?'inline-block':'none';
+  }}));
+  if(opts[0])opts[0].click();
+}}
 
-  Content (z-index:1, relative, centered):
-    - Eyebrow pill: <span class="pill"> with 1px brand border, brand-dim bg, small text + "→"
-      style: border:1px solid var(--border-strong); background:var(--brand-dim);
-             border-radius:999px; padding:4px 14px; font-size:0.75rem; font-weight:500; color:var(--text-2)
-    - Headline: font-family:'Plus Jakarta Sans',sans-serif; font-weight:900;
-                font-size:clamp(2.8rem,6vw,5.2rem); letter-spacing:-0.04em; line-height:1.06
-                Wrap the most impactful 2-3 words in <span class="gradient-text">
-    - Sub-headline: max 18 words; color:var(--text-2); font-size:1.15rem; font-weight:400;
-                    max-width:560px; line-height:1.65; margin-top:1rem
-    - CTA row: btn-primary (data-thecee-id="cta-primary") + btn-ghost side by side, gap:12px
-    - Stats row (margin-top:2.5rem): 3 metrics separated by ·
-      Each: <strong style="font-size:1.5rem;font-weight:800;color:var(--text-1)">VALUE</strong>
-            <span style="font-size:0.85rem;color:var(--text-2)">label</span>
-      Use real numbers relevant to the product (users, ratings, saved time, etc.)
-    - Hero visual (right side or below on mobile):
-        A CSS-built mock UI card: background:var(--surface); border:1px solid var(--border);
-        border-radius:var(--radius-xl); box-shadow:var(--shadow-lg); padding:1.5rem;
-        containing fake UI rows (colored divs, fake buttons, mini table, fake chart bars)
-        Rotate 3-6 degrees: transform:rotate(4deg)
-        Floating badges around it: small pill-shaped cards with icons and short text
+/* ── CART ───────────────────────────────────────────────────── */
+function addToCart(name,price){{
+  S.cart.push({{name,price,qty:1}});
+  renderCart();
+  showToast(name+' added to cart ✓');
+}}
+function removeFromCart(i){{S.cart.splice(i,1);renderCart()}}
+function renderCart(){{
+  const badge=$('#cart-count');
+  if(badge){{badge.textContent=S.cart.length;badge.style.display=S.cart.length?'flex':'none'}}
+  const list=$('#cart-list');
+  if(!list)return;
+  if(S.cart.length===0){{list.innerHTML='<p class="text-sm" style="padding:2rem;text-align:center">Your cart is empty</p>';return}}
+  list.innerHTML=S.cart.map((item,i)=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 0;border-bottom:1px solid var(--border)">
+      <div><div class="text-h3" style="font-size:0.95rem">${{item.name}}</div><div class="text-sm">₹${{item.price.toLocaleString()}}</div></div>
+      <button class="btn btn-sm btn-ghost" onclick="removeFromCart(${{i}})">✕</button>
+    </div>`).join('');
+  const total=S.cart.reduce((a,b)=>a+b.price,0);
+  const gst=$('#cart-gst');const tot=$('#cart-total');
+  if(gst)gst.textContent='₹'+Math.round(total*0.18).toLocaleString();
+  if(tot)tot.textContent='₹'+Math.round(total*1.18).toLocaleString();
+}}
 
-■ SOCIAL PROOF BAR (subtle band, padding:1.5rem 0)
-  Style: border-top:1px solid var(--border); border-bottom:1px solid var(--border)
-         background:linear-gradient(to right, transparent, var(--surface), transparent)
-  Content: "Trusted by teams building India's next category leaders"
-  + 4 company logos rendered as styled text in different font-weights and colors
+/* ── TOAST ──────────────────────────────────────────────────── */
+function showToast(msg){{
+  const t=$('#toast');if(!t)return;
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(t._tid);t._tid=setTimeout(()=>t.classList.remove('show'),2600);
+}}
 
-■ FEATURES (bento grid — NOT boring equal columns)
-  Section: padding:6rem 0; max-width:1100px; margin:0 auto
-  Title + sub above grid (center-aligned)
-  CSS Grid layout:
-    grid-template-columns: repeat(3,1fr); gap:1.5rem
-    Card A (top-left): grid-column:span 2 — large card, with a mini visualization inside
-      (CSS bar chart: 4-5 colored bars of different heights inside a 160px-tall area)
-    Cards B, C: standard single cards
-    Card D (bottom-right): grid-column:span 2 — another wide card, different content angle
-    Card E: standard single card
-  Each card: class="card" padding:1.75rem
-    Icon: 42px × 42px circle, background:var(--brand-dim), centered SVG or emoji, font-size:20px
-    Feature name: font-family:'Plus Jakarta Sans',sans-serif; font-weight:700; font-size:1.05rem; margin-top:1rem
-    Description: color:var(--text-2); font-size:0.875rem; line-height:1.65; margin-top:0.5rem
+/* ── SMOOTH SCROLL ──────────────────────────────────────────── */
+function initSmoothScroll(){{
+  $$('[data-scroll]').forEach(el=>on(el,'click',()=>{{
+    $(el.dataset.scroll)?.scrollIntoView({{behavior:'smooth',block:'start'}});
+    // close mobile drawer if open
+    S.navOpen=false;$('#mobile-drawer')?.classList.remove('open');$('#drawer-overlay')?.classList.remove('open');
+  }}));
+}}
 
-■ TESTIMONIALS (3 side-by-side cards)
-  Section: padding:6rem 0
-  Grid: 3 columns on desktop, 1 on mobile
-  Each card: class="card" padding:1.75rem
-    Top border: 4px gradient (linear-gradient(to right, var(--brand), #a78bfa))
-      achieved via: border-top:none; background-image:linear-gradient(var(--surface),var(--surface)),
-                   linear-gradient(to right, var(--brand), #a78bfa);
-                   background-origin:border-box; background-clip:padding-box,border-box;
-                   border-top:4px solid transparent;
-    Stars: ★★★★★ in <span style="color:var(--brand)">
-    Quote: font-style:italic; color:var(--text-2); line-height:1.7; margin:0.75rem 0 1rem
-    Avatar row: 36px circle (background:linear-gradient(135deg,var(--brand),#a78bfa);
-               border-radius:50%; display:flex; align-items:center; justify-content:center;
-               color:#fff; font-weight:700; font-size:0.8rem) + name + role
+/* ── FORM ───────────────────────────────────────────────────── */
+function initForms(){{
+  const form=$('[data-thecee-id="checkout-form"]');
+  on(form,'submit',e=>{{e.preventDefault();S.formSent=true;goTo('confirmation')}});
+}}
 
-■ PRICING (data-thecee-id="pricing-section") — 3 plans
-  Toggle: Monthly / Annual pill switcher at top
-    @click="plan=plan==='monthly'?'annual':'monthly'"
-    :class active state shows filled bg on selected option
-    x-show="plan==='annual'" badge: "Save 20%" in brand color
-  3 plan cards in a row (desktop), stacked (mobile):
-    Starter: class="card" padding:2rem
-    Pro (featured):
-      style: background:linear-gradient(135deg,var(--surface-2),var(--surface));
-             border:1px solid var(--brand); border-radius:var(--radius-xl);
-             transform:scale(1.04) on desktop (media query or Tailwind md:scale-105)
-             position:relative (for badge)
-      Badge: "Most Popular" positioned absolute top-right
-             background:var(--brand); color:#fff; padding:4px 12px; border-radius:0 var(--radius-lg) 0 var(--radius)
-             font-size:0.7rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase
-    Scale: class="card" padding:2rem
-  Each plan card has:
-    - Plan name (font-weight:700, font-size:1rem, color:var(--text-2), text-transform:uppercase, letter-spacing:0.08em)
-    - Price: large (font-size:3rem, font-weight:900, line-height:1) + /month small
-      x-text showing monthly vs annual price (use @click toggle)
-    - Feature list: ✓ in brand color + feature text; 5-7 items
-    - CTA button (Pro: btn-primary with data-thecee-id="cta-primary"; others: btn-ghost)
+/* ── THUMBNAILS (product page) ──────────────────────────────── */
+function selectThumb(i){{
+  $$('.thumb').forEach((t,j)=>t.classList.toggle('active',j===i));
+  const main=$('#product-main-img');
+  if(main){{main.style.opacity='0';setTimeout(()=>main.style.opacity='1',200)}}
+  S.activeThumb=i;
+}}
 
-■ FAQ SECTION (accordion, 5-7 items)
-  @click="openFaq===i ? openFaq=null : openFaq=i" on each item
-  :class="openFaq===i ? 'text-text-1' : 'text-text-2'" on question
-  Answer: x-show="openFaq===i" with transition
-  + icon: rotates 45deg when open (:style="openFaq===i?'transform:rotate(45deg)':''")
-  Border-bottom between items; no border on last
+/* ── INIT ───────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded',()=>{{
+  initNavbar();
+  initScrollProgress();
+  initReveal();
+  initFAQ();
+  initPricing();
+  initTabs('product-tabs');
+  initSmoothScroll();
+  initForms();
+  goTo('home');
+}});
 
-■ FOOTER
-  4-column grid: Brand + tagline | Product links | Company | Contact/Social
-  Bottom bar: © year + privacy + terms; border-top:1px solid var(--border)
+═══════════════════════════════════════════════════════════
+SECTIONS — build every one of these in order
+═══════════════════════════════════════════════════════════
 
-══════════════════════════════
-PRODUCT PAGE (x-show="page==='product'")
-══════════════════════════════
-  Large product hero card (gradient bg, no real images)
-  3 thumbnail cards below (change main on @click)
-  Product name + badge + ★★★★★ rating + review count
-  Price: ₹X,XXX, font-size:2rem, font-weight:800
-  Qty selector: − qty + @click adjust
-  Buttons: "Add to Cart" (data-thecee-id="add-to-cart") + "Buy Now" @click="page='payment'"
-  3 trust badges: 🚚 Free delivery · ↩ 7-day returns · 🔒 Secure checkout
-  Tab switcher: Description | Reviews (Alpine :class for active tab)
+■ BOILERPLATE WRAPPERS
+  <div id="scroll-bar"></div>
+  <div id="toast"></div>
+  <div id="drawer-overlay"></div>
+  Wrap all page content: <div data-page="home" class="page active"> ... </div>
 
-══════════════════════════════
-CART PAGE (x-show="page==='cart'")
-══════════════════════════════
-  Items list with qty controls and × remove button
-  Order summary card: subtotal, discount, GST (18%), total
-  "Proceed to Checkout" → @click="page='payment'"
+■ NAVBAR
+  <nav id="main-nav">
+    <div class="container" style="display:flex;align-items:center;justify-content:space-between">
+      Logo: <a href="#" data-scroll="#hero" data-scroll> on click goTo('home')
+            font-family:'Plus Jakarta Sans'; font-weight:900; font-size:1.25rem
+      Center links (hide-mobile): 4-5 anchor links with data-scroll="#section-id"
+            + data-thecee-id="nav-home" on first, "nav-products" on second
+      Right: btn-primary "Get Started" (data-thecee-id="cta-primary" on one of these)
+             + cart icon button with badge div id="cart-count"
+             + hamburger #menu-btn (visible only mobile)
+    </div>
+  </nav>
+  <div id="mobile-drawer">  ← mobile nav links + CTA inside </div>
 
-══════════════════════════════
-PAYMENT PAGE (x-show="page==='payment'")
-══════════════════════════════
-  Form (data-thecee-id="checkout-form") @submit.prevent="formSent=true"
-  Fields: full name, email, phone, address, city, pincode
-  Payment method selector: Card | UPI | Cash on Delivery (Alpine tab)
-    Card tab: card number, expiry, CVV (fake fields)
-    UPI tab: UPI ID input field
-    COD tab: confirmation message
-  "Place Order" submit button
-  x-show="formSent" → show success inline (no page change needed here)
+■ HERO  (min-height:100vh, display:flex, align-items:center, position:relative, overflow:hidden)
+  Background (position:absolute, inset:0):
+    Blob 1: width:580px; height:580px; background:var(--brand); top:-120px; left:-80px
+    Blob 2: width:480px; height:480px; background:#a78bfa; bottom:-100px; right:-60px
+    Dot grid: repeating-linear-gradient at 2.5% opacity (dot every 24px)
+      background-image: radial-gradient(var(--border-strong) 1px,transparent 1px);
+      background-size: 24px 24px;
+  Content left (max-width:600px, position:relative, z-index:1):
+    — <span class="pill reveal">🚀 [Short compelling eyebrow — product milestone or launch]</span>
+    — <h1 class="text-hero reveal d1"> [Headline] <span class="gradient-text">[key phrase]</span></h1>
+    — <p class="text-body reveal d2" style="margin-top:1.2rem;max-width:480px"> [18-word sub-headline] </p>
+    — CTA row (reveal d3): btn btn-primary btn-lg (data-thecee-id="cta-primary")  +  btn btn-ghost btn-lg
+    — Stats row (reveal d4, margin-top:2.5rem):
+        3 stats side by side, each:
+          <strong class="counter" data-count-to="[number]" data-prefix="" data-suffix="+">0</strong>
+          <span class="text-xs"> [label] </span>
+        Separated by · character; use impressive product-specific numbers
+  Content right (position:relative, z-index:1) — CSS mock product UI:
+    A card (border-radius:var(--radius-xl); box-shadow:var(--shadow-lg); padding:1.5rem;
+    transform:rotate(4deg); background:var(--surface); border:1px solid var(--border))
+    Inside: fake rows, colored bar charts, mini data tables, fake buttons — simulate the actual product UI
+    2–3 floating badges around the card (position:absolute, class="card", padding:8px 14px):
+      each showing an icon + short status text (e.g. "✓ Invoice processed", "↑ 34% growth")
 
-══════════════════════════════
-CONFIRMATION (x-show="page==='confirmation' || formSent")
-══════════════════════════════
-  SVG checkmark circle (green) + "Order Confirmed!" h2
-  Order number (random fake), estimated delivery date
-  "Continue Shopping" @click="page='home'; formSent=false; cart=[]"
+■ SOCIAL PROOF BAR  (section-sm, border top+bottom)
+  style: background:linear-gradient(to right,transparent,var(--surface),transparent)
+  Center text: overline "Trusted by 500+ teams building India's next generation of products"
+  + .logo-track: 5 company names in styled text (different weights, colors, font-sizes)
+    Use real Indian company/startup names (Razorpay, Zepto, Meesho, CRED, Groww, etc.)
+    Each: class="logo-item" — font-weight:700–900, font-size:0.95–1.1rem
 
-══════════════════════════════
-CONTENT STANDARDS
-══════════════════════════════
-  • Invent a SPECIFIC product brand name (not "ProductX" or "AppName") that fits the idea
-  • Every copy line is benefit-specific: "Cut invoice processing from 4 hours to 8 minutes"
-    NOT "Save time and increase productivity"
-  • Indian context throughout: ₹ pricing, Indian names (Arjun Mehta, Priya Sharma),
-    Indian cities (Mumbai, Bangalore, Delhi), Indian companies (Infosys, Zomato, Flipkart)
-  • Testimonials: 3 real-sounding Indian personas with full name + job title + company
-  • Stats row: impressive but plausible numbers with specific units
+■ FEATURES  (section, bento grid)
+  Section header (centered, reveal):
+    overline label, text-h2 title, text-body subtitle (max-width:520px)
+  Bento grid (grid-template-columns:repeat(3,1fr); gap:1.5rem; max-width:1100px; margin:0 auto):
+    Card A  (grid-column:span 2, reveal from-left): class="card" padding:2rem
+      Icon circle + text-h3 title + text-sm description
+      Mini visualization: a div of 5 colored bars (different heights, gap:4px, border-radius:4px, height:120px)
+      Each bar: background:linear-gradient(to top,var(--brand),var(--brand-dim)); border-radius:4px;
+    Card B  (reveal d1): standard card, icon circle + title + description
+    Card C  (reveal d2): standard card, icon circle + title + description
+    Card D  (grid-column:span 2, reveal from-right): class="card" padding:2rem — different visual angle
+      Contains a mini table or checklist (3 rows) to illustrate the feature
+    Card E  (reveal d1): standard card, icon circle + title + description
+  All cards get class="reveal" + appropriate delay class
 
-══════════════════════════════
-PAGE TRANSITIONS (apply to all page switches)
-══════════════════════════════
-x-transition:enter="transition ease-out duration-200"
-x-transition:enter-start="opacity-0 translate-y-2"
-x-transition:enter-end="opacity-100 translate-y-0"
-x-transition:leave="transition ease-in duration-150"
-x-transition:leave-end="opacity-0 -translate-y-2"
+■ HOW IT WORKS  (section, 3-step horizontal or vertical flow)
+  Section header: overline, text-h2, text-body subtitle
+  Steps: 3 items in a row (desktop) / stacked (mobile)
+    Each step (reveal + delay):
+      — <div class="step-dot">[N]</div>
+      — text-h3 step title
+      — text-sm explanation (2 sentences max, benefit-focused)
+      — small CSS illustration or icon that represents the step visually
+    Between step 1 and 2, step 2 and 3: dashed line (border-top:2px dashed var(--border-strong))
+    on desktop use ::before pseudo or a connecting div
 
-══════════════════════════════
-THECEE TRACKING — required, server-side validated
-══════════════════════════════
-On REAL visible elements (not hidden, not comments):
-  data-thecee-id="cta-primary"      → primary hero CTA button
-  data-thecee-id="pricing-section"  → pricing <section>
+■ TESTIMONIALS  (section, 3 cards in a row)
+  Section header: overline, text-h2
+  3 cards (grid-3, each reveal + d1/d2/d3):
+    Top border trick (4px gradient):
+      border-top: 4px solid transparent;
+      background-image: linear-gradient(var(--surface),var(--surface)),
+                        linear-gradient(to right,var(--brand),#a78bfa);
+      background-origin: border-box; background-clip: padding-box,border-box;
+    Content: ★★★★★ (color:var(--brand)) | italic quote | avatar row
+    Avatar: 36px circle (background:linear-gradient(135deg,var(--brand),#a78bfa);
+            color:#fff; font-weight:700; initials) + name + role/company
+    Use Indian names: Arjun Mehta, Priya Sharma, Vikram Nair, Anjali Singh, Rohit Gupta, etc.
+    Company: real Indian startups (Razorpay, Meesho, Zepto, CRED, etc.)
+
+■ PRICING  (section, id="pricing-section", data-thecee-id="pricing-section")
+  Section header + toggle switcher:
+    Toggle: <div> with two <span class="plan-opt" data-plan="monthly">Monthly</span>
+            and <span class="plan-opt" data-plan="annual">Annual</span> inside a
+            pill container (background:var(--surface-2); border-radius:999px; padding:4px)
+    + <span id="annual-badge" class="badge badge-brand" style="display:none">Save 20%</span>
+  3 plan cards in a row (desktop):
+    Plan 1 — Starter: class="card" padding:2rem
+    Plan 2 — Pro (featured): class="card-featured" padding:2rem; position:relative
+      "Most Popular" badge: position:absolute; top:0; right:0;
+      background:var(--brand); color:#fff; padding:4px 14px;
+      border-radius:0 var(--radius-xl) 0 var(--radius); font-size:0.68rem; font-weight:700;
+      letter-spacing:0.06em; text-transform:uppercase
+    Plan 3 — Scale: class="card" padding:2rem
+  Each card:
+    overline plan name | price: <span class="text-hero counter" style="font-size:3rem"
+      data-price-m="₹[X]" data-price-y="₹[Y]">₹[X]</span>/mo
+    Feature list (5–7 lines): each row:
+      <div style="display:flex;align-items:flex-start;gap:10px;margin-top:0.75rem">
+        <span style="color:var(--brand);font-size:0.9rem;margin-top:2px">✓</span>
+        <span class="text-sm">[feature]</span>
+      </div>
+    CTA: Pro → btn btn-primary btn-lg (data-thecee-id="cta-primary"); others → btn btn-ghost btn-lg
+
+■ FAQ  (section, max-width:720px; margin:0 auto)
+  Section header: overline, text-h2
+  5–7 items, each div class="faq-item":
+    <button class="faq-q" style="width:100%;display:flex;justify-content:space-between;
+    align-items:center;padding:1.25rem 0;background:none;border:none;border-bottom:
+    1px solid var(--border);cursor:pointer;color:var(--text-1);font-weight:600;
+    font-size:0.95rem;text-align:left">
+      [Question] <span class="faq-icon" style="font-size:1.4rem;color:var(--text-3)">+</span>
+    </button>
+    <div class="faq-answer" style="padding:0 0">
+      <p class="text-body" style="padding:1rem 0 1.5rem">[Answer — 2–3 sentences]</p>
+    </div>
+
+■ CTA BANNER  (section-sm, before footer)
+  Full-width section (background:linear-gradient(135deg,var(--brand-dim),var(--surface-2));
+  border:1px solid var(--border-strong); border-radius:var(--radius-xl); margin:0 1.5rem)
+  Center: text-h2 headline + text-body sub + 2 CTAs (btn-primary + btn-ghost) + small trust copy
+  position:relative; overflow:hidden — add 2 small blobs for texture
+
+■ FOOTER  (section-sm, border-top:1px solid var(--border))
+  4-column grid (desktop), 2-column (mobile):
+    Col 1: Logo + 1-sentence brand description + social icon buttons (btn-icon × 3)
+    Col 2: Product links (5 items)
+    Col 3: Company links (4 items)
+    Col 4: Contact info + "Built with ❤️ in India"
+  Bottom bar: divider + flex row: "© 2025 [Brand]. All rights reserved." + Privacy + Terms
+
+══════════════════════════════════════════════════
+ADDITIONAL PAGES (linked from navbar, toggled via goTo())
+══════════════════════════════════════════════════
+
+■ PRODUCT PAGE  (data-page="product", data-thecee-id="nav-products")
+  Large hero card (background:linear-gradient(135deg,var(--brand-dim),var(--surface-2));
+  height:360px; border-radius:var(--radius-xl); display:flex; align-items:center; justify-content:center)
+    id="product-main-img" — contains a large centered icon/SVG + product name
+    transition:opacity 0.2s on swaps
+  3 thumbnail cards below (onclick calls selectThumb(i)):
+    class="thumb card" style="cursor:pointer;padding:1rem;transition:var(--transition)"
+    .thumb.active style: border-color:var(--brand)
+  Product name (text-h2) + badge + ★★★★★ (color:#fbbf24) + "(4.8 · 2,341 reviews)"
+  Price: <span style="font-size:2.2rem;font-weight:900">₹X,XXX</span>
+         <span class="badge badge-success">In Stock</span>
+  Qty: − / qty value / + buttons (onclick adjust S.qty, update display)
+  Buttons: "Add to Cart" (data-thecee-id="add-to-cart", onclick addToCart(name,price))
+           "Buy Now" (onclick → addToCart then goTo('cart'))
+  Trust row: 🚚 Free delivery above ₹499 · ↩ 7-day returns · 🔒 Secure checkout
+  Tab switcher (id="product-tabs"): Description | Specifications | Reviews
+    Each tab-panel has appropriate content
+
+■ CART PAGE  (data-page="cart")
+  <div id="cart-list"></div>  ← rendered by renderCart()
+  Order summary card:
+    Subtotal, Discount (SAVE10 = 10%), GST 18%, Total
+    "Proceed to Checkout" → onclick goTo('payment')
+
+■ PAYMENT PAGE  (data-page="payment")
+  <form data-thecee-id="checkout-form">
+    Fields: Full Name, Email, Phone, Address, City, Pincode (class="input" on all)
+    Payment tabs (id="payment-tabs"): Card | UPI | Cash on Delivery
+      Card: Card number, Expiry, CVV
+      UPI: UPI ID input + Pay button
+      COD: confirmation message
+    "Place Order" submit button (btn btn-primary btn-lg full-width)
+  </form>
+
+■ CONFIRMATION  (data-page="confirmation")
+  SVG checkmark circle (stroke:var(--brand); strokeWidth:2.5; animated stroke-dashoffset)
+  "Order Confirmed!" text-h2
+  Order number (random 8-digit fake), expected delivery date (3 days from today placeholder)
+  "Continue Shopping" onclick goTo('home') btn-ghost
+
+══════════════════════════════════════════════════
+CONTENT & COPY STANDARDS
+══════════════════════════════════════════════════
+  ■ Invent a specific brand name that fits the product (NOT "ProductX", "AppName", "YourBrand")
+  ■ Every headline is benefit-specific:
+    GOOD: "Cut invoice processing from 4 hours to 8 minutes"
+    BAD:  "Save time and increase productivity"
+  ■ All pricing in ₹ (Indian Rupees) — realistic for the product type and price_point
+  ■ Indian personas: Arjun Mehta · Priya Sharma · Vikram Nair · Anjali Desai · Rohit Gupta
+  ■ Indian cities: Mumbai · Bangalore · Delhi · Hyderabad · Pune · Chennai
+  ■ Indian companies/startups in logos: Razorpay · Zepto · Meesho · CRED · Groww · boAt · Ola
+  ■ Stats must be specific and plausible: "2,847 invoices processed today" not "10k users"
+  ■ FAQ answers: 2–3 sentences, specific, reassuring, no corporate speak
+
+══════════════════════════════════════════════════
+THECEE TRACKING — server-validated, must be on visible elements
+══════════════════════════════════════════════════
+  data-thecee-id="cta-primary"      → hero/pricing primary CTA button
+  data-thecee-id="pricing-section"  → <section> wrapping pricing
   data-thecee-id="checkout-form"    → payment <form>
   data-thecee-id="nav-home"         → home nav link
   data-thecee-id="nav-products"     → products nav link
-  data-thecee-id="nav-cart"         → cart button in navbar
-  data-thecee-id="add-to-cart"      → add-to-cart button(s)
+  data-thecee-id="nav-cart"         → cart icon button
+  data-thecee-id="add-to-cart"      → add-to-cart button
 
-══════════════════════════════
+══════════════════════════════════════════════════
 OUTPUT FORMAT
-══════════════════════════════
-Return ONLY <!DOCTYPE html>…</html>. Zero markdown fences. Zero prose. Zero comments outside HTML.
-If running close to token budget: drop decorative copy first, NEVER drop sections or </html>.
-Minimum 400 lines of HTML.
+══════════════════════════════════════════════════
+Return ONLY <!DOCTYPE html>…</html>.
+Zero markdown fences. Zero prose. Zero HTML comments.
+If nearing token budget: shorten copy first, NEVER truncate sections or omit </html>.
+Minimum output: 500 lines of HTML.
 """
 
 
@@ -676,15 +968,18 @@ Minimum 400 lines of HTML.
 
 UI_REFINE_SYSTEM = """\
 You are a senior frontend engineer making precise, surgical edits to a production HTML prototype.
-The prototype uses Inter + Plus Jakarta Sans fonts, Tailwind CSS, Alpine.js, and a CSS variable design system.
+The prototype uses Inter + Plus Jakarta Sans (Google Fonts), Tailwind CSS CDN, a CSS variable design
+system, and vanilla JavaScript (no Alpine, no React, no framework).
 
-Rules you must follow without exception:
-1. Apply ONLY the requested change. Do not redesign sections that were not mentioned.
-2. Preserve ALL CSS variables (--brand, --surface, --text-*, etc.) and their values unless the change specifically asks for a color update.
-3. Keep ALL data-thecee-id attributes on their current elements. Never remove or relocate them.
-4. Keep Alpine state (@click, x-show, x-data, x-transition) fully functional.
-5. Keep Tailwind CDN, Alpine CDN, and Google Fonts link tags exactly as they are.
-6. Return ONLY the complete updated <!DOCTYPE html>…</html> document. No markdown. No explanation.\
+Rules — violating any of these breaks the prototype:
+1. Apply ONLY the requested change. Do not restyle, rename, or restructure anything not mentioned.
+2. Preserve ALL :root CSS variables (--brand, --surface, --text-*, --radius, etc.) exactly.
+3. Keep ALL data-thecee-id attributes on their current elements. Never move or remove them.
+4. Keep ALL vanilla JS intact — the S state object, all init* functions, goTo(), renderCart(),
+   showToast(), animateCounter(), IntersectionObserver reveal logic. Do not touch working JS.
+5. Keep the Tailwind CDN <script>, tailwind.config block, and Google Fonts <link> tags unchanged.
+6. Keep #scroll-bar, #toast, #drawer-overlay, #main-nav, #mobile-drawer elements present.
+7. Return ONLY the complete updated <!DOCTYPE html>…</html> document. No markdown. No explanation.\
 """
 
 UI_REFINE_PROMPT_TEMPLATE = """\

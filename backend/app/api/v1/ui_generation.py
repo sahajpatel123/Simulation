@@ -26,9 +26,8 @@ _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}
 _HTML_200 = {200: {"description": "HTML document", "content": {"text/html": {}}}}
 _PDF_200 = {200: {"description": "PDF file", "content": {"application/pdf": {}}}}
 
-ALLOWED_CDNS = ["tailwindcss", "alpinejs", "cdn.tailwindcss", "jsdelivr.net/npm/alpinejs"]
+ALLOWED_CDNS = ["tailwindcss", "cdn.tailwindcss"]
 TAILWIND_CDN = '<script src="https://cdn.tailwindcss.com"></script>'
-ALPINE_CDN = '<script src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js" defer></script>'
 
 
 def _new_preview_token() -> str:
@@ -102,21 +101,15 @@ def _coerce_to_html_doc(raw: str) -> str:
 
 
 def _ensure_cdns(html: str) -> str:
-    """Guarantee Tailwind + Alpine CDNs are present (the prototype's design and JS depend on them)."""
+    """Guarantee the Tailwind CDN is present — the prototype's styling depends on it."""
     lower = html.lower()
-    inject: list[str] = []
-    if "cdn.tailwindcss.com" not in lower and "tailwindcss" not in lower:
-        inject.append(TAILWIND_CDN)
-    if "alpinejs" not in lower:
-        inject.append(ALPINE_CDN)
-    if not inject:
+    if "cdn.tailwindcss.com" in lower or "tailwindcss" in lower:
         return html
-    payload = "".join(inject)
     if re.search(r"</head\s*>", html, re.IGNORECASE):
-        return re.sub(r"</head\s*>", payload + "</head>", html, count=1, flags=re.IGNORECASE)
+        return re.sub(r"</head\s*>", TAILWIND_CDN + "</head>", html, count=1, flags=re.IGNORECASE)
     if re.search(r"<body\b[^>]*>", html, re.IGNORECASE):
-        return re.sub(r"(<body\b[^>]*>)", r"\1" + payload, html, count=1, flags=re.IGNORECASE)
-    return payload + html
+        return re.sub(r"(<body\b[^>]*>)", r"\1" + TAILWIND_CDN, html, count=1, flags=re.IGNORECASE)
+    return TAILWIND_CDN + html
 
 
 def _has_tid(html: str, tid: str) -> bool:
