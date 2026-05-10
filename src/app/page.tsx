@@ -202,88 +202,117 @@ function NarrativeScroll() {
   )
 }
 
-/* ─── THE ANATOMY (TECHNICAL BLUEPRINT WITH CONNECTING LINES) ──────────────────────────────────────────── */
-function Anatomy() {
-  const ref = useRef(null)
+/* ─── THE DIRECTIVE (HORIZONTAL SCROLL) ──────────────────────────────────────────── */
+function DirectiveFeatures() {
+  const ref = React.useRef(null)
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] })
-
-  const scale = useTransform(scrollYProgress, [0, 0.2], [0.85, 1])
-  const opacity = useTransform(scrollYProgress, [0, 0.2], [0, 1])
-  const blur = useTransform(scrollYProgress, [0, 0.2], ['blur(20px)', 'blur(0px)'])
-
-  // Triggers for annotations
-  const a1 = useTransform(scrollYProgress, [0.25, 0.35], [0, 1])
-  const a2 = useTransform(scrollYProgress, [0.45, 0.55], [0, 1])
-  const a3 = useTransform(scrollYProgress, [0.65, 0.75], [0, 1])
+  
+  const x = useTransform(scrollYProgress, [0, 1], ['0%', '-66.66%'])
+  
+  // Progress bar
+  const scaleX = useTransform(scrollYProgress, [0, 1], [0, 1])
 
   return (
-    <section ref={ref} style={{ height: '350vh', background: 'var(--paper)', position: 'relative' }}>
-      <div style={{ position: 'sticky', top: 0, height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-        {/* Title */}
-        <div style={{ position: 'absolute', top: 40, textAlign: 'center', zIndex: 10 }}>
-          <div style={{ fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--ink-secondary)', fontWeight: 800, marginBottom: 12 }}>
-            The Architecture
+    <section ref={ref} style={{ height: '400vh', background: 'var(--paper)', position: 'relative' }}>
+      <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        
+        {/* Header */}
+        <div style={{ padding: '60px 48px 0', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', maxWidth: 1600, margin: '0 auto', width: '100%' }}>
+          <div>
+            <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--ink-secondary)', fontWeight: 800, marginBottom: 16 }}>
+              The Output
+            </div>
+            <h2 className="font-serif" style={{ fontSize: 'clamp(40px, 6vw, 80px)', fontWeight: 900, color: 'var(--ink)', letterSpacing: '-0.03em', lineHeight: 1 }}>
+              A clear <span style={{ color: 'var(--red)', fontStyle: 'italic' }}>directive.</span>
+            </h2>
           </div>
-          <h2 className="font-serif" style={{ fontSize: 'clamp(28px, 3vw, 40px)', fontWeight: 900, color: 'var(--ink)', letterSpacing: '-0.02em' }}>
-            The output is a clear directive.
-          </h2>
+          <div style={{ width: 240, height: 2, background: 'rgba(26,23,20,0.1)', position: 'relative', borderRadius: 2 }}>
+            <motion.div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, background: 'var(--red)', scaleX, transformOrigin: 'left', borderRadius: 2 }} />
+          </div>
         </div>
 
-        <motion.div style={{ scale, opacity, filter: blur, WebkitFilter: blur, width: '100%', maxWidth: 1000, position: 'relative' }}>
-          
-          {/* Main Specimen wrapped elegantly */}
-          <div style={{ pointerEvents: 'none', background: '#fff', padding: 40, borderRadius: 24, boxShadow: '0 40px 100px rgba(0,0,0,0.08), 0 10px 40px rgba(0,0,0,0.04)', border: '0.5px solid rgba(0,0,0,0.05)', position: 'relative', zIndex: 5 }}>
-            <DossierSpecimen />
-          </div>
-
-          {/* SVG Connecting Lines - acts as a structural grid */}
-          <svg style={{ position: 'absolute', inset: -100, width: 'calc(100% + 200px)', height: 'calc(100% + 200px)', pointerEvents: 'none', zIndex: 0 }}>
-            {/* Validation Line */}
-            <motion.path d="M 50,300 L 250,300" fill="transparent" stroke="var(--ink)" strokeWidth="0.5" strokeDasharray="4 4" style={{ pathLength: a1, opacity: a1 }} />
-            {/* Channel Fit Line */}
-            <motion.path d="M 1150,450 L 950,450" fill="transparent" stroke="var(--ink)" strokeWidth="0.5" strokeDasharray="4 4" style={{ pathLength: a2, opacity: a2 }} />
-            {/* Pre-mortem Line */}
-            <motion.path d="M 50,600 L 250,600" fill="transparent" stroke="var(--ink)" strokeWidth="0.5" strokeDasharray="4 4" style={{ pathLength: a3, opacity: a3 }} />
-          </svg>
-
-          {/* Annotations */}
-          <motion.div style={{ opacity: a1, y: useTransform(scrollYProgress, [0.25, 0.35], [20, 0]), position: 'absolute', top: 200, left: -220, background: 'rgba(242,236,224,0.9)', backdropFilter: 'blur(10px)', padding: 24, border: '0.5px solid var(--border-color)', width: 280, borderRadius: 16, zIndex: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-              <div style={{ padding: 6, background: 'var(--red)', borderRadius: 8, color: '#fff' }}>
-                <Database size={14} />
+        {/* Horizontal Track */}
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+          <motion.div style={{ display: 'flex', x, width: '300%', paddingLeft: '48px' }}>
+            
+            {/* Slide 1: Specimen Map */}
+            <div style={{ width: '33.33%', paddingRight: 48, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: '100%', maxWidth: 1000, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 80, alignItems: 'center' }}>
+                <div>
+                  <div style={{ padding: 12, background: 'rgba(192,57,43,0.1)', borderRadius: 12, color: 'var(--red)', display: 'inline-block', marginBottom: 24 }}>
+                    <Database size={24} />
+                  </div>
+                  <h3 className="font-serif" style={{ fontSize: 48, fontWeight: 900, marginBottom: 24, lineHeight: 1.1, letterSpacing: '-0.02em' }}>
+                    Hyper-targeted<br/>Validation.
+                  </h3>
+                  <p style={{ fontSize: 18, color: 'var(--ink-secondary)', lineHeight: 1.6, fontWeight: 400 }}>
+                    We don&apos;t ask generalized focus groups. Your idea is exposed to 52 distinct behavioral clusters instantly, measuring exact willingness to pay and feature prioritization before you write a single line of code.
+                  </p>
+                </div>
+                <div style={{ position: 'relative' }}>
+                  <div style={{ position: 'absolute', inset: -20, background: 'radial-gradient(circle, rgba(192,57,43,0.05) 0%, transparent 70%)', zIndex: 0 }} />
+                  <div style={{ background: '#fff', padding: 40, borderRadius: 24, boxShadow: '0 40px 100px rgba(0,0,0,0.08), 0 10px 40px rgba(0,0,0,0.04)', border: '0.5px solid rgba(0,0,0,0.05)', position: 'relative', zIndex: 1 }}>
+                    <DossierSpecimen />
+                  </div>
+                </div>
               </div>
-              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: 800 }}>Validation</div>
             </div>
-            <div style={{ fontSize: 13, color: 'var(--ink-secondary)', lineHeight: 1.6, fontWeight: 500 }}>
-              Tests willingness to pay across 52 behavioral clusters instantly.
-            </div>
-          </motion.div>
 
-          <motion.div style={{ opacity: a2, y: useTransform(scrollYProgress, [0.45, 0.55], [20, 0]), position: 'absolute', top: 350, right: -220, background: 'rgba(242,236,224,0.9)', backdropFilter: 'blur(10px)', padding: 24, border: '0.5px solid var(--border-color)', width: 280, borderRadius: 16, zIndex: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-              <div style={{ padding: 6, background: 'var(--ink)', borderRadius: 8, color: '#fff' }}>
-                <Crosshair size={14} />
+            {/* Slide 2: Channel Fit */}
+            <div style={{ width: '33.33%', paddingRight: 48, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: '100%', maxWidth: 1000, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 80, alignItems: 'center' }}>
+                <div style={{ position: 'relative' }}>
+                  <div style={{ background: 'var(--ink)', color: 'var(--paper)', padding: 40, borderRadius: 24, boxShadow: '0 40px 100px rgba(0,0,0,0.2)', position: 'relative', zIndex: 1, transform: 'rotate(-2deg)' }}>
+                    <div style={{ fontSize: 12, letterSpacing: '0.2em', textTransform: 'uppercase', opacity: 0.5, marginBottom: 16, fontWeight: 800 }}>Channel Analysis</div>
+                    <div style={{ fontSize: 40, fontWeight: 900, fontFamily: 'var(--font-serif)', letterSpacing: '-0.02em', marginBottom: 24 }}>Instagram vs LinkedIn</div>
+                    <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden', marginBottom: 16 }}>
+                      <div style={{ width: '85%', height: '100%', background: 'var(--red)' }} />
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.7 }}>85% conversion probability on visual networks.</div>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ padding: 12, background: 'rgba(26,23,20,0.05)', borderRadius: 12, color: 'var(--ink)', display: 'inline-block', marginBottom: 24 }}>
+                    <Crosshair size={24} />
+                  </div>
+                  <h3 className="font-serif" style={{ fontSize: 48, fontWeight: 900, marginBottom: 24, lineHeight: 1.1, letterSpacing: '-0.02em' }}>
+                    Absolute<br/>Channel Fit.
+                  </h3>
+                  <p style={{ fontSize: 18, color: 'var(--ink-secondary)', lineHeight: 1.6, fontWeight: 400 }}>
+                    We trace exactly where your target readers live, click, and buy. Stop guessing with ads and start placing your product precisely where the conversion probability is structurally highest.
+                  </p>
+                </div>
               </div>
-              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: 800 }}>Channel Fit</div>
             </div>
-            <div style={{ fontSize: 13, color: 'var(--ink-secondary)', lineHeight: 1.6, fontWeight: 500 }}>
-              Identifies exactly where your audience lives, clicks, and buys.
-            </div>
-          </motion.div>
 
-          <motion.div style={{ opacity: a3, y: useTransform(scrollYProgress, [0.65, 0.75], [20, 0]), position: 'absolute', top: 500, left: -220, background: 'rgba(242,236,224,0.9)', backdropFilter: 'blur(10px)', padding: 24, border: '0.5px solid var(--border-color)', width: 280, borderRadius: 16, zIndex: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-              <div style={{ padding: 6, background: 'var(--ink)', borderRadius: 8, color: '#fff' }}>
-                <Activity size={14} />
+            {/* Slide 3: Pre-Mortem */}
+            <div style={{ width: '33.33%', paddingRight: 48, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: '100%', maxWidth: 1000, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 80, alignItems: 'center' }}>
+                <div>
+                  <div style={{ padding: 12, background: 'rgba(192,57,43,0.1)', borderRadius: 12, color: 'var(--red)', display: 'inline-block', marginBottom: 24 }}>
+                    <Activity size={24} />
+                  </div>
+                  <h3 className="font-serif" style={{ fontSize: 48, fontWeight: 900, marginBottom: 24, lineHeight: 1.1, letterSpacing: '-0.02em' }}>
+                    The<br/>Pre-Mortem.
+                  </h3>
+                  <p style={{ fontSize: 18, color: 'var(--ink-secondary)', lineHeight: 1.6, fontWeight: 400 }}>
+                    We expose the exact structural reasons your product will fail. From onboarding friction to long-term defection rates, see the autopsy report and fix the vital flaws before they become code.
+                  </p>
+                </div>
+                <div style={{ position: 'relative' }}>
+                   <div style={{ background: '#fff', padding: 40, borderRadius: 24, boxShadow: '0 40px 100px rgba(192,57,43,0.1)', border: '1px solid rgba(192,57,43,0.2)', position: 'relative', zIndex: 1, transform: 'rotate(1deg)' }}>
+                    <div style={{ fontSize: 12, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--red)', marginBottom: 16, fontWeight: 800 }}>Critical Failure Mode</div>
+                    <div style={{ fontSize: 24, fontWeight: 900, fontFamily: 'var(--font-serif)', letterSpacing: '-0.02em', marginBottom: 16 }}>Day 7 Defection Risk</div>
+                    <p style={{ fontSize: 14, color: 'var(--ink-secondary)', lineHeight: 1.5, margin: 0 }}>
+                      Simulation shows 68% of cohort abandons due to lack of immediate utility in the onboarding flow. Intervention required.
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: 800 }}>Pre-mortem</div>
             </div>
-            <div style={{ fontSize: 13, color: 'var(--ink-secondary)', lineHeight: 1.6, fontWeight: 500 }}>
-              Exposes the exact structural reasons your product will fail.
-            </div>
-          </motion.div>
 
-        </motion.div>
+          </motion.div>
+        </div>
       </div>
     </section>
   )
@@ -337,7 +366,7 @@ function Distribution() {
   ]
 
   return (
-    <section ref={ref} style={{ padding: '240px 48px', background: 'var(--paper)', maxWidth: 1100, margin: '0 auto' }}>
+    <section ref={ref} style={{ padding: '160px clamp(48px, 6vw, 80px)', background: 'var(--paper)', maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ textAlign: 'center', marginBottom: 140 }}>
         <div style={{ fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--ink-secondary)', fontWeight: 800, marginBottom: 16 }}>
           The Futures
@@ -375,7 +404,7 @@ function SubscriptionsAndCTA({
       {/* Tiers */}
       <div style={{ display: 'flex', flexWrap: 'wrap', maxWidth: 1400, margin: '0 auto' }}>
         {TIERS.map((t, i) => (
-          <div key={t.name} style={{ flex: 1, minWidth: 340, padding: '140px 100px', position: 'relative', borderRight: i === 0 ? '0.5px solid var(--border-color)' : 'none', background: i === 1 ? 'var(--ink)' : 'transparent', color: i === 1 ? 'var(--paper)' : 'var(--ink)' }}>
+          <div key={t.name} style={{ flex: 1, minWidth: 340, padding: '100px clamp(48px, 6vw, 80px)', position: 'relative', borderRight: i === 0 ? '0.5px solid var(--border-color)' : 'none', background: i === 1 ? 'var(--ink)' : 'transparent', color: i === 1 ? 'var(--paper)' : 'var(--ink)' }}>
             <div style={{ fontSize: 11, letterSpacing: '0.15em', textTransform: 'uppercase', opacity: 0.5, marginBottom: 16, fontWeight: 800 }}>
               {t.sub}
             </div>
@@ -427,7 +456,7 @@ function SubscriptionsAndCTA({
 
       {/* Footer */}
       <footer style={{ background: '#050505', padding: '120px 64px', color: 'var(--paper)', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-        <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 40 }}>
+        <div style={{ maxWidth: 1400, margin: '0 auto', width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 40 }}>
           <div>
             <h2 className="font-serif" style={{ fontSize: 56, fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.02em', marginBottom: 24 }}>
               TheCee
@@ -466,7 +495,7 @@ export default function LandingPage() {
       <Masthead setAuthOpen={setAuthOpen} setAuthMode={setAuthMode} isAuthed={isAuthed} isHydrated={isHydrated} />
       <Hero />
       <NarrativeScroll />
-      <Anatomy />
+      <DirectiveFeatures />
       <Distribution />
       <SubscriptionsAndCTA setAuthMode={setAuthMode} setAuthOpen={setAuthOpen} />
       <InlineAuth open={authOpen} onClose={() => setAuthOpen(false)} initialMode={authMode} />
