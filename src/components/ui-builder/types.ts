@@ -30,6 +30,11 @@ export interface GeneratedUIHistoryResponse {
   uis: GeneratedUIHistoryRow[]
 }
 
+export interface UIRefineRequest {
+  generated_ui_id: number
+  refinement_prompt: string
+}
+
 export interface SimulateUIResponse {
   ui_simulation_run_id: number
   status?: string
