@@ -664,57 +664,93 @@ export default function PrototypePage() {
               display: 'flex',
               flexDirection: 'column',
               zIndex: 40,
-              background: 'var(--paper)',
+              background: 'var(--ink)',
             }}
           >
-            {/* Edit mode header bar */}
+            {/* ── Masthead bar ─────────────────────────────────────── */}
+            <div
+              style={{
+                height: 3,
+                background: 'var(--red)',
+                flexShrink: 0,
+              }}
+            />
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                padding: '0 24px',
-                height: 48,
+                padding: '0 32px',
+                height: 52,
                 background: 'var(--ink)',
-                borderBottom: '0.5px solid rgba(242,236,224,0.1)',
+                borderBottom: '0.5px solid rgba(242,236,224,0.08)',
                 flexShrink: 0,
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <div style={{ width: 2, height: 14, background: 'var(--red)' }} />
+              {/* Left: folio label */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span
+                    className="font-serif"
+                    style={{
+                      fontSize: 18,
+                      fontWeight: 900,
+                      fontStyle: 'italic',
+                      color: 'var(--paper)',
+                      letterSpacing: '-0.03em',
+                      opacity: 0.9,
+                    }}
+                  >
+                    Edit Room
+                  </span>
+                </div>
+                <div style={{ width: 0.5, height: 16, background: 'rgba(242,236,224,0.15)' }} />
                 <span
                   style={{
                     fontSize: 9,
-                    letterSpacing: '0.32em',
+                    letterSpacing: '0.3em',
                     textTransform: 'uppercase',
-                    color: 'rgba(242,236,224,0.55)',
+                    color: 'rgba(242,236,224,0.35)',
                     fontWeight: 600,
                     fontFamily: 'var(--font-body)',
                   }}
                 >
-                  Edit room
+                  Compositor's desk
                 </span>
-                {editApplied && (
-                  <motion.span
-                    initial={{ opacity: 0, x: -6 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 5,
-                      fontSize: 9,
-                      letterSpacing: '0.18em',
-                      textTransform: 'uppercase',
-                      color: '#4caf50',
-                      fontWeight: 600,
-                      fontFamily: 'var(--font-body)',
-                    }}
-                  >
-                    <Check style={{ width: 10, height: 10 }} />
-                    Changes applied
-                  </motion.span>
-                )}
+                <AnimatePresence>
+                  {editApplied && (
+                    <motion.div
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0 }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '3px 10px',
+                        border: '0.5px solid rgba(74,222,128,0.3)',
+                        background: 'rgba(74,222,128,0.08)',
+                      }}
+                    >
+                      <Check style={{ width: 9, height: 9, color: 'rgb(74,222,128)' }} />
+                      <span
+                        style={{
+                          fontSize: 8,
+                          letterSpacing: '0.22em',
+                          textTransform: 'uppercase',
+                          color: 'rgb(74,222,128)',
+                          fontWeight: 700,
+                          fontFamily: 'var(--font-body)',
+                        }}
+                      >
+                        Plate updated
+                      </span>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
+
+              {/* Right: Done */}
               <button
                 type="button"
                 onClick={handleExitEdit}
@@ -722,67 +758,88 @@ export default function PrototypePage() {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 8,
-                  padding: '7px 18px',
-                  background: 'var(--red)',
-                  color: '#fff',
-                  border: 'none',
+                  padding: '9px 22px',
+                  background: editApplied ? 'var(--red)' : 'rgba(242,236,224,0.08)',
+                  color: editApplied ? '#fff' : 'rgba(242,236,224,0.5)',
+                  border: editApplied ? 'none' : '0.5px solid rgba(242,236,224,0.15)',
                   fontFamily: 'var(--font-body)',
                   fontSize: 9,
                   fontWeight: 700,
-                  letterSpacing: '0.22em',
+                  letterSpacing: '0.24em',
                   textTransform: 'uppercase',
                   cursor: 'pointer',
+                  transition: 'background 300ms ease, color 300ms ease, border-color 300ms ease',
                 }}
               >
-                Done <Check style={{ width: 11, height: 11 }} />
+                {editApplied ? 'Save & close' : 'Close'}
+                <Check style={{ width: 10, height: 10 }} />
               </button>
             </div>
 
-            {/* Split body */}
+            {/* ── Split body ───────────────────────────────────────── */}
             <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
 
-              {/* Left — edit panel */}
+              {/* ── Left panel ───────────────────────────────────── */}
               <div
                 style={{
-                  width: '38%',
+                  width: '36%',
                   flexShrink: 0,
                   background: 'var(--ink)',
                   display: 'flex',
                   flexDirection: 'column',
                   borderRight: '0.5px solid rgba(242,236,224,0.08)',
                   overflowY: 'auto',
+                  scrollbarWidth: 'none',
                 }}
               >
-                <div style={{ padding: '28px 28px 0' }}>
-                  <div
-                    style={{
-                      fontSize: 9,
-                      letterSpacing: '0.3em',
-                      textTransform: 'uppercase',
-                      color: 'var(--red)',
-                      fontWeight: 600,
-                      fontFamily: 'var(--font-body)',
-                      marginBottom: 12,
-                    }}
-                  >
-                    Revision instruction
+                {/* ── Section I — Brief ─────────────────────────── */}
+                <div style={{ padding: '32px 32px 28px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 20 }}>
+                    <span
+                      className="font-serif"
+                      style={{
+                        fontSize: 28,
+                        fontWeight: 900,
+                        fontStyle: 'italic',
+                        color: 'rgba(242,236,224,0.12)',
+                        lineHeight: 1,
+                        flexShrink: 0,
+                        marginTop: 2,
+                        letterSpacing: '-0.02em',
+                      }}
+                    >
+                      I.
+                    </span>
+                    <div>
+                      <div
+                        style={{
+                          fontSize: 9,
+                          letterSpacing: '0.32em',
+                          textTransform: 'uppercase',
+                          color: 'var(--red)',
+                          fontWeight: 700,
+                          fontFamily: 'var(--font-body)',
+                          marginBottom: 6,
+                        }}
+                      >
+                        Revision instruction
+                      </div>
+                      <p
+                        className="font-serif"
+                        style={{
+                          fontSize: 12,
+                          fontStyle: 'italic',
+                          fontWeight: 500,
+                          color: 'rgba(242,236,224,0.4)',
+                          lineHeight: 1.6,
+                          margin: 0,
+                        }}
+                      >
+                        Tell the compositor what to change — copy, colours, sections, layout.
+                      </p>
+                    </div>
                   </div>
-                  <p
-                    className="font-serif"
-                    style={{
-                      fontSize: 13,
-                      fontStyle: 'italic',
-                      fontWeight: 600,
-                      color: 'rgba(242,236,224,0.55)',
-                      lineHeight: 1.55,
-                      marginBottom: 20,
-                    }}
-                  >
-                    Tell the compositor what to change — section, copy, colours, layout, anything.
-                  </p>
-                </div>
 
-                <div style={{ padding: '0 28px', flex: 1, display: 'flex', flexDirection: 'column', gap: 14, paddingBottom: 28 }}>
                   <textarea
                     value={editPrompt}
                     onChange={(e) => setEditPrompt(e.target.value)}
@@ -792,124 +849,269 @@ export default function PrototypePage() {
                         handleApplyEdit()
                       }
                     }}
-                    placeholder="e.g. Change the hero headline to focus on price. Make the CTA button red. Add a testimonials section with three quotes from Indian founders."
+                    placeholder="e.g. Change the hero headline to focus on price. Make the CTA button dark red. Add a testimonials section with three quotes from Indian founders…"
                     disabled={refineMutation.isPending}
-                    rows={7}
+                    rows={6}
                     style={{
                       width: '100%',
-                      resize: 'vertical',
-                      padding: '12px 14px',
-                      background: 'rgba(242,236,224,0.06)',
-                      border: '0.5px solid rgba(242,236,224,0.15)',
-                      color: 'var(--paper)',
+                      resize: 'none',
+                      padding: '14px 16px',
+                      background: 'rgba(242,236,224,0.04)',
+                      border: '0.5px solid rgba(242,236,224,0.12)',
+                      borderLeft: '2px solid rgba(192,57,43,0.5)',
+                      color: 'rgba(242,236,224,0.88)',
                       fontFamily: 'var(--font-body)',
                       fontSize: 13,
-                      lineHeight: 1.65,
+                      lineHeight: 1.7,
                       outline: 'none',
                       boxSizing: 'border-box',
+                      letterSpacing: '0.01em',
+                      transition: 'border-color 200ms ease',
                     }}
+                    onFocus={(e) => { e.currentTarget.style.borderLeftColor = 'var(--red)'; e.currentTarget.style.background = 'rgba(242,236,224,0.06)' }}
+                    onBlur={(e) => { e.currentTarget.style.borderLeftColor = 'rgba(192,57,43,0.5)'; e.currentTarget.style.background = 'rgba(242,236,224,0.04)' }}
                   />
 
-                  {/* Quick suggestion chips */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div
-                      style={{
-                        fontSize: 8,
-                        letterSpacing: '0.28em',
-                        textTransform: 'uppercase',
-                        color: 'rgba(242,236,224,0.3)',
-                        fontWeight: 600,
-                        fontFamily: 'var(--font-body)',
-                      }}
-                    >
-                      Quick edits
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {EDIT_SUGGESTIONS.map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() => setEditPrompt(s)}
-                          disabled={refineMutation.isPending}
-                          style={{
-                            padding: '5px 10px',
-                            background: 'rgba(242,236,224,0.06)',
-                            border: '0.5px solid rgba(242,236,224,0.12)',
-                            color: 'rgba(242,236,224,0.5)',
-                            fontFamily: 'var(--font-body)',
-                            fontSize: 10,
-                            letterSpacing: '0.06em',
-                            cursor: refineMutation.isPending ? 'not-allowed' : 'pointer',
-                            textAlign: 'left',
-                          }}
-                          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(192,57,43,0.5)'; (e.currentTarget as HTMLButtonElement).style.color = 'rgba(242,236,224,0.8)' }}
-                          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(242,236,224,0.12)'; (e.currentTarget as HTMLButtonElement).style.color = 'rgba(242,236,224,0.5)' }}
-                        >
-                          {s}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Error */}
-                  {refineError && (
-                    <div
-                      style={{
-                        padding: '10px 12px',
-                        background: 'rgba(192,57,43,0.12)',
-                        border: '0.5px solid rgba(192,57,43,0.3)',
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        gap: 8,
-                      }}
-                    >
-                      <X style={{ width: 12, height: 12, color: 'var(--red)', flexShrink: 0, marginTop: 1 }} />
-                      <span style={{ fontSize: 11, color: 'rgba(242,236,224,0.7)', fontFamily: 'var(--font-body)', lineHeight: 1.55 }}>
-                        {refineError}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Apply button */}
-                  <button
-                    type="button"
-                    onClick={handleApplyEdit}
-                    disabled={!editPrompt.trim() || refineMutation.isPending}
+                  {/* Hint */}
+                  <div
                     style={{
-                      display: 'inline-flex',
+                      marginTop: 8,
+                      display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 8,
-                      padding: '12px 20px',
-                      background: !editPrompt.trim() || refineMutation.isPending ? 'rgba(242,236,224,0.08)' : 'var(--red)',
-                      color: !editPrompt.trim() || refineMutation.isPending ? 'rgba(242,236,224,0.3)' : '#fff',
-                      border: 'none',
-                      fontFamily: 'var(--font-body)',
-                      fontSize: 10,
-                      fontWeight: 700,
-                      letterSpacing: '0.2em',
-                      textTransform: 'uppercase',
-                      cursor: !editPrompt.trim() || refineMutation.isPending ? 'not-allowed' : 'pointer',
-                      transition: 'background 200ms ease, color 200ms ease',
+                      justifyContent: 'space-between',
                     }}
                   >
-                    {refineMutation.isPending ? (
-                      <>
-                        <Loader2 className="animate-spin" style={{ width: 12, height: 12 }} />
-                        Compositor working…
-                      </>
-                    ) : (
-                      <>Apply changes</>
-                    )}
-                  </button>
+                    <span
+                      style={{
+                        fontSize: 9,
+                        color: 'rgba(242,236,224,0.2)',
+                        fontFamily: 'var(--font-body)',
+                        letterSpacing: '0.06em',
+                      }}
+                    >
+                      ⌘ Return to apply
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 9,
+                        color: editPrompt.length > 400 ? 'rgba(192,57,43,0.7)' : 'rgba(242,236,224,0.18)',
+                        fontFamily: 'var(--font-body)',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
+                      {editPrompt.length}/600
+                    </span>
+                  </div>
+                </div>
 
-                  <p style={{ margin: 0, fontSize: 10, color: 'rgba(242,236,224,0.2)', fontFamily: 'var(--font-body)', letterSpacing: '0.04em' }}>
-                    ⌘ + Enter to apply · Changes are saved automatically
-                  </p>
+                {/* ── Section divider ───────────────────────────── */}
+                <div style={{ height: '0.5px', background: 'rgba(242,236,224,0.07)', marginInline: 32 }} />
+
+                {/* ── Section II — Quick revisions ──────────────── */}
+                <div style={{ padding: '24px 32px 28px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 16 }}>
+                    <span
+                      className="font-serif"
+                      style={{
+                        fontSize: 28,
+                        fontWeight: 900,
+                        fontStyle: 'italic',
+                        color: 'rgba(242,236,224,0.12)',
+                        lineHeight: 1,
+                        flexShrink: 0,
+                        marginTop: 2,
+                        letterSpacing: '-0.02em',
+                      }}
+                    >
+                      II.
+                    </span>
+                    <div>
+                      <div
+                        style={{
+                          fontSize: 9,
+                          letterSpacing: '0.32em',
+                          textTransform: 'uppercase',
+                          color: 'rgba(242,236,224,0.35)',
+                          fontWeight: 700,
+                          fontFamily: 'var(--font-body)',
+                          marginBottom: 12,
+                        }}
+                      >
+                        Quick revisions
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                        {EDIT_SUGGESTIONS.map((s) => (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => setEditPrompt(s)}
+                            disabled={refineMutation.isPending}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 10,
+                              padding: '9px 12px',
+                              background: 'transparent',
+                              border: '0.5px solid rgba(242,236,224,0.08)',
+                              color: 'rgba(242,236,224,0.45)',
+                              fontFamily: 'var(--font-body)',
+                              fontSize: 11,
+                              letterSpacing: '0.02em',
+                              cursor: refineMutation.isPending ? 'not-allowed' : 'pointer',
+                              textAlign: 'left',
+                              transition: 'all 160ms ease',
+                              lineHeight: 1.4,
+                            }}
+                            onMouseEnter={(e) => {
+                              const el = e.currentTarget as HTMLButtonElement
+                              el.style.background = 'rgba(192,57,43,0.08)'
+                              el.style.borderColor = 'rgba(192,57,43,0.25)'
+                              el.style.color = 'rgba(242,236,224,0.8)'
+                            }}
+                            onMouseLeave={(e) => {
+                              const el = e.currentTarget as HTMLButtonElement
+                              el.style.background = 'transparent'
+                              el.style.borderColor = 'rgba(242,236,224,0.08)'
+                              el.style.color = 'rgba(242,236,224,0.45)'
+                            }}
+                          >
+                            <div style={{ width: 3, height: 3, borderRadius: '50%', background: 'var(--red)', flexShrink: 0, opacity: 0.6 }} />
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Section divider ───────────────────────────── */}
+                <div style={{ height: '0.5px', background: 'rgba(242,236,224,0.07)', marginInline: 32 }} />
+
+                {/* ── Section III — Apply ───────────────────────── */}
+                <div style={{ padding: '24px 32px 36px', marginTop: 'auto' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+                    <span
+                      className="font-serif"
+                      style={{
+                        fontSize: 28,
+                        fontWeight: 900,
+                        fontStyle: 'italic',
+                        color: 'rgba(242,236,224,0.12)',
+                        lineHeight: 1,
+                        flexShrink: 0,
+                        marginTop: 2,
+                        letterSpacing: '-0.02em',
+                      }}
+                    >
+                      III.
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 9,
+                          letterSpacing: '0.32em',
+                          textTransform: 'uppercase',
+                          color: 'rgba(242,236,224,0.35)',
+                          fontWeight: 700,
+                          fontFamily: 'var(--font-body)',
+                          marginBottom: 14,
+                        }}
+                      >
+                        Run the press
+                      </div>
+
+                      {/* Error */}
+                      <AnimatePresence>
+                        {refineError && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0 }}
+                            style={{
+                              padding: '10px 12px',
+                              background: 'rgba(192,57,43,0.1)',
+                              border: '0.5px solid rgba(192,57,43,0.25)',
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: 8,
+                              marginBottom: 12,
+                            }}
+                          >
+                            <X style={{ width: 11, height: 11, color: 'var(--red)', flexShrink: 0, marginTop: 1 }} />
+                            <span
+                              style={{
+                                fontSize: 11,
+                                color: 'rgba(242,236,224,0.6)',
+                                fontFamily: 'var(--font-body)',
+                                lineHeight: 1.55,
+                              }}
+                            >
+                              {refineError}
+                            </span>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
+                      <button
+                        type="button"
+                        onClick={handleApplyEdit}
+                        disabled={!editPrompt.trim() || refineMutation.isPending}
+                        style={{
+                          width: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 10,
+                          padding: '14px 20px',
+                          background: !editPrompt.trim() || refineMutation.isPending
+                            ? 'rgba(242,236,224,0.06)'
+                            : 'var(--red)',
+                          color: !editPrompt.trim() || refineMutation.isPending
+                            ? 'rgba(242,236,224,0.25)'
+                            : '#fff',
+                          border: !editPrompt.trim() || refineMutation.isPending
+                            ? '0.5px solid rgba(242,236,224,0.1)'
+                            : 'none',
+                          fontFamily: 'var(--font-body)',
+                          fontSize: 9,
+                          fontWeight: 700,
+                          letterSpacing: '0.26em',
+                          textTransform: 'uppercase',
+                          cursor: !editPrompt.trim() || refineMutation.isPending ? 'not-allowed' : 'pointer',
+                          transition: 'background 200ms ease, color 200ms ease',
+                        }}
+                      >
+                        {refineMutation.isPending ? (
+                          <>
+                            <Loader2 className="animate-spin" style={{ width: 11, height: 11 }} />
+                            Compositor working…
+                          </>
+                        ) : (
+                          <>
+                            <Pencil style={{ width: 10, height: 10 }} />
+                            Apply revision
+                          </>
+                        )}
+                      </button>
+
+                      <p
+                        style={{
+                          margin: '10px 0 0',
+                          fontSize: 9,
+                          color: 'rgba(242,236,224,0.15)',
+                          fontFamily: 'var(--font-body)',
+                          letterSpacing: '0.06em',
+                          textAlign: 'center',
+                        }}
+                      >
+                        Revisions are saved automatically — iterate freely
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Right — live preview */}
+              {/* ── Right panel — live preview ──────────────────── */}
               <div
                 style={{
                   flex: 1,
@@ -917,81 +1119,123 @@ export default function PrototypePage() {
                   display: 'flex',
                   flexDirection: 'column',
                   position: 'relative',
-                  background: '#e8e2d8',
+                  background: 'var(--paper-dark)',
                 }}
               >
-                {/* Preview label */}
+                {/* Preview bar */}
                 <div
                   style={{
-                    padding: '8px 16px',
-                    borderBottom: '0.5px solid rgba(26,23,20,0.12)',
-                    background: 'var(--paper-dark)',
+                    padding: '10px 20px',
+                    borderBottom: '0.5px solid rgba(26,23,20,0.1)',
+                    background: 'var(--paper)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     flexShrink: 0,
+                    height: 40,
+                    boxSizing: 'border-box',
                   }}
                 >
-                  <span
-                    style={{
-                      fontSize: 9,
-                      letterSpacing: '0.28em',
-                      textTransform: 'uppercase',
-                      color: 'var(--ink-secondary)',
-                      fontWeight: 600,
-                      fontFamily: 'var(--font-body)',
-                    }}
-                  >
-                    Live preview
-                  </span>
-                  {editApplied && (
-                    <motion.span
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {/* Traffic-light dots matching the chrome bar */}
+                    {['var(--red)', '#b88a3a', '#3d7a4a'].map((c) => (
+                      <span key={c} style={{ width: 8, height: 8, borderRadius: '50%', background: c, opacity: 0.7 }} />
+                    ))}
+                    <div style={{ width: 0.5, height: 12, background: 'var(--border-color)', marginLeft: 4 }} />
+                    <span
                       style={{
                         fontSize: 9,
-                        letterSpacing: '0.18em',
+                        letterSpacing: '0.24em',
                         textTransform: 'uppercase',
-                        color: 'var(--red)',
+                        color: 'var(--ink-tertiary)',
                         fontWeight: 600,
                         fontFamily: 'var(--font-body)',
                       }}
                     >
-                      Updated
-                    </motion.span>
-                  )}
+                      Reader's view
+                    </span>
+                  </div>
+
+                  <AnimatePresence>
+                    {editApplied && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.92 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0 }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          padding: '3px 10px',
+                          background: 'rgba(192,57,43,0.08)',
+                          border: '0.5px solid rgba(192,57,43,0.2)',
+                        }}
+                      >
+                        <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--red)' }} />
+                        <span
+                          style={{
+                            fontSize: 8,
+                            letterSpacing: '0.22em',
+                            textTransform: 'uppercase',
+                            color: 'var(--red)',
+                            fontWeight: 700,
+                            fontFamily: 'var(--font-body)',
+                          }}
+                        >
+                          Revised proof
+                        </span>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
 
                 {/* Refine loading overlay */}
                 {refineMutation.isPending && (
-                  <div
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
                     style={{
                       position: 'absolute',
                       inset: 0,
-                      top: 37,
+                      top: 40,
                       zIndex: 2,
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: 14,
-                      background: 'rgba(242,236,224,0.88)',
+                      gap: 18,
+                      background: 'rgba(242,236,224,0.9)',
+                      backdropFilter: 'blur(4px)',
                     }}
                   >
-                    <Loader2 className="animate-spin" style={{ width: 24, height: 24, color: 'var(--red)' }} />
-                    <span
-                      style={{
-                        fontSize: 11,
-                        letterSpacing: '0.22em',
-                        textTransform: 'uppercase',
-                        color: 'var(--ink-secondary)',
-                        fontWeight: 600,
-                        fontFamily: 'var(--font-body)',
-                      }}
-                    >
-                      Setting new type…
-                    </span>
-                  </div>
+                    <Loader2 className="animate-spin" style={{ width: 28, height: 28, color: 'var(--red)' }} />
+                    <div style={{ textAlign: 'center' }}>
+                      <p
+                        className="font-serif"
+                        style={{
+                          fontSize: 16,
+                          fontStyle: 'italic',
+                          fontWeight: 700,
+                          color: 'var(--ink)',
+                          marginBottom: 6,
+                        }}
+                      >
+                        Resetting the type…
+                      </p>
+                      <p
+                        style={{
+                          fontSize: 11,
+                          letterSpacing: '0.18em',
+                          textTransform: 'uppercase',
+                          color: 'var(--ink-secondary)',
+                          fontFamily: 'var(--font-body)',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Compositor is working
+                      </p>
+                    </div>
+                  </motion.div>
                 )}
 
                 {/* iframe */}
