@@ -26,9 +26,9 @@ const contentSecurityPolicy = [
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "connect-src 'self' https: wss:",
   "worker-src 'self' blob:",
-  // Include the API origin so generated-UI preview iframes (/serve endpoint)
-  // are allowed regardless of whether the API is on HTTP (dev) or HTTPS (prod).
-  `frame-src 'self' https: ${apiOrigin}`,
+  // Include only the API origin so generated-UI preview iframes (/serve endpoint)
+  // are allowed without opening the app to arbitrary HTTPS frames.
+  `frame-src 'self' ${apiOrigin}`,
   "object-src 'none'",
   "form-action 'self'",
   'upgrade-insecure-requests',
@@ -41,6 +41,10 @@ const contentSecurityPolicy = [
 // .next directory so Vercel's output serving works correctly.
 const nextConfig: NextConfig = {
   distDir: process.env.VERCEL ? '.next' : '.next.nosync',
+  turbopack: {
+    root: process.cwd(),
+  },
+  outputFileTracingRoot: process.cwd(),
   async redirects() {
     return [
       {

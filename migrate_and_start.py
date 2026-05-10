@@ -32,8 +32,9 @@ def run_migrations():
     with engine.connect() as conn:
         try:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto;"))
             conn.commit()
-            print("✅ pgvector extension ready")
+            print("✅ pgvector and pgcrypto extensions ready")
         except Exception as e:
             conn.rollback()
             print(f"⚠️ pgvector skip: {e}")
@@ -100,8 +101,11 @@ def run_migrations():
                     text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type};")
                 )
                 conn.commit()
-            except Exception:
+            except Exception as e:
                 conn.rollback()
+                raise RuntimeError(
+                    f"failed to add column {table}.{column}: {e}"
+                ) from e
 
         try:
             conn.execute(
@@ -113,8 +117,9 @@ def run_migrations():
                 )
             )
             conn.commit()
-        except Exception:
+        except Exception as e:
             conn.rollback()
+            raise RuntimeError(f"failed to add simulations.error_message: {e}") from e
 
         # Ensure simulations.results_json matches current SQLAlchemy JSONB model.
         try:
@@ -132,9 +137,9 @@ def run_migrations():
                 )
             )
             conn.commit()
-        except Exception:
+        except Exception as e:
             conn.rollback()
-
+            raise RuntimeError(f"failed to convert simulations.results_json to JSONB: {e}") from e
         # Step 36a: add signal_quality and claim_confidence_distribution to simulations
         for column, col_type in [
             ("signal_quality", "FLOAT"),
@@ -145,8 +150,9 @@ def run_migrations():
                     text(f"ALTER TABLE simulations ADD COLUMN IF NOT EXISTS {column} {col_type};")
                 )
                 conn.commit()
-            except Exception:
+            except Exception as e:
                 conn.rollback()
+                raise RuntimeError(f"failed to add simulations.{column}: {e}") from e
 
     # Step 36a: learning system tables
     with engine.connect() as conn:
@@ -352,6 +358,7 @@ def run_migrations():
                         version          INTEGER DEFAULT 1,
                         product_type     VARCHAR(100),
                         pages_generated  INTEGER DEFAULT 1,
+                        preview_token    VARCHAR(128),
                         created_at       TIMESTAMP DEFAULT NOW(),
                         updated_at       TIMESTAMP DEFAULT NOW()
                     );
@@ -362,6 +369,34 @@ def run_migrations():
         except Exception as e:
             conn.rollback()
             print(f"⚠️ generated_uis skip: {e}")
+
+
+        try:
+            conn.execute(
+                text("""
+                    ALTER TABLE generated_uis
+                    ADD COLUMN IF NOT EXISTS preview_token VARCHAR(128);
+                """)
+            )
+            conn.commit()
+            print("✅ generated_uis.preview_token ready")
+        except Exception as e:
+            conn.rollback()
+            raise RuntimeError(f"failed to add generated_uis.preview_token: {e}") from e
+
+        try:
+            conn.execute(
+                text("""
+                    UPDATE generated_uis
+                    SET preview_token = encode(gen_random_bytes(32), 'base64')
+                    WHERE preview_token IS NULL;
+                """)
+            )
+            conn.commit()
+            print("✅ generated_uis preview tokens backfilled")
+        except Exception as e:
+            conn.rollback()
+            raise RuntimeError(f"failed to backfill generated_uis.preview_token: {e}") from e
 
         try:
             conn.execute(
@@ -410,6 +445,7 @@ def run_migrations():
 
         for idx_sql in [
             "CREATE INDEX IF NOT EXISTS idx_generated_uis_project_id ON generated_uis(project_id);",
+            "CREATE INDEX IF NOT EXISTS idx_generated_uis_preview_token ON generated_uis(preview_token);",
             "CREATE INDEX IF NOT EXISTS idx_ui_sessions_generated_ui_id ON ui_simulation_sessions(generated_ui_id);",
             "CREATE INDEX IF NOT EXISTS idx_ui_sessions_cluster_id ON ui_simulation_sessions(agent_cluster_id);",
             "CREATE INDEX IF NOT EXISTS idx_ui_runs_project_id ON ui_simulation_runs(project_id);",
@@ -875,11 +911,6 @@ _TRAIT_NAMES = [
 def _seed_cluster_parameters():
     with engine.connect() as conn:
         try:
-            row = conn.execute(text("SELECT COUNT(*) FROM cluster_parameters")).scalar()
-            if row and row > 0:
-                print(f"✅ cluster_parameters already seeded ({row} rows)")
-                return
-
             rows = [
                 {"cluster_id": cid, "trait_name": trait}
                 for cid in _CLUSTER_IDS
@@ -897,11 +928,12 @@ def _seed_cluster_parameters():
                 rows,
             )
             conn.commit()
+            expected = len(_CLUSTER_IDS) * len(_TRAIT_NAMES)
             inserted = conn.execute(text("SELECT COUNT(*) FROM cluster_parameters")).scalar()
-            print(f"✅ cluster_parameters seeded: {inserted} rows")
+            print(f"✅ cluster_parameters verified: {inserted}/{expected} rows")
         except Exception as e:
             conn.rollback()
-            print(f"⚠️ cluster_parameters seed failed: {e}")
+            raise RuntimeError(f"cluster_parameters seed failed: {e}") from e
 
 
 if __name__ == "__main__":

@@ -101,8 +101,8 @@ def _service_health() -> tuple[dict[str, object], int]:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         report["services"]["database"] = {"status": "healthy"}
-    except Exception as exc:
-        report["services"]["database"] = {"status": "unhealthy", "detail": str(exc)}
+    except Exception:
+        report["services"]["database"] = {"status": "unhealthy"}
         report["status"] = "unhealthy"
         status_code = 503
 
@@ -113,8 +113,8 @@ def _service_health() -> tuple[dict[str, object], int]:
         try:
             redis_client.ping()
             report["services"]["redis"] = {"status": "healthy"}
-        except Exception as exc:
-            report["services"]["redis"] = {"status": "unhealthy", "detail": str(exc)}
+        except Exception:
+            report["services"]["redis"] = {"status": "unhealthy"}
             report["status"] = "unhealthy"
             status_code = 503
 
@@ -125,8 +125,8 @@ def _service_health() -> tuple[dict[str, object], int]:
             "status": "healthy" if active_workers else "degraded",
             "workers_online": len(active_workers),
         }
-    except Exception as exc:
-        report["services"]["celery"] = {"status": "degraded", "detail": str(exc)}
+    except Exception:
+        report["services"]["celery"] = {"status": "degraded"}
 
     return report, status_code
 
@@ -143,15 +143,13 @@ async def celery_status():
         active_workers = result.active()
         return {
             "status": "configured",
-            "broker": settings.CELERY_BROKER_URL,
             "workers_online": len(active_workers) if active_workers else 0,
         }
     except Exception:
         return {
             "status": "configured",
-            "broker": settings.CELERY_BROKER_URL,
             "workers_online": 0,
-            "note": "Worker not running or Redis unreachable",
+            "note": "Worker not running or broker unreachable",
         }
 
 

@@ -14,6 +14,7 @@ ENV PYTHONPATH=/app/backend
 # Install Python dependencies (cached layer — only re-runs if requirements.txt changes)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m playwright install --with-deps chromium
 
 # Copy the rest of the application
 COPY . .

@@ -10,11 +10,14 @@ const eslintConfig = defineConfig([
     // Default ignores of eslint-config-next:
     ".next/**",
     ".next.nosync/**",
+    "src/.next/**",
+    "src/.next.nosync/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
     "node_modules/**",
     "node_modules 2/**",
+    ".claude/**",
     // Python backend + any venv (never lint third-party JS)
     "thecee-backend/**",
     "backend/app/**",

@@ -79,7 +79,7 @@ export function EditorialExpandable({
       setHeight('auto')
       setIsTransitioning(false)
     },
-    [clearFallback, clearTransitionEnd]
+    [clearFallback, clearTransitionEnd, setHeight, setIsTransitioning]
   )
 
   useEffect(
@@ -139,7 +139,17 @@ export function EditorialExpandable({
     requestAnimationFrame(() => {
       requestAnimationFrame(settle)
     })
-  }, [clearFallback, clearTransitionEnd, completeTransition, expanded, isTransitioning, prefersReducedMotion])
+  }, [
+    clearFallback,
+    clearTransitionEnd,
+    completeTransition,
+    expanded,
+    isTransitioning,
+    prefersReducedMotion,
+    setExpanded,
+    setHeight,
+    setIsTransitioning,
+  ])
 
   /**
    * Collapse: keep full title + control visible while height animates down (overflow clips excess).
@@ -197,7 +207,17 @@ export function EditorialExpandable({
     requestAnimationFrame(() => {
       requestAnimationFrame(settle)
     })
-  }, [clearFallback, clearTransitionEnd, completeTransition, expanded, isTransitioning, prefersReducedMotion])
+  }, [
+    clearFallback,
+    clearTransitionEnd,
+    completeTransition,
+    expanded,
+    isTransitioning,
+    prefersReducedMotion,
+    setExpanded,
+    setHeight,
+    setIsTransitioning,
+  ])
 
   const handleExpand = useCallback(() => runExpand(), [runExpand])
   const handleCollapse = useCallback(() => runCollapse(), [runCollapse])

@@ -18,3 +18,4 @@ class GeneratedUI(Base, TimestampMixin):
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     product_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     pages_generated: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    preview_token: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)

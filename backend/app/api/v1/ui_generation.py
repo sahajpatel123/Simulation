@@ -1,5 +1,7 @@
+import hmac
 import logging
 import re
+import secrets
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, Response
@@ -26,7 +28,23 @@ _PDF_200 = {200: {"description": "PDF file", "content": {"application/pdf": {}}}
 
 ALLOWED_CDNS = ["tailwindcss", "alpinejs", "cdn.tailwindcss", "jsdelivr.net/npm/alpinejs"]
 TAILWIND_CDN = '<script src="https://cdn.tailwindcss.com"></script>'
-ALPINE_CDN = '<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>'
+ALPINE_CDN = '<script src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js" defer></script>'
+
+
+def _new_preview_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def _preview_url(ui: GeneratedUI) -> str:
+    if ui.preview_token:
+        return f"/api/v1/generated-uis/{ui.id}/serve?preview_token={ui.preview_token}"
+    return f"/api/v1/generated-uis/{ui.id}/serve"
+
+
+def _is_valid_preview_token(ui: GeneratedUI, preview_token: str | None) -> bool:
+    if not ui.preview_token or not preview_token:
+        return False
+    return hmac.compare_digest(ui.preview_token, preview_token)
 
 
 def _strip_unsafe_scripts(html: str) -> str:
@@ -236,6 +254,7 @@ async def generate_ui(
         version=1,
         product_type=body.product_type,
         pages_generated=len(body.pages_required),
+        preview_token=_new_preview_token(),
     )
     db.add(ui)
     db.commit()
@@ -245,7 +264,7 @@ async def generate_ui(
         id=ui.id,
         project_id=project_id,
         version=ui.version,
-        html_preview_url=f"/api/v1/generated-uis/{ui.id}/serve",
+        html_preview_url=_preview_url(ui),
         html_content=html,
         pages_detected=body.pages_required,
     )
@@ -320,6 +339,7 @@ No markdown, no explanation."""
         version=existing.version + 1,
         product_type=existing.product_type,
         pages_generated=existing.pages_generated,
+        preview_token=_new_preview_token(),
     )
     db.add(new_ui)
     db.commit()
@@ -329,7 +349,7 @@ No markdown, no explanation."""
         id=new_ui.id,
         project_id=project_id,
         version=new_ui.version,
-        html_preview_url=f"/api/v1/generated-uis/{new_ui.id}/serve",
+        html_preview_url=_preview_url(new_ui),
         html_content=html,
         pages_detected=["home", "product", "checkout"],
     )
@@ -367,7 +387,7 @@ async def list_generated_uis(
                 "version": ui.version,
                 "product_type": ui.product_type,
                 "pages_generated": ui.pages_generated,
-                "html_preview_url": f"/api/v1/generated-uis/{ui.id}/serve",
+                "html_preview_url": _preview_url(ui),
                 "html_content": ui.html_content,
                 "created_at": ui.created_at.isoformat() if ui.created_at else None,
             }
@@ -404,7 +424,7 @@ async def get_generated_ui(
         "product_type": ui.product_type,
         "pages_generated": ui.pages_generated,
         "prompt": ui.prompt,
-        "html_preview_url": f"/api/v1/generated-uis/{ui.id}/serve",
+        "html_preview_url": _preview_url(ui),
         "created_at": ui.created_at.isoformat() if ui.created_at else None,
     }
 
@@ -412,15 +432,18 @@ async def get_generated_ui(
 @router.get(
     "/generated-uis/{ui_id}/serve",
     response_class=HTMLResponse,
-    summary="Serve generated HTML in the browser (unauthenticated preview URL)",
+    summary="Serve generated HTML in the browser with a preview token",
     responses=_HTML_200,
 )
 async def serve_generated_ui(
     ui_id: int,
+    preview_token: str | None = None,
     db: Session = Depends(get_db),
 ):
     ui = db.query(GeneratedUI).filter(GeneratedUI.id == ui_id).first()
     if not ui:
+        raise HTTPException(status_code=404, detail="UI not found")
+    if not _is_valid_preview_token(ui, preview_token):
         raise HTTPException(status_code=404, detail="UI not found")
 
     # Allow the frontend to embed this document in an iframe while blocking
@@ -429,27 +452,29 @@ async def serve_generated_ui(
     # /serve paths so older browsers are also covered.
     frontend_origin = settings.FRONTEND_URL.rstrip("/")
     csp_parts = [
-        "default-src 'self' https:",
+        "default-src 'none'",
         # Tailwind Play CDN and Alpine.js both rely on eval/inline execution.
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
+        "script-src 'unsafe-inline' 'unsafe-eval' "
         "https://cdn.tailwindcss.com https://unpkg.com "
         "https://cdn.jsdelivr.net https://esm.sh",
-        "style-src 'self' 'unsafe-inline' "
+        "style-src 'unsafe-inline' "
         "https://cdn.tailwindcss.com https://fonts.googleapis.com "
         "https://cdn.jsdelivr.net",
-        "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net",
-        "img-src * data: blob:",
-        "connect-src 'self' https:",
+        "font-src data: https://fonts.gstatic.com https://cdn.jsdelivr.net",
+        "img-src data: blob:",
+        "connect-src 'none'",
         # Only the TheCee frontend (and the API itself for direct opens) may frame this document.
         f"frame-ancestors 'self' {frontend_origin}",
+        "form-action 'none'",
         "object-src 'none'",
-        "base-uri 'self'",
+        "base-uri 'none'",
     ]
     headers = {
         "Content-Security-Policy": "; ".join(csp_parts),
         "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "no-referrer",
         # Cache generated UIs aggressively — content is immutable per version.
-        "Cache-Control": "public, max-age=3600, immutable",
+        "Cache-Control": "private, max-age=3600, immutable",
     }
     return HTMLResponse(content=_inject_tracking(ui.html_content), headers=headers)
 
@@ -496,9 +521,7 @@ async def start_ui_simulation(
     db.commit()
     db.refresh(run)
 
-    serve_url = (
-        f"{settings.PUBLIC_API_BASE_URL.rstrip('/')}/api/v1/generated-uis/{ui_id}/serve"
-    )
+    serve_url = f"{settings.PUBLIC_API_BASE_URL.rstrip('/')}{_preview_url(ui)}"
 
     run_ui_simulation.delay(
         ui_simulation_run_id=run.id,

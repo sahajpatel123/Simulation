@@ -74,6 +74,22 @@ def _session_outcome(s: dict) -> str:
     return "abandoned"
 
 
+async def _run_browser_batch(
+    pool: BrowserPool,
+    cluster_id: str,
+    agent_profile: dict,
+    architect_outputs: dict,
+    n_agents: int,
+    serve_url: str,
+) -> list[dict]:
+    return await pool.run_cluster_batch(
+        cluster_id=cluster_id,
+        agent_profiles=[agent_profile] * n_agents,
+        architect_outputs=architect_outputs,
+        url=serve_url,
+    )
+
+
 # ── Main Celery task ──
 @celery_app.task(
     name="ui_simulation.run",
@@ -123,6 +139,8 @@ def run_ui_simulation(
         total_agents = 0
         total_converted = 0
 
+        browser_batches: list[tuple[str, object, dict, dict, int]] = []
+
         for cluster in all_clusters:
             cid = cluster.cluster_id
             agent_profile = cluster_to_agent_profile(cid)
@@ -143,19 +161,8 @@ def run_ui_simulation(
             if decision.tier == AgentTier.MICRO or serve_url is None:
                 session_data = _micro_evaluate(cid, agent_profile, arch_dicts, n)
             else:
-                # WORKER / SUPERVISOR — real browser
-                pool = BrowserPool(max_sessions=4)
-                profiles_list = [agent_profile] * n
-
-                async def _run_batch() -> list[dict]:
-                    return await pool.run_cluster_batch(
-                        cluster_id=cid,
-                        agent_profiles=profiles_list,
-                        architect_outputs=arch_dicts,
-                        url=serve_url,
-                    )
-
-                session_data = asyncio.run(_run_batch())
+                browser_batches.append((cid, cluster, agent_profile, arch_dicts, n))
+                continue
 
             converted = sum(1 for s in session_data if s.get("converted"))
             cr = converted / max(len(session_data), 1)
@@ -188,6 +195,47 @@ def run_ui_simulation(
                     }
                 )
 
+        if browser_batches:
+            browser_pool = BrowserPool(max_sessions=4)
+
+            async def _run_browser_batches() -> list[tuple[str, object, dict, list[dict]]]:
+                results: list[tuple[str, object, dict, list[dict]]] = []
+                for cid, cluster, agent_profile, arch_dicts, n in browser_batches:
+                    sessions = await _run_browser_batch(
+                        browser_pool, cid, agent_profile, arch_dicts, n, serve_url
+                    )
+                    results.append((cid, cluster, agent_profile, sessions))
+                return results
+
+            for cid, cluster, agent_profile, session_data in asyncio.run(_run_browser_batches()):
+                converted = sum(1 for s in session_data if s.get("converted"))
+                cr = converted / max(len(session_data), 1)
+                cluster_results[cid] = {
+                    "cluster_name": cluster.name,
+                    "tier": AgentTier.WORKER.value,
+                    "agents_run": len(session_data),
+                    "converted": converted,
+                    "conversion_rate": round(cr, 4),
+                    "population_fraction": round(cluster.population_weight, 4),
+                    "top_finding": _top_finding(conductor_result, cid),
+                }
+                total_agents += len(session_data)
+                total_converted += converted
+                for s in session_data:
+                    conv = bool(s.get("converted", False))
+                    session_maps.append(
+                        {
+                            "generated_ui_id": generated_ui_id,
+                            "agent_cluster_id": cid,
+                            "agent_profile_json": agent_profile,
+                            "events_json": s.get("events", []),
+                            "outcome": _session_outcome(s),
+                            "duration_seconds": int(s.get("duration_seconds", 0)),
+                            "pages_visited": int(s.get("pages_visited", 1)),
+                            "converted": conv,
+                        }
+                    )
+
         if session_maps:
             db.bulk_insert_mappings(UISimulationSession, session_maps)
 
@@ -212,14 +260,17 @@ def run_ui_simulation(
         return {"status": "completed", "overall_conversion_rate": overall_cr}
 
     except Exception as e:
-        try:
-            db.execute(
-                text("UPDATE ui_simulation_runs SET status='FAILED' WHERE id=:id"),
-                {"id": ui_simulation_run_id},
-            )
-            db.commit()
-        except Exception:
-            db.rollback()
+        retries = int(getattr(self.request, "retries", 0) or 0)
+        max_retries = int(getattr(self, "max_retries", 0) or 0)
+        if retries >= max_retries:
+            try:
+                db.execute(
+                    text("UPDATE ui_simulation_runs SET status='FAILED' WHERE id=:id"),
+                    {"id": ui_simulation_run_id},
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
         raise self.retry(exc=e, countdown=30) from e
     finally:
         db.close()

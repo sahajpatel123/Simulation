@@ -107,7 +107,7 @@ def generate_hardware_spec(
     if not settings.GROK_API_KEY:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="GROK_API_KEY is not configured",
+            detail="LLM service unavailable",
         )
     pt = body.product_type.strip().lower()
     if pt not in VALID_PRODUCT_TYPES:
@@ -196,7 +196,7 @@ def refine_hardware_spec(
     if not settings.GROK_API_KEY:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="GROK_API_KEY is not configured",
+            detail="LLM service unavailable",
         )
 
     _get_owned_project(db, project_id, current_user.id)
@@ -888,6 +888,24 @@ def trigger_consumer_simulation(
     generated_ui_id = body.get("generated_ui_id")
     if generated_ui_id is not None:
         generated_ui_id = int(generated_ui_id)
+
+    db.execute(
+        text("""
+            INSERT INTO hardware_consumer_simulation_runs
+            (hardware_product_id, project_id, status, agent_count,
+             product_type, results_json, conductor_result_json, generated_ui_id,
+             created_at, completed_at)
+            VALUES (:hw_id, :pid, 'QUEUED', 0, NULL,
+                    CAST(:results AS jsonb), NULL, :ui_id, NOW(), NULL)
+        """),
+        {
+            "hw_id": hw_id,
+            "pid": project_id,
+            "results": json.dumps({"status": "QUEUED"}),
+            "ui_id": generated_ui_id,
+        },
+    )
+    db.commit()
 
     task = run_hardware_consumer_simulation.delay(
         hardware_product_id=hw_id,

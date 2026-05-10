@@ -202,6 +202,43 @@ def _public_api_base() -> str:
     return os.environ.get("PUBLIC_API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 
 
+def _fallback_sessions(
+    cid: str,
+    n_agents: int,
+    eff_will_pay: float,
+) -> list[dict]:
+    sessions: list[dict] = []
+    for _ in range(n_agents):
+        converted = random.random() < eff_will_pay * 0.7
+        sessions.append(
+            {
+                "converted": converted,
+                "outcome": "converted" if converted else "abandoned",
+                "pages_visited": 2 if random.random() < eff_will_pay else 1,
+                "duration_seconds": random.randint(10, 60),
+                "events": [{"action": "micro_eval", "cluster": cid}],
+                "agent_cluster_id": cid,
+            }
+        )
+    return sessions
+
+
+async def _run_browser_batch(
+    pool,
+    cluster_id: str,
+    agent_profile: dict,
+    architect_outputs: dict,
+    n_agents: int,
+    serve_url: str,
+) -> list:
+    return await pool.run_cluster_batch(
+        cluster_id=cluster_id,
+        agent_profiles=[agent_profile] * n_agents,
+        architect_outputs=architect_outputs,
+        url=serve_url,
+    )
+
+
 @celery_app.task(
     name="hardware.consumer_simulation",
     bind=True,
@@ -292,9 +329,15 @@ def run_hardware_consumer_simulation(
 
         serve_url: str | None = None
         if generated_ui_id:
-            serve_url = (
-                f"{_public_api_base()}/api/v1/generated-uis/{generated_ui_id}/serve"
-            )
+            token_row = db.execute(
+                text("SELECT preview_token FROM generated_uis WHERE id = :ui_id"),
+                {"ui_id": generated_ui_id},
+            ).fetchone()
+            if token_row and token_row.preview_token:
+                serve_url = (
+                    f"{_public_api_base()}/api/v1/generated-uis/{generated_ui_id}/serve"
+                    f"?preview_token={token_row.preview_token}"
+                )
 
         findings_all: list = []
         try:
@@ -310,6 +353,26 @@ def run_hardware_consumer_simulation(
             "true",
             "yes",
         )
+
+        from app.browser.pool import BrowserPool
+
+        browser_pool = BrowserPool(max_sessions=4) if serve_url and not skip_browser else None
+
+        db.execute(
+            text("""
+                UPDATE hardware_consumer_simulation_runs
+                SET status = 'RUNNING'
+                WHERE id = (
+                    SELECT id FROM hardware_consumer_simulation_runs
+                    WHERE hardware_product_id = :hw_id AND project_id = :pid
+                      AND status = 'QUEUED'
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                )
+            """),
+            {"hw_id": hardware_product_id, "pid": project_id},
+        )
+        db.commit()
 
         for cluster in all_clusters:
             cid = cluster.cluster_id
@@ -334,43 +397,18 @@ def run_hardware_consumer_simulation(
 
             if (
                 serve_url
-                and not skip_browser
+                and browser_pool is not None
                 and decision.tier in (AgentTier.WORKER, AgentTier.SUPERVISOR)
             ):
-                from app.browser.pool import BrowserPool
-
-                pool = BrowserPool(max_sessions=4)
-
-                async def _run_batch() -> list:
-                    return await pool.run_cluster_batch(
-                        cluster_id=cid,
-                        agent_profiles=[mutated_profile] * n_agents,
-                        architect_outputs=arch_dicts,
-                        url=serve_url,
-                    )
-
-                sessions = asyncio.run(_run_batch())
+                sessions = asyncio.run(
+                    _run_browser_batch(browser_pool, cid, mutated_profile, arch_dicts, n_agents, serve_url)
+                )
             else:
                 pricing_m = arch_dicts.get("PricingArchitect", {}).get("metrics", {})
                 will_pay = float(pricing_m.get("will_pay_probability", 0.05))
                 trust_pen = abs(float(mutation_result.total_trust_delta))
                 eff_will_pay = max(0.0, will_pay - trust_pen * 0.5)
-
-                sessions = [
-                    {
-                        "converted": random.random() < eff_will_pay * 0.7,
-                        "outcome": (
-                            "converted"
-                            if random.random() < eff_will_pay * 0.7
-                            else "abandoned"
-                        ),
-                        "pages_visited": 2 if random.random() < eff_will_pay else 1,
-                        "duration_seconds": random.randint(10, 60),
-                        "events": [{"action": "micro_eval", "cluster": cid}],
-                        "agent_cluster_id": cid,
-                    }
-                    for _ in range(n_agents)
-                ]
+                sessions = _fallback_sessions(cid, n_agents, eff_will_pay)
 
             converted = sum(1 for s in sessions if s.get("converted"))
             cr = converted / max(len(sessions), 1)
@@ -465,13 +503,18 @@ def run_hardware_consumer_simulation(
 
         db.execute(
             text("""
-            INSERT INTO hardware_consumer_simulation_runs
-            (hardware_product_id, project_id, status, agent_count,
-             product_type, results_json, conductor_result_json,
-             generated_ui_id, completed_at, created_at)
-            VALUES (:hw_id, :pid, 'COMPLETED', :agents, :pt,
-                    CAST(:results AS jsonb), CAST(:conductor AS jsonb),
-                    :ui_id, NOW(), NOW())
+            UPDATE hardware_consumer_simulation_runs
+            SET status = 'COMPLETED', agent_count = :agents, product_type = :pt,
+                results_json = CAST(:results AS jsonb),
+                conductor_result_json = CAST(:conductor AS jsonb),
+                completed_at = NOW()
+            WHERE id = (
+                SELECT id FROM hardware_consumer_simulation_runs
+                WHERE hardware_product_id = :hw_id AND project_id = :pid
+                  AND status IN ('QUEUED', 'RUNNING')
+                ORDER BY created_at DESC
+                LIMIT 1
+            )
         """),
             {
                 "hw_id": hardware_product_id,
@@ -480,7 +523,6 @@ def run_hardware_consumer_simulation(
                 "pt": product_type.value,
                 "results": json.dumps(results_json),
                 "conductor": json.dumps(conductor_blob),
-                "ui_id": generated_ui_id,
             },
         )
         db.commit()
@@ -503,28 +545,35 @@ def run_hardware_consumer_simulation(
                 __name__,
                 _exc,
             )
-        try:
-            err_msg = str(e)[:500]
-            db.execute(
-                text("""
-                    INSERT INTO hardware_consumer_simulation_runs
-                    (hardware_product_id, project_id, status, agent_count, product_type,
-                     results_json, conductor_result_json, generated_ui_id, completed_at, created_at)
-                    VALUES (:hw_id, :pid, 'FAILED', 0, 'unknown',
-                            CAST(:results AS jsonb), NULL, :ui_id, NOW(), NOW())
-                """),
-                {
-                    "hw_id": hardware_product_id,
-                    "pid": project_id,
-                    "results": json.dumps(
-                        {"error_message": err_msg, "status": "FAILED"}
-                    ),
-                    "ui_id": generated_ui_id,
-                },
-            )
-            db.commit()
-        except Exception:
-            db.rollback()
+        retries = int(getattr(self.request, "retries", 0) or 0)
+        max_retries = int(getattr(self, "max_retries", 0) or 0)
+        if retries >= max_retries:
+            try:
+                err_msg = str(e)[:500]
+                db.execute(
+                    text("""
+                        UPDATE hardware_consumer_simulation_runs
+                        SET status = 'FAILED', agent_count = 0, product_type = 'unknown',
+                            results_json = CAST(:results AS jsonb), completed_at = NOW()
+                        WHERE id = (
+                            SELECT id FROM hardware_consumer_simulation_runs
+                            WHERE hardware_product_id = :hw_id AND project_id = :pid
+                              AND status IN ('QUEUED', 'RUNNING')
+                            ORDER BY created_at DESC
+                            LIMIT 1
+                        )
+                    """),
+                    {
+                        "hw_id": hardware_product_id,
+                        "pid": project_id,
+                        "results": json.dumps(
+                            {"error_message": err_msg, "status": "FAILED"}
+                        ),
+                    },
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
         raise self.retry(exc=e, countdown=30)
     finally:
         db.close()

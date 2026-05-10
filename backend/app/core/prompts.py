@@ -64,7 +64,7 @@ Return ONLY valid JSON, no markdown, no backticks, no explanation:
 
 HTML rules:
 - Include <script src="https://cdn.tailwindcss.com"></script> in head
-- Include <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script> for interactivity
+- Include <script src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js" defer></script> for interactivity
 - Build at minimum: hero, product/feature section, pricing section, one CTA flow
 - Use realistic product names, copy, and pricing based on the idea
 - Dark or light theme that fits the product category
@@ -341,19 +341,41 @@ Generate a single, complete, self-contained HTML file for the product below.
 The output is a real working prototype — not a wireframe — every button must do
 something visible.
 
+HARD RULES — violating any of these will invalidate the output:
+- NEVER use bare onclick="..." or addEventListener. Use Alpine.js @click ONLY.
+- NEVER leave a button without an @click that changes visible state.
+- NEVER generate a form without @submit.prevent.
+- NEVER output a static page. Every section transition must be driven by Alpine.
+
 ALL of the following are mandatory — do not omit any:
 
 TECHNICAL:
 - Tailwind CSS CDN: <script src="https://cdn.tailwindcss.com"></script>
-- Alpine.js CDN: <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-- Wrap the whole app in a single Alpine.js x-data root with a `page` state
-  (e.g. 'home' | 'product' | 'cart' | 'payment' | 'confirmation') plus a
-  cart array and any UI state (modals, toggles, form fields).
-- Render each "page" as a <section x-show="page==='...'"> block. No iframes,
-  no separate files, no full-page reloads.
+- Alpine.js CDN: <script src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js" defer></script>
+- Your entire app MUST be wrapped in one Alpine root exactly like this skeleton
+  (expand it — do not shrink it):
+
+  <body x-data="{
+    page: 'home',
+    cart: [],
+    cartOpen: false,
+    modalOpen: false,
+    formSent: false,
+    qty: 1,
+    addToCart(item) { this.cart.push(item); this.cartOpen = true; },
+    removeFromCart(i) { this.cart.splice(i, 1); }
+  }">
+    <section x-show="page==='home'" x-transition> … </section>
+    <section x-show="page==='product'" x-transition> … </section>
+    <section x-show="page==='cart'" x-transition> … </section>
+    <section x-show="page==='payment'" x-transition> … </section>
+    <section x-show="page==='confirmation'" x-transition> … </section>
+  </body>
+
 - Every <button> must have an @click handler that mutates Alpine state
-  (navigate, add/remove cart item, open modal, submit form, etc.).
-- All <form> elements must have @submit.prevent that shows a success state.
+  (navigate pages, toggle modals, add/remove cart items, etc.).
+- All <form> elements must have @submit.prevent="formSent=true" and show a
+  success message with x-show="formSent".
 
 DESIGN QUALITY (this is graded):
 - Use a strong type hierarchy, generous spacing, and a real visual identity

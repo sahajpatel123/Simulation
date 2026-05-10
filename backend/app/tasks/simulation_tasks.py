@@ -393,7 +393,9 @@ def run_full_simulation(self, simulation_id: int) -> dict:
 
     except Exception as exc:
         logger.exception(f"[Simulation] Failed - simulation_id={simulation_id}")
-        if sim is not None:
+        retries = int(getattr(self.request, "retries", 0) or 0)
+        max_retries = int(getattr(self, "max_retries", 0) or 0)
+        if sim is not None and retries >= max_retries:
             _mark_failed(self.db, sim, exc)
         raise self.retry(exc=exc)
 

@@ -5,21 +5,16 @@ import { motion } from 'framer-motion'
 import { Monitor, Smartphone, ArrowRight, ArrowLeft, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { formatProductTypeLabel, SOFTWARE_TYPES } from '@/components/ui-builder/constants'
-import type { GeneratedUI, UIGenerateRequest } from '@/components/ui-builder/types'
+import type { GeneratedUI, GeneratedUIHistoryResponse, UIGenerateRequest } from '@/components/ui-builder/types'
 import { previewAbsoluteUrl } from '@/components/ui-builder/preview-absolute-url'
 import { useProject } from '@/hooks/useProjects'
-import { getApiV1Base } from '@/lib/api-v1-base'
+import { apiError, apiLong } from '@/lib/api'
 
-function authHeaders(): HeadersInit {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  }
-}
+type PrototypeGenerateResponse = GeneratedUI & { project_id?: number }
+type UISimulationStartResponse = { ui_simulation_run_id: number }
 
 /**
  * Editorial fallback when the API has not yet typeset a prototype HTML.
@@ -155,6 +150,22 @@ export default function PrototypePage() {
   const [simStatus, setSimStatus] = useState<string | null>(null)
   const promptSeededRef = useRef(false)
 
+  const { data: uiHistory, isLoading: isLoadingUiHistory } = useQuery({
+    queryKey: ['generated-uis', projectId],
+    queryFn: async (): Promise<GeneratedUIHistoryResponse> => {
+      const { data } = await apiLong.get<GeneratedUIHistoryResponse>(`/projects/${projectId}/generated-uis`)
+      return data
+    },
+    enabled: Number.isFinite(projectId),
+  })
+
+  useEffect(() => {
+    const latest = uiHistory?.uis?.[0]
+    if (!latest || uiPreviewPath) return
+    setUiPreviewPath(latest.html_preview_url)
+    setGeneratedUiId(latest.id)
+  }, [uiHistory, uiPreviewPath])
+
   useEffect(() => {
     promptSeededRef.current = false
     setPrompt('')
@@ -168,31 +179,22 @@ export default function PrototypePage() {
   }, [project, isLoading, router, projectId])
 
   const generateMutation = useMutation({
-    mutationFn: async (body: UIGenerateRequest) => {
-      const res = await fetch(`${getApiV1Base()}/projects/${projectId}/generate-ui`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) throw new Error(await res.text())
-      return (await res.json()) as GeneratedUI & { project_id?: number }
+    mutationFn: async (body: UIGenerateRequest): Promise<PrototypeGenerateResponse> => {
+      const { data } = await apiLong.post<PrototypeGenerateResponse>(`/projects/${projectId}/generate-ui`, body)
+      return data
     },
     onSuccess: (data) => {
       setUiPreviewPath(data.html_preview_url)
       setGeneratedUiId(data.id)
       setSimStatus(null)
-      void qc.invalidateQueries({ queryKey: ['project', projectId] })
+      void qc.invalidateQueries({ queryKey: ['generated-uis', projectId] })
     },
   })
 
   const simulateMutation = useMutation({
-    mutationFn: async (uiId: number) => {
-      const res = await fetch(`${getApiV1Base()}/projects/${projectId}/generated-uis/${uiId}/simulate`, {
-        method: 'POST',
-        headers: authHeaders(),
-      })
-      if (!res.ok) throw new Error(await res.text())
-      return (await res.json()) as { ui_simulation_run_id: number }
+    mutationFn: async (uiId: number): Promise<UISimulationStartResponse> => {
+      const { data } = await apiLong.post<UISimulationStartResponse>(`/projects/${projectId}/generated-uis/${uiId}/simulate`)
+      return data
     },
     onSuccess: (data) => {
       setSimStatus(`Simulation queued — run #${data.ui_simulation_run_id}`)
@@ -248,6 +250,7 @@ export default function PrototypePage() {
   const legacyPrototypeHtml = project.prototypeHtml?.trim() ?? ''
   const hasBuiltOnce = Boolean(legacyPrototypeHtml) || Boolean(uiPreviewPath)
   const iframeServeUrl = uiPreviewPath ? previewAbsoluteUrl(uiPreviewPath) : null
+  const generateError = generateMutation.isError ? apiError(generateMutation.error) : null
 
   const handlePullProof = () => {
     if (!prompt.trim() || !Number.isFinite(projectId)) return
@@ -478,15 +481,15 @@ export default function PrototypePage() {
                 {generateMutation.isPending ? 'Building…' : 'Build'}
               </button>
             </div>
-            {generateMutation.isError && (
+            {generateError && (
               <p style={{ padding: '0 14px 10px', margin: 0, fontSize: 11, color: 'var(--red)' }}>
-                The presses jammed — check your connection and try again.
+                The presses jammed — {generateError}
               </p>
             )}
           </div>
 
           <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-            {generateMutation.isPending && (
+            {(generateMutation.isPending || isLoadingUiHistory) && (
               <div
                 style={{
                   position: 'absolute',
@@ -502,7 +505,7 @@ export default function PrototypePage() {
               >
                 <Loader2 className="animate-spin" style={{ width: 22, height: 22, color: 'var(--red)' }} />
                 <span className="kicker" style={{ color: 'var(--ink-secondary)' }}>
-                  Compositor is setting your line…
+                  {generateMutation.isPending ? 'Compositor is setting your line…' : 'Checking saved plates…'}
                 </span>
               </div>
             )}
@@ -511,7 +514,7 @@ export default function PrototypePage() {
                 key={iframeServeUrl}
                 src={iframeServeUrl}
                 title="Generated prototype preview"
-                sandbox="allow-scripts allow-same-origin"
+                sandbox="allow-scripts allow-forms allow-same-origin"
                 style={{
                   flex: 1,
                   width: '100%',
@@ -524,7 +527,7 @@ export default function PrototypePage() {
               <iframe
                 srcDoc={legacyPrototypeHtml || MOCK_HTML}
                 title="Prototype preview"
-                sandbox="allow-scripts"
+                sandbox="allow-scripts allow-forms allow-same-origin"
                 style={{
                   flex: 1,
                   width: '100%',

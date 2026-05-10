@@ -14,10 +14,21 @@ postcss.config.mjs
 eslint.config.mjs
 components.json
 .next
+.next.nosync
 out
 build
 src
 public
+.vercel
+.turbo
+.cache
+htmlcov
+.coverage*
+coverage
+
+# Legacy / stale Python trees not used by the canonical backend image
+/app/
+/thecee-backend/
 
 # Python artefacts
 __pycache__
@@ -38,15 +49,17 @@ env
 tests
 app.bak
 
+# Logs
+*.log
+logs
+
 # iCloud duplicates
-* 2.py
-* 2.sh
-* 2.txt
+* 2*
 
 # Local env files — secrets must come from Railway env vars
-.env
-.env.local
-.env.production
+.env*
+.env *
+!.env.example
 
 # macOS
 .DS_Store

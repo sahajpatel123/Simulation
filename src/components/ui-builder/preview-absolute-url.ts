@@ -1,11 +1,18 @@
 import { getApiOriginFromV1Base, getApiV1Base } from '@/lib/api-v1-base'
 
-/** Turn `/api/v1/generated-uis/…/serve` (or absolute URLs) into a browser-openable origin URL. */
+/** Turn generated preview paths into browser-openable URLs without double-prefixing API bases. */
 export function previewAbsoluteUrl(htmlPreviewUrl: string): string {
   if (htmlPreviewUrl.startsWith('http://') || htmlPreviewUrl.startsWith('https://')) {
     return htmlPreviewUrl
   }
-  const origin = getApiOriginFromV1Base(getApiV1Base())
+
   const path = htmlPreviewUrl.startsWith('/') ? htmlPreviewUrl : `/${htmlPreviewUrl}`
-  return `${origin}${path}`
+  const apiV1Base = getApiV1Base()
+  const pathWithoutApiPrefix = path.replace(/^\/api\/v1(?=\/|$)/, '')
+
+  if (apiV1Base.startsWith('/')) {
+    return `${apiV1Base}${pathWithoutApiPrefix}`
+  }
+
+  return `${getApiOriginFromV1Base(apiV1Base)}${path}`
 }

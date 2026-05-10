@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     GROK_BASE_URL: str = "https://api.x.ai/v1"
     GROK_MODEL: str = "grok-3-mini"
     GROK_FAST_MODEL: str = "grok-3-mini"
+    # Alias fields: pydantic-settings loads these from .env AND OS env, so the
+    # validator below can read them via self.* (os.environ.get() misses .env values).
+    OPENAI_API_KEY: str = ""
+    XAI_API_KEY: str = ""
+    OPENAI_BASE_URL: str = ""
+    OPENAI_MODEL: str = ""
     FRONTEND_URL: str = "http://localhost:3000"
     PUBLIC_API_BASE_URL: str = "http://127.0.0.1:8000"
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -61,31 +67,24 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _coerce_llm_env_aliases(self) -> "Settings":
-        """Accept OPENAI_* env vars as fallbacks when GROK_* are unset.
+        """Accept OPENAI_* / XAI_* env vars as fallbacks when GROK_* are unset.
 
-        xAI Grok uses an OpenAI-compatible API, so tooling and profile configs
-        (e.g. .openclaude-profile.json) may set OPENAI_API_KEY / OPENAI_BASE_URL
-        / OPENAI_MODEL instead of the GROK_* equivalents. Accept both so a
-        missing key doesn't silently surface as a timeout.
+        Reads from model fields (populated by pydantic-settings from .env AND OS env)
+        so .env file aliases are honoured — unlike os.environ.get() which only sees OS-level vars.
         """
-        import os
-
         if not self.GROK_API_KEY:
-            for env_var in ("OPENAI_API_KEY", "XAI_API_KEY"):
-                v = os.environ.get(env_var, "").strip()
-                if v:
-                    self.GROK_API_KEY = v
+            for fallback in (self.XAI_API_KEY, self.OPENAI_API_KEY):
+                if fallback.strip():
+                    self.GROK_API_KEY = fallback.strip()
                     break
 
-        openai_base = os.environ.get("OPENAI_BASE_URL", "").strip()
-        if openai_base and openai_base != self.GROK_BASE_URL:
-            self.GROK_BASE_URL = openai_base
+        if self.OPENAI_BASE_URL.strip() and self.OPENAI_BASE_URL.strip() != self.GROK_BASE_URL:
+            self.GROK_BASE_URL = self.OPENAI_BASE_URL.strip()
 
-        openai_model = os.environ.get("OPENAI_MODEL", "").strip()
-        if openai_model and self.GROK_MODEL == "grok-3-mini":
-            self.GROK_MODEL = openai_model
+        if self.OPENAI_MODEL.strip() and self.GROK_MODEL == "grok-3-mini":
+            self.GROK_MODEL = self.OPENAI_MODEL.strip()
             if self.GROK_FAST_MODEL == "grok-3-mini":
-                self.GROK_FAST_MODEL = openai_model
+                self.GROK_FAST_MODEL = self.OPENAI_MODEL.strip()
 
         return self
 

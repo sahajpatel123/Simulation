@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from typing import Any
+
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -19,8 +21,8 @@ class UISimulationSession(Base):
         index=True,
     )
     agent_cluster_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    agent_profile_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    events_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    agent_profile_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    events_json: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, nullable=True)
     outcome: Mapped[str | None] = mapped_column(String(50), nullable=True)
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     pages_visited: Mapped[int] = mapped_column(Integer, default=1, nullable=False)

@@ -3,6 +3,7 @@
 # try to use the Python backend as the App Router source, producing an
 # empty build and a 404 on every route.
 /app/
+/backend/
 /thecee-backend/
 /tests/
 /migrations/
@@ -21,3 +22,9 @@ railway.toml
 # Python config / docs (not needed for frontend build)
 AGENTS.md
 CLAUDE.md
+
+# Local env / secrets and duplicate local files
+.env*
+.env *
+!.env.example
+* 2*

@@ -523,7 +523,10 @@ thecee/
 **Required** (see `.env.example` for full list):
 ```
 DATABASE_URL=postgresql://...
-ANTHROPIC_API_KEY=sk-ant-...
+GROK_API_KEY=...
+GROK_BASE_URL=https://api.x.ai/v1
+GROK_MODEL=grok-3-mini
+GROK_FAST_MODEL=grok-3-mini
 REDIS_URL=redis://localhost:6379/0
 CELERY_BROKER_URL=redis://localhost:6379/0
 CELERY_RESULT_BACKEND=redis://localhost:6379/1

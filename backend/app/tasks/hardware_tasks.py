@@ -209,27 +209,30 @@ def run_hardware_tests(self, hardware_product_id: int, project_id: int):
                 __name__,
                 _exc,
             )
-        try:
-            db.execute(
-                text("""
-                    UPDATE hardware_products
-                    SET last_test_summary_json = CAST(:summary AS jsonb)
-                    WHERE id = :hw_id AND project_id = :pid
-                """),
-                {
-                    "summary": json.dumps(
-                        {
-                            "status": "FAILED",
-                            "error_message": str(e)[:500],
-                        }
-                    ),
-                    "hw_id": hardware_product_id,
-                    "pid": project_id,
-                },
-            )
-            db.commit()
-        except Exception:
-            db.rollback()
+        retries = int(getattr(self.request, "retries", 0) or 0)
+        max_retries = int(getattr(self, "max_retries", 0) or 0)
+        if retries >= max_retries:
+            try:
+                db.execute(
+                    text("""
+                        UPDATE hardware_products
+                        SET last_test_summary_json = CAST(:summary AS jsonb)
+                        WHERE id = :hw_id AND project_id = :pid
+                    """),
+                    {
+                        "summary": json.dumps(
+                            {
+                                "status": "FAILED",
+                                "error_message": str(e)[:500],
+                            }
+                        ),
+                        "hw_id": hardware_product_id,
+                        "pid": project_id,
+                    },
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
         raise self.retry(exc=e, countdown=15)
     finally:
         db.close()

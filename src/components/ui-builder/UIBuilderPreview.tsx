@@ -81,7 +81,7 @@ export default function UIBuilderPreview({ generatedUI, generatePending, iframeR
             src={previewSrc}
             className="relative z-[1] h-full w-full border-0"
             title="Generated UI Preview"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+            sandbox="allow-scripts allow-forms"
           />
         )}
       </div>

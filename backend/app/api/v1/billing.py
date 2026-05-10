@@ -22,6 +22,8 @@ _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}
 
 
 def get_razorpay_client() -> razorpay.Client:
+    if not settings.RAZORPAY_KEY_ID or not settings.RAZORPAY_KEY_SECRET:
+        raise HTTPException(503, detail="Payment service not configured")
     return razorpay.Client(
         auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET),
     )
@@ -67,10 +69,13 @@ async def create_subscription(
 
     client = get_razorpay_client()
 
-    existing_customer_id = db.execute(
-        text("SELECT razorpay_customer_id FROM users WHERE id = :uid"),
+    user_row = db.execute(
+        text("SELECT razorpay_customer_id, razorpay_subscription_id FROM users WHERE id = :uid"),
         {"uid": current_user.id},
-    ).scalar_one_or_none()
+    ).mappings().first()
+    existing_customer_id = (user_row["razorpay_customer_id"] or None) if user_row else None
+    if user_row and user_row["razorpay_subscription_id"]:
+        raise HTTPException(409, detail="An active subscription already exists. Cancel it before creating a new one.")
 
     if not existing_customer_id:
         display_name = (current_user.full_name or "TheCee User").strip() or "TheCee User"
@@ -169,7 +174,8 @@ async def razorpay_webhook(
     now = datetime.now(timezone.utc)
 
     if event == "subscription.activated":
-        expires_at = now + timedelta(days=30)
+        current_end = entity.get("current_end")
+        expires_at = datetime.fromtimestamp(int(current_end), tz=timezone.utc) if current_end else now + timedelta(days=30)
         db.execute(
             text("""
             UPDATE users
@@ -182,7 +188,8 @@ async def razorpay_webhook(
         db.commit()
 
     elif event == "subscription.charged":
-        expires_at = now + timedelta(days=32)
+        current_end = entity.get("current_end")
+        expires_at = datetime.fromtimestamp(int(current_end), tz=timezone.utc) if current_end else now + timedelta(days=32)
         db.execute(
             text("""
             UPDATE users

@@ -221,7 +221,10 @@ See `.env.example` for the full list. Minimum for local dev:
 ```
 DATABASE_URL=postgresql://...
 SECRET_KEY=<32+ random chars>
-ANTHROPIC_API_KEY=sk-ant-...
+GROK_API_KEY=...
+GROK_BASE_URL=https://api.x.ai/v1
+GROK_MODEL=grok-3-mini
+GROK_FAST_MODEL=grok-3-mini
 REDIS_URL=redis://localhost:6379/0
 CELERY_BROKER_URL=redis://localhost:6379/0
 CELERY_RESULT_BACKEND=redis://localhost:6379/1

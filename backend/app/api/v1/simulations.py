@@ -25,7 +25,8 @@ from app.simulation.scored_assumption import (
     score_assumptions,
     signal_quality_tier,
 )
-from app.tasks.simulation_tasks import health_check, run_full_simulation
+from app.tasks.simulation_tasks import run_full_simulation
+from app.worker import celery_app
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/simulations", tags=["simulations"])
@@ -122,11 +123,11 @@ def create_simulation(
 )
 def worker_health():
     try:
-        result = health_check.delay()
-        resp = result.get(timeout=5)
-        return {"worker_reachable": True, "response": resp}
-    except Exception as exc:
-        return {"worker_reachable": False, "error": str(exc)}
+        inspect = celery_app.control.inspect(timeout=1.0)
+        active_workers = inspect.ping() or {}
+        return {"worker_reachable": bool(active_workers), "workers_online": len(active_workers)}
+    except Exception:
+        return {"worker_reachable": False, "workers_online": 0}
 
 
 @router.get(

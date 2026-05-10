@@ -5,8 +5,7 @@ import traceback
 from datetime import datetime, timezone
 from typing import Any
 
-from celery import Task, group
-from celery.result import allow_join_result
+from celery import Task
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
@@ -259,8 +258,8 @@ def run_decision_comparison(self, decision_id: int) -> dict[str, Any]:
 
         logger.info("[Decision] Dispatching %s scenarios decision_id=%s", len(scenarios), decision_id)
 
-        signatures = [
-            run_single_scenario.s(
+        raw_results: list[dict[str, Any]] = [
+            run_single_scenario.run(
                 project_id=decision.project_id,
                 scenario=scenario,
                 base_env_params=base_env_params,
@@ -269,27 +268,6 @@ def run_decision_comparison(self, decision_id: int) -> dict[str, Any]:
             )
             for index, scenario in enumerate(scenarios)
         ]
-
-        raw_results: list[dict[str, Any]]
-        try:
-            scenario_tasks = group(signatures)
-            with allow_join_result():
-                raw_results = scenario_tasks.apply_async().get(timeout=840, propagate=False)
-        except Exception as group_exc:
-            logger.warning(
-                "[Decision] Parallel group execution failed, falling back to sequential run: %s",
-                group_exc,
-            )
-            raw_results = [
-                run_single_scenario.run(
-                    project_id=decision.project_id,
-                    scenario=scenario,
-                    base_env_params=base_env_params,
-                    assumption_dicts=assumption_dicts,
-                    seed_offset=index * 100,
-                )
-                for index, scenario in enumerate(scenarios)
-            ]
 
         valid = [result for result in raw_results if not result.get("error")]
         failed = [result for result in raw_results if result.get("error")]
@@ -341,7 +319,9 @@ def run_decision_comparison(self, decision_id: int) -> dict[str, Any]:
 
     except Exception as exc:
         logger.exception("[Decision] Failed — decision_id=%s", decision_id)
-        if decision is not None:
+        retries = int(getattr(self.request, "retries", 0) or 0)
+        max_retries = int(getattr(self, "max_retries", 0) or 0)
+        if decision is not None and retries >= max_retries:
             try:
                 decision.status = "FAILED"
                 decision.error_message = (

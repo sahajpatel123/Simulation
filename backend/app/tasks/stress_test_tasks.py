@@ -297,24 +297,26 @@ def run_assumption_stress_test(self, project_id: int) -> dict[str, Any]:
 
     except Exception as exc:
         logger.exception("[StressTest] Failed — project_id=%s", project_id)
-        error_payload = {
-            "status": "FAILED",
-            "error": str(exc),
-            "traceback": traceback.format_exc()[:1000],
-            "generated_at": _utcnow(),
-            "task_id": self.request.id if getattr(self, "request", None) else None,
-        }
-        try:
-            if project:
+        retries = int(getattr(self.request, "retries", 0) or 0)
+        max_retries = int(getattr(self, "max_retries", 0) or 0)
+        if project and retries >= max_retries:
+            error_payload = {
+                "status": "FAILED",
+                "error": str(exc),
+                "traceback": traceback.format_exc()[:1000],
+                "generated_at": _utcnow(),
+                "task_id": self.request.id if getattr(self, "request", None) else None,
+            }
+            try:
                 self.db.execute(
                     text("UPDATE projects SET stress_test_json = :v WHERE id = :id"),
                     {"v": json.dumps(error_payload), "id": project_id},
                 )
                 self.db.commit()
-        except Exception as _exc:
-            logger.debug(
-                "%s suppressed: %s",
-                __name__,
-                _exc,
-            )
+            except Exception as _exc:
+                logger.debug(
+                    "%s suppressed: %s",
+                    __name__,
+                    _exc,
+                )
         raise self.retry(exc=exc)
