@@ -336,80 +336,365 @@ Known assumptions: {assumptions_text}
 # ══════════════════════════════════════════
 
 UI_GENERATION_PROMPT = """\
-You are a world-class UI/UX designer and senior frontend engineer.
-Generate a single, complete, self-contained HTML file for the product below.
-The output is a real working prototype — not a wireframe — every button must do
-something visible.
+You are an elite product designer who has shipped at Linear, Vercel, Framer, and Stripe.
+Build a complete, self-contained HTML prototype that is indistinguishable from a funded product.
+Your output should look like it was designed by a senior designer at a top-tier startup — not a template.
 
-HARD RULES — violating any of these will invalidate the output:
-- NEVER use bare onclick="..." or addEventListener. Use Alpine.js @click ONLY.
-- NEVER leave a button without an @click that changes visible state.
-- NEVER generate a form without @submit.prevent.
-- NEVER output a static page. Every section transition must be driven by Alpine.
-
-ALL of the following are mandatory — do not omit any:
-
-TECHNICAL:
-- Tailwind CSS CDN: <script src="https://cdn.tailwindcss.com"></script>
-- Alpine.js CDN: <script src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js" defer></script>
-- Your entire app MUST be wrapped in one Alpine root exactly like this skeleton
-  (expand it — do not shrink it):
-
-  <body x-data="{
-    page: 'home',
-    cart: [],
-    cartOpen: false,
-    modalOpen: false,
-    formSent: false,
-    qty: 1,
-    addToCart(item) { this.cart.push(item); this.cartOpen = true; },
-    removeFromCart(i) { this.cart.splice(i, 1); }
-  }">
-    <section x-show="page==='home'" x-transition> … </section>
-    <section x-show="page==='product'" x-transition> … </section>
-    <section x-show="page==='cart'" x-transition> … </section>
-    <section x-show="page==='payment'" x-transition> … </section>
-    <section x-show="page==='confirmation'" x-transition> … </section>
-  </body>
-
-- Every <button> must have an @click handler that mutates Alpine state
-  (navigate pages, toggle modals, add/remove cart items, etc.).
-- All <form> elements must have @submit.prevent="formSent=true" and show a
-  success message with x-show="formSent".
-
-DESIGN QUALITY (this is graded):
-- Use a strong type hierarchy, generous spacing, and a real visual identity
-  (gradient hero, cards with shadows, hover states, transitions).
-- Use Tailwind utility classes liberally for color, spacing, rounded corners,
-  shadows, hover, and `transition` animations. No bare unstyled elements.
-- Mobile-first responsive (sm: md: lg:) — 79% of agents are on mobile.
-- ARIA labels on every interactive element.
-
-CONTENT:
-- Realistic fake data: product names, INR prices, reviews, testimonials.
-- SVG placeholders or descriptive image URLs.
-- Full checkout flow: Home → Product → Cart → Payment → Confirmation.
-
-THECEE TRACKING — these attributes are REQUIRED and validated. Use these exact
-strings, double-quoted, on real elements (not comments):
-- data-thecee-id="cta-primary"       on the primary hero CTA button
-- data-thecee-id="pricing-section"   on the <section> showing pricing
-- data-thecee-id="checkout-form"     on the <form> in the payment/checkout page
-- data-thecee-id="nav-home"          on the home nav link
-- data-thecee-id="nav-products"      on the products nav link
-- data-thecee-id="nav-cart"          on the cart button in the navbar
-- data-thecee-id="add-to-cart"       on every add-to-cart button
-
-OUTPUT FORMAT:
-- Return ONLY the HTML document, starting with <!DOCTYPE html> and ending with
-  </html>. No markdown fences, no commentary, no prose.
-- Do not truncate. If you are running long, drop decorative copy before
-  dropping pages or the closing </html> tag.
-
-Product description: {description}
-Product type: {product_type}
+PRODUCT
+Description: {description}
+Type: {product_type}
 Target segment: {target_segment}
 Price point: {price_point}
+
+══════════════════════════════
+MANDATORY HEAD TAGS (copy these exactly — do not alter the URLs)
+══════════════════════════════
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {{
+  theme: {{ extend: {{ fontFamily: {{
+    sans: ['"Inter"', 'system-ui', 'sans-serif'],
+    display: ['"Plus Jakarta Sans"', '"Inter"', 'sans-serif']
+  }}}}}}
+}}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js" defer></script>
+
+══════════════════════════════
+DESIGN SYSTEM — write this in your <style> tag
+══════════════════════════════
+Choose a brand color that fits the product personality:
+  SaaS / productivity → indigo or violet (#6366f1 or #8b5cf6)
+  Health / wellness   → emerald or teal (#10b981 or #14b8a6)
+  Finance / B2B       → blue or slate-blue (#3b82f6 or #4f6ef7)
+  Consumer / D2C      → amber or rose (#f59e0b or #f43f5e)
+  Developer tools     → electric green or cyan (#22c55e or #06b6d4)
+  EdTech / learning   → violet or fuchsia (#a855f7 or #d946ef)
+
+For SaaS, B2B, developer tools → use a DARK theme (bg: #08080e, cards: #111119)
+For consumer, health, food, retail → use a LIGHT theme (bg: #f8f7ff, cards: #ffffff)
+
+:root {{
+  --brand: #6366f1;
+  --brand-hover: #4f46e5;
+  --brand-dim: rgba(99,102,241,0.12);
+  --brand-glow: rgba(99,102,241,0.25);
+  --bg: #08080e;
+  --surface: #111119;
+  --surface-2: #1a1a28;
+  --border: rgba(255,255,255,0.07);
+  --border-strong: rgba(255,255,255,0.14);
+  --text-1: #f0f0f8;
+  --text-2: #9090a8;
+  --text-3: #55556a;
+  --radius: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.3);
+  --shadow-lg: 0 24px 64px rgba(0,0,0,0.45);
+  --transition: all 0.18s cubic-bezier(0.4,0,0.2,1);
+}}
+body {{ background:var(--bg); color:var(--text-1); font-family:'Inter',sans-serif; -webkit-font-smoothing:antialiased; }}
+* {{ box-sizing:border-box; margin:0; padding:0; }}
+
+/* Reusable component classes */
+.card {{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius-lg); transition:var(--transition);
+}}
+.card:hover {{ transform:translateY(-3px); box-shadow:var(--shadow-lg); border-color:var(--border-strong); }}
+
+.btn-primary {{
+  display:inline-flex; align-items:center; gap:8px;
+  background:var(--brand); color:#fff; padding:0.7rem 1.6rem;
+  border-radius:var(--radius); font-weight:600; font-size:0.9rem;
+  letter-spacing:0.01em; border:none; cursor:pointer;
+  transition:var(--transition);
+}}
+.btn-primary:hover {{ background:var(--brand-hover); transform:translateY(-2px); box-shadow:0 8px 24px var(--brand-glow); }}
+.btn-primary:active {{ transform:scale(0.97); }}
+
+.btn-ghost {{
+  display:inline-flex; align-items:center; gap:8px;
+  background:transparent; border:1px solid var(--border-strong); color:var(--text-2);
+  padding:0.7rem 1.6rem; border-radius:var(--radius); font-weight:500; font-size:0.9rem;
+  cursor:pointer; transition:var(--transition);
+}}
+.btn-ghost:hover {{ background:var(--brand-dim); border-color:var(--brand); color:var(--text-1); }}
+
+.gradient-text {{
+  background:linear-gradient(135deg, var(--brand) 0%, #a78bfa 100%);
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+}}
+
+.glass {{
+  background:rgba(255,255,255,0.03); backdrop-filter:blur(16px) saturate(180%);
+  -webkit-backdrop-filter:blur(16px) saturate(180%);
+  border:1px solid var(--border);
+}}
+
+/* Hero background blobs */
+.blob {{
+  position:absolute; border-radius:50%; filter:blur(90px);
+  opacity:0.18; pointer-events:none; z-index:0;
+}}
+
+/* Animated gradient border for featured elements */
+.gradient-border {{
+  position:relative; background:var(--surface-2);
+  border-radius:var(--radius-lg); padding:1px;
+  background:linear-gradient(135deg, var(--brand), transparent, var(--brand));
+}}
+.gradient-border-inner {{ background:var(--surface); border-radius:calc(var(--radius-lg) - 1px); height:100%; }}
+
+/* Input fields */
+input, textarea, select {{
+  background:var(--surface-2); border:1px solid var(--border-strong); color:var(--text-1);
+  border-radius:var(--radius); padding:0.65rem 1rem; font-size:0.9rem;
+  font-family:'Inter',sans-serif; transition:var(--transition); width:100%;
+}}
+input:focus, textarea:focus, select:focus {{
+  outline:2px solid var(--brand); outline-offset:2px; border-color:var(--brand);
+}}
+
+/* Page transitions via Alpine */
+[x-cloak] {{ display:none !important; }}
+
+══════════════════════════════
+ALPINE ROOT — mandatory structure
+══════════════════════════════
+<body x-cloak x-data="{{
+  page:'home', cart:[], cartOpen:false, formSent:false,
+  qty:1, tab:0, openFaq:null, plan:'monthly', navOpen:false, scrolled:false,
+  addToCart(item){{this.cart.push(item);this.cartOpen=true}},
+  removeFromCart(i){{this.cart.splice(i,1)}},
+  init(){{window.addEventListener('scroll',()=>{{this.scrolled=window.scrollY>60}})}}
+}}">
+
+RULES — violating these breaks the prototype:
+  - NEVER onclick="..." — Alpine @click ONLY
+  - EVERY <button> must mutate visible Alpine state
+  - EVERY <form> must have @submit.prevent="formSent=true"
+  - x-transition on all page switches
+
+══════════════════════════════
+SECTIONS — build every one of these
+══════════════════════════════
+
+■ NAVBAR (sticky glass bar)
+  Structure: logo | nav links | CTA button + cart icon
+  Style: position:fixed; top:0; width:100%; z-index:50
+         :class="scrolled ? 'glass border-b shadow-sm' : 'bg-transparent'"
+         transition:background 0.3s
+  Logo: <span style="font-family:'Plus Jakarta Sans',sans-serif; font-weight:900; font-size:1.3rem">
+  Cart icon: show badge (x-show="cart.length>0") with count (x-text="cart.length")
+  data-thecee-id: nav-home, nav-products, nav-cart
+  Mobile: hamburger @click="navOpen=!navOpen" → slide-in drawer x-show="navOpen"
+
+■ HERO (maximum visual impact — min-height:100vh)
+  Background layers (in order, all position:relative/absolute, z-index controlled):
+    1. Base: bg color var(--bg)
+    2. Blob 1: width:600px; height:600px; background:var(--brand); top:-100px; left:-100px
+    3. Blob 2: width:500px; height:500px; background:#a78bfa; bottom:-80px; right:-50px
+    4. Subtle grid overlay: SVG dot-grid or CSS repeating-linear-gradient at 3% opacity
+
+  Content (z-index:1, relative, centered):
+    - Eyebrow pill: <span class="pill"> with 1px brand border, brand-dim bg, small text + "→"
+      style: border:1px solid var(--border-strong); background:var(--brand-dim);
+             border-radius:999px; padding:4px 14px; font-size:0.75rem; font-weight:500; color:var(--text-2)
+    - Headline: font-family:'Plus Jakarta Sans',sans-serif; font-weight:900;
+                font-size:clamp(2.8rem,6vw,5.2rem); letter-spacing:-0.04em; line-height:1.06
+                Wrap the most impactful 2-3 words in <span class="gradient-text">
+    - Sub-headline: max 18 words; color:var(--text-2); font-size:1.15rem; font-weight:400;
+                    max-width:560px; line-height:1.65; margin-top:1rem
+    - CTA row: btn-primary (data-thecee-id="cta-primary") + btn-ghost side by side, gap:12px
+    - Stats row (margin-top:2.5rem): 3 metrics separated by ·
+      Each: <strong style="font-size:1.5rem;font-weight:800;color:var(--text-1)">VALUE</strong>
+            <span style="font-size:0.85rem;color:var(--text-2)">label</span>
+      Use real numbers relevant to the product (users, ratings, saved time, etc.)
+    - Hero visual (right side or below on mobile):
+        A CSS-built mock UI card: background:var(--surface); border:1px solid var(--border);
+        border-radius:var(--radius-xl); box-shadow:var(--shadow-lg); padding:1.5rem;
+        containing fake UI rows (colored divs, fake buttons, mini table, fake chart bars)
+        Rotate 3-6 degrees: transform:rotate(4deg)
+        Floating badges around it: small pill-shaped cards with icons and short text
+
+■ SOCIAL PROOF BAR (subtle band, padding:1.5rem 0)
+  Style: border-top:1px solid var(--border); border-bottom:1px solid var(--border)
+         background:linear-gradient(to right, transparent, var(--surface), transparent)
+  Content: "Trusted by teams building India's next category leaders"
+  + 4 company logos rendered as styled text in different font-weights and colors
+
+■ FEATURES (bento grid — NOT boring equal columns)
+  Section: padding:6rem 0; max-width:1100px; margin:0 auto
+  Title + sub above grid (center-aligned)
+  CSS Grid layout:
+    grid-template-columns: repeat(3,1fr); gap:1.5rem
+    Card A (top-left): grid-column:span 2 — large card, with a mini visualization inside
+      (CSS bar chart: 4-5 colored bars of different heights inside a 160px-tall area)
+    Cards B, C: standard single cards
+    Card D (bottom-right): grid-column:span 2 — another wide card, different content angle
+    Card E: standard single card
+  Each card: class="card" padding:1.75rem
+    Icon: 42px × 42px circle, background:var(--brand-dim), centered SVG or emoji, font-size:20px
+    Feature name: font-family:'Plus Jakarta Sans',sans-serif; font-weight:700; font-size:1.05rem; margin-top:1rem
+    Description: color:var(--text-2); font-size:0.875rem; line-height:1.65; margin-top:0.5rem
+
+■ TESTIMONIALS (3 side-by-side cards)
+  Section: padding:6rem 0
+  Grid: 3 columns on desktop, 1 on mobile
+  Each card: class="card" padding:1.75rem
+    Top border: 4px gradient (linear-gradient(to right, var(--brand), #a78bfa))
+      achieved via: border-top:none; background-image:linear-gradient(var(--surface),var(--surface)),
+                   linear-gradient(to right, var(--brand), #a78bfa);
+                   background-origin:border-box; background-clip:padding-box,border-box;
+                   border-top:4px solid transparent;
+    Stars: ★★★★★ in <span style="color:var(--brand)">
+    Quote: font-style:italic; color:var(--text-2); line-height:1.7; margin:0.75rem 0 1rem
+    Avatar row: 36px circle (background:linear-gradient(135deg,var(--brand),#a78bfa);
+               border-radius:50%; display:flex; align-items:center; justify-content:center;
+               color:#fff; font-weight:700; font-size:0.8rem) + name + role
+
+■ PRICING (data-thecee-id="pricing-section") — 3 plans
+  Toggle: Monthly / Annual pill switcher at top
+    @click="plan=plan==='monthly'?'annual':'monthly'"
+    :class active state shows filled bg on selected option
+    x-show="plan==='annual'" badge: "Save 20%" in brand color
+  3 plan cards in a row (desktop), stacked (mobile):
+    Starter: class="card" padding:2rem
+    Pro (featured):
+      style: background:linear-gradient(135deg,var(--surface-2),var(--surface));
+             border:1px solid var(--brand); border-radius:var(--radius-xl);
+             transform:scale(1.04) on desktop (media query or Tailwind md:scale-105)
+             position:relative (for badge)
+      Badge: "Most Popular" positioned absolute top-right
+             background:var(--brand); color:#fff; padding:4px 12px; border-radius:0 var(--radius-lg) 0 var(--radius)
+             font-size:0.7rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase
+    Scale: class="card" padding:2rem
+  Each plan card has:
+    - Plan name (font-weight:700, font-size:1rem, color:var(--text-2), text-transform:uppercase, letter-spacing:0.08em)
+    - Price: large (font-size:3rem, font-weight:900, line-height:1) + /month small
+      x-text showing monthly vs annual price (use @click toggle)
+    - Feature list: ✓ in brand color + feature text; 5-7 items
+    - CTA button (Pro: btn-primary with data-thecee-id="cta-primary"; others: btn-ghost)
+
+■ FAQ SECTION (accordion, 5-7 items)
+  @click="openFaq===i ? openFaq=null : openFaq=i" on each item
+  :class="openFaq===i ? 'text-text-1' : 'text-text-2'" on question
+  Answer: x-show="openFaq===i" with transition
+  + icon: rotates 45deg when open (:style="openFaq===i?'transform:rotate(45deg)':''")
+  Border-bottom between items; no border on last
+
+■ FOOTER
+  4-column grid: Brand + tagline | Product links | Company | Contact/Social
+  Bottom bar: © year + privacy + terms; border-top:1px solid var(--border)
+
+══════════════════════════════
+PRODUCT PAGE (x-show="page==='product'")
+══════════════════════════════
+  Large product hero card (gradient bg, no real images)
+  3 thumbnail cards below (change main on @click)
+  Product name + badge + ★★★★★ rating + review count
+  Price: ₹X,XXX, font-size:2rem, font-weight:800
+  Qty selector: − qty + @click adjust
+  Buttons: "Add to Cart" (data-thecee-id="add-to-cart") + "Buy Now" @click="page='payment'"
+  3 trust badges: 🚚 Free delivery · ↩ 7-day returns · 🔒 Secure checkout
+  Tab switcher: Description | Reviews (Alpine :class for active tab)
+
+══════════════════════════════
+CART PAGE (x-show="page==='cart'")
+══════════════════════════════
+  Items list with qty controls and × remove button
+  Order summary card: subtotal, discount, GST (18%), total
+  "Proceed to Checkout" → @click="page='payment'"
+
+══════════════════════════════
+PAYMENT PAGE (x-show="page==='payment'")
+══════════════════════════════
+  Form (data-thecee-id="checkout-form") @submit.prevent="formSent=true"
+  Fields: full name, email, phone, address, city, pincode
+  Payment method selector: Card | UPI | Cash on Delivery (Alpine tab)
+    Card tab: card number, expiry, CVV (fake fields)
+    UPI tab: UPI ID input field
+    COD tab: confirmation message
+  "Place Order" submit button
+  x-show="formSent" → show success inline (no page change needed here)
+
+══════════════════════════════
+CONFIRMATION (x-show="page==='confirmation' || formSent")
+══════════════════════════════
+  SVG checkmark circle (green) + "Order Confirmed!" h2
+  Order number (random fake), estimated delivery date
+  "Continue Shopping" @click="page='home'; formSent=false; cart=[]"
+
+══════════════════════════════
+CONTENT STANDARDS
+══════════════════════════════
+  • Invent a SPECIFIC product brand name (not "ProductX" or "AppName") that fits the idea
+  • Every copy line is benefit-specific: "Cut invoice processing from 4 hours to 8 minutes"
+    NOT "Save time and increase productivity"
+  • Indian context throughout: ₹ pricing, Indian names (Arjun Mehta, Priya Sharma),
+    Indian cities (Mumbai, Bangalore, Delhi), Indian companies (Infosys, Zomato, Flipkart)
+  • Testimonials: 3 real-sounding Indian personas with full name + job title + company
+  • Stats row: impressive but plausible numbers with specific units
+
+══════════════════════════════
+PAGE TRANSITIONS (apply to all page switches)
+══════════════════════════════
+x-transition:enter="transition ease-out duration-200"
+x-transition:enter-start="opacity-0 translate-y-2"
+x-transition:enter-end="opacity-100 translate-y-0"
+x-transition:leave="transition ease-in duration-150"
+x-transition:leave-end="opacity-0 -translate-y-2"
+
+══════════════════════════════
+THECEE TRACKING — required, server-side validated
+══════════════════════════════
+On REAL visible elements (not hidden, not comments):
+  data-thecee-id="cta-primary"      → primary hero CTA button
+  data-thecee-id="pricing-section"  → pricing <section>
+  data-thecee-id="checkout-form"    → payment <form>
+  data-thecee-id="nav-home"         → home nav link
+  data-thecee-id="nav-products"     → products nav link
+  data-thecee-id="nav-cart"         → cart button in navbar
+  data-thecee-id="add-to-cart"      → add-to-cart button(s)
+
+══════════════════════════════
+OUTPUT FORMAT
+══════════════════════════════
+Return ONLY <!DOCTYPE html>…</html>. Zero markdown fences. Zero prose. Zero comments outside HTML.
+If running close to token budget: drop decorative copy first, NEVER drop sections or </html>.
+Minimum 400 lines of HTML.
+"""
+
+
+# ── Refine prompt components ──────────────────────────────────────────────────
+# Used by the refine_ui endpoint to make surgical changes to an existing prototype.
+
+UI_REFINE_SYSTEM = """\
+You are a senior frontend engineer making precise, surgical edits to a production HTML prototype.
+The prototype uses Inter + Plus Jakarta Sans fonts, Tailwind CSS, Alpine.js, and a CSS variable design system.
+
+Rules you must follow without exception:
+1. Apply ONLY the requested change. Do not redesign sections that were not mentioned.
+2. Preserve ALL CSS variables (--brand, --surface, --text-*, etc.) and their values unless the change specifically asks for a color update.
+3. Keep ALL data-thecee-id attributes on their current elements. Never remove or relocate them.
+4. Keep Alpine state (@click, x-show, x-data, x-transition) fully functional.
+5. Keep Tailwind CDN, Alpine CDN, and Google Fonts link tags exactly as they are.
+6. Return ONLY the complete updated <!DOCTYPE html>…</html> document. No markdown. No explanation.\
+"""
+
+UI_REFINE_PROMPT_TEMPLATE = """\
+CURRENT HTML:
+{html}
+
+CHANGE REQUEST:
+{instruction}
+
+Return the complete updated HTML document starting with <!DOCTYPE html>.\
 """
 
 # ══════════════════════════════════════════

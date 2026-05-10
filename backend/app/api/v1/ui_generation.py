@@ -12,7 +12,7 @@ from app.core.claude_client import claude_call_with_fallback
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
-from app.core.prompts import UI_GENERATION_PROMPT
+from app.core.prompts import UI_GENERATION_PROMPT, UI_REFINE_PROMPT_TEMPLATE, UI_REFINE_SYSTEM
 from app.models.generated_ui import GeneratedUI
 from app.models.project import Project
 from app.models.ui_simulation_run import UISimulationRun
@@ -300,15 +300,10 @@ async def refine_ui(
     if not existing:
         raise HTTPException(status_code=404, detail="Generated UI not found")
 
-    refine_prompt = f"""You are refining an existing HTML prototype.
-Current HTML:
-{existing.html_content[:3000]}
-
-Refinement instruction: {body.refinement_prompt}
-
-Return ONLY the complete updated HTML. Keep all data-thecee-id attributes.
-Maintain Tailwind CSS and Alpine.js CDN links.
-No markdown, no explanation."""
+    refine_prompt = UI_REFINE_PROMPT_TEMPLATE.format(
+        html=existing.html_content or "",
+        instruction=body.refinement_prompt,
+    )
 
     out = claude_call_with_fallback(
         [{"role": "user", "content": refine_prompt}],
@@ -316,6 +311,7 @@ No markdown, no explanation."""
         max_tokens=8192,
         fallback_key="ui_generation",
         timeout=240,
+        system=UI_REFINE_SYSTEM,
     )
     if out.get("error"):
         raise HTTPException(
