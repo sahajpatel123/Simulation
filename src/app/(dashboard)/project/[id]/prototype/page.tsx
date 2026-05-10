@@ -683,11 +683,12 @@ export default function PrototypePage() {
             style={{
               position: 'fixed',
               inset: 0,
-              top: 60,
+              top: 64,
               display: 'flex',
               flexDirection: 'column',
               zIndex: 40,
               background: 'var(--ink)',
+              borderTop: '1px solid var(--red)',
             }}
           >
             {/* ── Split body ───────────────────────────────────────── */}
@@ -969,14 +970,14 @@ export default function PrototypePage() {
                 {/* Preview bar */}
                 <div
                   style={{
-                    padding: '8px 20px',
+                    padding: '10px 20px 8px',
                     borderBottom: '0.5px solid rgba(26,23,20,0.1)',
                     background: 'var(--paper)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     flexShrink: 0,
-                    height: 48,
+                    height: 50,
                     boxSizing: 'border-box',
                   }}
                 >
@@ -1085,7 +1086,7 @@ export default function PrototypePage() {
                     style={{
                       position: 'absolute',
                       inset: 0,
-                      top: 48,
+                      top: 50,
                       zIndex: 2,
                       display: 'flex',
                       flexDirection: 'column',
