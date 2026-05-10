@@ -141,62 +141,69 @@ function Hero() {
   )
 }
 
-/* ─── NARRATIVE SCROLL (APPLE STYLE BLUR FADES) ──────────────────────────────────────────── */
+/* ─── NARRATIVE SCROLL (REFINED, CENTERED, READABLE) ──────────────────────────────────────────── */
 function NarrativeScroll() {
-  const ref = useRef(null)
+  const ref = React.useRef(null)
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] })
 
-  // Slide 1
-  const o1 = useTransform(scrollYProgress, [0, 0.1, 0.25, 0.35], [0, 1, 1, 0])
-  const b1 = useTransform(scrollYProgress, [0, 0.1, 0.25, 0.35], ['blur(20px)', 'blur(0px)', 'blur(0px)', 'blur(20px)'])
-  const y1 = useTransform(scrollYProgress, [0, 0.1, 0.25, 0.35], [60, 0, 0, -60])
-  const s1 = useTransform(scrollYProgress, [0, 0.1, 0.25, 0.35], [0.95, 1, 1, 1.05])
+  // We spread the timeline out more safely so text doesn't overlap or blur out constantly.
+  // Slide 1 (0.0 to 0.3)
+  const o1 = useTransform(scrollYProgress, [0, 0.05, 0.25, 0.3], [0, 1, 1, 0])
+  const y1 = useTransform(scrollYProgress, [0, 0.05, 0.25, 0.3], [40, 0, 0, -40])
+  const b1 = useTransform(scrollYProgress, [0, 0.05, 0.25, 0.3], ['blur(10px)', 'blur(0px)', 'blur(0px)', 'blur(10px)'])
 
-  // Slide 2
-  const o2 = useTransform(scrollYProgress, [0.35, 0.45, 0.55, 0.65], [0, 1, 1, 0])
-  const b2 = useTransform(scrollYProgress, [0.35, 0.45, 0.55, 0.65], ['blur(20px)', 'blur(0px)', 'blur(0px)', 'blur(20px)'])
-  const y2 = useTransform(scrollYProgress, [0.35, 0.45, 0.55, 0.65], [60, 0, 0, -60])
-  const s2 = useTransform(scrollYProgress, [0.35, 0.45, 0.55, 0.65], [0.95, 1, 1, 1.05])
+  // Slide 2 (0.35 to 0.65)
+  const o2 = useTransform(scrollYProgress, [0.35, 0.4, 0.6, 0.65], [0, 1, 1, 0])
+  const y2 = useTransform(scrollYProgress, [0.35, 0.4, 0.6, 0.65], [40, 0, 0, -40])
+  const b2 = useTransform(scrollYProgress, [0.35, 0.4, 0.6, 0.65], ['blur(10px)', 'blur(0px)', 'blur(0px)', 'blur(10px)'])
 
-  // Slide 3
-  const o3 = useTransform(scrollYProgress, [0.65, 0.75, 0.85, 1], [0, 1, 1, 0])
-  const b3 = useTransform(scrollYProgress, [0.65, 0.75, 0.85, 1], ['blur(20px)', 'blur(0px)', 'blur(0px)', 'blur(20px)'])
-  const y3 = useTransform(scrollYProgress, [0.65, 0.75, 0.85, 1], [60, 0, 0, -60])
-  const s3 = useTransform(scrollYProgress, [0.65, 0.75, 0.85, 1], [0.95, 1, 1, 1.05])
+  // Slide 3 (0.7 to 1.0)
+  const o3 = useTransform(scrollYProgress, [0.7, 0.75, 0.95, 1], [0, 1, 1, 0])
+  const y3 = useTransform(scrollYProgress, [0.7, 0.75, 0.95, 1], [40, 0, 0, -40])
+  const b3 = useTransform(scrollYProgress, [0.7, 0.75, 0.95, 1], ['blur(10px)', 'blur(0px)', 'blur(0px)', 'blur(10px)'])
 
   const textStyle: React.CSSProperties = {
     position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    width: '100%',
-    maxWidth: 1000,
+    top: 0, left: 0, right: 0, bottom: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
     textAlign: 'center',
-    fontSize: 'clamp(40px, 6vw, 80px)',
+    fontSize: 'clamp(32px, 5vw, 72px)',
     fontFamily: 'var(--font-serif)',
     fontWeight: 500,
-    color: '#fff',
+    color: 'var(--paper)',
     lineHeight: 1.1,
     letterSpacing: '-0.02em',
+    padding: '0 5%',
   }
 
   return (
     <section ref={ref} style={{ height: '400vh', background: '#050505', position: 'relative' }}>
-      <div style={{ position: 'sticky', top: 0, height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-        <motion.div style={{ ...textStyle, opacity: o1, y: y1, scale: s1, filter: b1, WebkitFilter: b1 }}>
-          You have an idea.<br />You build it for six months.<br />
-          <span style={{ color: 'var(--red)', fontStyle: 'italic' }}>Then you find out nobody wants it.</span>
+      <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden' }}>
+        
+        <motion.div style={{ ...textStyle, opacity: o1, y: y1, filter: b1, WebkitFilter: b1 }}>
+          <p style={{ margin: 0, maxWidth: 1000 }}>
+            You have an idea.<br />You build it for six months.<br />
+            <span style={{ color: 'var(--red)', fontStyle: 'italic' }}>Then you find out nobody wants it.</span>
+          </p>
         </motion.div>
 
-        <motion.div style={{ ...textStyle, opacity: o2, y: y2, scale: s2, filter: b2, WebkitFilter: b2 }}>
-          What if you could put <br />your idea in front of <br />
-          <span style={{ fontStyle: 'italic' }}>10,000 synthetic readers</span> today?
+        <motion.div style={{ ...textStyle, opacity: o2, y: y2, filter: b2, WebkitFilter: b2 }}>
+          <p style={{ margin: 0, maxWidth: 1000 }}>
+            What if you could put <br />your idea in front of <br />
+            <span style={{ fontStyle: 'italic' }}>10,000 synthetic readers</span> today?
+          </p>
         </motion.div>
 
-        <motion.div style={{ ...textStyle, opacity: o3, y: y3, scale: s3, filter: b3, WebkitFilter: b3 }}>
-          We print the autopsy<br />before the burial.<br />
-          <span style={{ color: 'var(--red)', fontStyle: 'italic' }}>In exactly two minutes.</span>
+        <motion.div style={{ ...textStyle, opacity: o3, y: y3, filter: b3, WebkitFilter: b3 }}>
+          <p style={{ margin: 0, maxWidth: 1000 }}>
+            We print the autopsy<br />before the burial.<br />
+            <span style={{ color: 'var(--red)', fontStyle: 'italic' }}>In exactly two minutes.</span>
+          </p>
         </motion.div>
+        
       </div>
     </section>
   )
