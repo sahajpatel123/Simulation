@@ -229,8 +229,8 @@ function DirectiveFeatures() {
   const centerScale = useTransform(spreadProgress, [0, 1], [0.95, 1.05])
   const centerY = useTransform(spreadProgress, [0, 1], [0, -20])
 
-  const textOpacity = useTransform(scrollYProgress, [0, 0.1], [0, 1])
-  const headerY = useTransform(scrollYProgress, [0, 0.2], [40, 0])
+  const textOpacity = useTransform(scrollYProgress, [0, 0.05], [1, 1]) // Forced to 1 for full visibility
+  const headerY = useTransform(scrollYProgress, [0, 0.05], [20, 0])
 
   const cardShadow = useTransform(
     spreadProgress,
