@@ -60,3 +60,8 @@ dist/
 * 2.txt
 .gitkeep 2
 thecee-backend/
+
+# Root-level Python shadow (runtime uses backend/ exclusively)
+/app/
+/scripts/
+.venv_step86/

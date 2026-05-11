@@ -419,7 +419,7 @@ for table, column, col_type in [
 
 ## 10. File Structure Reference
 
-On disk, the FastAPI package is **`backend/app/`** (a `backend/` wrapper so Next.js does not treat the repo-root `app/` directory as the App Router—see `find-pages-dir` priority in Next.js). Imports stay **`from app…`** when `PYTHONPATH` includes `backend` (Docker, `start_worker.sh`, `pytest` via `pyproject.toml`) or when running **`migrate_and_start.py`**, which prepends `backend` to `sys.path`.
+The FastAPI package lives in **`backend/app/`**. The `backend/` wrapper keeps Python code out of the Next.js `src/` tree and ensures imports resolve correctly as `from app…` when `PYTHONPATH` includes `backend` (Docker, `start_worker.sh`, `pytest` via `pyproject.toml`) or when running **`migrate_and_start.py`**, which prepends `backend` to `sys.path`. Do not create a root-level `app/` directory — it is gitignored and has no role in the runtime.
 
 ```
 thecee/
