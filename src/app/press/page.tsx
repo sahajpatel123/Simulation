@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useRef } from 'react'
-import { motion, useScroll, useTransform, useSpring } from 'framer-motion'
+import { motion, useScroll, useTransform, useSpring, type Variants } from 'framer-motion'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 
@@ -27,7 +27,7 @@ export default function PressPage() {
     "END OF THE A/B TEST",
   ]
 
-  const variants = {
+  const variants: Variants = {
     hidden: { opacity: 0, filter: 'blur(10px)', y: 20 },
     visible: (i: number) => ({
       opacity: 1,
