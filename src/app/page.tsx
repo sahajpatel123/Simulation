@@ -416,9 +416,9 @@ function FooterSection() {
         </div>
         <div style={{ textAlign: 'right' }}>
           <div style={{ display: 'flex', gap: 40, marginBottom: 40, fontSize: 12, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)', fontWeight: 600 }}>
-            <a href="#" style={{ color: 'inherit', textDecoration: 'none' }}>About</a>
-            <a href="#" style={{ color: 'inherit', textDecoration: 'none' }}>Methodology</a>
-            <a href="#" style={{ color: 'inherit', textDecoration: 'none' }}>Press</a>
+            <Link href="/about" style={{ color: 'inherit', textDecoration: 'none' }}>About</Link>
+            <Link href="/methodology" style={{ color: 'inherit', textDecoration: 'none' }}>Methodology</Link>
+            <Link href="/press" style={{ color: 'inherit', textDecoration: 'none' }}>Press</Link>
           </div>
           <div style={{ fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', fontWeight: 700 }}>
             © 2026 TheCee — Printed in IST
