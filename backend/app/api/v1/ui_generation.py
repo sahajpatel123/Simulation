@@ -10,9 +10,15 @@ from sqlalchemy.orm import Session
 
 from app.core.claude_client import claude_call_with_fallback
 from app.core.config import settings
+from app.core.css_templates import select_template
 from app.core.database import get_db
 from app.core.deps import get_current_user
-from app.core.prompts import UI_GENERATION_PROMPT, UI_REFINE_PROMPT_TEMPLATE, UI_REFINE_SYSTEM
+from app.core.prompts import (
+    UI_GENERATION_PROMPT,
+    UI_GENERATION_SYSTEM,
+    UI_REFINE_PROMPT_TEMPLATE,
+    UI_REFINE_SYSTEM,
+)
 from app.models.generated_ui import GeneratedUI
 from app.models.project import Project
 from app.models.ui_simulation_run import UISimulationRun
@@ -100,6 +106,21 @@ def _coerce_to_html_doc(raw: str) -> str:
     )
 
 
+def _inject_base_css(html: str, css: str) -> str:
+    html = re.sub(
+        r'<style\b[^>]*\bid=["\']thecee-base["\'][^>]*>.*?</style>',
+        "",
+        html,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    tag = f'<style id="thecee-base">\n{css}\n</style>'
+    if re.search(r'<style[\s>]', html, re.IGNORECASE):
+        return re.sub(r'(<style[\s>])', tag + r'\n\1', html, count=1, flags=re.IGNORECASE)
+    if re.search(r'</head\s*>', html, re.IGNORECASE):
+        return re.sub(r'</head\s*>', tag + '</head>', html, count=1, flags=re.IGNORECASE)
+    return tag + html
+
+
 def _ensure_cdns(html: str) -> str:
     """Guarantee the Tailwind CDN is present — the prototype's styling depends on it."""
     lower = html.lower()
@@ -158,17 +179,20 @@ def _ensure_tracking_ids(html: str) -> str:
     return html
 
 
-def _build_safe_html(raw: str) -> str:
+def _build_safe_html(raw: str, css_template: str = "") -> str:
     """Coerce raw model output into a self-contained, valid prototype document.
 
     Pipeline:
       1. Coerce to a complete HTML document (handles fences, fragments, truncation).
       2. Strip non-allowlisted external scripts.
-      3. Inject Tailwind + Alpine CDNs if missing.
-      4. Guarantee the three required tracking attributes exist.
+      3. Inject TheCee base CSS template before model-generated style overrides.
+      4. Inject Tailwind CDN if missing.
+      5. Guarantee the three required tracking attributes exist.
     """
     doc = _coerce_to_html_doc(raw)
     doc = _strip_unsafe_scripts(doc)
+    if css_template:
+        doc = _inject_base_css(doc, css_template)
     doc = _ensure_cdns(doc)
     doc = _ensure_tracking_ids(doc)
     return doc
@@ -205,6 +229,7 @@ async def generate_ui(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    css = select_template(body.product_type)
     prompt = UI_GENERATION_PROMPT.format(
         description=(project.description or "") + "\n\n" + body.prompt,
         product_type=body.product_type,
@@ -218,6 +243,7 @@ async def generate_ui(
         max_tokens=8192,
         fallback_key="ui_generation",
         timeout=240,
+        system=UI_GENERATION_SYSTEM,
     )
     if out.get("error"):
         raise HTTPException(
@@ -232,7 +258,7 @@ async def generate_ui(
             detail="Generator returned no content. Please retry.",
         )
 
-    html = _build_safe_html(raw)
+    html = _build_safe_html(raw, css_template=css)
     logger.info(
         "generate-ui ok project=%s raw_len=%s html_len=%s",
         project_id,
@@ -293,6 +319,7 @@ async def refine_ui(
     if not existing:
         raise HTTPException(status_code=404, detail="Generated UI not found")
 
+    css = select_template(existing.product_type)
     refine_prompt = UI_REFINE_PROMPT_TEMPLATE.format(
         html=existing.html_content or "",
         instruction=body.refinement_prompt,
@@ -319,7 +346,7 @@ async def refine_ui(
             detail="Generator returned no content. Please retry.",
         )
 
-    html = _build_safe_html(raw)
+    html = _build_safe_html(raw, css_template=css)
 
     new_ui = GeneratedUI(
         project_id=project_id,
