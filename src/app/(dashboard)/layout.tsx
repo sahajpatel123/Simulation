@@ -10,31 +10,16 @@ import UserMenu from '@/components/layout/UserMenu'
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  /** Hidden after visiting a project prototype (same beat as rail collapse); restored only when opening `/projects`. */
-  const [archiveStripHidden, setArchiveStripHidden] = useState(false)
 
   useEffect(() => {
     if (!pathname) return
-    if (pathname === '/projects') {
-      setArchiveStripHidden(false)
-      return
-    }
     if (pathname.match(/^\/project\/\d+\/prototype\/?$/)) {
       setSidebarCollapsed(true)
-      setArchiveStripHidden(true)
     }
     if (pathname.match(/^\/project\/\d+\/hardware\/?$/)) {
       setSidebarCollapsed(true)
     }
   }, [pathname])
-
-  const today = new Date().toLocaleDateString('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
-  const issue = `VOL. ${new Date().getFullYear() - 2024 || 1} · NO. ${Math.floor(Math.random() * 900) + 100}`
 
   return (
     <ProtectedRoute>
@@ -58,28 +43,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             borderBottom: '0.5px solid var(--border-strong)',
           }}
         >
-          {/* Top meta strip — omitted after opening a prototype plate (stays off until `/projects`) */}
-          {!archiveStripHidden ? (
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '10px 40px',
-                fontSize: 10,
-                letterSpacing: '0.22em',
-                textTransform: 'uppercase',
-                color: 'var(--ink-secondary)',
-                borderBottom: '0.5px solid var(--border-color)',
-                fontWeight: 500,
-              }}
-            >
-              <span>{issue}</span>
-              <span style={{ color: 'var(--red)', fontWeight: 600 }}>THE ARCHIVE · WORKSPACE EDITION</span>
-              <span>{today}</span>
-            </div>
-          ) : null}
-
           {/* Masthead row */}
           <div
             style={{
@@ -88,9 +51,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               alignItems: 'center',
               padding: '18px 40px',
               gap: 24,
-              ...(archiveStripHidden
-                ? { borderTop: '0.5px solid var(--border-color)' }
-                : {}),
             }}
           >
             {/* Left — section indicator */}
@@ -180,7 +140,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             onCollapse={() => setSidebarCollapsed(true)}
             onExpand={() => setSidebarCollapsed(false)}
           />
-          <main style={{ minHeight: 'calc(100dvh - 120px)', position: 'relative' }}>{children}</main>
+          <main style={{ minHeight: 'calc(100dvh - 100px)', position: 'relative' }}>{children}</main>
         </div>
       </div>
     </ProtectedRoute>
