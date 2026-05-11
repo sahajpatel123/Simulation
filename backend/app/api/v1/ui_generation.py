@@ -5,7 +5,7 @@ import secrets
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, Response
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.core.claude_client import claude_call_with_fallback
@@ -50,6 +50,22 @@ def _is_valid_preview_token(ui: GeneratedUI, preview_token: str | None) -> bool:
     if not ui.preview_token or not preview_token:
         return False
     return hmac.compare_digest(ui.preview_token, preview_token)
+
+
+def _lock_project_for_ui_version(db: Session, project_id: int, user_id: int) -> None:
+    locked = (
+        db.query(Project.id)
+        .filter(Project.id == project_id, Project.user_id == user_id)
+        .with_for_update()
+        .first()
+    )
+    if not locked:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+
+def _next_ui_version(db: Session, project_id: int) -> int:
+    latest = db.query(func.max(GeneratedUI.version)).filter(GeneratedUI.project_id == project_id).scalar()
+    return int(latest or 0) + 1
 
 
 def _strip_unsafe_scripts(html: str) -> str:
@@ -343,11 +359,12 @@ async def generate_ui(
         len(html),
     )
 
+    _lock_project_for_ui_version(db, project_id, current_user.id)
     ui = GeneratedUI(
         project_id=project_id,
         prompt=body.prompt,
         html_content=html,
-        version=1,
+        version=_next_ui_version(db, project_id),
         product_type=body.product_type,
         pages_generated=len(body.pages_required),
         preview_token=_new_preview_token(),
@@ -426,11 +443,12 @@ async def refine_ui(
 
     html = _build_safe_html(raw, css_template=css)
 
+    _lock_project_for_ui_version(db, project_id, current_user.id)
     new_ui = GeneratedUI(
         project_id=project_id,
         prompt=body.refinement_prompt,
         html_content=html,
-        version=existing.version + 1,
+        version=_next_ui_version(db, project_id),
         product_type=existing.product_type,
         pages_generated=existing.pages_generated,
         preview_token=_new_preview_token(),
@@ -470,7 +488,7 @@ async def list_generated_uis(
     uis = (
         db.query(GeneratedUI)
         .filter(GeneratedUI.project_id == project_id)
-        .order_by(GeneratedUI.version.desc())
+        .order_by(GeneratedUI.id.desc())
         .all()
     )
 

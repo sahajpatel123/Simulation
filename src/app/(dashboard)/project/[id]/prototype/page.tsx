@@ -153,6 +153,11 @@ interface Revision {
   errorMsg?: string
 }
 
+const withPreviewNonce = (htmlPreviewUrl: string): string => {
+  const separator = htmlPreviewUrl.includes('?') ? '&' : '?'
+  return `${htmlPreviewUrl}${separator}preview_nonce=${Date.now()}`
+}
+
 export default function PrototypePage() {
   const params = useParams()
   const router = useRouter()
@@ -185,13 +190,6 @@ export default function PrototypePage() {
   })
 
   useEffect(() => {
-    const latest = uiHistory?.uis?.[0]
-    if (!latest || uiPreviewPath) return
-    setUiPreviewPath(latest.html_preview_url)
-    setGeneratedUiId(latest.id)
-  }, [uiHistory, uiPreviewPath])
-
-  useEffect(() => {
     promptSeededRef.current = false
     setPrompt('')
   }, [projectId])
@@ -209,9 +207,23 @@ export default function PrototypePage() {
       return data
     },
     onSuccess: (data) => {
-      setUiPreviewPath(data.html_preview_url)
+      setUiPreviewPath(withPreviewNonce(data.html_preview_url))
       setGeneratedUiId(data.id)
       setSimStatus(null)
+      qc.setQueryData<GeneratedUIHistoryResponse>(['generated-uis', projectId], (current) => ({
+        uis: [
+          {
+            id: data.id,
+            version: data.version,
+            product_type: data.product_type,
+            html_preview_url: data.html_preview_url,
+            html_content: data.html_content,
+            pages_detected: data.pages_detected,
+            created_at: new Date().toISOString(),
+          },
+          ...(current?.uis ?? []).filter((ui) => ui.id !== data.id),
+        ],
+      }))
       void qc.invalidateQueries({ queryKey: ['generated-uis', projectId] })
     },
   })
@@ -226,9 +238,23 @@ export default function PrototypePage() {
     },
     onSuccess: (data) => {
       setRevisions(prev => prev.map((r, i) => i === 0 ? { ...r, status: 'applied' as const } : r))
-      setUiPreviewPath(data.html_preview_url)
+      setUiPreviewPath(withPreviewNonce(data.html_preview_url))
       setGeneratedUiId(data.id)
       setEditApplied(true)
+      qc.setQueryData<GeneratedUIHistoryResponse>(['generated-uis', projectId], (current) => ({
+        uis: [
+          {
+            id: data.id,
+            version: data.version,
+            product_type: data.product_type,
+            html_preview_url: data.html_preview_url,
+            html_content: data.html_content,
+            pages_detected: data.pages_detected,
+            created_at: new Date().toISOString(),
+          },
+          ...(current?.uis ?? []).filter((ui) => ui.id !== data.id),
+        ],
+      }))
       void qc.invalidateQueries({ queryKey: ['generated-uis', projectId] })
     },
     onError: (err) => {
@@ -245,6 +271,14 @@ export default function PrototypePage() {
       setSimStatus(`Simulation queued — run #${data.ui_simulation_run_id}`)
     },
   })
+
+  useEffect(() => {
+    const latest = uiHistory?.uis?.[0]
+    if (!latest || generateMutation.isPending || refineMutation.isPending) return
+    if (generatedUiId != null && latest.id < generatedUiId) return
+    setUiPreviewPath((current) => (current?.startsWith(latest.html_preview_url) ? current : withPreviewNonce(latest.html_preview_url)))
+    setGeneratedUiId((current) => (current === latest.id ? current : latest.id))
+  }, [uiHistory, generatedUiId, generateMutation.isPending, refineMutation.isPending])
 
   useEffect(() => {
     if (!project?.description?.trim() || promptSeededRef.current) return
