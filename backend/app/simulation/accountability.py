@@ -189,6 +189,8 @@ class AccountabilityEngine:
                     conversion_impact = round(
                         abs(delta) * pop_frac * (cluster_cr / max(pwc, 0.001)), 4
                     )
+                    if conversion_impact <= 0.0:
+                        conversion_impact = 0.0001
                     conversion_impact = min(0.50, conversion_impact)
 
                     severity = (
@@ -253,7 +255,8 @@ class AccountabilityEngine:
         if not findings:
             return "unknown"
         arch_impact: dict[str, float] = {}
-        for f in findings:
+        ranked_findings = [f for f in findings if f.severity == "CRITICAL"] or findings
+        for f in ranked_findings:
             arch_impact[f.architect_name] = (
                 arch_impact.get(f.architect_name, 0.0) + f.impact_on_overall_conversion
             )

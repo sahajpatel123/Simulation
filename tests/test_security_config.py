@@ -31,6 +31,7 @@ def test_production_cors_only_allows_configured_frontend() -> None:
         DATABASE_URL="postgresql://postgres:postgres@localhost:5432/thecee",
         ENVIRONMENT="production",
         FRONTEND_URL="https://app.thecee.ai",
+        SECRET_KEY="production-test-secret-with-32-plus-chars",
     )
 
     assert settings.cors_allowed_origins() == ["https://app.thecee.ai"]
