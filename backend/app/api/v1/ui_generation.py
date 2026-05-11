@@ -121,6 +121,15 @@ def _inject_base_css(html: str, css: str) -> str:
     return tag + html
 
 
+def _strip_base_style(html: str) -> str:
+    return re.sub(
+        r'<style\b[^>]*\bid=["\']thecee-base["\'][^>]*>.*?</style>\s*',
+        "",
+        html,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+
 def _ensure_cdns(html: str) -> str:
     """Guarantee the Tailwind CDN is present — the prototype's styling depends on it."""
     lower = html.lower()
@@ -179,6 +188,72 @@ def _ensure_tracking_ids(html: str) -> str:
     return html
 
 
+def _inject_enhancements(html: str) -> str:
+    html = re.sub(
+        r'<script\b[^>]*\bid=["\']thecee-fx["\'][^>]*>.*?</script>\s*',
+        "",
+        html,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    script = """<script id="thecee-fx">
+window.addEventListener('load',function(){
+  try{
+    (function(){
+      const brand=getComputedStyle(document.documentElement).getPropertyValue('--brand').trim()||'#6366f1';
+      const spot=Object.assign(document.createElement('div'),{style:'position:fixed;inset:0;pointer-events:none;z-index:0;transition:opacity .4s;'});
+      document.body.appendChild(spot);
+      document.addEventListener('mousemove',e=>{spot.style.background=`radial-gradient(700px at ${e.clientX}px ${e.clientY}px,${brand}1a,transparent 70%)`;},{passive:true});
+    })();
+    document.querySelectorAll('.btn-primary,.btn-ghost').forEach(btn=>{
+      btn.addEventListener('mousemove',e=>{
+        const r=btn.getBoundingClientRect();
+        const x=(e.clientX-r.left-r.width/2)/(r.width/2)*7;
+        const y=(e.clientY-r.top-r.height/2)/(r.height/2)*4;
+        btn.style.transform=`perspective(600px) rotateX(${-y}deg) rotateY(${x}deg) translateY(-2px)`;
+      });
+      btn.addEventListener('mouseleave',()=>{btn.style.transform='';});
+    });
+    const hero=document.querySelector('.text-hero');
+    if(hero&&hero.children.length===0){
+      const txt=hero.textContent||'';
+      if(txt.length>4){
+        hero.textContent='';
+        let i=0;
+        const type=()=>{hero.textContent+=txt[i++];if(i<txt.length)setTimeout(type,24);};
+        setTimeout(type,300);
+      }
+    }
+    const sec=document.querySelector('.section,.hero-section,section');
+    if(sec){
+      const cv=document.createElement('canvas');
+      cv.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:0.35';
+      sec.style.position='relative';
+      sec.insertBefore(cv,sec.firstChild);
+      const ctx=cv.getContext('2d');
+      if(ctx){
+        const brand=getComputedStyle(document.documentElement).getPropertyValue('--brand').trim()||'#6366f1';
+        const pts=Array.from({length:35},()=>({x:Math.random(),y:Math.random(),vx:(Math.random()-.5)*.0003,vy:(Math.random()-.5)*.0003,r:Math.random()*2+1}));
+        const tick=()=>{
+          cv.width=cv.offsetWidth;cv.height=cv.offsetHeight;
+          ctx.clearRect(0,0,cv.width,cv.height);
+          pts.forEach(p=>{
+            p.x=(p.x+p.vx+1)%1;p.y=(p.y+p.vy+1)%1;
+            ctx.beginPath();ctx.arc(p.x*cv.width,p.y*cv.height,p.r,0,6.28);
+            ctx.fillStyle=brand;ctx.fill();
+          });
+          requestAnimationFrame(tick);
+        };
+        tick();
+      }
+    }
+  }catch(e){console.warn('TheCee FX skipped',e);}
+});
+</script>"""
+    if re.search(r"</body\s*>", html, re.IGNORECASE):
+        return re.sub(r"</body\s*>", script + "</body>", html, count=1, flags=re.IGNORECASE)
+    return html + script
+
+
 def _build_safe_html(raw: str, css_template: str = "") -> str:
     """Coerce raw model output into a self-contained, valid prototype document.
 
@@ -188,6 +263,7 @@ def _build_safe_html(raw: str, css_template: str = "") -> str:
       3. Inject TheCee base CSS template before model-generated style overrides.
       4. Inject Tailwind CDN if missing.
       5. Guarantee the three required tracking attributes exist.
+      6. Inject enhancement effects (spotlight, magnetic, typewriter, particles).
     """
     doc = _coerce_to_html_doc(raw)
     doc = _strip_unsafe_scripts(doc)
@@ -195,6 +271,7 @@ def _build_safe_html(raw: str, css_template: str = "") -> str:
         doc = _inject_base_css(doc, css_template)
     doc = _ensure_cdns(doc)
     doc = _ensure_tracking_ids(doc)
+    doc = _inject_enhancements(doc)
     return doc
 
 
@@ -320,15 +397,16 @@ async def refine_ui(
         raise HTTPException(status_code=404, detail="Generated UI not found")
 
     css = select_template(existing.product_type)
+    html_for_model = _strip_base_style(existing.html_content or "")
     refine_prompt = UI_REFINE_PROMPT_TEMPLATE.format(
-        html=existing.html_content or "",
+        html=html_for_model,
         instruction=body.refinement_prompt,
     )
 
     out = claude_call_with_fallback(
         [{"role": "user", "content": refine_prompt}],
         model="claude-sonnet-4-6",
-        max_tokens=8192,
+        max_tokens=16000,
         fallback_key="ui_generation",
         timeout=240,
         system=UI_REFINE_SYSTEM,
