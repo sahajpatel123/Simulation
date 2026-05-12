@@ -1,6 +1,0 @@
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "nextjs",
-  "buildCommand": "rm -rf ./app ./thecee-backend ./tests ./migrations && next build",
-  "outputDirectory": ".next"
-}

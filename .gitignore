@@ -54,11 +54,11 @@ __pycache__/
 *.egg-info/
 dist/
 
-# iCloud duplicate files (e.g. "file 2.py")
-* 2.py
-* 2.sh
-* 2.txt
-.gitkeep 2
+# iCloud duplicate files (catch all extensions, any nesting)
+* 2.*
+**/* 2.*
+* 2
+**/* 2
 thecee-backend/
 
 # Root-level Python shadow (runtime uses backend/ exclusively)
@@ -66,3 +66,24 @@ thecee-backend/
 /scripts/
 .venv_step86/
 .next.nosync/
+
+# Claude AI tooling — personal workspace data, not project code
+.claude/
+
+# External reference code (Lovable open-source engine), not integrated
+/Lovable/
+**/Lovable/
+
+# One-off patch scripts (already applied, kept for history only)
+/bulk_replace.py
+/patch_api_common.py
+/patch_prompts.py
+/patch_prompts_v2.py
+/patch_ui_builder.py
+
+# Audit reports — security documentation (keep tracked, ignore future copies)
+/AUDIT_REPORT* 2*.md
+/SECURITY_AUDIT* 2*.md
+
+# Empty migrations placeholder (real migrations via migrate_and_start.py)
+/migrations/
