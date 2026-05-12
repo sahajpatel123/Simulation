@@ -7,6 +7,7 @@ No LLM, no DB, no randomness.
 from __future__ import annotations
 
 from app.simulation.architects.base import ArchitectOutput, BaseArchitect, DomainReport
+from app.simulation.architects.utils import extract_assumption_signals
 from app.simulation.clusters.definitions import ClusterDefinition
 
 
@@ -34,17 +35,19 @@ class MacroeconomicArchitect(BaseArchitect):
         product_type = str(env_params.get("product_type", "saas"))
         calendar     = str(env_params.get("calendar_period", "NORMAL"))
 
-        # ── Extract from assumptions ──────────────────────────────────────
-        usd_pricing  = False
-        gov_eligible = False
+        # ── Extract signals from assumptions ──────────────────────────────
+        signals = extract_assumption_signals(assumptions)
+        usd_pricing = signals["price_signal"]
+        gov_eligible = signals["retention_signal"]  # Simplified - checks for government subsidy keywords
+
+        # Check for subsidy keywords specifically
         for a in assumptions:
             text = str(a.get("text", a.get("assumption", ""))).lower()
-            if any(w in text for w in ["usd", "dollar", "$", "foreign currency"]):
-                usd_pricing = True
             if any(w in text for w in [
                 "government scheme", "subsidy", "pm scheme", "digital india", "startup india",
             ]):
                 gov_eligible = True
+                break
 
         # ── RECESSION / HIGH_GROWTH ───────────────────────────────────────
         if scenario == "RECESSION":

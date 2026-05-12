@@ -19,6 +19,7 @@ from app.core.prompts import (
     UI_REFINE_PROMPT_TEMPLATE,
     UI_REFINE_SYSTEM,
 )
+from app.api.v1.common import get_owned_project
 from app.models.generated_ui import GeneratedUI
 from app.models.project import Project
 from app.models.ui_simulation_run import UISimulationRun
@@ -314,13 +315,7 @@ async def generate_ui(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     css = select_template(body.product_type)
     prompt = UI_GENERATION_PROMPT.format(
@@ -394,13 +389,7 @@ async def refine_ui(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     existing = (
         db.query(GeneratedUI)
@@ -477,13 +466,7 @@ async def list_generated_uis(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     uis = (
         db.query(GeneratedUI)
@@ -604,13 +587,7 @@ async def start_ui_simulation(
 ):
     from app.tasks.ui_simulation_tasks import run_ui_simulation
 
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     ui = (
         db.query(GeneratedUI)
@@ -662,13 +639,7 @@ async def get_ui_simulation_run(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     run = (
         db.query(UISimulationRun)
@@ -705,13 +676,7 @@ async def get_heatmap(
 ):
     from app.simulation.heatmap import HeatmapEngine
 
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     run = (
         db.query(UISimulationRun)
@@ -768,13 +733,7 @@ async def get_funnel_analytics(
 ):
     from app.simulation.funnel_analytics import FunnelAnalyticsEngine
 
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     run = (
         db.query(UISimulationRun)
@@ -832,13 +791,7 @@ async def get_channel_attribution(
     from app.simulation.conductor import Conductor
     from app.simulation.product_type import ProductType
 
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     run = (
         db.query(UISimulationRun)
@@ -913,13 +866,7 @@ async def get_retention_churn(
     from app.simulation.product_type import ProductType
     from app.simulation.retention_churn import RetentionChurnEngine
 
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     run = (
         db.query(UISimulationRun)
@@ -995,13 +942,7 @@ async def get_infra_scaling(
     from app.simulation.product_type import ProductType
     from app.simulation.retention_churn import RetentionChurnEngine
 
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     run = (
         db.query(UISimulationRun)
@@ -1093,13 +1034,7 @@ async def get_simulation_report_pdf(
     from app.simulation.product_type import ProductType
     from app.simulation.retention_churn import RetentionChurnEngine
 
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     run = (
         db.query(UISimulationRun)

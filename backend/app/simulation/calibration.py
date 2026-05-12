@@ -101,77 +101,47 @@ class CalibrationEngine:
             return "MEDIUM"
         return "LOW"
 
-    def _conversion_accuracy(self, outcomes: list[Outcome]) -> CategoryAccuracy:
-        pairs = [
-            (o.variance_conversion, o.calibration_score)
-            for o in outcomes
-            if o.variance_conversion is not None and o.calibration_score is not None
-        ]
-        if not pairs:
-            return CategoryAccuracy("conversion", 0.0, 0, 0.0, "NEUTRAL", "INSUFFICIENT_DATA")
+    def _category_accuracy(
+        self,
+        outcomes: list[Outcome],
+        category: str,
+        difficulty_key: str | None = None,
+    ) -> CategoryAccuracy:
+        """Generic accuracy computation for a given metric category."""
+        difficulty = CATEGORY_DIFFICULTY.get(difficulty_key or category, 1.0)
+        
+        # Handle different outcome field structures
+        if category == "conversion":
+            variances = [
+                o.variance_conversion for o in outcomes
+                if o.variance_conversion is not None and o.calibration_score is not None
+            ]
+        elif category == "revenue":
+            variances = [o.variance_mrr for o in outcomes if o.variance_mrr is not None]
+        else:
+            # For retention/cac, we use the calibration_score directly
+            variances = [o.calibration_score for o in outcomes if o.calibration_score is not None]
 
-        variances = [p[0] for p in pairs]
-        accuracies = [self._outcome_accuracy(v) for v in variances if v is not None]
-        mean_acc = float(np.mean(accuracies)) if accuracies else 0.0
-        mean_var = float(np.mean([abs(v) for v in variances]))
-        bias = self._bias_direction(variances)
+        if not variances:
+            return CategoryAccuracy(category, 0.0, 0, 0.0, "NEUTRAL", "INSUFFICIENT_DATA")
+
+        if category in ("conversion", "revenue"):
+            accuracies = [self._outcome_accuracy(v) for v in variances if v is not None]
+            mean_acc = float(np.mean(accuracies)) if accuracies else 0.0
+            mean_var = float(np.mean([abs(v) for v in variances if v is not None]))
+            bias = self._bias_direction([v for v in variances if v is not None])
+        else:
+            mean_acc = float(np.mean(variances))
+            mean_var = 0.0
+            bias = "NEUTRAL"
 
         return CategoryAccuracy(
-            category="conversion",
-            accuracy_score=round(mean_acc * CATEGORY_DIFFICULTY["conversion"], 2),
-            sample_count=len(pairs),
+            category=category,
+            accuracy_score=round(mean_acc * difficulty, 2),
+            sample_count=len(variances),
             mean_variance_pct=round(mean_var, 2),
             bias_direction=bias,
-            reliability=self._reliability(len(pairs), mean_acc),
-        )
-
-    def _revenue_accuracy(self, outcomes: list[Outcome]) -> CategoryAccuracy:
-        pairs = [o.variance_mrr for o in outcomes if o.variance_mrr is not None]
-        if not pairs:
-            return CategoryAccuracy("revenue", 0.0, 0, 0.0, "NEUTRAL", "INSUFFICIENT_DATA")
-
-        accuracies = [self._outcome_accuracy(v) for v in pairs if v is not None]
-        mean_acc = float(np.mean(accuracies)) if accuracies else 0.0
-        mean_var = float(np.mean([abs(v) for v in pairs]))
-        bias = self._bias_direction(pairs)
-
-        return CategoryAccuracy(
-            category="revenue",
-            accuracy_score=round(mean_acc * CATEGORY_DIFFICULTY["revenue"], 2),
-            sample_count=len(pairs),
-            mean_variance_pct=round(mean_var, 2),
-            bias_direction=bias,
-            reliability=self._reliability(len(pairs), mean_acc),
-        )
-
-    def _retention_accuracy(self, outcomes: list[Outcome]) -> CategoryAccuracy:
-        scores = [o.calibration_score for o in outcomes if o.calibration_score is not None]
-        if not scores:
-            return CategoryAccuracy("retention", 0.0, 0, 0.0, "NEUTRAL", "INSUFFICIENT_DATA")
-
-        mean_acc = float(np.mean(scores)) * CATEGORY_DIFFICULTY["retention"]
-        return CategoryAccuracy(
-            category="retention",
-            accuracy_score=round(mean_acc, 2),
-            sample_count=len(scores),
-            mean_variance_pct=0.0,
-            bias_direction="NEUTRAL",
-            reliability=self._reliability(len(scores), mean_acc),
-        )
-
-    def _cac_accuracy(self, outcomes: list[Outcome]) -> CategoryAccuracy:
-        scores = [o.calibration_score for o in outcomes if o.calibration_score is not None]
-        if not scores:
-            return CategoryAccuracy("cac", 0.0, 0, 0.0, "NEUTRAL", "INSUFFICIENT_DATA")
-
-        mean_acc = float(np.mean(scores)) * CATEGORY_DIFFICULTY["cac"]
-        return CategoryAccuracy(
-            category="cac",
-            accuracy_score=round(mean_acc, 2),
-            sample_count=len(scores),
-            mean_variance_pct=0.0,
-            bias_direction="NEUTRAL",
-            reliability=self._reliability(len(scores), mean_acc),
+            reliability=self._reliability(len(variances), mean_acc),
         )
 
     def _trend(self, outcomes: list[Outcome]) -> tuple[str, float]:
@@ -329,10 +299,10 @@ class CalibrationEngine:
             )
 
         categories = [
-            self._conversion_accuracy(outcomes),
-            self._revenue_accuracy(outcomes),
-            self._retention_accuracy(outcomes),
-            self._cac_accuracy(outcomes),
+            self._category_accuracy(outcomes, "conversion"),
+            self._category_accuracy(outcomes, "revenue"),
+            self._category_accuracy(outcomes, "retention"),
+            self._category_accuracy(outcomes, "cac"),
         ]
 
         platform_accuracy = self._weighted_platform_accuracy(categories)

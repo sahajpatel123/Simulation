@@ -7,6 +7,7 @@ of these outputs. No LLM, no DB, no randomness.
 from __future__ import annotations
 
 from app.simulation.architects.base import ArchitectOutput, BaseArchitect, DomainReport
+from app.simulation.architects.utils import extract_assumption_signals
 from app.simulation.clusters.definitions import ClusterDefinition
 from app.core.utils import geo_tier
 
@@ -41,23 +42,11 @@ class MarketTimingArchitect(BaseArchitect):
         product_type    = str(env_params.get("product_type", "saas"))
 
         # ── Extract signals from assumptions ──────────────────────────────
-        urgency_stated   = 0.5
-        switching_stated = 0.5
-        regulatory_dep   = False
-        seasonal         = False
-
-        for a in assumptions:
-            text = str(a.get("text", a.get("assumption", ""))).lower()
-            if any(w in text for w in ["urgent", "critical", "must have", "acute", "pain"]):
-                urgency_stated = 0.80
-            elif any(w in text for w in ["nice to have", "optional", "when time permits"]):
-                urgency_stated = 0.25
-            if any(w in text for w in ["switching", "migrate", "replace", "move from"]):
-                switching_stated = 0.70
-            if any(w in text for w in ["regulation", "compliance", "rbi", "sebi", "fda", "approval"]):
-                regulatory_dep = True
-            if any(w in text for w in ["festival", "diwali", "seasonal", "exam", "summer"]):
-                seasonal = True
+        signals = extract_assumption_signals(assumptions)
+        urgency_stated   = signals["urgency_stated"]
+        switching_stated = signals["switching_stated"]
+        regulatory_dep   = signals["regulatory_dep"]
+        seasonal         = signals["seasonal"]
 
         # ── Category awareness ────────────────────────────────────────────
         awareness = market_maturity * (0.6 + literacy * 0.4)

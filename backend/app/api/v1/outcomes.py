@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
+from app.api.v1.common import get_owned_project
 from app.models.outcome import Outcome
 from app.models.project import Project
 from app.models.simulation import Simulation
@@ -162,13 +163,7 @@ def submit_outcome_feedback(
             detail="simulation_id and actual_conversion_rate are required",
         )
 
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     sim = (
         db.query(Simulation)
@@ -343,13 +338,7 @@ def record_outcome(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     latest_sim = (
         db.query(Simulation)
@@ -433,13 +422,7 @@ def get_outcome_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     outcomes = (
         db.query(Outcome)

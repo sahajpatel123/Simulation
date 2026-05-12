@@ -1,7 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import api from '@/lib/api'
 import type { Project } from '@/types'
+import { useCeeMutation } from './useMutationFactory'
 
 type ProjectListResponse = { projects: Project[]; total: number }
 
@@ -70,8 +71,8 @@ type CreateProjectPayload = {
 
 export const useCreateProject = () => {
   const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (payload: CreateProjectPayload | string) => {
+  return useCeeMutation(
+    (payload: CreateProjectPayload | string) => {
       const description = typeof payload === 'string' ? payload : payload.description
       const raw = typeof payload === 'string' ? ({} as CreateProjectPayload) : payload
       const rawTitle = typeof payload === 'string' ? '' : (payload.title ?? '')
@@ -88,23 +89,23 @@ export const useCreateProject = () => {
         })
         .then((r) => r.data as Project)
     },
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ['projects'] })
-      if (data && typeof data === 'object' && data.id != null) {
-        const normalized = normalizeProject(data)
-        qc.setQueryData(['project', Number(normalized.id)], normalized)
-      }
-    },
-  })
+    [['projects']],
+    {
+      onSuccess: (data) => {
+        if (data && typeof data === 'object' && data.id != null) {
+          const normalized = normalizeProject(data)
+          qc.setQueryData(['project', Number(normalized.id)], normalized)
+        }
+      },
+    }
+  )
 }
 
-export const useDeleteProject = () => {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: number) => api.delete(`/projects/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
-  })
-}
+export const useDeleteProject = () =>
+  useCeeMutation(
+    (id: number) => api.delete(`/projects/${id}`),
+    [['projects']]
+  )
 
 type UpdateProjectPayload = {
   id: number | string
@@ -114,12 +115,8 @@ type UpdateProjectPayload = {
 
 export const useUpdateProject = () => {
   const qc = useQueryClient()
-  return useMutation({
-    mutationFn: async ({
-      id,
-      title,
-      description,
-    }: UpdateProjectPayload) => {
+  return useCeeMutation(
+    async ({ id, title, description }: UpdateProjectPayload) => {
       const body: { title?: string; description?: string } = {}
       if (title !== undefined) body.title = title
       if (description !== undefined) body.description = description
@@ -129,12 +126,14 @@ export const useUpdateProject = () => {
       const { data } = await api.patch<Project>(`/projects/${id}`, body)
       return data
     },
-    onSuccess: (data) => {
-      const normalized = normalizeProject(data)
-      qc.setQueryData(['project', Number(normalized.id)], normalized)
-      qc.invalidateQueries({ queryKey: ['projects'] })
-    },
-  })
+    [['projects']],
+    {
+      onSuccess: (data) => {
+        const normalized = normalizeProject(data)
+        qc.setQueryData(['project', Number(normalized.id)], normalized)
+      },
+    }
+  )
 }
 
 /** Alias for rename/patch flows — same behavior as {@link useUpdateProject}. */
@@ -142,26 +141,28 @@ export const usePatchProject = useUpdateProject
 
 export const useArchiveProject = () => {
   const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: number) =>
-      api.patch<Project>(`/projects/${id}/archive`).then((r) => r.data),
-    onSuccess: (data) => {
-      const normalized = normalizeProject(data)
-      qc.setQueryData(['project', Number(normalized.id)], normalized)
-      qc.invalidateQueries({ queryKey: ['projects'] })
-    },
-  })
+  return useCeeMutation(
+    (id: number) => api.patch<Project>(`/projects/${id}/archive`).then((r) => r.data),
+    [['projects']],
+    {
+      onSuccess: (data) => {
+        const normalized = normalizeProject(data)
+        qc.setQueryData(['project', Number(normalized.id)], normalized)
+      },
+    }
+  )
 }
 
 export const useUnarchiveProject = () => {
   const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: number) =>
-      api.patch<Project>(`/projects/${id}/unarchive`).then((r) => r.data),
-    onSuccess: (data) => {
-      const normalized = normalizeProject(data)
-      qc.setQueryData(['project', Number(normalized.id)], normalized)
-      qc.invalidateQueries({ queryKey: ['projects'] })
-    },
-  })
+  return useCeeMutation(
+    (id: number) => api.patch<Project>(`/projects/${id}/unarchive`).then((r) => r.data),
+    [['projects']],
+    {
+      onSuccess: (data) => {
+        const normalized = normalizeProject(data)
+        qc.setQueryData(['project', Number(normalized.id)], normalized)
+      },
+    }
+  )
 }

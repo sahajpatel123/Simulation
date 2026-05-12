@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
+from app.api.v1.common import get_owned_project
 from app.models.assumption import Assumption
 from app.models.environment import Environment
 from app.models.project import Project
@@ -382,13 +383,7 @@ def list_project_simulations(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     sims = (
         db.query(Simulation)

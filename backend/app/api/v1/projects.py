@@ -58,6 +58,7 @@ from app.schemas.stress_test import (
     StressTestStatusOut,
 )
 from app.simulation.calibration_engine import CalibrationEngine
+from app.api.v1.common import get_owned_project
 from app.core.utils import extract_json_from_markdown
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.competitive_software import CompetitiveSoftwareAnalyser
@@ -218,13 +219,7 @@ def patch_project(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Provide title and/or description to update",
         )
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     title_changed = False
     if payload.title is not None:
@@ -268,13 +263,7 @@ def archive_project(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
     project.is_archived = True
     db.add(project)
     db.commit()
@@ -292,13 +281,7 @@ def unarchive_project(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
     project.is_archived = False
     db.add(project)
     db.commit()
@@ -316,13 +299,7 @@ def get_project_clusters(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     latest_sim = (
         db.query(Simulation)
@@ -364,13 +341,7 @@ def get_domain_findings(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     latest_sim = (
         db.query(Simulation)
@@ -410,13 +381,7 @@ def submit_outcome_feedback(
             detail="simulation_id and actual_conversion_rate required",
         )
 
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     sim = db.query(Simulation).filter(Simulation.id == simulation_id).first()
     if not sim or sim.project_id != project_id:
@@ -535,13 +500,7 @@ def get_assumptions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     assumptions = (
         db.query(Assumption)
@@ -571,13 +530,7 @@ def extract_assumptions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     raw_description = (
         payload.description
@@ -771,13 +724,7 @@ def generate_prototype(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     if not project.description or len(project.description.strip()) < 20:
         raise HTTPException(
@@ -889,13 +836,7 @@ def get_prototype(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     prototype = (
         db.query(Prototype).filter(Prototype.project_id == project_id).first()
@@ -936,13 +877,7 @@ def run_premortem(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     description = (
         payload.description_override if payload and payload.description_override else project.description
@@ -1115,13 +1050,7 @@ def get_premortem(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     data = getattr(project, "premortem_json", None)
     if not data:
@@ -1152,13 +1081,7 @@ def start_stress_test(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     environment = db.query(Environment).filter(Environment.project_id == project_id).first()
     if not environment:
@@ -1200,13 +1123,7 @@ def get_stress_test(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     raw = getattr(project, "stress_test_json", None)
     if not raw:
@@ -1258,13 +1175,7 @@ def clear_stress_test(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     db.execute(
         text("UPDATE projects SET stress_test_json = NULL WHERE id = :id"),
@@ -1285,13 +1196,7 @@ def generate_interventions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     description = (
         payload.description_override if payload and payload.description_override else project.description
@@ -1468,13 +1373,7 @@ def get_interventions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     data = getattr(project, "interventions_json", None)
     if not data:
@@ -1507,13 +1406,7 @@ def run_competitive_analysis(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     description = (
         payload.description_override if payload and payload.description_override else project.description
@@ -1685,13 +1578,7 @@ def get_competitive_analysis(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     data = getattr(project, "competitive_json", None)
     if not data:
@@ -1730,13 +1617,7 @@ def create_or_update_environment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     if payload.mode.value == "SCENARIO" and payload.scenario_type:
         preset = SCENARIO_PRESETS.get(payload.scenario_type.value)
@@ -1795,13 +1676,7 @@ def get_environment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     env = db.query(Environment).filter(Environment.project_id == project_id).first()
     if not env:
@@ -1826,13 +1701,7 @@ def get_scenario_presets(
     Returns all scenario preset configs so the frontend
     can display them to the user before they choose.
     """
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     return {name: preset.model_dump() for name, preset in SCENARIO_PRESETS.items()}
 
@@ -1847,13 +1716,7 @@ def get_project(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
     _backfill_display_precis_lazy(db, project)
     db.refresh(project)
     return ProjectOut.model_validate(project)
@@ -1874,13 +1737,7 @@ def re_simulate(
     Compares the two most recent completed runs (newest vs prior).
     Returns delta metrics immediately after queuing.
     """
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     sims = (
         db.query(Simulation)
@@ -2027,13 +1884,7 @@ def get_simulation_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     sims = (
         db.query(Simulation)
@@ -2095,13 +1946,7 @@ def run_competitive_software_analysis(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     sim = (
         db.query(Simulation)
@@ -2184,13 +2029,7 @@ def get_competitive_software_analysis(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     sim = (
         db.query(Simulation)

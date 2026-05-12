@@ -1,4 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
+import { useCeeMutation } from './useMutationFactory'
 
 import api from '@/lib/api'
 import type { Environment } from '@/types'
@@ -14,10 +15,9 @@ export const useEnvironment = (projectId: number | string | null) =>
     },
   })
 
-export const useCreateEnvironment = () => {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({
+export const useCreateEnvironment = () =>
+  useCeeMutation(
+    ({
       projectId,
       payload,
     }: {
@@ -28,9 +28,8 @@ export const useCreateEnvironment = () => {
         scenario_type?: string
       }
     }) => api.post(`/projects/${projectId}/environments`, payload).then((r) => r.data),
-    onSuccess: (_, { projectId }) => qc.invalidateQueries({ queryKey: ['environment', projectId] }),
-  })
-}
+    (_, { projectId }) => [['environment', projectId]]
+  )
 
 export const useScenarioPresets = (projectId: number | null) =>
   useQuery({

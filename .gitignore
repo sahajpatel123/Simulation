@@ -65,3 +65,4 @@ thecee-backend/
 /app/
 /scripts/
 .venv_step86/
+.next.nosync/

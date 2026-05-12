@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.api.v1.common import get_owned_project
 from app.core.deps import get_current_user, get_db
 from app.models.decision import Decision
 from app.models.environment import Environment
@@ -55,13 +56,7 @@ def create_decision_comparison(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = get_owned_project(db, current_user.id, project_id)
 
     environment = db.query(Environment).filter(Environment.project_id == project_id).first()
     if not environment:
@@ -142,13 +137,7 @@ def list_decisions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.user_id == current_user.id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    get_owned_project(db, current_user.id, project_id)
 
     decisions = (
         db.query(Decision)

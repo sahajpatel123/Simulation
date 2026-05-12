@@ -1,4 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
+import { useCeeMutation } from './useMutationFactory'
 
 import api, { apiLong } from '@/lib/api'
 import type { SimulationResult, SimulationStatusResponse } from '@/types'
@@ -33,10 +34,9 @@ export const useSimulationResults = (simulationId: number | null) =>
     },
   })
 
-export const useCreateSimulation = () => {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({
+export const useCreateSimulation = () =>
+  useCeeMutation(
+    ({
       projectId,
       consumerVolume = 10000,
     }: {
@@ -49,12 +49,11 @@ export const useCreateSimulation = () => {
           consumer_volume: consumerVolume,
         })
         .then((r) => r.data),
-    onSuccess: (data: { project_id?: number; projectId?: number }) => {
+    (data: { project_id?: number; projectId?: number }) => {
       const id = data.project_id ?? data.projectId
-      if (id) qc.invalidateQueries({ queryKey: ['simulations', id] })
-    },
-  })
-}
+      return id ? [['simulations', id]] : []
+    }
+  )
 
 export const useSimulationProgress = (simulationId: number | null) =>
   useQuery({

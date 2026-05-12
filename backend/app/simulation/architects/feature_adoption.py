@@ -7,18 +7,8 @@ No LLM, no DB, no randomness.
 from __future__ import annotations
 
 from app.simulation.architects.base import ArchitectOutput, BaseArchitect, DomainReport
+from app.simulation.architects.utils import extract_complexity
 from app.simulation.clusters.definitions import ClusterDefinition
-
-
-def complexity_from(assumptions: list[dict]) -> float:
-    """Infer product complexity from assumption text. Returns 0.0–1.0."""
-    for a in assumptions:
-        text = str(a.get("text", a.get("assumption", ""))).lower()
-        if any(w in text for w in ["complex", "advanced", "many features", "multi-step"]):
-            return 0.8
-        if any(w in text for w in ["simple", "easy", "minimal", "one feature"]):
-            return 0.2
-    return 0.5
 
 
 class FeatureAdoptionArchitect(BaseArchitect):
@@ -59,7 +49,7 @@ class FeatureAdoptionArchitect(BaseArchitect):
             else 0.3
         )
 
-        complexity = complexity_from(assumptions)
+        complexity = extract_complexity(assumptions)
 
         # ── Core metrics ─────────────────────────────────────────────────
         core_dau        = min(0.95, motivation * 0.6 + literacy * 0.25 + patience * 0.15)

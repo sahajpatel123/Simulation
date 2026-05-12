@@ -8,6 +8,7 @@ No LLM, no DB, no randomness.
 from __future__ import annotations
 
 from app.simulation.architects.base import ArchitectOutput, BaseArchitect, DomainReport
+from app.simulation.architects.utils import extract_complexity
 from app.simulation.clusters.definitions import ClusterDefinition
 from app.core.utils import geo_tier
 
@@ -40,13 +41,7 @@ class OnboardingArchitect(BaseArchitect):
         geo        = geo_tier(cluster.demographic_profile.get("geography", "metro"))
 
         # ── Complexity from assumptions ──────────────────────────────────
-        complexity = 0.5
-        for a in assumptions:
-            text = str(a.get("text", a.get("assumption", ""))).lower()
-            if any(w in text for w in ["complex", "advanced", "multi-step", "many features"]):
-                complexity = 0.8
-            elif any(w in text for w in ["simple", "easy", "quick", "seamless", "2 minute"]):
-                complexity = 0.25
+        complexity = extract_complexity(assumptions)
 
         # ── Core metrics ─────────────────────────────────────────────────
 
