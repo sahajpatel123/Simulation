@@ -1,100 +1,260 @@
-# TheCee
+<div align="center">
 
-Pre-launch behavioral simulation platform.
-Runs 52-cluster agent simulation to predict real-world
-conversion before founders launch.
+# 🧬 **TheCee**
 
-## Architecture Overview
+### *"10,000 AI consumers. One startup idea. Zero guesswork."*
 
-Frontend (Next.js 15) → Backend (FastAPI) → Celery Workers
-                                         → PostgreSQL (Supabase)
-                                         → Redis (Railway)
-                                         → Claude API (Anthropic)
+<br>
 
-Simulation flow:
-  Founder describes product
-  → Assumption extraction (Claude)
-  → Conductor routes 52 clusters through 20 architects
-  → CognitiveState mutations applied
-  → Cluster conversion rates computed
-  → KeyPersonReport generated
+[![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-306998?style=flat&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=flat&logo=nextdotjs&logoColor=white)](https://nextjs.org)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat&logo=postgresql&logoColor=white)](https://postgresql.org)
+[![Celery](https://img.shields.io/badge/Celery-5.4-37814A?style=flat&logo=celery&logoColor=white)](https://docs.celeryq.dev)
+[![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat&logo=redis&logoColor=white)](https://redis.io)
+[![Railway](https://img.shields.io/badge/Deployed%20on-Railway-0B0D0E?style=flat&logo=railway&logoColor=white)](https://railway.app)
+[![License](https://img.shields.io/badge/License-MIT-yellow?style=flat)](LICENSE)
 
-## Local setup (monorepo)
+<br>
 
-This repository contains the FastAPI backend under `app/` and the Next.js app at the same root (`package.json`, `src/`).
+> **Before you write a line of product code — simulate 10,000 consumers across 52 psychographic clusters,**
+> **evaluate 20 business domains, and know exactly why your idea will succeed or fail.**
+
+[✨ Try the API](#-api-documentation) • [🧠 How It Works](#-how-it-works) • [⚡ Quick Start](#-quick-start) • [📊 Learn More](ARCHITECTURE.md)
+
+<br>
+
+---
+
+```mermaid
+flowchart LR
+    F[👤 Founder Input] --> A[🤖 Assumption<br>Extraction]
+    A --> S[🧮 Score<br>Assumptions]
+    S --> G[👥 Generate<br>10K Agents]
+    G --> C[🎯 Conductor<br>52 Clusters × 20 Architects]
+    C --> M[📉 Markov<br>Funnel]
+    M --> R[📊 Results<br>Aggregator]
+    R --> E[⚖️ Accountability<br>Engine]
+    E --> O[📋 Business<br>Recommendations]
+
+    style F fill:#1a1a2e,stroke:#e94560,color:#fff
+    style A fill:#16213e,stroke:#0f3460,color:#fff
+    style S fill:#16213e,stroke:#0f3460,color:#fff
+    style G fill:#16213e,stroke:#0f3460,color:#fff
+    style C fill:#1a1a2e,stroke:#e94560,color:#fff
+    style M fill:#16213e,stroke:#0f3460,color:#fff
+    style R fill:#16213e,stroke:#0f3460,color:#fff
+    style E fill:#16213e,stroke:#0f3460,color:#fff
+    style O fill:#1a1a2e,stroke:#e94560,color:#fff
+```
+
+---
+
+</div>
+
+## 🔮 **Forget Surveys. Forget Focus Groups.**
+
+TheCee replaces expensive user research with a **behavioral simulation engine** that pits your startup idea against **52 distinct consumer archetypes**, evaluated by **20 domain-specialist AI architects**, all flowing through a **Markov decision funnel**.
+
+**What you get:**
+- 🎯 **Predicted conversion rate** with confidence intervals
+- 🔥 **Primary failure domain** — the exact reason your idea fails
+- 🧠 **Per-cluster breakdown** — which segments love/hate your idea
+- 💰 **Revenue projection** at any price point
+- 📋 **Ranked domain findings** — actionable recommendations, not noise
+
+---
+
+## 🧠 **How It Works**
+
+### 1. 🧬 The 52 Clusters
+
+Every consumer is different. TheCee models **52 Indian consumer archetypes** — from *metro power professionals* to *tier-3 first-time app users* — each with **8 calibrated personality traits**:
+
+```
+income_level │ digital_literacy │ motivation │ trust
+price_sensitivity │ risk_aversion │ patience_score │ social_orientation
+```
+
+These aren't stereotypes. They're **data-calibrated behavioral vectors** that evolve as real founder outcomes flow back into the system.
+
+### 2. 🏛️ The 20 Architects
+
+Domain specialists that evaluate one business dimension each:
+
+| Architect | Evaluates |
+|-----------|-----------|
+| `MarketTimingArchitect` | Is the market ready? Timing right? |
+| `PricingArchitect` | Will they pay? At what price? |
+| `TrustArchitect` | Brand credibility signals |
+| `OnboardingArchitect` | First-usage experience |
+| `RetentionArchitect` | Long-term stickiness |
+| `ViralityArchitect` | Word-of-mouth potential |
+| `CompetitiveDynamicsArchitect` | Incumbent response & switching friction |
+| `MacroeconomicArchitect` | Economic headwinds/tailwinds |
+| *+ 12 more domain specialists* | Hardware, health, ecosystem, etc. |
+
+Each architect calls `.compute()` per cluster — **1,040 evaluations per simulation** — then outputs override deltas to the Markov matrix.
+
+### 3. 📉 The Markov Funnel
+
+```
+ARRIVE → BROWSE → CONSIDER → DECIDE → 🟢 PURCHASE
+                                 ↘ → 🔴 ABANDON → RETURN ↗
+```
+
+A **7-state stochastic model** where every transition probability is modulated by:
+- 📝 **Assumption keywords** (pricing, trust, retention, UX, competition)
+- 🧬 **Cluster personality traits**
+- 🏛️ **Architect override signals**
+- 🌍 **Environmental parameters** (scenario, market maturity)
+
+### 4. 🔄 Self-Learning Calibration
+
+> *"The simulation gets smarter every time a founder submits real data."*
+
+The `CalibrationEngine` compares **predicted vs actual** conversion rates from real founder outcomes, then:
+- 🎚️ Updates per-architect correction scalars
+- 🧬 Adjusts cluster trait calibrations via **Bayesian updates**
+- 📊 Tracks user-level accuracy trends
+- 🧠 Detects market blindspots automatically
+
+---
+
+## ⚡ **Quick Start**
 
 ### Prerequisites
-  Node.js 18+, Python 3.11+, PostgreSQL, Redis
+```
+🐍 Python 3.12+    📦 Node.js 18+    🐘 PostgreSQL    📡 Redis
+```
 
-### Backend
-  From the repository root (directory that contains `app/` and `requirements.txt`):
-  `python -m venv venv` && `source venv/bin/activate` (or `venv\Scripts\activate` on Windows)
-  `pip install -r requirements.txt`
-  `cp .env.example .env`     # fill in values
-  `python migrate_and_start.py`
+### 🖥️ Backend
 
-### Celery Worker
-  From the same repository root with the virtualenv active:
-  `celery -A app.worker worker --loglevel=info`
+```bash
+# Clone & enter
+git clone https://github.com/Sahajpatel123/Simulation.git && cd thecee
 
-### Frontend
-  From the same repository root:
-  `npm install`
-  `cp .env.local.example .env.local`    # fill in values, if the example exists
-  `npm run dev`
+# Python setup
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
 
-## Environment Variables
+# Configure
+cp .env.example .env        # 👈 Set DATABASE_URL, GROK_API_KEY, REDIS_URL
 
-### Backend (.env)
-  `DATABASE_URL=postgresql://...`
-  `ANTHROPIC_API_KEY=sk-ant-...`
-  `RAZORPAY_KEY_ID=rzp_test_...`
-  `RAZORPAY_KEY_SECRET=...`
-  `RAZORPAY_WEBHOOK_SECRET=...`
-  `RAZORPAY_PRO_PLAN_ID=plan_...`
-  `RAZORPAY_ENTERPRISE_PLAN_ID=plan_...`
-  `REDIS_URL=redis://...`
-  `SECRET_KEY=...`
-  `PUBLIC_API_BASE_URL=https://your-api-domain`
-  `ENVIRONMENT=development`
-  `SENTRY_DSN=`           # optional
-  `CONDUCTOR_WORKERS=4`
-  `ACCESS_TOKEN_EXPIRE_MINUTES=60`
-  `REFRESH_TOKEN_EXPIRE_DAYS=30`
+# Migrate + launch API
+python migrate_and_start.py  # Creates DB tables, syncs clusters, starts uvicorn
+```
 
-### Frontend (.env.local)
-  `NEXT_PUBLIC_API_URL=http://localhost:8080`
-  `NEXT_PUBLIC_ALLOW_INDEXING=false`
+### ⚙️ Celery Worker
 
-## Railway + Vercel Deployment
+```bash
+# Terminal 2 (same venv)
+./start_worker.sh
+```
 
-### Backend on Railway
-  1. Push to GitHub
-  2. New Railway project → Deploy from GitHub
-  3. Add PostgreSQL service and Redis service
-  4. Set all env vars from list above
-  5. Start command: `python migrate_and_start.py`
-  6. Add second service for Celery worker:
-     Start command: `celery -A app.worker worker --loglevel=info`
+Check worker health: `http://localhost:8000/celery/status`
 
-### Frontend on Vercel
-  1. Import GitHub repo to Vercel
-  2. Set `NEXT_PUBLIC_API_URL` to Railway backend URL
-  3. Deploy (root directory: this repo, or a subdirectory if the frontend is split out)
+### 🌐 Frontend
 
-### Razorpay Webhook
-  Dashboard → Webhooks → Add:
-  URL: `https://your-railway-url/api/v1/billing/webhook`
-  Events: `subscription.activated`, `subscription.charged`,
-          `subscription.cancelled`, `subscription.expired`,
-          `subscription.halted`
+```bash
+# Terminal 3
+npm install
+cp .env.local.example .env.local
+npm run dev                 # → http://localhost:3000
+```
 
-## Running Tests
-  From repository root, with the virtualenv active:
-  `pytest tests/ -v`
-  `npm run typecheck`
-  `npm run build`
+---
 
-## API documentation
+## 🧪 **Testing**
 
-  With the backend running (default `8080` if configured): OpenAPI UI at `http://localhost:8080/docs` and ReDoc at `http://localhost:8080/redoc`.
+```bash
+# Backend (51 tests, all green ✅)
+source .venv/bin/activate
+pytest tests/ -v
+
+# Frontend
+npm run typecheck
+npm run build
+```
+
+---
+
+## 🚀 **Deployment**
+
+### Backend → Railway
+```
+1. Push to GitHub
+2. New Railway project → Deploy from repo
+3. Add PostgreSQL + Redis services
+4. Set all env vars
+5. Start command: python migrate_and_start.py
+6. Add second service: celery -A app.worker worker --loglevel=info
+```
+
+### Frontend → Vercel
+```
+1. Import repo to Vercel
+2. Set NEXT_PUBLIC_API_URL to Railway backend
+3. Deploy
+```
+
+---
+
+## 📋 **API Reference**
+
+With backend running:
+| Tool | URL |
+|------|-----|
+| **Swagger UI** | `http://localhost:8000/docs` |
+| **ReDoc** | `http://localhost:8000/redoc` |
+| **Health Check** | `http://localhost:8000/health` |
+| **Celery Status** | `http://localhost:8000/celery/status` |
+
+---
+
+## 🧱 **Project Structure**
+
+```
+thecee/
+├── backend/app/          # 🐍 Python FastAPI (the engine)
+│   ├── api/v1/           #   14 route modules
+│   ├── simulation/       #   Core engine: conductor, 20 architects, Markov funnel
+│   ├── models/           #   17 SQLAlchemy ORM models
+│   ├── schemas/          #   16 Pydantic schemas
+│   ├── tasks/            #   8 Celery task modules
+│   ├── core/             #   Config, DB, auth, LLM client
+│   └── hardware/         #   Hardware product simulation pipeline
+├── src/                  # 🎨 Next.js 16 frontend
+├── tests/                # 🧪 pytest suite (51 tests)
+├── AGENTS.md             # 🤖 AI coding guide
+├── CLAUDE.md             # 📘 Full architecture reference
+└── ARCHITECTURE.md       # 📐 Deep-dive architecture doc
+```
+
+---
+
+## 🏛️ **Architecture Philosophy**
+
+| Principle | Why |
+|-----------|-----|
+| **Pure compute** | Architects do zero I/O — pure math, deterministic |
+| **Cluster-first** | 52 archetypes drive everything, not demographic averages |
+| **Self-correcting** | Every founder outcome improves future simulations |
+| **A/B testable** | Config-driven knobs, all default to no-op |
+| **Performance-budgeted** | Full 10K simulation under 30s |
+
+---
+
+<div align="center">
+
+<br>
+
+**Built with** 🧠 **fastapi** · ⚡ **celery** · 🎯 **postgresql** · 🔮 **grok**
+
+*"Simulate before you build. Know before you launch."*
+
+[🐛 Report Bug](https://github.com/Sahajpatel123/Simulation/issues) · [✨ Feature Request](https://github.com/Sahajpatel123/Simulation/issues)
+
+<br>
+
+</div>
