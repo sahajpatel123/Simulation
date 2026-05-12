@@ -22,7 +22,7 @@
 - Each cluster possesses 8 normalized traits (income, literacy, motivation, trust, price sensitivity, risk aversion, patience, social orientation).
 
 ### 3.2 Domain Architects (`backend/app/simulation/architects/`)
-- 21 specialists that evaluate domains like pricing, onboarding, trust, market timing, etc., for all clusters.
+- 20 specialists that evaluate domains like pricing, onboarding, trust, market timing, etc., for all clusters.
 - Architects output adjustments to Markov transition matrices and identify failure modes.
 
 ### 3.3 Markov Funnel (`backend/app/simulation/markov.py`)

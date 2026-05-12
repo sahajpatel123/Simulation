@@ -288,6 +288,21 @@ def run_migrations():
             conn.rollback()
             print(f"⚠️ idx_founder_outcomes_sim skip: {e}")
 
+        for idx_sql in [
+            "CREATE INDEX IF NOT EXISTS idx_user_accuracy_user_id ON user_claim_accuracy_profiles(user_id);",
+            "CREATE INDEX IF NOT EXISTS idx_user_blindspots_user_id ON user_market_blindspots(user_id);",
+            "CREATE INDEX IF NOT EXISTS idx_user_accuracy_history_user_id ON user_simulation_accuracy_history(user_id);",
+            "CREATE INDEX IF NOT EXISTS idx_user_accuracy_history_sim ON user_simulation_accuracy_history(simulation_id);",
+            "CREATE INDEX IF NOT EXISTS idx_cluster_params_cluster ON cluster_parameters(cluster_id);",
+            "CREATE INDEX IF NOT EXISTS idx_cluster_run_sim ON cluster_run_summaries(simulation_id);",
+        ]:
+            try:
+                conn.execute(text(idx_sql))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+        print("✅ Learning system FK indexes ready")
+
         try:
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS user_claim_accuracy_profiles (

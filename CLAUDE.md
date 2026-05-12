@@ -89,7 +89,7 @@ all_clusters = registry.all_clusters()  # Returns list of 52 ClusterDefinition
 cluster = registry.get_cluster("metro_power_professional")
 ```
 
-### 3.2 Architect System — 21 Domain Specialists
+### 3.2 Architect System — 20 Domain Specialists
 
 **Location**: `app/simulation/architects/`
 

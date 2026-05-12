@@ -131,8 +131,46 @@ class CognitiveStateMutator:
                 profile.get("motivation", 0.5) + delta,
             )
 
-        # ── Enforce per-trait mutation cap ──
-        # Reconstruct original profile for delta comparison
+        # ── MUTATION 4: positive_trust_boost ──
+        # Trigger: known brand (bdm >= 0.75) AND free trial available
+        if bdm >= 0.75 and has_trial:
+            delta = +0.10
+            mutations.append(CognitiveStateMutation(
+                trigger_name="positive_trust_boost",
+                trait_affected="trust",
+                delta=delta,
+                reason=f"Known brand (bdm={bdm:.2f}) with free trial — trust actively builds",
+                cluster_id=cluster_id,
+            ))
+            profile["trust"] = min(1.0, profile.get("trust", 0.5) + delta)
+
+        # ── MUTATION 5: positive_value_confidence ──
+        # Trigger: will_pay >= 0.60 AND progressive_disclosure >= 5
+        if will_pay >= 0.60 and disclosure >= 5.0:
+            delta = +0.15
+            mutations.append(CognitiveStateMutation(
+                trigger_name="positive_value_confidence",
+                trait_affected="patience_score",
+                delta=delta,
+                reason=f"Clear value (will_pay={will_pay:.2f}) with manageable steps (limit={disclosure:.0f}) — patience holds",
+                cluster_id=cluster_id,
+            ))
+            profile["patience_score"] = min(1.0, profile.get("patience_score", 0.5) + delta)
+
+        # ── MUTATION 6: positive_awareness_boost ──
+        # Trigger: category_awareness >= 0.70
+        if awareness >= 0.70:
+            delta = +0.08
+            mutations.append(CognitiveStateMutation(
+                trigger_name="positive_awareness_boost",
+                trait_affected="motivation",
+                delta=delta,
+                reason=f"High category awareness {awareness:.2f} — cluster knows the problem, motivation sustained",
+                cluster_id=cluster_id,
+            ))
+            profile["motivation"] = min(1.0, profile.get("motivation", 0.5) + delta)
+
+        # ── Enforce per-trait mutation cap (both directions) ──
         original = {k: float(v) for k, v in agent_profile.items()
                     if isinstance(v, (int, float))}
         for trait in ["trust", "patience_score", "motivation"]:
@@ -141,6 +179,8 @@ class CognitiveStateMutator:
             total_delta = curr - orig
             if total_delta < -MAX_MUTATION_PER_TRAIT:
                 profile[trait] = max(TRAIT_FLOOR, orig - MAX_MUTATION_PER_TRAIT)
+            if total_delta > MAX_MUTATION_PER_TRAIT:
+                profile[trait] = min(1.0, orig + MAX_MUTATION_PER_TRAIT)
 
         # ── Aggregate totals for logging ──
         total_trust       = profile.get("trust", 0.5)       - original.get("trust", 0.5)

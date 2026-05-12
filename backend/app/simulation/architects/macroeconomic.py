@@ -37,8 +37,8 @@ class MacroeconomicArchitect(BaseArchitect):
 
         # ── Extract signals from assumptions ──────────────────────────────
         signals = extract_assumption_signals(assumptions)
-        usd_pricing = signals["price_signal"]
-        gov_eligible = signals["retention_signal"]  # Simplified - checks for government subsidy keywords
+        usd_pricing = signals.get("price_signal", 0.5)
+        gov_eligible = signals.get("retention_signal", False)  # Simplified - checks for government subsidy keywords
 
         # Check for subsidy keywords specifically
         for a in assumptions:

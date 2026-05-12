@@ -6,7 +6,10 @@ registry weights better match B2B vs B2C, price tier, and category.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.product_type import ProductType
@@ -130,8 +133,37 @@ REWEIGHTING_RULES: dict[str, ReweightRules] = {
 }
 
 
+_VALIDATED_IDS: set[str] | None = None
+
+
+def _validate_rule_ids() -> None:
+    """Warn if any hardcoded cluster ID in REWEIGHTING_RULES is unknown."""
+    global _VALIDATED_IDS
+    if _VALIDATED_IDS is not None:
+        return
+    try:
+        known = {c.cluster_id for c in ClusterRegistry().all_clusters()}
+    except Exception:
+        known = set()
+    seen: set[str] = set()
+    for rules in REWEIGHTING_RULES.values():
+        seen.update(rules.suppress)
+        seen.update(rules.amplify.keys())
+    unknown = seen - known
+    for uid in sorted(unknown):
+        logger.warning(
+            "[ClusterReweighting] Unknown cluster ID '%s' in reweighting rules — "
+            "may be renamed in registry but not updated here.",
+            uid,
+        )
+    _VALIDATED_IDS = seen
+
+
 class ClusterReweightingEngine:
     """Apply scenario-specific suppress/amplify rules and renormalize to sum 1.0."""
+
+    def __init__(self) -> None:
+        _validate_rule_ids()
 
     def compute_weights(
         self,

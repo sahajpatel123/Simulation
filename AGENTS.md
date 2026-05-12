@@ -64,7 +64,7 @@ must exist in the `cluster_parameters` PostgreSQL table.
 
 ### 3. Architects (`app/simulation/architects/`)
 
-21 domain-specialist modules. Each subclasses `BaseArchitect` and must
+20 domain-specialist modules. Each subclasses `BaseArchitect` and must
 implement:
 - `name: str` — unique string used as DB key
 - `product_types: list[str]` — which product categories this activates for

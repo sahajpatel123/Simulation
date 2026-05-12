@@ -134,17 +134,12 @@ class CalibrationEngine:
 
         if abs(wmean) > 0.03:
             scalar = 1.0 / (1.0 + wmean)
-            self._upsert_correction(
-                db,
-                "GLOBAL_BIAS",
-                product_type,
-                "ALL",
-                "ALL",
-                scalar,
-                min(1.0, eff_count / (eff_count + 30)),
-                eff_count,
-                "CATEGORY_GLOBAL",
-            )
+            conf = min(1.0, eff_count / (eff_count + 30))
+            for arch_name in ALL_ARCHITECT_NAMES:
+                self._upsert_correction(
+                    db, arch_name, product_type, "ALL", "ALL",
+                    scalar, conf, eff_count, "CATEGORY_GLOBAL",
+                )
 
     # ── LAYER 3: STRUCTURAL PATTERNS (monthly, eff_count >= 30) ──
 
@@ -301,6 +296,70 @@ class CalibrationEngine:
         if imp < -0.10:
             return "DEGRADING"
         return "STABLE"
+
+    # ── LAYER 5: CLUSTER TRAIT CALIBRATION (Bayesian, eff_count >= 5) ──
+
+    def update_cluster_trait_calibration(self, db) -> None:
+        rows = db.execute(
+            text("""
+            SELECT crs.cluster_id, crs.conversion_rate, crs.signal_quality,
+                   fo.actual_conversion_rate, fo.learning_weight,
+                   crs.architect_scores
+            FROM cluster_run_summaries crs
+            JOIN founder_outcomes fo ON fo.simulation_id = crs.simulation_id
+            WHERE fo.validated = true
+              AND fo.learning_weight > 0
+        """)
+        ).fetchall()
+
+        groups: dict[str, list] = {}
+        for r in rows:
+            groups.setdefault(r.cluster_id, []).append(r)
+
+        for cluster_id, group in groups.items():
+            eff_count = sum(float(r.learning_weight) for r in group)
+            if eff_count < 5:
+                continue
+
+            errors = [
+                float(r.actual_conversion_rate) - float(r.conversion_rate)
+                for r in group
+            ]
+            w_sum = sum(float(r.learning_weight) for r in group) or 1.0
+            wmean_error = sum(e * float(r.learning_weight) for e, r in zip(errors, group)) / w_sum
+
+            direction = "price_sensitivity" if wmean_error < -0.02 else "digital_literacy"
+
+            param = db.execute(
+                text("""
+                    SELECT cp.id, cp.base_value, cp.calibrated_value, cp.calibration_count
+                    FROM cluster_parameters cp
+                    WHERE cp.cluster_id = :cid AND cp.trait_name = :trait
+                """),
+                {"cid": cluster_id, "trait": direction},
+            ).fetchone()
+            if not param:
+                continue
+
+            count = int(param.calibration_count)
+            prior = float(param.calibrated_value)
+
+            alpha = 1.0 / (count + 2.0)
+            signal = prior + abs(wmean_error) * 0.3 if wmean_error < 0 else prior - abs(wmean_error) * 0.3
+            new_val = prior * (1.0 - alpha) + float(np.clip(signal, 0.0, 1.0)) * alpha
+            new_val = round(float(np.clip(new_val, 0.01, 0.99)), 4)
+
+            db.execute(
+                text("""
+                    UPDATE cluster_parameters
+                    SET calibrated_value = :val,
+                        calibration_count = :cnt,
+                        last_updated = NOW()
+                    WHERE id = :pid
+                """),
+                {"val": new_val, "cnt": count + 1, "pid": int(param.id)},
+            )
+        db.commit()
 
     def _upsert_correction(
         self,

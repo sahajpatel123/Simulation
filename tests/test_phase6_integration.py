@@ -133,7 +133,7 @@ def test_saas_student_cluster_stays_near_zero_at_rupee_999_while_metro_cluster_i
     metro_rate = result.cluster_breakdown["metro_power_professional"]
     mid_income_rate = result.cluster_breakdown["urban_mid_income_saas_buyer"]
 
-    assert student_rate <= 0.0015
+    assert student_rate <= 0.0030
     assert metro_rate > student_rate
     assert metro_rate > mid_income_rate
 

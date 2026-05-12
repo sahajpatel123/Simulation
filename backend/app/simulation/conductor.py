@@ -524,6 +524,30 @@ class Conductor:
         self,
         cluster_outputs: dict[str, ArchitectOutput],
     ) -> float:
+        from app.simulation.markov import ClusterTransitionMatrix, MarkovBehaviourModel
+
+        # Find the cluster definition for this set of outputs
+        cluster_def = None
+        for output in cluster_outputs.values():
+            if output.cluster_id:
+                cluster_def = self._registry.get_cluster(output.cluster_id)
+                if cluster_def:
+                    break
+
+        if cluster_def:
+            try:
+                result = MarkovBehaviourModel.build(
+                    env_params={},
+                    assumptions=[],
+                    cluster=cluster_def,
+                    architect_outputs=cluster_outputs,
+                )
+                if isinstance(result, ClusterTransitionMatrix):
+                    return round(float(result.conversion_estimate), 6)
+            except Exception:
+                pass
+
+        # Fallback: direct multiplication (overrides from architects)
         decide_purchase = 0.5
         arrive_browse   = 0.8
         browse_consider = 0.7
@@ -561,7 +585,6 @@ class Conductor:
             max(0.01, min(0.95, consider_decide)) *
             max(0.01, min(0.95, decide_purchase))
         )
-        # Preserve ordering across clusters (student vs metro, tier-3 vs metro) — avoid 0.001 floor.
         return round(max(0.0, min(0.95, conversion)), 6)
 
     def _compute_accountability(

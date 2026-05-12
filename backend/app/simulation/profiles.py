@@ -8,6 +8,8 @@ from typing import Any
 import numpy as np
 from scipy.stats import beta as beta_dist
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 # ================================================================
@@ -208,9 +210,38 @@ class AgentProfileGenerator:
         beta: float,
         low: float = 0.03,
         high: float = 0.97,
+        variance_multiplier: float = 1.0,
     ) -> float:
         alpha = max(0.1, alpha)
         beta = max(0.1, beta)
+
+        # Apply variance multiplier while preserving mean
+        # For beta distribution: mean = alpha / (alpha + beta)
+        # Variance = (alpha * beta) / ((alpha + beta)^2 * (alpha + beta + 1))
+        # To increase variance by factor while keeping mean constant:
+        # We decrease the sum (alpha + beta) which increases variance
+        if variance_multiplier != 1.0:
+            mean = alpha / (alpha + beta)
+            sum_ab = alpha + beta
+
+            # New sum to achieve desired variance increase
+            # Variance = mean * (1 - mean) / (sum_ab + 1)
+            # So: sum_ab_new = (mean * (1 - mean) / new_variance) - 1
+            # And new_variance = variance_multiplier * old_variance
+            # Therefore: sum_ab_new = (sum_ab + 1) / variance_multiplier - 1
+            sum_ab_new = (sum_ab + 1) / variance_multiplier - 1
+
+            # Ensure sum_ab_new is positive
+            sum_ab_new = max(0.2, sum_ab_new)  # Minimum sum to avoid extreme values
+
+            # Calculate new alpha and beta that preserve the mean
+            alpha = mean * sum_ab_new
+            beta = (1 - mean) * sum_ab_new
+
+            # Ensure minimum values
+            alpha = max(0.1, alpha)
+            beta = max(0.1, beta)
+
         return float(np.clip(beta_dist.rvs(alpha, beta), low, high))
 
     def _build_trait_params(
@@ -233,12 +264,58 @@ class AgentProfileGenerator:
 
         return {k: (v[0], v[1]) for k, v in params.items()}
 
+    def generate_from_cluster(
+        self,
+        cluster: Any,
+        env_params: dict[str, Any],
+        scenario_type: str | None = None,
+    ) -> AgentProfile:
+        """Generate a single agent profile centered on a cluster's base traits."""
+        _ = env_params
+        variance_multiplier = settings.CLUSTER_VARIANCE_MULTIPLIER
+
+        age_bracket_idx = np.random.choice(len(AGE_BRACKETS), p=AGE_WEIGHTS)
+        age_lo, age_hi = AGE_BRACKETS[age_bracket_idx]
+        age = int(np.random.randint(age_lo, age_hi + 1))
+
+        income_idx = np.random.choice(len(INCOME_BRACKETS), p=INCOME_WEIGHTS)
+        income_enum, income_lo, income_hi = INCOME_BRACKETS[income_idx]
+        monthly_income = int(np.random.randint(income_lo, income_hi + 1))
+
+        region = REGION_VALUES[np.random.choice(len(REGION_VALUES), p=REGION_WEIGHTS)]
+        device_type = DEVICE_VALUES[np.random.choice(len(DEVICE_VALUES), p=DEVICE_WEIGHTS)]
+
+        cluster_traits = cluster.base_traits if hasattr(cluster, 'base_traits') else {}
+        trait_params = self._build_trait_params(income_enum, region, scenario_type)
+
+        def blend_trait(trait_name: str, cluster_default: float) -> float:
+            base_alpha, base_beta = trait_params.get(trait_name, (2.5, 2.5))
+            mean_adjusted = base_alpha / (base_alpha + base_beta) if (base_alpha + base_beta) > 0 else 0.5
+            blended_mean = mean_adjusted * 0.4 + cluster_default * 0.6
+            blended_alpha = max(0.1, blended_mean * (base_alpha + base_beta))
+            blended_beta = max(0.1, (1.0 - blended_mean) * (base_alpha + base_beta))
+            return self._sample_beta(blended_alpha, blended_beta, variance_multiplier=variance_multiplier)
+
+        return AgentProfile(
+            age=age,
+            income_bracket=income_enum,
+            monthly_income=monthly_income,
+            region=region,
+            device_type=device_type,
+            digital_literacy=blend_trait("digital_literacy", cluster_traits.get("digital_literacy", 0.5)),
+            price_sensitivity=blend_trait("price_sensitivity", cluster_traits.get("price_sensitivity", 0.5)),
+            patience_score=blend_trait("patience_score", cluster_traits.get("patience_score", 0.5)),
+            motivation=blend_trait("motivation", cluster_traits.get("motivation", 0.5)),
+            trust_baseline=blend_trait("trust_baseline", cluster_traits.get("trust", 0.5)),
+        )
+
     def generate_one(
         self,
         env_params: dict[str, Any],
         scenario_type: str | None = None,
     ) -> AgentProfile:
         _ = env_params
+        variance_multiplier = settings.CLUSTER_VARIANCE_MULTIPLIER
 
         age_bracket_idx = np.random.choice(len(AGE_BRACKETS), p=AGE_WEIGHTS)
         age_lo, age_hi = AGE_BRACKETS[age_bracket_idx]
@@ -259,11 +336,11 @@ class AgentProfileGenerator:
             monthly_income=monthly_income,
             region=region,
             device_type=device_type,
-            digital_literacy=self._sample_beta(*trait_params["digital_literacy"]),
-            price_sensitivity=self._sample_beta(*trait_params["price_sensitivity"]),
-            patience_score=self._sample_beta(*trait_params["patience_score"]),
-            motivation=self._sample_beta(*trait_params["motivation"]),
-            trust_baseline=self._sample_beta(*trait_params["trust_baseline"]),
+            digital_literacy=self._sample_beta(*trait_params["digital_literacy"], variance_multiplier=variance_multiplier),
+            price_sensitivity=self._sample_beta(*trait_params["price_sensitivity"], variance_multiplier=variance_multiplier),
+            patience_score=self._sample_beta(*trait_params["patience_score"], variance_multiplier=variance_multiplier),
+            motivation=self._sample_beta(*trait_params["motivation"], variance_multiplier=variance_multiplier),
+            trust_baseline=self._sample_beta(*trait_params["trust_baseline"], variance_multiplier=variance_multiplier),
         )
 
     def generate_population(

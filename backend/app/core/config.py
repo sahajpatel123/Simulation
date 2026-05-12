@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     # In-process fan-out for heavy simulation paths (tunable per deployment).
     CONDUCTOR_WORKERS: int = 4
 
+    # Simulation enhancement: multiplier for intra-cluster trait variance
+    # Values > 1.0 increase behavioral variation within clusters for better edge-case detection
+    CLUSTER_VARIANCE_MULTIPLIER: float = 1.0
+
     RAZORPAY_KEY_ID: str = ""
     RAZORPAY_KEY_SECRET: str = ""
     RAZORPAY_WEBHOOK_SECRET: str = ""
