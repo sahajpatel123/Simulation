@@ -344,8 +344,8 @@ Keep all required data-thecee-id attributes on visible interactive elements.
 """
 
 UI_GENERATION_PROMPT = """\
-Build a visually stunning, polished self-contained HTML prototype.
-Generate semantic HTML, product-specific copy, and full vanilla JavaScript.
+Build a visually stunning, highly interactive, and completely functional HTML prototype.
+Generate semantic HTML, product-specific copy, and comprehensive vanilla JavaScript for state management (cart, tabs, modals, accordions).
 
 ═══════════════════════════════════════════════════════════
 PRODUCT BRIEF
@@ -359,9 +359,9 @@ Price point:  {price_point}
 OUTPUT CONTRACT & RULES
 ═══════════════════════════════════════════════════════════
 - Return ONLY <!DOCTYPE html>...</html>.
-- Minimum 600 lines of HTML. Make it exhaustive, beautiful, and complete.
+- Minimum 800 lines of HTML. Make it exhaustive, beautiful, and fully functional.
 - Use only vanilla JavaScript. No external frameworks.
-- NEVER use external images. Use CSS shapes, inline SVGs, or emojis.
+- NEVER use external images. Use CSS shapes, inline SVGs, gradients, or emojis.
 - YOU MUST USE LUCIDE ICONS. We include the script. Use <i data-lucide="icon-name" class="w-5 h-5"></i>.
 
 ═══════════════════════════════════════════════════════════
@@ -370,7 +370,8 @@ UI/UX & STYLING RULES (LOVABLE INSPIRED)
 - Use standard Tailwind utility classes for EVERYTHING. Do not write custom CSS.
 - Use modern Shadcn-like design: `bg-background`, `text-foreground`, `bg-card`, `border-border`, `text-muted-foreground`.
 - Build a breathtaking Hero section, Bento-box feature grid, beautiful pricing cards, and polished forms.
-- Create glassmorphism effects (`backdrop-blur-md bg-white/10` or `bg-black/40`), subtle gradients (`bg-gradient-to-br from-primary to-accent`), and large, elegant typography.
+- Create glassmorphism effects (`backdrop-blur-md bg-white/10` or `bg-background/80`), subtle gradients (`bg-gradient-to-br from-primary to-accent`), and large, elegant typography.
+- Make buttons pop: `bg-primary text-primary-foreground hover:opacity-90 shadow-md transition-all active:scale-95`.
 - ALWAYS use proper responsive design (`sm:`, `md:`, `lg:`, `grid`, `flex`).
 - Include smooth interactions: `transition-all duration-300 hover:scale-105 hover:shadow-xl`.
 
@@ -421,6 +422,10 @@ MANDATORY HEAD
     html {{ scroll-behavior: smooth; }}
     body {{ font-family: 'Inter', sans-serif; background-color: var(--bg); color: var(--text-1); }}
     .font-display {{ font-family: 'Plus Jakarta Sans', sans-serif; }}
+    
+    /* FAQ Accordion Transitions */
+    .faq-answer {{ overflow: hidden; transition: max-height 0.3s ease, opacity 0.3s ease; }}
+    .faq-icon {{ transition: transform 0.3s ease; }}
   </style>
 </head>
 
@@ -437,37 +442,161 @@ Place these exact attributes on visible interactive elements (DO NOT ALTER THEM)
 - data-thecee-id="add-to-cart"      (product add-to-cart button)
 
 ═══════════════════════════════════════════════════════════
-PAGE STRUCTURE & JAVASCRIPT
+PAGE STRUCTURE & JAVASCRIPT BOILERPLATE
 ═══════════════════════════════════════════════════════════
 Inside <body>:
-Create these pages wrapped in a `<main>`:
-1. <div data-page="home" class="page active"> Landing page </div>
-2. <div data-page="product" class="page"> Product detail </div>
-3. <div data-page="cart" class="page"> Cart page </div>
-4. <div data-page="payment" class="page"> Payment form </div>
-5. <div data-page="confirmation" class="page"> Order confirmation </div>
 
-Write a complete bottom-of-body <script> handling page transitions and Lucide icons:
+1. Always add a global toast container:
+<div id="toast" class="fixed bottom-4 right-4 bg-foreground text-background px-6 py-3 rounded-lg shadow-lg transform translate-y-full opacity-0 transition-all duration-300 z-50 flex items-center gap-2 font-medium"></div>
+
+2. Create a sticky Navbar `<nav id="main-nav">` with a mobile drawer `<div id="mobile-drawer">` and an overlay `<div id="drawer-overlay">`.
+
+3. Create these pages wrapped in a `<main>`:
+<div data-page="home" class="page active"> Landing page (Hero, Bento Features, Social Proof, Pricing, FAQ)</div>
+<div data-page="product" class="page"> Product detail (Tabs, Add to Cart) </div>
+<div data-page="cart" class="page"> Cart page (Cart List `id="cart-list"`, Subtotal, Total, Checkout Button) </div>
+<div data-page="payment" class="page"> Payment form (Form with `data-thecee-id="checkout-form"`) </div>
+<div data-page="confirmation" class="page"> Order confirmation </div>
+
+4. Write THIS EXACT complete bottom-of-body <script> to handle all complex interactivity (DO NOT SKIP THIS):
 <script>
+  const S = {{
+    page:'home', cart:[], plan:'monthly',
+    navOpen:false, openFaq:-1, qty:1, activeThumb:0
+  }};
+
   const $ = s => document.querySelector(s);
   const $$ = s => document.querySelectorAll(s);
-  
+  const on = (el,ev,fn) => el?.addEventListener(ev,fn);
+
   function goTo(page) {{
     $$('.page').forEach(p => p.classList.remove('active'));
     $(`[data-page="${{page}}"]`)?.classList.add('active');
     window.scrollTo({{top:0, behavior:'smooth'}});
+    S.page = page;
+    if(S.navOpen) closeDrawer();
   }}
 
-  // Add event listeners to navigation items manually since this is vanilla JS
+  function initNavbar() {{
+    const nav = $('#main-nav');
+    window.addEventListener('scroll', () => nav?.classList.toggle('shadow-sm', scrollY > 10), {{passive:true}});
+    on($('#menu-btn'), 'click', () => {{
+      S.navOpen = !S.navOpen;
+      $('#mobile-drawer')?.classList.toggle('translate-x-full', !S.navOpen);
+      $('#drawer-overlay')?.classList.toggle('opacity-0', !S.navOpen);
+      $('#drawer-overlay')?.classList.toggle('pointer-events-none', !S.navOpen);
+    }});
+    on($('#drawer-overlay'), 'click', closeDrawer);
+  }}
+  
+  function closeDrawer() {{
+    S.navOpen = false;
+    $('#mobile-drawer')?.classList.add('translate-x-full');
+    $('#drawer-overlay')?.classList.add('opacity-0', 'pointer-events-none');
+  }}
+
+  function addToCart(name, price) {{
+    const existing = S.cart.find(i => i.name === name);
+    if(existing) existing.qty += S.qty; else S.cart.push({{name, price, qty:S.qty}});
+    renderCart();
+    showToast(`${{name}} added to cart!`);
+  }}
+  
+  function removeFromCart(idx) {{ S.cart.splice(idx,1); renderCart(); }}
+  
+  function renderCart() {{
+    const badge = $('#cart-count');
+    const count = S.cart.reduce((sum, item) => sum + item.qty, 0);
+    if(badge) {{ badge.textContent = count; badge.style.display = count ? 'flex' : 'none'; }}
+    
+    const list = $('#cart-list');
+    if(!list) return;
+    if(!S.cart.length) {{ list.innerHTML = '<div class="p-12 text-center text-muted-foreground bg-secondary/30 rounded-xl border border-border">Your cart is empty. Let\'s find you something amazing!</div>'; return; }}
+    
+    list.innerHTML = S.cart.map((item, i) => `
+      <div class="flex items-center justify-between py-4 border-b border-border">
+        <div>
+          <div class="font-medium text-foreground text-lg">${{item.name}}</div>
+          <div class="text-sm text-muted-foreground mt-1">Qty: ${{item.qty}} × ₹${{item.price.toLocaleString('en-IN')}}</div>
+        </div>
+        <button onclick="removeFromCart(${{i}})" class="p-2 rounded-md text-destructive hover:bg-destructive/10 transition-colors"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
+      </div>
+    `).join('');
+    lucide.createIcons();
+    
+    const subtotal = S.cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+    const gst = Math.round(subtotal * 0.18);
+    if($('#cart-subtotal')) $('#cart-subtotal').textContent = `₹${{subtotal.toLocaleString('en-IN')}}`;
+    if($('#cart-gst')) $('#cart-gst').textContent = `₹${{gst.toLocaleString('en-IN')}}`;
+    if($('#cart-total')) $('#cart-total').textContent = `₹${{(subtotal + gst).toLocaleString('en-IN')}}`;
+  }}
+
+  function showToast(msg) {{
+    const t = $('#toast'); if (!t) return;
+    t.innerHTML = `<i data-lucide="check-circle-2" class="w-5 h-5 text-green-400"></i> ${{msg}}`;
+    lucide.createIcons();
+    t.classList.remove('translate-y-full', 'opacity-0');
+    clearTimeout(t._tid); 
+    t._tid = setTimeout(() => t.classList.add('translate-y-full', 'opacity-0'), 3500);
+  }}
+
+  function initFAQ() {{
+    $$('.faq-item').forEach((item, i) => {{
+      const btn = item.querySelector('.faq-q');
+      const ans = item.querySelector('.faq-answer');
+      const icon = item.querySelector('.faq-icon');
+      if(!btn || !ans) return;
+      on(btn, 'click', () => {{
+        const isOpen = S.openFaq === i;
+        $$('.faq-answer').forEach(a => {{ a.style.maxHeight = '0px'; a.style.opacity = '0'; }});
+        $$('.faq-icon').forEach(ic => ic.style.transform = 'rotate(0deg)');
+        S.openFaq = isOpen ? -1 : i;
+        if (!isOpen) {{ ans.style.maxHeight = ans.scrollHeight + 'px'; ans.style.opacity = '1'; }}
+        if (!isOpen && icon) icon.style.transform = 'rotate(180deg)';
+      }});
+    }});
+  }}
+
+  function initTabs() {{
+    $$('.tab-btn').forEach(btn => on(btn, 'click', (e) => {{
+      const group = btn.closest('.tabs-container');
+      if(!group) return;
+      const target = btn.dataset.tabTarget;
+      $$('.tab-btn', group).forEach(b => b.classList.remove('border-primary', 'text-foreground'));
+      $$('.tab-btn', group).forEach(b => b.classList.add('border-transparent', 'text-muted-foreground'));
+      btn.classList.remove('border-transparent', 'text-muted-foreground');
+      btn.classList.add('border-primary', 'text-foreground');
+      
+      $$('.tab-panel', group).forEach(p => p.classList.add('hidden'));
+      $(`.tab-panel[data-tab-id="${{target}}"]`, group)?.classList.remove('hidden');
+    }}));
+  }}
+
   document.addEventListener("DOMContentLoaded", () => {{
     lucide.createIcons();
-    $$('[data-thecee-id="nav-home"]').forEach(el => el.addEventListener('click', () => goTo('home')));
-    $$('[data-thecee-id="nav-products"]').forEach(el => el.addEventListener('click', () => goTo('product')));
-    $$('[data-thecee-id="nav-cart"]').forEach(el => el.addEventListener('click', () => goTo('cart')));
-    $$('[data-thecee-id="checkout-form"]').forEach(el => el.addEventListener('submit', (e) => {{ e.preventDefault(); goTo('confirmation'); }}));
-  }});
+    initNavbar();
+    initFAQ();
+    initTabs();
+    
+    $$('[data-thecee-id="nav-home"]').forEach(el => on(el, 'click', () => goTo('home')));
+    $$('[data-thecee-id="nav-products"]').forEach(el => on(el, 'click', () => goTo('product')));
+    $$('[data-thecee-id="nav-cart"]').forEach(el => on(el, 'click', () => goTo('cart')));
+    
+    $$('[data-thecee-id="add-to-cart"]').forEach(el => on(el, 'click', () => {{
+      const name = el.dataset.productName || 'Premium License';
+      const price = parseInt(el.dataset.productPrice || '999');
+      addToCart(name, price);
+    }}));
 
-  // Add any additional custom logic here (cart state, tab switching, etc.)
+    $$('[data-thecee-id="checkout-form"]').forEach(el => on(el, 'submit', (e) => {{ 
+      e.preventDefault(); 
+      if(S.cart.length === 0) return showToast("Your cart is empty!");
+      S.cart = []; renderCart();
+      goTo('confirmation'); 
+    }}));
+    
+    renderCart();
+  }});
 </script>
 
 ═══════════════════════════════════════════════════════════
@@ -476,6 +605,7 @@ CONTENT STANDARDS
 - Invent a specific brand name. 
 - Use Indian cities (Mumbai, Bangalore, etc.) and personas (Arjun, Priya, etc.).
 - All pricing in Indian Rupees (₹).
+- Build the DOM such that the scripts above target valid elements. (e.g. `faq-item`, `tabs-container`, etc.)
 - Never omit required pages, tracking IDs, script, </body>, or </html>.
 """
 
