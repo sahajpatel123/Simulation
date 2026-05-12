@@ -336,19 +336,16 @@ Known assumptions: {assumptions_text}
 # ══════════════════════════════════════════
 
 UI_GENERATION_SYSTEM = """\
-You are a senior frontend engineer building a production-quality startup prototype.
-Return only a complete <!DOCTYPE html>...</html> document. No markdown, no prose, no comments.
-CSS is pre-loaded by TheCee before the prototype is served. Do not recreate a design system.
-Use the listed class names and write only small component-specific CSS additions when unavoidable.
-Your main job is semantic HTML structure, product-specific Indian copy, and full vanilla JavaScript.
-No Alpine.js, React, Vue, external images, or framework code. Vanilla JavaScript only.
+You are an expert Frontend Developer and UI/UX Designer inspired by the best modern React builders (like Lovable).
+Your task is to build a breathtaking, production-quality startup prototype in a SINGLE HTML document.
+Return ONLY a complete <!DOCTYPE html>...</html> document. No markdown, no prose, no comments.
+No React, Vue, or external frameworks. Vanilla JavaScript and standard Tailwind CSS ONLY.
 Keep all required data-thecee-id attributes on visible interactive elements.
-Do not omit closing </body> or </html> tags.
 """
 
 UI_GENERATION_PROMPT = """\
-Build a polished self-contained HTML prototype using TheCee's pre-loaded CSS template.
-Generate semantic HTML, product-specific copy, and full vanilla JavaScript. Keep CSS minimal.
+Build a visually stunning, polished self-contained HTML prototype.
+Generate semantic HTML, product-specific copy, and full vanilla JavaScript.
 
 ═══════════════════════════════════════════════════════════
 PRODUCT BRIEF
@@ -359,15 +356,23 @@ Target:       {target_segment}
 Price point:  {price_point}
 
 ═══════════════════════════════════════════════════════════
-OUTPUT CONTRACT
+OUTPUT CONTRACT & RULES
 ═══════════════════════════════════════════════════════════
 - Return ONLY <!DOCTYPE html>...</html>.
-- No markdown fences, explanation, or HTML comments.
-- Minimum 400 lines of HTML.
-- Include complete <head>, <body>, and one bottom <script> block.
-- CSS template classes already exist. Do not write a large CSS system.
-- Use only vanilla JavaScript. Do not include Alpine.js.
-- No external image dependencies. Use CSS mockups, inline SVG, emoji, gradients, and cards.
+- Minimum 600 lines of HTML. Make it exhaustive, beautiful, and complete.
+- Use only vanilla JavaScript. No external frameworks.
+- NEVER use external images. Use CSS shapes, inline SVGs, or emojis.
+- YOU MUST USE LUCIDE ICONS. We include the script. Use <i data-lucide="icon-name" class="w-5 h-5"></i>.
+
+═══════════════════════════════════════════════════════════
+UI/UX & STYLING RULES (LOVABLE INSPIRED)
+═══════════════════════════════════════════════════════════
+- Use standard Tailwind utility classes for EVERYTHING. Do not write custom CSS.
+- Use modern Shadcn-like design: `bg-background`, `text-foreground`, `bg-card`, `border-border`, `text-muted-foreground`.
+- Build a breathtaking Hero section, Bento-box feature grid, beautiful pricing cards, and polished forms.
+- Create glassmorphism effects (`backdrop-blur-md bg-white/10` or `bg-black/40`), subtle gradients (`bg-gradient-to-br from-primary to-accent`), and large, elegant typography.
+- ALWAYS use proper responsive design (`sm:`, `md:`, `lg:`, `grid`, `flex`).
+- Include smooth interactions: `transition-all duration-300 hover:scale-105 hover:shadow-xl`.
 
 ═══════════════════════════════════════════════════════════
 MANDATORY HEAD
@@ -376,343 +381,102 @@ MANDATORY HEAD
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>[BrandName] — [6-word value prop]</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@600;700;800;900&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
   <script>
-    tailwind.config = {{theme:{{extend:{{fontFamily:{{
-      sans:['Inter','system-ui','sans-serif'],
-      display:['Plus Jakarta Sans','Inter','sans-serif']
-    }}}}}}}}
+    tailwind.config = {{
+      darkMode: 'class',
+      theme: {{
+        extend: {{
+          fontFamily: {{
+            sans: ['Inter', 'sans-serif'],
+            display: ['Plus Jakarta Sans', 'sans-serif']
+          }},
+          colors: {{
+            border: 'var(--border-strong)',
+            input: 'var(--border)',
+            ring: 'var(--brand)',
+            background: 'var(--bg)',
+            foreground: 'var(--text-1)',
+            primary: {{ DEFAULT: 'var(--brand)', foreground: '#ffffff' }},
+            secondary: {{ DEFAULT: 'var(--surface-2)', foreground: 'var(--text-1)' }},
+            destructive: {{ DEFAULT: 'var(--accent)', foreground: '#ffffff' }},
+            muted: {{ DEFAULT: 'var(--surface-2)', foreground: 'var(--text-2)' }},
+            accent: {{ DEFAULT: 'var(--brand-dim)', foreground: 'var(--brand)' }},
+            card: {{ DEFAULT: 'var(--surface)', foreground: 'var(--text-1)' }},
+          }},
+          borderRadius: {{ lg: 'var(--radius-lg)', md: 'var(--radius)', sm: 'calc(var(--radius) - 2px)' }}
+        }}
+      }}
+    }}
   </script>
   <style>
-    /* Optional tiny component-specific additions only. Do not recreate base CSS. */
+    /* Custom utility animations */
+    @keyframes fade-in-up {{ from {{ opacity: 0; transform: translateY(20px); }} to {{ opacity: 1; transform: translateY(0); }} }}
+    .animate-fade-in-up {{ animation: fade-in-up 0.6s ease-out forwards; }}
+    .glass-panel {{ background: var(--glass); backdrop-filter: blur(12px); border: 1px solid var(--border-strong); }}
+    .page {{ display: none; opacity: 0; transition: opacity 0.3s ease; }}
+    .page.active {{ display: block; opacity: 1; }}
+    html {{ scroll-behavior: smooth; }}
+    body {{ font-family: 'Inter', sans-serif; background-color: var(--bg); color: var(--text-1); }}
+    .font-display {{ font-family: 'Plus Jakarta Sans', sans-serif; }}
   </style>
 </head>
 
 ═══════════════════════════════════════════════════════════
-AVAILABLE CSS CLASSES
+THECEE TRACKING ATTRIBUTES (CRITICAL FOR SIMULATION)
 ═══════════════════════════════════════════════════════════
-Typography:
-.font-display .text-hero .text-h2 .text-h3 .text-body .text-sm .text-xs .overline .gradient-text
-
-Buttons:
-.btn .btn-primary .btn-ghost .btn-lg .btn-sm .btn-icon
-
-Cards and surfaces:
-.card .card-featured .glass .pill .badge .badge-brand .badge-success .badge-muted
-
-Motion and layout:
-.blob .blob-2 .reveal .from-left .from-right .scale-in .visible .d1 .d2 .d3 .d4 .d5
-.page .active .section .section-sm .container .grid-2 .grid-3 .hide-mobile
-
-Interaction components:
-.faq-item .faq-q .faq-answer .faq-icon .tab-btn .tab-panel .plan-opt .input .form-label
-
-Utilities:
-.step-dot .icon-circle .divider .counter .stars .logo-track .logo-item .thumb .hero-grid
-
-Required IDs:
-#scroll-bar #toast #drawer-overlay #main-nav #mobile-drawer #menu-btn #cart-count #cart-list
-#cart-gst #cart-total #annual-badge #product-tabs #payment-tabs #product-main-img
+Place these exact attributes on visible interactive elements (DO NOT ALTER THEM):
+- data-thecee-id="cta-primary"      (hero or pricing primary CTA)
+- data-thecee-id="pricing-section"  (pricing section wrapper)
+- data-thecee-id="checkout-form"    (checkout/payment form)
+- data-thecee-id="nav-home"         (home nav link)
+- data-thecee-id="nav-products"     (products nav link)
+- data-thecee-id="nav-cart"         (cart icon/button)
+- data-thecee-id="add-to-cart"      (product add-to-cart button)
 
 ═══════════════════════════════════════════════════════════
-THECEE TRACKING ATTRIBUTES
+PAGE STRUCTURE & JAVASCRIPT
 ═══════════════════════════════════════════════════════════
-Place these on visible elements:
-- data-thecee-id="cta-primary"      hero or pricing primary CTA
-- data-thecee-id="pricing-section"  pricing section wrapper
-- data-thecee-id="checkout-form"    checkout/payment form
-- data-thecee-id="nav-home"         home nav link
-- data-thecee-id="nav-products"     products nav link
-- data-thecee-id="nav-cart"         cart icon/button
-- data-thecee-id="add-to-cart"      product add-to-cart button
+Inside <body>:
+Create these pages wrapped in a `<main>`:
+1. <div data-page="home" class="page active"> Landing page </div>
+2. <div data-page="product" class="page"> Product detail </div>
+3. <div data-page="cart" class="page"> Cart page </div>
+4. <div data-page="payment" class="page"> Payment form </div>
+5. <div data-page="confirmation" class="page"> Order confirmation </div>
 
-═══════════════════════════════════════════════════════════
-PAGE STRUCTURE
-═══════════════════════════════════════════════════════════
-Always create these wrappers first inside <body>:
-<div id="scroll-bar"></div>
-<div id="toast"></div>
-<div id="drawer-overlay"></div>
+Write a complete bottom-of-body <script> handling page transitions and Lucide icons:
+<script>
+  const $ = s => document.querySelector(s);
+  const $$ = s => document.querySelectorAll(s);
+  
+  function goTo(page) {{
+    $$('.page').forEach(p => p.classList.remove('active'));
+    $(`[data-page="${{page}}"]`)?.classList.add('active');
+    window.scrollTo({{top:0, behavior:'smooth'}});
+  }}
 
-Create these pages:
-1. <div data-page="home" class="page active"> landing page content </div>
-2. <div data-page="product" class="page"> product detail page </div>
-3. <div data-page="cart" class="page"> cart page </div>
-4. <div data-page="payment" class="page"> payment form </div>
-5. <div data-page="confirmation" class="page"> order confirmation </div>
+  // Add event listeners to navigation items manually since this is vanilla JS
+  document.addEventListener("DOMContentLoaded", () => {{
+    lucide.createIcons();
+    $$('[data-thecee-id="nav-home"]').forEach(el => el.addEventListener('click', () => goTo('home')));
+    $$('[data-thecee-id="nav-products"]').forEach(el => el.addEventListener('click', () => goTo('product')));
+    $$('[data-thecee-id="nav-cart"]').forEach(el => el.addEventListener('click', () => goTo('cart')));
+    $$('[data-thecee-id="checkout-form"]').forEach(el => el.addEventListener('submit', (e) => {{ e.preventDefault(); goTo('confirmation'); }}));
+  }});
 
-═══════════════════════════════════════════════════════════
-HOME PAGE SECTIONS
-═══════════════════════════════════════════════════════════
-NAVBAR:
-- Fixed <nav id="main-nav"> with logo, 4 links, CTA, cart button, mobile menu button.
-- First link has data-thecee-id="nav-home" and calls goTo('home').
-- Product link has data-thecee-id="nav-products" and calls goTo('product').
-- Cart button has data-thecee-id="nav-cart" and calls goTo('cart').
-- Include <div id="mobile-drawer"> with mobile links and CTA.
-
-HERO:
-- Full viewport section with .container and .grid-2.
-- Add two absolute .blob elements and a subtle .hero-grid background.
-- Left: .pill, .text-hero headline with .gradient-text phrase, .text-body subheadline, two CTAs.
-- Primary CTA must have data-thecee-id="cta-primary".
-- Add 3 animated stats using .counter and data-count-to.
-- Right: realistic CSS product mockup card with rows, charts, status pills, fake UI details.
-
-SOCIAL PROOF:
-- .section-sm with overline and .logo-track of five real/plausible Indian startup names.
-
-FEATURES:
-- .section with centered header, bento-like .grid-3 cards.
-- At least five feature cards using .card, .icon-circle, .text-h3, .text-sm, .reveal.
-- Include one visual card with bars/table/checklist based on the product.
-
-HOW IT WORKS:
-- Three step flow using .step-dot and connecting dividers.
-- Explain the user's first successful journey through the product.
-
-TESTIMONIALS:
-- Three .card testimonials with .stars, Indian names, roles, and specific measurable quotes.
-
-PRICING:
-- <section id="pricing-section" data-thecee-id="pricing-section">.
-- Include monthly/annual toggle with .plan-opt and #annual-badge.
-- Three plans: Starter, Pro, Scale. Pro uses .card-featured.
-- Use ₹ pricing that matches the product and price point.
-- Use data-price-m and data-price-y for all price spans.
-
-FAQ:
-- Five to seven .faq-item blocks with .faq-q button, .faq-answer, .faq-icon.
-- Answers must be specific and reassuring, not generic.
-
-CTA BANNER AND FOOTER:
-- Final conversion banner with CTA buttons.
-- Footer with four columns and India-specific contact/trust copy.
-
-═══════════════════════════════════════════════════════════
-PRODUCT / CART / PAYMENT PAGES
-═══════════════════════════════════════════════════════════
-PRODUCT PAGE:
-- Large hero product card with id="product-main-img".
-- Three .thumb cards calling selectThumb(i).
-- Product title, badge, .stars rating, price, quantity controls.
-- Add-to-cart button with data-thecee-id="add-to-cart" calling addToCart(name, price).
-- Buy-now button calls addToCart(...) then goTo('cart').
-- Tabs in #product-tabs: Description, Specifications, Reviews.
-
-CART PAGE:
-- <div id="cart-list"></div> rendered by JS.
-- Order summary with subtotal, discount, GST 18%, total.
-- Checkout button calls goTo('payment').
-
-PAYMENT PAGE:
-- <form data-thecee-id="checkout-form"> with name, email, phone, address, city, pincode.
-- Inputs use .input and labels use .form-label.
-- Payment tabs in #payment-tabs: Card, UPI, Cash on Delivery.
-- Submit button places order and calls goTo('confirmation').
-
-CONFIRMATION PAGE:
-- Success checkmark, order number, delivery expectation, Continue Shopping button.
+  // Add any additional custom logic here (cart state, tab switching, etc.)
+</script>
 
 ═══════════════════════════════════════════════════════════
 CONTENT STANDARDS
 ═══════════════════════════════════════════════════════════
-- Invent a specific brand name. Never use ProductX, AppName, YourBrand, or placeholders.
-- Every headline must be benefit-specific and measurable when possible.
-- All pricing in Indian Rupees.
-- Use Indian cities: Mumbai, Bangalore, Delhi, Hyderabad, Pune, Chennai.
-- Use Indian personas: Arjun Mehta, Priya Sharma, Vikram Nair, Anjali Desai, Rohit Gupta.
-- Use Indian startup references where useful: Razorpay, Zepto, Meesho, CRED, Groww, boAt, Ola.
-- Stats must be plausible and specific, not vague vanity metrics.
-- Make product copy match the product_type and description exactly.
-
-═══════════════════════════════════════════════════════════
-JAVASCRIPT BOILERPLATE
-═══════════════════════════════════════════════════════════
-Write a complete bottom-of-body <script> with this architecture and product-specific calls:
-
-const S = {{
-  page:'home', cart:[], plan:'monthly', navOpen:false,
-  openFaq:-1, activeTab:0, formSent:false, qty:1, activeThumb:0
-}};
-
-const $ = (s,c=document) => c.querySelector(s);
-const $$ = (s,c=document) => Array.from(c.querySelectorAll(s));
-const on = (el,ev,fn) => el?.addEventListener(ev,fn);
-
-function goTo(page) {{
-  $$('.page').forEach(p => p.classList.remove('active'));
-  const target = $(`[data-page="${{page}}"]`);
-  if (target) {{ target.classList.add('active'); window.scrollTo({{top:0, behavior:'smooth'}}); }}
-  S.page = page;
-  initReveal();
-}}
-
-function initNavbar() {{
-  const nav = $('#main-nav');
-  window.addEventListener('scroll', () => nav?.classList.toggle('scrolled', scrollY > 60), {{passive:true}});
-  on($('#menu-btn'), 'click', () => {{
-    S.navOpen = !S.navOpen;
-    $('#mobile-drawer')?.classList.toggle('open', S.navOpen);
-    $('#drawer-overlay')?.classList.toggle('open', S.navOpen);
-  }});
-  on($('#drawer-overlay'), 'click', closeDrawer);
-}}
-function closeDrawer() {{
-  S.navOpen = false;
-  $('#mobile-drawer')?.classList.remove('open');
-  $('#drawer-overlay')?.classList.remove('open');
-}}
-
-function initScrollProgress() {{
-  const bar = $('#scroll-bar');
-  if (!bar) return;
-  window.addEventListener('scroll', () => {{
-    const max = document.documentElement.scrollHeight - innerHeight;
-    bar.style.width = (max > 0 ? scrollY / max * 100 : 0) + '%';
-  }}, {{passive:true}});
-}}
-
-function initReveal() {{
-  if (!('IntersectionObserver' in window)) {{ $$('.reveal').forEach(el => el.classList.add('visible')); return; }}
-  const obs = new IntersectionObserver(entries => {{
-    entries.forEach((entry, i) => {{
-      if (entry.isIntersecting) {{
-        setTimeout(() => {{
-          entry.target.classList.add('visible');
-          const countTo = entry.target.dataset.countTo;
-          if (countTo) animateCounter(entry.target, parseFloat(countTo));
-        }}, i * 65);
-        obs.unobserve(entry.target);
-      }}
-    }});
-  }}, {{threshold:0.1, rootMargin:'0px 0px -36px 0px'}});
-  $$('.reveal').forEach(el => obs.observe(el));
-}}
-
-function animateCounter(el, target, dur=1500) {{
-  const start = performance.now();
-  const isFloat = target % 1 !== 0;
-  const prefix = el.dataset.prefix || '';
-  const suffix = el.dataset.suffix || '';
-  const fmt = n => String(n).replace(/\\B(?=(\\d{{3}})+(?!\\d))/g, ',');
-  (function tick(now) {{
-    const p = Math.min((now - start) / dur, 1);
-    const eased = 1 - Math.pow(1 - p, 3);
-    const val = isFloat ? (eased * target).toFixed(1) : Math.floor(eased * target);
-    el.textContent = prefix + fmt(val) + suffix;
-    if (p < 1) requestAnimationFrame(tick);
-  }})(start);
-}}
-
-function initFAQ() {{
-  $$('.faq-item').forEach((item, i) => {{
-    on(item.querySelector('.faq-q'), 'click', () => {{
-      const ans = item.querySelector('.faq-answer');
-      const icon = item.querySelector('.faq-icon');
-      const isOpen = S.openFaq === i;
-      $$('.faq-answer').forEach(a => {{ a.style.maxHeight = '0'; a.style.opacity = '0'; }});
-      $$('.faq-icon').forEach(ic => ic.style.transform = 'rotate(0deg)');
-      S.openFaq = isOpen ? -1 : i;
-      if (!isOpen && ans) {{ ans.style.maxHeight = ans.scrollHeight + 'px'; ans.style.opacity = '1'; }}
-      if (!isOpen && icon) icon.style.transform = 'rotate(45deg)';
-    }});
-  }});
-}}
-
-function initTabs(wrapperId) {{
-  const wrapper = $('#' + wrapperId); if (!wrapper) return;
-  const btns = $$('.tab-btn', wrapper);
-  const panels = $$('.tab-panel', wrapper);
-  btns.forEach((btn, i) => on(btn, 'click', () => {{
-    btns.forEach(b => b.classList.remove('active'));
-    panels.forEach(p => p.classList.remove('active'));
-    btn.classList.add('active');
-    panels[i]?.classList.add('active');
-  }}));
-  btns[0]?.click();
-}}
-
-function initPricing() {{
-  const opts = $$('.plan-opt');
-  opts.forEach(opt => on(opt, 'click', () => {{
-    S.plan = opt.dataset.plan || 'monthly';
-    opts.forEach(o => o.classList.toggle('active', o.dataset.plan === S.plan));
-    $$('[data-price-m]').forEach(el => {{ el.textContent = S.plan === 'monthly' ? el.dataset.priceM : el.dataset.priceY; }});
-    const badge = $('#annual-badge');
-    if (badge) badge.style.display = S.plan === 'annual' ? 'inline-block' : 'none';
-  }}));
-  opts[0]?.click();
-}}
-
-function addToCart(name, price) {{
-  S.cart.push({{name, price, qty:S.qty || 1}});
-  renderCart();
-  showToast(name + ' added to cart');
-}}
-function removeFromCart(i) {{ S.cart.splice(i,1); renderCart(); }}
-function renderCart() {{
-  const badge = $('#cart-count');
-  const count = S.cart.reduce((sum, item) => sum + item.qty, 0);
-  if (badge) {{ badge.textContent = count; badge.style.display = count ? 'flex' : 'none'; }}
-  const list = $('#cart-list');
-  if (!list) return;
-  if (!S.cart.length) {{ list.innerHTML = '<p class="text-sm" style="padding:2rem;text-align:center">Your cart is empty</p>'; return; }}
-  list.innerHTML = S.cart.map((item, i) => `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 0;border-bottom:1px solid var(--border)">
-      <div><div class="text-h3" style="font-size:0.95rem">${{item.name}}</div><div class="text-sm">Qty ${{item.qty}} · ₹${{item.price.toLocaleString('en-IN')}}</div></div>
-      <button class="btn btn-sm btn-ghost" onclick="removeFromCart(${{i}})">Remove</button>
-    </div>`).join('');
-  const subtotal = S.cart.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const gst = Math.round(subtotal * 0.18);
-  $('#cart-gst') && ($('#cart-gst').textContent = '₹' + gst.toLocaleString('en-IN'));
-  $('#cart-total') && ($('#cart-total').textContent = '₹' + (subtotal + gst).toLocaleString('en-IN'));
-}}
-
-function showToast(msg) {{
-  const t = $('#toast'); if (!t) return;
-  t.textContent = msg; t.classList.add('show');
-  clearTimeout(t._tid); t._tid = setTimeout(() => t.classList.remove('show'), 2600);
-}}
-
-function initSmoothScroll() {{
-  $$('[data-scroll]').forEach(el => on(el, 'click', e => {{
-    e.preventDefault();
-    $(el.dataset.scroll)?.scrollIntoView({{behavior:'smooth', block:'start'}});
-    closeDrawer();
-  }}));
-}}
-
-function initForms() {{
-  on($('[data-thecee-id="checkout-form"]'), 'submit', e => {{ e.preventDefault(); S.formSent = true; goTo('confirmation'); showToast('Order placed successfully'); }});
-}}
-
-function selectThumb(i) {{
-  $$('.thumb').forEach((t, j) => t.classList.toggle('active', j === i));
-  const main = $('#product-main-img');
-  if (main) {{ main.style.opacity = '0.35'; setTimeout(() => main.style.opacity = '1', 180); }}
-  S.activeThumb = i;
-}}
-function changeQty(delta) {{
-  S.qty = Math.max(1, S.qty + delta);
-  $$('.qty-value').forEach(el => el.textContent = S.qty);
-}}
-
-window.goTo = goTo;
-window.addToCart = addToCart;
-window.removeFromCart = removeFromCart;
-window.selectThumb = selectThumb;
-window.changeQty = changeQty;
-
-document.addEventListener('DOMContentLoaded', () => {{
-  initNavbar(); initScrollProgress(); initReveal(); initFAQ(); initPricing();
-  initTabs('product-tabs'); initTabs('payment-tabs'); initSmoothScroll(); initForms(); renderCart();
-}});
-
-If nearing token budget, shorten copy first. Never omit required pages, tracking IDs, script, </body>, or </html>.
+- Invent a specific brand name. 
+- Use Indian cities (Mumbai, Bangalore, etc.) and personas (Arjun, Priya, etc.).
+- All pricing in Indian Rupees (₹).
+- Never omit required pages, tracking IDs, script, </body>, or </html>.
 """
 
 # ── Refine prompt components ──────────────────────────────────────────────────

@@ -60,7 +60,7 @@ export default function UIBuilderPreview({ generatedUI, generatePending, iframeR
         {generatePending && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-[#0a0f1c]/95">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
-            <p className="text-sm text-slate-400">Claude is generating your UI…</p>
+            <p className="text-sm text-slate-400">Lovable Engine is generating your UI…</p>
             <p className="font-mono text-xs text-slate-600">This takes 15–30 seconds</p>
           </div>
         )}

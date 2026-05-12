@@ -112,7 +112,7 @@ export default function UIBuilderConfigPanel(props: Props) {
               Generating…
             </span>
           ) : (
-            'Generate UI'
+            '✨ Generate Lovable UI'
           )}
         </button>
 
