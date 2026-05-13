@@ -187,13 +187,31 @@ def _inject_base_css(html: str, css: str) -> str:
     return tag + html
 
 
-def _strip_base_style(html: str) -> str:
-    return re.sub(
+def _strip_injected_tags(html: str) -> str:
+    """Strip server-injected script/style tags before sending to Claude for refinement.
+
+    Removes thecee-app JS boilerplate, thecee-fx enhancements, and thecee-base styles
+    so Claude only sees the original LLM-generated HTML and makes targeted edits.
+    """
+    html = re.sub(
+        r'<script\b[^>]*\bid=["\']thecee-app["\'][^>]*>.*?</script>\s*',
+        "",
+        html,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    html = re.sub(
+        r'<script\b[^>]*\bid=["\']thecee-fx["\'][^>]*>.*?</script>\s*',
+        "",
+        html,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    html = re.sub(
         r'<style\b[^>]*\bid=["\']thecee-base["\'][^>]*>.*?</style>\s*',
         "",
         html,
         flags=re.IGNORECASE | re.DOTALL,
     )
+    return html
 
 
 def _ensure_cdns(html: str) -> str:
@@ -543,7 +561,7 @@ async def refine_ui(
     if not existing:
         raise HTTPException(status_code=404, detail="Generated UI not found")
 
-    html_for_model = _strip_base_style(existing.html_content or "")
+    html_for_model = _strip_injected_tags(existing.html_content or "")
     refine_prompt = UI_REFINE_PROMPT_TEMPLATE.format(
         html=html_for_model,
         instruction=body.refinement_prompt,
@@ -570,7 +588,7 @@ async def refine_ui(
             detail="Generator returned no content. Please retry.",
         )
 
-    html = _build_safe_html(raw, css_template=css)
+    html = _build_safe_html(raw)
 
     _lock_project_for_ui_version(db, project_id, current_user.id)
     new_ui = GeneratedUI(
