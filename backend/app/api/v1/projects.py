@@ -113,11 +113,12 @@ def _backfill_display_precis_lazy(db: Session, project: Project) -> None:
         line = generate_precis(project.title, project.description)
         if line:
             project.precis = line
-        project.precis_title_fingerprint = _title_fingerprint(project.title)
-        db.add(project)
+    except Exception:
+        pass
+    project.precis_title_fingerprint = _title_fingerprint(project.title)
+    db.add(project)
     db.commit()
     db.refresh(project)
-    return ProjectOut.model_validate(project)
 
 
 # ── THE BRIEF — founder-authored product spec ────────────────────────────
