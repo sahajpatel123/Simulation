@@ -336,210 +336,52 @@ Known assumptions: {assumptions_text}
 # ══════════════════════════════════════════
 
 UI_GENERATION_SYSTEM = """\
-You are an elite frontend designer who builds startups' first landing pages. You were trained on the best
-modern web — Stripe, Linear, Notion, Vercel, Coolify, and the Y Combinator batch. Every site you build
-looks like a $10M-funded startup, not a template.
+You are an elite frontend designer who builds unique landing pages for startups. Every product gets a DIFFERENT
+visual approach — you NEVER reuse the same layout, color scheme, or structure across different products.
 
-Design principles you always follow:
-- Clean, intentional whitespace
-- High-contrast typography with max 2 fonts
-- A clear visual hierarchy — the CTA is the most prominent element
-- Color is used sparingly but deliberately
-- Mobile-first: the page looks perfect at 375px, then scales up
-- Micro-interactions: hover states, scroll reveals, smooth transitions
-- No gimmicks. No particle effects. No magnetic buttons. Just clean, functional design.
+DESIGN PHILOSOPHY:
+- Every product category demands a DIFFERENT visual language. A developer tool should NOT look like an e-commerce store.
+- Study the product description and layout instruction carefully — they tell you what THIS product needs.
+- If the layout instruction says "showcase", design a product-focused visual experience with full-bleed elements.
+- If it says "dashboard", design a data-dense, card-based layout.
+- If it says "bento", design an asymmetric, editorial-feel grid.
+- If it says "mono", use brutalist single-font high-contrast design.
+- If it says "luxe", use large whitespace, premium colors, and elegant spacing.
+- Make color, typography, spacing, and interaction style UNIQUE to each product.
 
-Rules:
-- Output a SINGLE complete <!DOCTYPE html> document with Tailwind CSS.
-- All CSS must be custom (via <style> or Tailwind classes). Do NOT rely on injected stylesheets.
-- Include <script src="https://cdn.tailwindcss.com"></script> in <head>.
-- You MAY use Unsplash images: <img src="https://images.unsplash.com/photo-XXXX?w=800&q=80">
-- Use Lucide icons for all icons: <i data-lucide="icon-name"></i> + script CDN.
-- Required data-thecee-id attributes on visible interactive elements (these power browser
-  simulation — never omit them):
-  cta-primary, pricing-section, checkout-form, nav-home, nav-products, nav-cart, add-to-cart
-- TheCee injects a JS runtime that auto-detects and wires up these patterns:
-  • Navigation: put each page section in a <div data-page="home">, <div data-page="product">,
-    <div data-page="cart">, etc. The first one is visible by default, others hidden.
-    The runtime shows/hides them when nav-* elements are clicked.
-  • Cart: use data-thecee-id="add-to-cart" on buttons with data-product-name and
-    data-product-price attributes. Cart renders into #cart-list if present.
-  • FAQ: use .faq-item > .faq-q + .faq-answer structure for auto-accordion.
-  • Tabs: use .tabs-container with .tab-btn[data-tab-target] and .tab-panel[data-tab-id].
-  • Toast: a #toast element anywhere for notifications, or one is auto-created.
-  • Navbar: #main-nav gets a scroll shadow automatically.
-  • Mobile drawer: #menu-btn toggles #mobile-drawer and #drawer-overlay.
-  • Form: data-thecee-id="checkout-form" triggers cart validation on submit.
-- Mobile-first: design for 375px first, then use Tailwind sm:/md:/lg: to scale up.
-- No React, Vue, or frameworks. Vanilla JS + Tailwind only.
+RULES:
+- Output <!DOCTYPE html> with Tailwind CSS.
+- Include Tailwind CDN in <head>.
+- You MAY use Unsplash images.
+- Use Lucide icons.
+- Required data-thecee-id attributes: cta-primary, pricing-section, checkout-form, nav-home, nav-products, nav-cart, add-to-cart.
+- Use <div data-page="home/product/cart"> for navigation. The JS runtime shows/hides them.
+- Use data-thecee-id="add-to-cart" with data-product-name and data-product-price for cart.
+- Use .faq-item > .faq-q + .faq-answer for FAQ accordions.
+- Use .tabs-container with .tab-btn[data-tab-target] and .tab-panel[data-tab-id] for tabs.
+- TheCee injects navigation, cart, toast, FAQ, tabs JS — just provide the HTML hooks.
+- Mobile-first: 375px first, then sm:/md:/lg: scale up.
+- Vanilla JS + Tailwind only. No React, Vue, or frameworks.
+- Never repeat a layout you have used before. Each generation must be structurally unique.
 
 Product: {description}
 Type: {product_type}  
 Target: {target_segment}
 Price point: {price_point}
-Layout: {layout_archetype}
-
-Study these examples for quality bar:
-```html
-<!-- Stripe-inspired hero: clean headline, one subheading, single CTA, no clutter -->
-<section class="min-h-screen flex items-center justify-center px-4">
-  <div class="max-w-4xl mx-auto text-center">
-    <h1 class="text-4xl md:text-6xl font-bold tracking-tight">Payments infrastructure for the internet</h1>
-    <p class="mt-6 text-lg text-gray-600 max-w-2xl mx-auto">Millions of businesses of all sizes use Stripe to accept payments, send payouts, and manage their operations online.</p>
-    <div class="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
-      <a class="bg-black text-white px-8 py-3 rounded-lg font-medium hover:bg-gray-800 transition">Start now</a>
-      <a class="border border-gray-300 px-8 py-3 rounded-lg font-medium hover:border-gray-400 transition">Contact sales</a>
-    </div>
-  </div>
-</section>
-```
-
-```html
-<!-- Vercel-inspired bento grid: asymmetric cards, one hero card larger -->
-<section class="max-w-6xl mx-auto px-4 py-24">
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-    <div class="md:col-span-2 md:row-span-2 bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl p-8">
-      <h3 class="text-2xl font-bold">Deploy in seconds</h3>
-      <p class="mt-2 text-gray-600">Push to any Git repository — we build and deploy automatically.</p>
-    </div>
-    <div class="bg-gray-50 rounded-2xl p-6"><h3 class="font-semibold">Edge Functions</h3><p class="mt-1 text-sm text-gray-500">Run code in 30+ regions</p></div>
-    <div class="bg-gray-50 rounded-2xl p-6"><h3 class="font-semibold">Analytics</h3><p class="mt-1 text-sm text-gray-500">Real-time traffic insights</p></div>
-  </div>
-</section>
-```
-
-Design your own layout. Make it unique to this product. Use the layout archetype as a starting point,
-but adapt it. The page should feel like it was designed specifically for THIS product, not copied.
+Layout instruction — THIS IS THE PRIMARY DESIGN GUIDE: {layout_archetype}
 """
 
 UI_GENERATION_PROMPT = """\
-Build a visually stunning, highly interactive, and completely functional HTML prototype.
-Generate semantic HTML, product-specific copy, and comprehensive vanilla JavaScript for state management (cart, tabs, modals, accordions).
+Build a complete HTML prototype for this product.
 
-═══════════════════════════════════════════════════════════
-PRODUCT BRIEF
-═══════════════════════════════════════════════════════════
-Description:  {description}
-Type:         {product_type}
-Target:       {target_segment}
-Price point:  {price_point}
+Product description: {description}
+Product type: {product_type}
+Target segment: {target_segment}
+Price point: {price_point}
+Layout approach: {layout_archetype}
 
-═══════════════════════════════════════════════════════════
-OUTPUT CONTRACT & RULES
-═══════════════════════════════════════════════════════════
-- Return ONLY <!DOCTYPE html>...</html>.
-- Minimum 800 lines of HTML. Make it exhaustive, beautiful, and fully functional.
-- Use only vanilla JavaScript. No external frameworks.
-- NEVER use external images. Use CSS shapes, inline SVGs, gradients, or emojis.
-- YOU MUST USE LUCIDE ICONS. We include the script. Use <i data-lucide="icon-name" class="w-5 h-5"></i>.
-
-═══════════════════════════════════════════════════════════
-UI/UX & STYLING RULES (LOVABLE INSPIRED)
-═══════════════════════════════════════════════════════════
-- Use standard Tailwind utility classes for EVERYTHING. Do not write custom CSS.
-- Use modern Shadcn-like design: `bg-background`, `text-foreground`, `bg-card`, `border-border`, `text-muted-foreground`.
-- Build a breathtaking Hero section, Bento-box feature grid, beautiful pricing cards, and polished forms.
-- Create glassmorphism effects (`backdrop-blur-md bg-white/10` or `bg-background/80`), subtle gradients (`bg-gradient-to-br from-primary to-accent`), and large, elegant typography.
-- Make buttons pop: `bg-primary text-primary-foreground hover:opacity-90 shadow-md transition-all active:scale-95`.
-- ALWAYS use proper responsive design (`sm:`, `md:`, `lg:`, `grid`, `flex`).
-- Include smooth interactions: `transition-all duration-300 hover:scale-105 hover:shadow-xl`.
-
-═══════════════════════════════════════════════════════════
-MANDATORY HEAD
-═══════════════════════════════════════════════════════════
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>[BrandName] — [6-word value prop]</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@600;700;800;900&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <script>
-    tailwind.config = {{
-      darkMode: 'class',
-      theme: {{
-        extend: {{
-          fontFamily: {{
-            sans: ['Inter', 'sans-serif'],
-            display: ['Plus Jakarta Sans', 'sans-serif']
-          }},
-          colors: {{
-            border: 'var(--border-strong)',
-            input: 'var(--border)',
-            ring: 'var(--brand)',
-            background: 'var(--bg)',
-            foreground: 'var(--text-1)',
-            primary: {{ DEFAULT: 'var(--brand)', foreground: '#ffffff' }},
-            secondary: {{ DEFAULT: 'var(--surface-2)', foreground: 'var(--text-1)' }},
-            destructive: {{ DEFAULT: 'var(--accent)', foreground: '#ffffff' }},
-            muted: {{ DEFAULT: 'var(--surface-2)', foreground: 'var(--text-2)' }},
-            accent: {{ DEFAULT: 'var(--brand-dim)', foreground: 'var(--brand)' }},
-            card: {{ DEFAULT: 'var(--surface)', foreground: 'var(--text-1)' }},
-          }},
-          borderRadius: {{ lg: 'var(--radius-lg)', md: 'var(--radius)', sm: 'calc(var(--radius) - 2px)' }}
-        }}
-      }}
-    }}
-  </script>
-  <style>
-    /* Custom utility animations */
-    @keyframes fade-in-up {{ from {{ opacity: 0; transform: translateY(20px); }} to {{ opacity: 1; transform: translateY(0); }} }}
-    .animate-fade-in-up {{ animation: fade-in-up 0.6s ease-out forwards; }}
-    .glass-panel {{ background: var(--glass); backdrop-filter: blur(12px); border: 1px solid var(--border-strong); }}
-    .page {{ display: none; opacity: 0; transition: opacity 0.3s ease; }}
-    .page.active {{ display: block; opacity: 1; }}
-    html {{ scroll-behavior: smooth; }}
-    body {{ font-family: 'Inter', sans-serif; background-color: var(--bg); color: var(--text-1); }}
-    .font-display {{ font-family: 'Plus Jakarta Sans', sans-serif; }}
-    
-    /* FAQ Accordion Transitions */
-    .faq-answer {{ overflow: hidden; transition: max-height 0.3s ease, opacity 0.3s ease; }}
-    .faq-icon {{ transition: transform 0.3s ease; }}
-  </style>
-</head>
-
-═══════════════════════════════════════════════════════════
-THECEE TRACKING ATTRIBUTES (CRITICAL FOR SIMULATION)
-═══════════════════════════════════════════════════════════
-Place these exact attributes on visible interactive elements (DO NOT ALTER THEM):
-- data-thecee-id="cta-primary"      (hero or pricing primary CTA)
-- data-thecee-id="pricing-section"  (pricing section wrapper)
-- data-thecee-id="checkout-form"    (checkout/payment form)
-- data-thecee-id="nav-home"         (home nav link)
-- data-thecee-id="nav-products"     (products nav link)
-- data-thecee-id="nav-cart"         (cart icon/button)
-- data-thecee-id="add-to-cart"      (product add-to-cart button)
-
-═══════════════════════════════════════════════════════════
-PAGE STRUCTURE & BOILERPLATE (TheCee injects JS server-side)
-═══════════════════════════════════════════════════════════
-Inside <body>:
-
-1. Always add a global toast container:
-<div id="toast" class="fixed bottom-4 right-4 bg-foreground text-background px-6 py-3 rounded-lg shadow-lg transform translate-y-full opacity-0 transition-all duration-300 z-50 flex items-center gap-2 font-medium"></div>
-
-2. Create a sticky Navbar `<nav id="main-nav">` with a mobile drawer `<div id="mobile-drawer">` and an overlay `<div id="drawer-overlay">`.
-
-3. Create these pages wrapped in a `<main>`, using `data-page` and `class="page active"`:
-<div data-page="home" class="page active"> Landing hero, features, pricing, FAQ </div>
-<div data-page="product" class="page"> Product detail with tabs, Add to Cart </div>
-<div data-page="cart" class="page"> Cart list with `id="cart-list"`, subtotal, total </div>
-<div data-page="payment" class="page"> Payment form with `data-thecee-id="checkout-form"` </div>
-<div data-page="confirmation" class="page"> Order confirmation </div>
-
-4. TheCee automatically injects full SPA JavaScript (goTo, addToCart, renderCart, initNavbar,
-   showToast, initFAQ, initTabs, Lucide integration). Just wire up your HTML elements with the
-   correct CSS classes and data attributes above — no need to write the JS yourself.
-
-═══════════════════════════════════════════════════════════
-CONTENT STANDARDS
-═══════════════════════════════════════════════════════════
-- Invent a specific brand name. 
-- Use Indian cities (Mumbai, Bangalore, etc.) and personas (Arjun, Priya, etc.).
-- All pricing in Indian Rupees (₹).
-- Build the DOM such that the scripts above target valid elements. (e.g. `faq-item`, `tabs-container`, etc.)
-- Never omit required pages, tracking IDs, script, </body>, or </html>.
-"""
+IMPORTANT — Design the layout, colors, typography, and visual structure to match THIS specific product.
+This is NOT a template. The layout approach above is your PRIMARY structural guide. Build something unique."""
 
 # ── Refine prompt components ──────────────────────────────────────────────────
 # Used by the refine_ui endpoint to make surgical changes to an existing prototype.

@@ -43,18 +43,18 @@ _LAYOUT_MAP: dict[str, LayoutArchetype] = {
 }
 
 _ARCHETYPE_INSTRUCTIONS: dict[LayoutArchetype, str] = {
-    "bento":    "Asymmetric card grid with one large hero card. Perfect for feature-rich SaaS products.",
-    "editorial":"Large typography, article-style flow. Content-first, minimal chrome.",
-    "showcase": "Full-bleed hero image, sparse copy, product photography focus.",
-    "wizard":   "Step-through narrative with progressive disclosure. Great for onboarding flows.",
-    "dashboard":"Data-dense, card-first layout with sidebar navigation. For analytics and enterprise tools.",
-    "narrative":"Scroll-triggered scene changes with progress indicator. Story-driven brand experience.",
-    "mono":     "Brutalist, single font, high contrast. For developer tools and infrastructure products.",
-    "luxe":     "Large whitespace, gold/black palette, elegant product grid. Premium D2C and luxury brands.",
-    "social":   "Profile cards, activity feeds, search bar. Community and marketplace platforms.",
-    "utility":  "Minimal chrome, function-first. Calculator, banking, and tool products.",
-    "landing":  "Single scroll page, aggressive CTA, social proof. Pre-launch MVPs and waitlist pages.",
-    "portfolio":"Masonry grid of project cards. Agency and creator showcase sites.",
+    "bento":    "LAYOUT: Asymmetric card grid with one hero card spanning 2 columns. VISUAL: Gradient-heavy, modern. Use a bold brand color (NOT indigo — pick something unique to this product). Example feel: Notion or Linear.",
+    "editorial":"LAYOUT: Large typography hero, article-style content flow, minimal chrome. VISUAL: High contrast, lots of whitespace, serif or large sans-serif headlines. Black/white with one accent color. Example feel: The Browser Company or Apple product pages.",
+    "showcase": "LAYOUT: Full-bleed hero with product visuals, sparse copy sections, large product grid. VISUAL: Dark or light but minimal — let the product imagery dominate. Use Unsplash photos that show the actual product category.",
+    "wizard":   "LAYOUT: Step-through progressive disclosure with a progress indicator at top. Each step reveals next section. VISUAL: Clean, card-based, with clear forward/back buttons. Example feel: Typeform or onboarding flows.",
+    "dashboard":"LAYOUT: Data-dense card-first layout with sidebar navigation. VISUAL: Professional, muted colors, monospace or clean sans for data. Example feel: Vercel analytics or Retool.",
+    "narrative":"LAYOUT: Full-screen sections that feel like scenes in a story. Scroll progress indicator. VISUAL: Rich backgrounds, large imagery, text overlays. Example feel: Apple Watch or Airbnb experiences pages.",
+    "mono":     "LAYOUT: Brutalist — one column, single font, maximum contrast. VISUAL: Black/white/gray only (no brand colors). One typeface at different weights. Example feel: Stripe or Deel documentation.",
+    "luxe":     "LAYOUT: Large whitespace, elegant product grid, sparse copy. VISUAL: Gold/champagne accent, dark or cream background, refined typography. Example feel: Aesop or Cartier.",
+    "social":   "LAYOUT: Profile cards, activity feed, prominent search bar. VISUAL: Light background, rounded avatars, card shadows. Example feel: Twitter or Dribbble.",
+    "utility":  "LAYOUT: Minimal chrome, function-first — the tool/calculator/is the hero. Clear input areas, prominent results display. VISUAL: Clean, neutral, accessibility-focused. Example feel: Calculator or banking apps.",
+    "landing":  "LAYOUT: Single scroll page. Aggressive CTA above the fold, social proof logos, feature grid, pricing. VISUAL: Bold, confident, high-contrast. Example feel: Dropbox or Superhuman landing pages.",
+    "portfolio":"LAYOUT: Masonry grid of project cards with filterable categories. Large hero with name/title. VISUAL: Creative, white space, elegant typography. Example feel: Awwwards winning portfolio sites.",
 }
 
 
