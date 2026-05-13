@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, Request
 
+from app.core.config import settings
 from app.core.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
@@ -93,6 +94,11 @@ def rate_limit(limit: int = 30, window_s: int = 60):
         key = f"rate-limit:{request.url.path}:{ip}"
         allowed = _redis_limiter.is_allowed(key, limit, window_s)
         if allowed is None:
+            if settings.ENVIRONMENT.lower() == "production":
+                raise RuntimeError(
+                    "Redis is unavailable in production — rate limiting bypass not allowed. "
+                    "Check REDIS_URL configuration."
+                )
             allowed = _memory_limiter.is_allowed(key, limit, window_s)
         if not allowed:
             raise HTTPException(

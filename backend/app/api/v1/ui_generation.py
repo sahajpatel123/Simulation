@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.css_templates import select_layout_archetype
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.core.rate_limiter import rate_limit
 from app.core.prompts import (
     UI_GENERATION_PROMPT,
     UI_GENERATION_SYSTEM,
@@ -574,6 +575,7 @@ async def get_generated_ui(
     response_class=HTMLResponse,
     summary="Serve generated HTML in the browser with a preview token",
     responses=_HTML_200,
+    dependencies=[Depends(rate_limit(limit=20, window_s=60))],
 )
 async def serve_generated_ui(
     ui_id: int,

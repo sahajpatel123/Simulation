@@ -835,6 +835,35 @@ def run_migrations():
             conn.rollback()
             print(f"⚠️ step 87 performance indexes skip: {e}")
 
+        # Step 89: processed webhooks table for billing idempotency
+        try:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS processed_webhooks (
+                        id           SERIAL PRIMARY KEY,
+                        event_id     VARCHAR(255) NOT NULL UNIQUE,
+                        event_type   VARCHAR(100) NOT NULL,
+                        status       VARCHAR(50) NOT NULL DEFAULT 'processed',
+                        created_at   TIMESTAMP DEFAULT NOW()
+                    );
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_processed_webhooks_event_id
+                    ON processed_webhooks (event_id);
+                    """
+                )
+            )
+            conn.commit()
+            print("✅ processed_webhooks table created")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ processed_webhooks skip: {e}")
+
         # Step 88: refresh tokens (opaque, hashed)
         try:
             conn.execute(

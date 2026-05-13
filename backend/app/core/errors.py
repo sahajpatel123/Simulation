@@ -5,6 +5,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.core.config import settings
+
 
 class TheCeeError(Exception):
     def __init__(self, code: str, message: str, detail: str = "", status: int = 400):
@@ -27,12 +29,17 @@ async def thecee_error_handler(_request: Request, exc: TheCeeError) -> JSONRespo
 
 async def generic_error_handler(_request: Request, exc: Exception) -> JSONResponse:
     if isinstance(exc, RequestValidationError):
+        detail = (
+            exc.errors() if settings.ENVIRONMENT.lower() != "production" else {}
+        )
         return JSONResponse(
             status_code=422,
             content={
                 "code": "VALIDATION_ERROR",
-                "message": "Invalid request",
-                "detail": exc.errors(),
+                "message": "Invalid request body"
+                if settings.ENVIRONMENT.lower() == "production"
+                else "Invalid request",
+                "detail": detail,
             },
         )
     if isinstance(exc, StarletteHTTPException):

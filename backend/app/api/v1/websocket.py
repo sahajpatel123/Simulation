@@ -92,6 +92,16 @@ async def websocket_simulation_progress(
         while True:
             try:
                 data = await websocket.receive_text()
+                if len(data) > 65536:
+                    logger.warning(
+                        "[WS] Oversized frame rejected simulation_id=%s len=%s",
+                        simulation_id,
+                        len(data),
+                    )
+                    await websocket.send_text(
+                        '{"type":"error","message":"Frame too large (max 64KB)"}'
+                    )
+                    continue
                 if data.strip() == "ping":
                     await websocket.send_text('{"type":"pong"}')
             except WebSocketDisconnect:

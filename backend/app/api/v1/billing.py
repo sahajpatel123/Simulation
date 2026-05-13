@@ -160,6 +160,17 @@ async def razorpay_webhook(
         raise HTTPException(400, detail="Invalid JSON body") from None
 
     event = payload.get("event", "")
+    event_id = payload.get("id")
+
+    # Idempotency: skip if this webhook event has already been processed
+    if event_id:
+        existing = db.execute(
+            text("SELECT id FROM processed_webhooks WHERE event_id = :eid"),
+            {"eid": event_id},
+        ).mappings().first()
+        if existing:
+            return {"status": "already_processed", "event": event, "event_id": event_id}
+
     sub_payload = (payload.get("payload") or {}).get("subscription") or {}
     entity = sub_payload.get("entity") or {}
 
@@ -169,6 +180,16 @@ async def razorpay_webhook(
     tier = plan_map.get(plan_id, "pro") if plan_id else "pro"
 
     if not subscription_id:
+        if event_id:
+            db.execute(
+                text("""
+                    INSERT INTO processed_webhooks (event_id, event_type, status)
+                    VALUES (:eid, :etype, 'ignored_no_subscription')
+                    ON CONFLICT (event_id) DO NOTHING
+                """),
+                {"eid": event_id, "etype": event},
+            )
+            db.commit()
         return {"status": "ignored", "reason": "no subscription entity"}
 
     now = datetime.now(timezone.utc)
@@ -218,6 +239,17 @@ async def razorpay_webhook(
         db.execute(
             text("UPDATE users SET subscription_expires_at = :expires WHERE razorpay_subscription_id = :sid"),
             {"expires": grace_expires, "sid": subscription_id},
+        )
+        db.commit()
+
+    if event_id:
+        db.execute(
+            text("""
+                INSERT INTO processed_webhooks (event_id, event_type, status)
+                VALUES (:eid, :etype, 'processed')
+                ON CONFLICT (event_id) DO NOTHING
+            """),
+            {"eid": event_id, "etype": event},
         )
         db.commit()
 
