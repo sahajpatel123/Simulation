@@ -280,153 +280,119 @@ document.addEventListener('DOMContentLoaded',function(){
 
 
 _UI_JS_BOILERPLATE = """<script id="thecee-app">
-// ── TheCee Autonomous Runtime ─────────────────────────────
-// Detects what elements exist in the DOM and wires them up.
-// All selectors use safe optional chaining — no errors if absent.
+try{
 (function(){
-const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
-const on=(el,ev,fn)=>el?.addEventListener(ev,fn);
-var S={cart:[],navOpen:false};
+// ── Single event delegation handler ──────────────────────────
+// ONE listener. try-catch wrapped. No onclick attributes.
+// Every interaction goes through this function.
+var S={cart:[]};
 
-// ── 1. Navigation: auto-detect pattern and wire up ──
-// Priority: data-page divs > same-page anchors > smooth scroll
-var hasSPA=$$('[data-page]').length>0;
-if(hasSPA) $$('[data-page]').forEach(function(p,i){if(i>0)p.style.display='none';});
-function navTo(name){
-  if(hasSPA){
-    $$('[data-page]').forEach(function(p){p.style.display='none';});
-    var t=$('[data-page="'+name+'"]');
-    if(t){t.style.display='block';window.scrollTo({top:0,behavior:'smooth'});}
-  }else{
-    var t=$('[id="'+name+'"]')||$('[data-section="'+name+'"]');
-    if(t)t.scrollIntoView({behavior:'smooth'});
-    else window.scrollTo({top:0,behavior:'smooth'});
+function showPage(name){
+  var pages=document.querySelectorAll('[data-page]');
+  if(pages.length){
+    pages.forEach(function(p){p.style.display='none';});
+    var t=document.querySelector('[data-page="'+name+'"]');
+    if(t)t.style.display='block';
   }
+  window.scrollTo({top:0,behavior:'smooth'});
 }
 
-// ── 2. data-thecee-id click router (powers simulation + UX) ──
-document.addEventListener('click',function(e){
-  var el=e.target.closest('[data-thecee-id]');
-  if(!el)return;
-  var id=el.getAttribute('data-thecee-id');
-  // Simulation logging
-  console.log('TheCee:',id);
-  // Navigation
-  if(id==='nav-home')navTo('home');
-  else if(id==='nav-products')navTo('product');
-  else if(id==='nav-cart'){var cl=$('[data-page="cart"]');if(cl)navTo('cart');else if($('#cart-list')||$('.cart')){$('#cart-list,.cart')?.classList.toggle('hidden');}}
-  else if(id==='cta-primary'){/* logged for simulation */}
-});
-
-// ── 3. Cart system (auto-detected) ──
-function addToCart(name,price,qty){
-  qty=qty||1;
-  var ex=S.cart.find(function(i){return i.name===name;});
-  if(ex)ex.qty+=qty;else S.cart.push({name:name,price:price,qty:qty});
-  renderCart();showToast(name+' added!');
-}
-function removeFromCart(i){S.cart.splice(i,1);renderCart();}
 function renderCart(){
-  var badge=$('#cart-count');
-  var count=S.cart.reduce(function(s,i){return s+i.qty;},0);
-  if(badge){badge.textContent=count;badge.style.display=count?'':'none';}
-  var list=$('#cart-list');
+  var list=document.getElementById('cart-list');
   if(!list)return;
+  var count=S.cart.reduce(function(s,i){return s+i.qty;},0);
+  var badge=document.getElementById('cart-count');
+  if(badge){badge.textContent=count;badge.style.display=count?'':'none';}
   if(!S.cart.length){list.innerHTML='<div class="p-12 text-center opacity-60">Your cart is empty</div>';return;}
   list.innerHTML=S.cart.map(function(i,idx){
-    return '<div class="flex items-center justify-between py-3 border-b"><div><div class="font-medium">'+i.name+'</div><div class="text-sm opacity-60">Qty: '+i.qty+'</div></div><button onclick="removeFromCart('+idx+')" class="text-red-500 hover:text-red-700 p-1">✕</button></div>';
+    return '<div class="flex items-center justify-between py-3 border-b" data-cart-idx="'+idx+'"><div><div class="font-medium">'+i.name+'</div><div class="text-sm opacity-60">Qty: '+i.qty+' × ₹'+i.price.toLocaleString('en-IN')+'</div></div><button class="text-red-500 hover:text-red-700 p-1" data-remove-cart="'+idx+'">✕</button></div>';
   }).join('');
   var sub=S.cart.reduce(function(s,i){return s+i.price*i.qty;},0);
-  ['cart-subtotal','cart-total'].forEach(function(id){var e=$('#'+id);if(e)e.textContent='₹'+sub.toLocaleString('en-IN');});
+  ['cart-subtotal','cart-total'].forEach(function(id){
+    var e=document.getElementById(id);if(e)e.textContent='₹'+sub.toLocaleString('en-IN');
+  });
 }
-document.addEventListener('click',function(e){
-  var el=e.target.closest('[data-thecee-id="add-to-cart"]');
-  if(!el)return;
-  var n=el.getAttribute('data-product-name')||'Product';
-  var p=parseFloat(el.getAttribute('data-product-price'))||999;
-  var q=parseInt(el.getAttribute('data-qty')||'1');
-  addToCart(n,p,q);
-});
 
-// ── 4. Toast (auto-creates if missing) ──
 function showToast(m){
-  var t=$('#toast');
+  var t=document.getElementById('toast');
   if(!t){
-    t=document.createElement('div');
-    t.id='toast';
-    t.style.cssText='position:fixed;bottom:24px;right:24px;background:#1f2937;color:white;padding:12px 24px;border-radius:8px;z-index:9999;opacity:0;transform:translateY(16px);transition:all 0.3s;font-size:14px;';
+    t=document.createElement('div');t.id='toast';
+    t.style.cssText='position:fixed;bottom:24px;right:24px;background:#1f2937;color:white;padding:12px 24px;border-radius:8px;z-index:9999;opacity:0;transform:translateY(16px);transition:all 0.3s;font-size:14px;max-width:320px;';
     document.body.appendChild(t);
   }
-  t.textContent=m;
-  t.style.opacity='1';t.style.transform='translateY(0)';
+  t.textContent=m;t.style.opacity='1';t.style.transform='translateY(0)';
   clearTimeout(t._tid);t._tid=setTimeout(function(){t.style.opacity='0';t.style.transform='translateY(16px)';},3000);
 }
 
-// ── 5. Navbar scroll effect (auto-detected) ──
-var nav=$('#main-nav')||$('nav');
-if(nav&&!nav.id)nav.id='main-nav';
+// ── ONE click handler to rule them all ──
+document.addEventListener('click',function(e){
+  try{
+    var el=e.target.closest('[data-thecee-id]');
+    if(el){
+      var id=el.getAttribute('data-thecee-id');
+      if(id==='nav-home')showPage('home');
+      else if(id==='nav-products')showPage('product');
+      else if(id==='nav-cart')showPage('cart');
+      else if(id==='add-to-cart'){
+        var n=el.getAttribute('data-product-name')||'Product';
+        var p=parseFloat(el.getAttribute('data-product-price'))||999;
+        var ex=S.cart.find(function(i){return i.name===n;});
+        if(ex)ex.qty+=1;else S.cart.push({name:n,price:p,qty:1});
+        renderCart();showToast(n+' added!');
+      }
+    }
+    // Cart remove buttons (no thecee-id, uses data-remove-cart)
+    var rm=e.target.closest('[data-remove-cart]');
+    if(rm){
+      var idx=parseInt(rm.getAttribute('data-remove-cart'));
+      if(!isNaN(idx)&&idx>=0&&idx<S.cart.length){S.cart.splice(idx,1);renderCart();}
+    }
+  }catch(e){console.warn('TheCee click:',e);}
+});
+
+// ── Form submission ──
+document.addEventListener('submit',function(e){
+  try{
+    var form=e.target.closest('[data-thecee-id="checkout-form"]');
+    if(!form)return;
+    e.preventDefault();
+    if(!S.cart.length)return showToast('Cart is empty');
+    S.cart=[];renderCart();
+    var cp=document.querySelector('[data-page="confirmation"]');
+    if(cp)showPage('confirmation');
+    showToast('Order placed!');
+  }catch(e){}
+});
+
+// ── Navbar scroll shadow ──
 window.addEventListener('scroll',function(){
-  var n=$('#main-nav');
+  var n=document.getElementById('main-nav');
   if(n)n.style.boxShadow=window.scrollY>10?'0 1px 3px rgba(0,0,0,0.1)':'none';
 },{passive:true});
 
-// ── 6. Mobile drawer (auto-detected) ──
-var menuBtn=$('#menu-btn')||$('[aria-label="menu"]')||$('.menu-btn');
-var drawer=$('#mobile-drawer');
-var overlay=$('#drawer-overlay');
-if(menuBtn&&drawer){
-  on(menuBtn,'click',function(){
-    S.navOpen=!S.navOpen;drawer.classList.toggle('open',S.navOpen);
-    if(overlay){overlay.classList.toggle('open',S.navOpen);overlay.style.pointerEvents=S.navOpen?'auto':'none';}
-  });
-  if(overlay)on(overlay,'click',function(){S.navOpen=false;drawer.classList.remove('open');overlay.style.pointerEvents='none';});
-}
+// ── Hide all but first SPA page ──
+var pages=document.querySelectorAll('[data-page]');
+if(pages.length>1)for(var i=1;i<pages.length;i++)pages[i].style.display='none';
 
-// ── 7. Lucide icons ──
+// ── Lucide ──
 if(typeof lucide!=='undefined')try{lucide.createIcons();}catch(e){}
 
-// ── 8. FAQ accordion (auto-detected) ──
-$$('.faq-item').forEach(function(item,i){
+// ── FAQ accordion ──
+document.querySelectorAll('.faq-item').forEach(function(item){
   var btn=item.querySelector('.faq-q,.faq-question,button');
   var ans=item.querySelector('.faq-answer');
   if(!btn||!ans)return;
-  on(btn,'click',function(){
+  btn.addEventListener('click',function(e){
+    e.stopPropagation();
     var isOpen=item.classList.contains('active');
-    $$('.faq-item').forEach(function(x){x.classList.remove('active');});
+    document.querySelectorAll('.faq-item').forEach(function(x){x.classList.remove('active');});
     if(!isOpen)item.classList.add('active');
   });
 });
 
-// ── 9. Tabs (auto-detected) ──
-$$('.tabs-container').forEach(function(container){
-  var btns=container.querySelectorAll('.tab-btn');
-  var panels=container.querySelectorAll('.tab-panel');
-  if(!btns.length)return;
-  btns.forEach(function(btn){
-    on(btn,'click',function(){
-      btns.forEach(function(b){b.classList.remove('active','border-primary','text-foreground');});
-      btn.classList.add('active');
-      var target=btn.getAttribute('data-tab-target');
-      panels.forEach(function(p){
-        p.style.display=p.getAttribute('data-tab-id')===target?'block':'none';
-      });
-    });
-  });
-});
-
-// ── 10. Form submission (auto-detected) ──
-document.addEventListener('submit',function(e){
-  var form=e.target.closest('[data-thecee-id="checkout-form"]');
-  if(!form)return;
-  e.preventDefault();
-  if(!S.cart.length)return showToast('Cart is empty');
-  S.cart=[];renderCart();
-  navTo('confirmation');
-  showToast('Order placed!');
-});
-
 renderCart();
 })();
+}catch(e){console.warn('TheCee init:',e);}
 </script>"""
 
 
