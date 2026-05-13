@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.claude_client import claude_call_with_fallback
 from app.core.config import settings
-from app.core.css_templates import select_template
+from app.core.css_templates import select_layout_archetype
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.prompts import (
@@ -35,7 +35,7 @@ _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}
 _HTML_200 = {200: {"description": "HTML document", "content": {"text/html": {}}}}
 _PDF_200 = {200: {"description": "PDF file", "content": {"application/pdf": {}}}}
 
-ALLOWED_CDNS = ["tailwindcss", "cdn.tailwindcss"]
+ALLOWED_CDNS = ["tailwindcss", "cdn.tailwindcss", "images.unsplash.com", "unpkg.com", "fonts.googleapis.com", "fonts.gstatic.com"]
 TAILWIND_CDN = '<script src="https://cdn.tailwindcss.com"></script>'
 
 
@@ -260,58 +260,17 @@ def _inject_enhancements(html: str) -> str:
         html,
         flags=re.IGNORECASE | re.DOTALL,
     )
+    # Clean scroll-triggered reveal animations — no gimmicks
     script = """<script id="thecee-fx">
-window.addEventListener('load',function(){
-  try{
-    (function(){
-      const brand=getComputedStyle(document.documentElement).getPropertyValue('--brand').trim()||'#6366f1';
-      const spot=Object.assign(document.createElement('div'),{style:'position:fixed;inset:0;pointer-events:none;z-index:0;transition:opacity .4s;'});
-      document.body.appendChild(spot);
-      document.addEventListener('mousemove',e=>{spot.style.background=`radial-gradient(700px at ${e.clientX}px ${e.clientY}px,${brand}1a,transparent 70%)`;},{passive:true});
-    })();
-    document.querySelectorAll('.btn-primary,.btn-ghost').forEach(btn=>{
-      btn.addEventListener('mousemove',e=>{
-        const r=btn.getBoundingClientRect();
-        const x=(e.clientX-r.left-r.width/2)/(r.width/2)*7;
-        const y=(e.clientY-r.top-r.height/2)/(r.height/2)*4;
-        btn.style.transform=`perspective(600px) rotateX(${-y}deg) rotateY(${x}deg) translateY(-2px)`;
-      });
-      btn.addEventListener('mouseleave',()=>{btn.style.transform='';});
+document.addEventListener('DOMContentLoaded',function(){
+  const observer=new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){e.target.style.opacity='1';e.target.style.transform='translateY(0)';observer.unobserve(e.target);}
     });
-    const hero=document.querySelector('.text-hero');
-    if(hero&&hero.children.length===0){
-      const txt=hero.textContent||'';
-      if(txt.length>4){
-        hero.textContent='';
-        let i=0;
-        const type=()=>{hero.textContent+=txt[i++];if(i<txt.length)setTimeout(type,24);};
-        setTimeout(type,300);
-      }
-    }
-    const sec=document.querySelector('.section,.hero-section,section');
-    if(sec){
-      const cv=document.createElement('canvas');
-      cv.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:0.35';
-      sec.style.position='relative';
-      sec.insertBefore(cv,sec.firstChild);
-      const ctx=cv.getContext('2d');
-      if(ctx){
-        const brand=getComputedStyle(document.documentElement).getPropertyValue('--brand').trim()||'#6366f1';
-        const pts=Array.from({length:35},()=>({x:Math.random(),y:Math.random(),vx:(Math.random()-.5)*.0003,vy:(Math.random()-.5)*.0003,r:Math.random()*2+1}));
-        const tick=()=>{
-          cv.width=cv.offsetWidth;cv.height=cv.offsetHeight;
-          ctx.clearRect(0,0,cv.width,cv.height);
-          pts.forEach(p=>{
-            p.x=(p.x+p.vx+1)%1;p.y=(p.y+p.vy+1)%1;
-            ctx.beginPath();ctx.arc(p.x*cv.width,p.y*cv.height,p.r,0,6.28);
-            ctx.fillStyle=brand;ctx.fill();
-          });
-          requestAnimationFrame(tick);
-        };
-        tick();
-      }
-    }
-  }catch(e){console.warn('TheCee FX skipped',e);}
+  },{threshold:0.1});
+  document.querySelectorAll('section, .card, .page>div').forEach(function(el, i){
+    if(!el.classList.contains('page')){el.style.opacity='0';el.style.transform='translateY(24px)';el.style.transition='opacity 0.6s ease-out, transform 0.6s ease-out';el.style.transitionDelay=(i*0.08)+'s';observer.observe(el);}
+  });
 });
 </script>"""
     if re.search(r"</body\s*>", html, re.IGNORECASE):
@@ -355,21 +314,19 @@ def _inject_js_boilerplate(html: str) -> str:
     return html + _UI_JS_BOILERPLATE
 
 
-def _build_safe_html(raw: str, css_template: str = "") -> str:
+def _build_safe_html(raw: str) -> str:
     """Coerce raw model output into a self-contained, valid prototype document.
 
     Pipeline:
       1. Coerce to a complete HTML document (handles fences, fragments, truncation).
       2. Strip non-allowlisted external scripts.
-      3. Inject TheCee base CSS template before model-generated style overrides.
-      4. Inject Tailwind CDN if missing.
-      5. Guarantee the three required tracking attributes exist.
-      6. Inject enhancement effects (spotlight, magnetic, typewriter, particles).
+      3. Inject Tailwind CDN if missing.
+      4. Guarantee the required tracking attributes exist.
+      5. Inject scroll-reveal animations.
+      6. Inject SPA JS boilerplate.
     """
     doc = _coerce_to_html_doc(raw)
     doc = _strip_unsafe_scripts(doc)
-    if css_template:
-        doc = _inject_base_css(doc, css_template)
     doc = _ensure_cdns(doc)
     doc = _ensure_tracking_ids(doc)
     doc = _inject_enhancements(doc)
@@ -405,12 +362,13 @@ async def generate_ui(
 ):
     project = get_owned_project(db, current_user.id, project_id)
 
-    css = select_template(body.product_type)
+    layout_arch, layout_instruction = select_layout_archetype(body.product_type)
     prompt = UI_GENERATION_PROMPT.format(
         description=(project.description or "") + "\n\n" + body.prompt,
         product_type=body.product_type,
         target_segment=body.target_demographic or "general Indian consumer",
         price_point=body.price_point or "competitive",
+        layout_archetype=layout_instruction,
     )
 
     out = claude_call_with_fallback(
@@ -434,7 +392,7 @@ async def generate_ui(
             detail="Generator returned no content. Please retry.",
         )
 
-    html = _build_safe_html(raw, css_template=css)
+    html = _build_safe_html(raw)
     logger.info(
         "generate-ui ok project=%s raw_len=%s html_len=%s",
         project_id,
@@ -490,7 +448,6 @@ async def refine_ui(
     if not existing:
         raise HTTPException(status_code=404, detail="Generated UI not found")
 
-    css = select_template(existing.product_type)
     html_for_model = _strip_base_style(existing.html_content or "")
     refine_prompt = UI_REFINE_PROMPT_TEMPLATE.format(
         html=html_for_model,

@@ -1,5 +1,69 @@
 from __future__ import annotations
 
+from typing import Literal
+
+# ── Layout Archetypes ──────────────────────────────────────────
+# Maps product types to page layout strategies for the LLM prompt.
+# Each archetype dictates the overall page structure and visual rhythm.
+
+LayoutArchetype = Literal[
+    "bento", "editorial", "showcase", "wizard", "dashboard",
+    "narrative", "mono", "luxe", "social", "utility", "landing", "portfolio",
+]
+
+_LAYOUT_MAP: dict[str, LayoutArchetype] = {
+    "saas":              "bento",
+    "marketplace":       "social",
+    "mobile_app":        "wizard",
+    "developer_tool":    "mono",
+    "enterprise_software": "dashboard",
+    "consumer_hardware": "showcase",
+    "health_hardware":   "narrative",
+    "iot_hardware":      "showcase",
+    "wearable":          "showcase",
+    "b2b_hardware":      "dashboard",
+    "mobile_app":        "wizard",
+    "fintech":           "utility",
+    "ecommerce":         "luxe",
+    "d2c":               "luxe",
+    "edtech":            "narrative",
+    "food":              "social",
+    "productivity":      "bento",
+    "crm":               "dashboard",
+    "api":               "mono",
+    "platform":          "bento",
+    "banking":           "utility",
+    "insurance":         "utility",
+    "fitness":           "narrative",
+    "health":            "narrative",
+    "wellness":          "narrative",
+    "learning":          "narrative",
+    "course":            "narrative",
+    "device":            "showcase",
+}
+
+_ARCHETYPE_INSTRUCTIONS: dict[LayoutArchetype, str] = {
+    "bento":    "Asymmetric card grid with one large hero card. Perfect for feature-rich SaaS products.",
+    "editorial":"Large typography, article-style flow. Content-first, minimal chrome.",
+    "showcase": "Full-bleed hero image, sparse copy, product photography focus.",
+    "wizard":   "Step-through narrative with progressive disclosure. Great for onboarding flows.",
+    "dashboard":"Data-dense, card-first layout with sidebar navigation. For analytics and enterprise tools.",
+    "narrative":"Scroll-triggered scene changes with progress indicator. Story-driven brand experience.",
+    "mono":     "Brutalist, single font, high contrast. For developer tools and infrastructure products.",
+    "luxe":     "Large whitespace, gold/black palette, elegant product grid. Premium D2C and luxury brands.",
+    "social":   "Profile cards, activity feeds, search bar. Community and marketplace platforms.",
+    "utility":  "Minimal chrome, function-first. Calculator, banking, and tool products.",
+    "landing":  "Single scroll page, aggressive CTA, social proof. Pre-launch MVPs and waitlist pages.",
+    "portfolio":"Masonry grid of project cards. Agency and creator showcase sites.",
+}
+
+
+def select_layout_archetype(product_type: str) -> tuple[LayoutArchetype, str]:
+    """Return (archetype, instruction) for the given product type string."""
+    key = (product_type or "").lower().strip()
+    arch = _LAYOUT_MAP.get(key, "landing")
+    return arch, _ARCHETYPE_INSTRUCTIONS[arch]
+
 
 def _template(
     *,
