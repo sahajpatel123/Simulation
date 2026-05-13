@@ -83,6 +83,13 @@ def create_simulation(
             detail="Environment not configured. POST /api/v1/projects/{id}/environments first.",
         )
 
+    if not project.brief_completed_at:
+        raise HTTPException(
+            status_code=400,
+            detail="The Brief must be completed before running a simulation. "
+            "Fill in positioning, features, and hook at /briefs first.",
+        )
+
     running = (
         db.query(Simulation)
         .filter(

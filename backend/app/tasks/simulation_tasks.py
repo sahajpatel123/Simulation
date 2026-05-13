@@ -267,6 +267,35 @@ def run_full_simulation(self, simulation_id: int) -> dict:
             for a in assumptions
         ]
 
+        # Inject The Brief fields as structured simulation inputs
+        if project.brief_positioning:
+            env_params["brief_positioning"] = project.brief_positioning
+            assumption_dicts.append({
+                "id": -1, "text": project.brief_positioning,
+                "sensitivity": "HIGH", "impact_score": 8.0,
+                "category": "positioning",
+            })
+        if project.brief_hook:
+            env_params["brief_hook"] = project.brief_hook
+            assumption_dicts.append({
+                "id": -2, "text": f"Homepage hook: {project.brief_hook}",
+                "sensitivity": "HIGH", "impact_score": 7.0,
+                "category": "hook",
+            })
+        if project.brief_features_json:
+            import json as _json
+            try:
+                features = _json.loads(project.brief_features_json)
+                for i, feat in enumerate(features[:3]):
+                    env_params[f"brief_feature_{i}"] = feat
+                    assumption_dicts.append({
+                        "id": -10 - i, "text": f"Killer feature #{i + 1}: {feat}",
+                        "sensitivity": "MEDIUM", "impact_score": 6.0 - i,
+                        "category": "feature",
+                    })
+            except Exception:
+                pass
+
         logger.info(
             f"[Simulation] Data loaded - project_id={sim.project_id} "
             f"assumptions={len(assumption_dicts)} volume={sim.consumer_volume}"
