@@ -355,12 +355,21 @@ Rules:
 - Include <script src="https://cdn.tailwindcss.com"></script> in <head>.
 - You MAY use Unsplash images: <img src="https://images.unsplash.com/photo-XXXX?w=800&q=80">
 - Use Lucide icons for all icons: <i data-lucide="icon-name"></i> + script CDN.
-- TheCee injects SPA JavaScript server-side (cart, navigation, toast, FAQ accordion, tabs).
-  Build your HTML with matching IDs and classes: #toast, #main-nav, #mobile-drawer, #cart-list,
-  .faq-item, .faq-q, .faq-answer, .tab-btn, .tab-panel, .tabs-container, data-page attributes.
-- Required data-thecee-id tracking attributes on visible interactive elements (these power our
-  browser simulation — never omit them):
+- Required data-thecee-id attributes on visible interactive elements (these power browser
+  simulation — never omit them):
   cta-primary, pricing-section, checkout-form, nav-home, nav-products, nav-cart, add-to-cart
+- TheCee injects a JS runtime that auto-detects and wires up these patterns:
+  • Navigation: put each page section in a <div data-page="home">, <div data-page="product">,
+    <div data-page="cart">, etc. The first one is visible by default, others hidden.
+    The runtime shows/hides them when nav-* elements are clicked.
+  • Cart: use data-thecee-id="add-to-cart" on buttons with data-product-name and
+    data-product-price attributes. Cart renders into #cart-list if present.
+  • FAQ: use .faq-item > .faq-q + .faq-answer structure for auto-accordion.
+  • Tabs: use .tabs-container with .tab-btn[data-tab-target] and .tab-panel[data-tab-id].
+  • Toast: a #toast element anywhere for notifications, or one is auto-created.
+  • Navbar: #main-nav gets a scroll shadow automatically.
+  • Mobile drawer: #menu-btn toggles #mobile-drawer and #drawer-overlay.
+  • Form: data-thecee-id="checkout-form" triggers cart validation on submit.
 - Mobile-first: design for 375px first, then use Tailwind sm:/md:/lg: to scale up.
 - No React, Vue, or frameworks. Vanilla JS + Tailwind only.
 

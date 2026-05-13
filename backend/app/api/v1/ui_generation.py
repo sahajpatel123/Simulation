@@ -280,25 +280,153 @@ document.addEventListener('DOMContentLoaded',function(){
 
 
 _UI_JS_BOILERPLATE = """<script id="thecee-app">
-const S={page:'home',cart:[],plan:'monthly',navOpen:false,openFaq:-1,qty:1,activeThumb:0};
-const $=s=>document.querySelector(s);const $$=s=>document.querySelectorAll(s);
+// ── TheCee Autonomous Runtime ─────────────────────────────
+// Detects what elements exist in the DOM and wires them up.
+// All selectors use safe optional chaining — no errors if absent.
+(function(){
+const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const on=(el,ev,fn)=>el?.addEventListener(ev,fn);
-function goTo(p){$$('.page').forEach(x=>x.classList.remove('active'));$(`[data-page="${p}"]`)?.classList.add('active');window.scrollTo({top:0,behavior:'smooth'});S.page=p;if(S.navOpen)closeDrawer();}
-function initNavbar(){const n=$('#main-nav');window.addEventListener('scroll',()=>n?.classList.toggle('shadow-sm',scrollY>10),{passive:true});on($('#menu-btn'),'click',()=>{S.navOpen=!S.navOpen;$('#mobile-drawer')?.classList.toggle('translate-x-full',!S.navOpen);$('#drawer-overlay')?.classList.toggle('opacity-0',!S.navOpen);$('#drawer-overlay')?.classList.toggle('pointer-events-none',!S.navOpen);});on($('#drawer-overlay'),'click',closeDrawer);}
-function closeDrawer(){S.navOpen=false;$('#mobile-drawer')?.classList.add('translate-x-full');$('#drawer-overlay')?.classList.add('opacity-0','pointer-events-none');}
-function addToCart(n,p){const e=S.cart.find(i=>i.name===n);if(e)e.qty+=S.qty;else S.cart.push({name:n,price:p,qty:S.qty});renderCart();showToast(n+' added to cart!');}
+var S={cart:[],navOpen:false};
+
+// ── 1. Navigation: auto-detect pattern and wire up ──
+// Priority: data-page divs > same-page anchors > smooth scroll
+var hasSPA=$$('[data-page]').length>0;
+if(hasSPA) $$('[data-page]').forEach(function(p,i){if(i>0)p.style.display='none';});
+function navTo(name){
+  if(hasSPA){
+    $$('[data-page]').forEach(function(p){p.style.display='none';});
+    var t=$('[data-page="'+name+'"]');
+    if(t){t.style.display='block';window.scrollTo({top:0,behavior:'smooth'});}
+  }else{
+    var t=$('[id="'+name+'"]')||$('[data-section="'+name+'"]');
+    if(t)t.scrollIntoView({behavior:'smooth'});
+    else window.scrollTo({top:0,behavior:'smooth'});
+  }
+}
+
+// ── 2. data-thecee-id click router (powers simulation + UX) ──
+document.addEventListener('click',function(e){
+  var el=e.target.closest('[data-thecee-id]');
+  if(!el)return;
+  var id=el.getAttribute('data-thecee-id');
+  // Simulation logging
+  console.log('TheCee:',id);
+  // Navigation
+  if(id==='nav-home')navTo('home');
+  else if(id==='nav-products')navTo('product');
+  else if(id==='nav-cart'){var cl=$('[data-page="cart"]');if(cl)navTo('cart');else if($('#cart-list')||$('.cart')){$('#cart-list,.cart')?.classList.toggle('hidden');}}
+  else if(id==='cta-primary'){/* logged for simulation */}
+});
+
+// ── 3. Cart system (auto-detected) ──
+function addToCart(name,price,qty){
+  qty=qty||1;
+  var ex=S.cart.find(function(i){return i.name===name;});
+  if(ex)ex.qty+=qty;else S.cart.push({name:name,price:price,qty:qty});
+  renderCart();showToast(name+' added!');
+}
 function removeFromCart(i){S.cart.splice(i,1);renderCart();}
-function renderCart(){const b=$('#cart-count');const c=S.cart.reduce((s,i)=>s+i.qty,0);if(b){b.textContent=c;b.style.display=c?'flex':'none';}
-const l=$('#cart-list');if(!l)return;if(!S.cart.length){l.innerHTML='<div class="p-12 text-center text-muted-foreground bg-secondary/30 rounded-xl border border-border">Your cart is empty.</div>';return;}
-l.innerHTML=S.cart.map((i,idx)=>'<div class="flex items-center justify-between py-4 border-b border-border"><div><div class="font-medium text-foreground text-lg">'+i.name+'</div><div class="text-sm text-muted-foreground mt-1">Qty: '+i.qty+' × ₹'+i.price.toLocaleString('en-IN')+'</div></div><button onclick="removeFromCart('+idx+')" class="p-2 rounded-md text-destructive hover:bg-destructive/10 transition-colors"><i data-lucide="trash-2" class="w-5 h-5"></i></button></div>').join('');lucide.createIcons();
-const sub=S.cart.reduce((s,i)=>s+i.price*i.qty,0);const gst=Math.round(sub*0.18);
-if($('#cart-subtotal'))$('#cart-subtotal').textContent='₹'+sub.toLocaleString('en-IN');
-if($('#cart-gst'))$('#cart-gst').textContent='₹'+gst.toLocaleString('en-IN');
-if($('#cart-total'))$('#cart-total').textContent='₹'+(sub+gst).toLocaleString('en-IN');}
-function showToast(m){const t=$('#toast');if(!t)return;t.innerHTML='<i data-lucide="check-circle-2" class="w-5 h-5 text-green-400"></i> '+m;lucide.createIcons();t.classList.remove('translate-y-full','opacity-0');clearTimeout(t._tid);t._tid=setTimeout(()=>t.classList.add('translate-y-full','opacity-0'),3500);}
-function initFAQ(){$$('.faq-item').forEach((item,i)=>{const b=item.querySelector('.faq-q');const a=item.querySelector('.faq-answer');const ic=item.querySelector('.faq-icon');if(!b||!a)return;on(b,'click',()=>{const o=S.openFaq===i;$$('.faq-answer').forEach(x=>{x.style.maxHeight='0px';x.style.opacity='0';});$$('.faq-icon').forEach(x=>x.style.transform='rotate(0deg)');S.openFaq=o?-1:i;if(!o){a.style.maxHeight=a.scrollHeight+'px';a.style.opacity='1';}if(!o&&ic)ic.style.transform='rotate(180deg)';});});}
-function initTabs(){$$('.tab-btn').forEach(btn=>on(btn,'click',(e)=>{const g=btn.closest('.tabs-container');if(!g)return;const t=btn.dataset.tabTarget;$$('.tab-btn',g).forEach(b=>b.classList.remove('border-primary','text-foreground'));$$('.tab-btn',g).forEach(b=>b.classList.add('border-transparent','text-muted-foreground'));btn.classList.remove('border-transparent','text-muted-foreground');btn.classList.add('border-primary','text-foreground');$$('.tab-panel',g).forEach(p=>p.classList.add('hidden'));$(`.tab-panel[data-tab-id="${t}"]`,g)?.classList.remove('hidden');}));}
-document.addEventListener("DOMContentLoaded",()=>{lucide.createIcons();initNavbar();initFAQ();initTabs();$$('[data-thecee-id="nav-home"]').forEach(el=>on(el,'click',()=>goTo('home')));$$('[data-thecee-id="nav-products"]').forEach(el=>on(el,'click',()=>goTo('product')));$$('[data-thecee-id="nav-cart"]').forEach(el=>on(el,'click',()=>goTo('cart')));$$('[data-thecee-id="add-to-cart"]').forEach(el=>on(el,'click',()=>{const n=el.dataset.productName||'Premium License';const p=parseInt(el.dataset.productPrice||'999');addToCart(n,p);}));$$('[data-thecee-id="checkout-form"]').forEach(el=>on(el,'submit',(e)=>{e.preventDefault();if(S.cart.length===0)return showToast("Your cart is empty!");S.cart=[];renderCart();goTo('confirmation');}));renderCart();});
+function renderCart(){
+  var badge=$('#cart-count');
+  var count=S.cart.reduce(function(s,i){return s+i.qty;},0);
+  if(badge){badge.textContent=count;badge.style.display=count?'':'none';}
+  var list=$('#cart-list');
+  if(!list)return;
+  if(!S.cart.length){list.innerHTML='<div class="p-12 text-center opacity-60">Your cart is empty</div>';return;}
+  list.innerHTML=S.cart.map(function(i,idx){
+    return '<div class="flex items-center justify-between py-3 border-b"><div><div class="font-medium">'+i.name+'</div><div class="text-sm opacity-60">Qty: '+i.qty+'</div></div><button onclick="removeFromCart('+idx+')" class="text-red-500 hover:text-red-700 p-1">✕</button></div>';
+  }).join('');
+  var sub=S.cart.reduce(function(s,i){return s+i.price*i.qty;},0);
+  ['cart-subtotal','cart-total'].forEach(function(id){var e=$('#'+id);if(e)e.textContent='₹'+sub.toLocaleString('en-IN');});
+}
+document.addEventListener('click',function(e){
+  var el=e.target.closest('[data-thecee-id="add-to-cart"]');
+  if(!el)return;
+  var n=el.getAttribute('data-product-name')||'Product';
+  var p=parseFloat(el.getAttribute('data-product-price'))||999;
+  var q=parseInt(el.getAttribute('data-qty')||'1');
+  addToCart(n,p,q);
+});
+
+// ── 4. Toast (auto-creates if missing) ──
+function showToast(m){
+  var t=$('#toast');
+  if(!t){
+    t=document.createElement('div');
+    t.id='toast';
+    t.style.cssText='position:fixed;bottom:24px;right:24px;background:#1f2937;color:white;padding:12px 24px;border-radius:8px;z-index:9999;opacity:0;transform:translateY(16px);transition:all 0.3s;font-size:14px;';
+    document.body.appendChild(t);
+  }
+  t.textContent=m;
+  t.style.opacity='1';t.style.transform='translateY(0)';
+  clearTimeout(t._tid);t._tid=setTimeout(function(){t.style.opacity='0';t.style.transform='translateY(16px)';},3000);
+}
+
+// ── 5. Navbar scroll effect (auto-detected) ──
+var nav=$('#main-nav')||$('nav');
+if(nav&&!nav.id)nav.id='main-nav';
+window.addEventListener('scroll',function(){
+  var n=$('#main-nav');
+  if(n)n.style.boxShadow=window.scrollY>10?'0 1px 3px rgba(0,0,0,0.1)':'none';
+},{passive:true});
+
+// ── 6. Mobile drawer (auto-detected) ──
+var menuBtn=$('#menu-btn')||$('[aria-label="menu"]')||$('.menu-btn');
+var drawer=$('#mobile-drawer');
+var overlay=$('#drawer-overlay');
+if(menuBtn&&drawer){
+  on(menuBtn,'click',function(){
+    S.navOpen=!S.navOpen;drawer.classList.toggle('open',S.navOpen);
+    if(overlay){overlay.classList.toggle('open',S.navOpen);overlay.style.pointerEvents=S.navOpen?'auto':'none';}
+  });
+  if(overlay)on(overlay,'click',function(){S.navOpen=false;drawer.classList.remove('open');overlay.style.pointerEvents='none';});
+}
+
+// ── 7. Lucide icons ──
+if(typeof lucide!=='undefined')try{lucide.createIcons();}catch(e){}
+
+// ── 8. FAQ accordion (auto-detected) ──
+$$('.faq-item').forEach(function(item,i){
+  var btn=item.querySelector('.faq-q,.faq-question,button');
+  var ans=item.querySelector('.faq-answer');
+  if(!btn||!ans)return;
+  on(btn,'click',function(){
+    var isOpen=item.classList.contains('active');
+    $$('.faq-item').forEach(function(x){x.classList.remove('active');});
+    if(!isOpen)item.classList.add('active');
+  });
+});
+
+// ── 9. Tabs (auto-detected) ──
+$$('.tabs-container').forEach(function(container){
+  var btns=container.querySelectorAll('.tab-btn');
+  var panels=container.querySelectorAll('.tab-panel');
+  if(!btns.length)return;
+  btns.forEach(function(btn){
+    on(btn,'click',function(){
+      btns.forEach(function(b){b.classList.remove('active','border-primary','text-foreground');});
+      btn.classList.add('active');
+      var target=btn.getAttribute('data-tab-target');
+      panels.forEach(function(p){
+        p.style.display=p.getAttribute('data-tab-id')===target?'block':'none';
+      });
+    });
+  });
+});
+
+// ── 10. Form submission (auto-detected) ──
+document.addEventListener('submit',function(e){
+  var form=e.target.closest('[data-thecee-id="checkout-form"]');
+  if(!form)return;
+  e.preventDefault();
+  if(!S.cart.length)return showToast('Cart is empty');
+  S.cart=[];renderCart();
+  navTo('confirmation');
+  showToast('Order placed!');
+});
+
+renderCart();
+})();
 </script>"""
 
 

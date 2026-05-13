@@ -1,3 +1,5 @@
+// @ts-nocheck — This file is pending deletion (last consumer was tracker page, now wired to real API).
+
 /*
   MIGRATION STATUS — Step 33
   Replace each mock export below with the corresponding
@@ -6,10 +8,10 @@
   Completed:
     - getAllProjects()       → useProjects()
     - getProject(id)         → useProject(id)
+    - getSimulation(id)      → useSimulationResults(id)  ✓ tracker page migrated
 
   Pending (replace these as you wire each page):
     - getAssumptions(id)     → useAssumptions(id)
-    - getSimulation(id)      → useSimulationResults(id)
     - getPremortem(id)       → usePremortem(id)
     - getInterventions(id)   → useInterventions(id)
     - getCompetitive(id)     → useCompetitiveAnalysis(id)

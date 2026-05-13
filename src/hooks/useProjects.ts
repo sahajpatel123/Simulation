@@ -72,20 +72,19 @@ type CreateProjectPayload = {
 export const useCreateProject = () => {
   const qc = useQueryClient()
   return useCeeMutation(
-    (payload: CreateProjectPayload | string) => {
-      const description = typeof payload === 'string' ? payload : payload.description
-      const raw = typeof payload === 'string' ? ({} as CreateProjectPayload) : payload
-      const rawTitle = typeof payload === 'string' ? '' : (payload.title ?? '')
+    (payload: CreateProjectPayload) => {
+      const description = payload.description
+      const rawTitle = payload.title ?? ''
       const title = rawTitle.trim() || description.trim().slice(0, 500) || 'Untitled idea'
       return api
         .post('/projects', {
           title,
           description,
-          intake_mode: raw.intake_mode ?? 'IDEA',
-          landing_page_url: raw.landing_page_url,
-          mvp_feature_list: raw.mvp_feature_list ?? [],
-          existing_product_description: raw.existing_product_description,
-          dossier_axis: raw.dossier_axis ?? 'software',
+          intake_mode: payload.intake_mode ?? 'IDEA',
+          landing_page_url: payload.landing_page_url,
+          mvp_feature_list: payload.mvp_feature_list ?? [],
+          existing_product_description: payload.existing_product_description,
+          dossier_axis: payload.dossier_axis ?? 'software',
         })
         .then((r) => r.data as Project)
     },

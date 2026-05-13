@@ -10,7 +10,8 @@ import { useParams } from 'next/navigation'
 import { ArrowLeft, CheckCircle2, TrendingUp, TrendingDown, Minus, ClipboardList, Loader2 } from 'lucide-react'
 
 import { useProject } from '@/hooks/useProjects'
-import { getSimulationResultByProjectId } from '@/lib/mock-data'
+import { useSimulations, useSimulationResults } from '@/hooks/useSimulation'
+import { useOutcomes, useRecordOutcome } from '@/hooks/useOutcomes'
 
 const schema = z.object({
   actualConversionRate: z.coerce.number().min(0).max(100),
@@ -25,10 +26,7 @@ function optionalNumber(v: unknown): number | undefined {
   return Number.isNaN(n) ? undefined : n
 }
 
-const mockHistory = [
-  { date: '12 Mar 2026', predicted: 3.1, actual: 2.8, revenue: 381000, status: 'under' as const },
-  { date: '28 Feb 2026', predicted: 4.2, actual: 4.9, revenue: 612000, status: 'over' as const },
-]
+
 
 const inputStyle: CSSProperties = {
   width: '100%',
@@ -44,22 +42,55 @@ const inputStyle: CSSProperties = {
 export default function TrackerPage() {
   const params = useParams()
   const projectId = Number(params.id)
-  const idStr = String(projectId)
 
-  const { data: project, isLoading, isError } = useProject(Number.isFinite(projectId) ? projectId : null)
-  const result = getSimulationResultByProjectId(idStr)
+  const projectIdNum = Number.isFinite(projectId) ? projectId : null
+  const { data: project, isLoading, isError } = useProject(projectIdNum)
+  const { data: simulations } = useSimulations(projectIdNum)
+  const latestSimId = simulations?.find((s) => s.status === 'COMPLETED')?.id ?? null
+  const { data: simResults } = useSimulationResults(latestSimId)
+  const { data: outcomeHistory } = useOutcomes(projectIdNum)
+  const recordOutcome = useRecordOutcome()
+
+  const predictedConv =
+    simResults?.results?.mean_conversion_rate ?? simResults?.results?.conversion_rate ?? null
+  const predictedRevenue =
+    simResults?.results?.mean_revenue ?? simResults?.results?.revenue_projection ?? null
   const [submitted, setSubmitted] = useState(false)
+  const [submitError, setSubmitError] = useState('')
 
-  const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<FormData>({
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors, isSubmitting },
+  } = useForm<FormData>({
     resolver: zodResolver(schema) as Resolver<FormData>,
   })
 
   const watchedConversion = watch('actualConversionRate')
   const watchedRevenue = watch('actualRevenue')
 
-  const onSubmit = async () => {
-    await new Promise((r) => setTimeout(r, 1000))
-    setSubmitted(true)
+  const onSubmit = async (formData: FormData) => {
+    setSubmitError('')
+    try {
+      await recordOutcome.mutateAsync({
+        projectId,
+        payload: {
+          actual_conversion_rate: formData.actualConversionRate / 100,
+          actual_mrr: formData.actualRevenue,
+          actual_cac: 0,
+          actual_churn_rate: 0,
+          notes: formData.notes,
+        },
+      })
+      setSubmitted(true)
+    } catch (err) {
+      const msg =
+        err && typeof err === 'object' && 'response' in err
+          ? String((err as { response?: { data?: { detail?: string } } }).response?.data?.detail ?? err)
+          : 'Failed to record outcome'
+      setSubmitError(msg)
+    }
   }
 
   if (!Number.isFinite(projectId) || isError) {
@@ -87,7 +118,7 @@ export default function TrackerPage() {
     )
   }
 
-  const predicted = result?.conversionRate || 3.8
+  const predicted = predictedConv !== null ? predictedConv * 100 : 3.8
   const actual = optionalNumber(watchedConversion)
   const hasActualConv = actual !== undefined
   const variance = actual !== undefined ? (((actual - predicted) / predicted) * 100).toFixed(1) : null
@@ -98,6 +129,7 @@ export default function TrackerPage() {
 
   const revenueNum = optionalNumber(watchedRevenue)
   const hasRevenue = revenueNum !== undefined
+  const outcomes = outcomeHistory?.outcomes ?? []
 
   return (
     <div style={{ padding: '36px 48px 56px', maxWidth: 900 }}>
@@ -107,7 +139,7 @@ export default function TrackerPage() {
             className="kicker"
             style={{ color: 'var(--red)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
           >
-            <Link href={`/project/${idStr}/results`} style={{ color: 'inherit', textDecoration: 'none' }}>
+            <Link href={`/project/${projectId}/results`} style={{ color: 'inherit', textDecoration: 'none' }}>
               Proofs
             </Link>
             <span style={{ color: 'var(--ink-tertiary)' }}>·</span>
@@ -214,8 +246,11 @@ export default function TrackerPage() {
                     />
                   </div>
 
-                  <button type="submit" disabled={isSubmitting} className="btn-ink" style={{ width: '100%', justifyContent: 'center' }}>
-                    {isSubmitting ? 'Filing…' : 'File line'}
+                  {submitError && (
+                    <p style={{ color: 'var(--red)', fontSize: 11, marginTop: -8 }}>{submitError}</p>
+                  )}
+                  <button type="submit" disabled={isSubmitting || recordOutcome.isPending} className="btn-ink" style={{ width: '100%', justifyContent: 'center' }}>
+                    {isSubmitting || recordOutcome.isPending ? 'Filing…' : 'File line'}
                   </button>
                 </form>
               </>
@@ -229,10 +264,10 @@ export default function TrackerPage() {
               </h4>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {[
-                  { label: 'Conversion rate', predicted: `${predicted}%`, actual: hasActualConv ? `${actual}%` : '—' },
+                  { label: 'Conversion rate', predicted: `${predicted.toFixed(1)}%`, actual: hasActualConv ? `${actual!}%` : '—' },
                   {
                     label: 'Revenue',
-                    predicted: `₹${((result?.projectedRevenue || 0) / 1000).toFixed(0)}K`,
+                    predicted: predictedRevenue !== null ? `₹${(predictedRevenue / 1000).toFixed(0)}K` : '—',
                     actual: hasRevenue ? `₹${((revenueNum ?? 0) / 1000).toFixed(0)}K` : '—',
                   },
                 ].map(({ label, predicted: p, actual: a }) => (
@@ -281,10 +316,10 @@ export default function TrackerPage() {
                 </h4>
               </div>
               <div style={{ height: 4, background: 'rgba(26,23,20,0.08)', overflow: 'hidden', marginBottom: 10 }}>
-                <div style={{ height: '100%', width: '18%', background: 'var(--ink)' }} />
+                <div style={{ height: '100%', width: `${Math.min(100, (outcomeHistory?.total ?? 0) * 10)}%`, background: 'var(--ink)' }} />
               </div>
               <p style={{ fontSize: 11, lineHeight: 1.55, color: 'var(--ink-tertiary)' }}>
-                Two of ten or more outcomes on file. Add more field lines to tighten the next impression.
+                {outcomeHistory?.total ?? 0} of ten or more outcomes on file. Add more field lines to tighten the next impression.
               </p>
             </div>
           </div>
@@ -294,57 +329,64 @@ export default function TrackerPage() {
           <h3 className="font-serif" style={{ fontSize: 16, fontWeight: 800, fontStyle: 'italic', color: 'var(--ink)', marginBottom: 18 }}>
             Prior filings
           </h3>
-          {mockHistory.length === 0 ? (
+          {outcomes.length === 0 ? (
             <p style={{ fontSize: 13, color: 'var(--ink-tertiary)', textAlign: 'center', padding: 24 }}>No outcomes yet.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {mockHistory.map((h, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, x: -6 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.06 }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 16,
-                    padding: '14px 0',
-                    borderBottom: i < mockHistory.length - 1 ? '0.5px solid var(--border-color)' : 'none',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <div>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{h.date}</span>
-                    <div style={{ fontSize: 11, color: 'var(--ink-tertiary)', marginTop: 4 }}>
-                      Predicted {h.predicted}% → Actual {h.actual}%
+              {outcomes.slice(0, 10).map((o, i) => {
+                const pred = o.predicted_conversion_rate ?? 0
+                const actual = o.actual_conversion_rate
+                const diff = pred > 0 ? ((actual - pred) / pred) * 100 : 0
+                const status = diff > 0 ? 'over' as const : 'under' as const
+                const date = o.recorded_at ? new Date(o.recorded_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+                return (
+                  <motion.div
+                    key={o.id}
+                    initial={{ opacity: 0, x: -6 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.06 }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 16,
+                      padding: '14px 0',
+                      borderBottom: i < outcomes.length - 1 ? '0.5px solid var(--border-color)' : 'none',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <div>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{date}</span>
+                      <div style={{ fontSize: 11, color: 'var(--ink-tertiary)', marginTop: 4 }}>
+                        Predicted {(pred * 100).toFixed(1)}% → Actual {(actual * 100).toFixed(1)}%
+                      </div>
                     </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ fontSize: 13, color: 'var(--ink-secondary)' }}>₹{(h.revenue / 1000).toFixed(0)}K</span>
-                    <span
-                      style={{
-                        fontSize: 9,
-                        letterSpacing: '0.1em',
-                        textTransform: 'uppercase',
-                        fontWeight: 600,
-                        padding: '4px 10px',
-                        border: `0.5px solid ${h.status === 'over' ? 'rgba(45,90,74,0.35)' : 'rgba(192,57,43,0.35)'}`,
-                        color: h.status === 'over' ? '#2d5a4a' : 'var(--red)',
-                        background: h.status === 'over' ? 'rgba(45,90,74,0.08)' : 'rgba(192,57,43,0.06)',
-                      }}
-                    >
-                      {h.status === 'over' ? 'Above proof' : 'Below proof'}
-                    </span>
-                  </div>
-                </motion.div>
-              ))}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <span style={{ fontSize: 13, color: 'var(--ink-secondary)' }}>₹{((o.actual_mrr ?? 0) / 1000).toFixed(0)}K</span>
+                      <span
+                        style={{
+                          fontSize: 9,
+                          letterSpacing: '0.1em',
+                          textTransform: 'uppercase',
+                          fontWeight: 600,
+                          padding: '4px 10px',
+                          border: `0.5px solid ${status === 'over' ? 'rgba(45,90,74,0.35)' : 'rgba(192,57,43,0.35)'}`,
+                          color: status === 'over' ? '#2d5a4a' : 'var(--red)',
+                          background: status === 'over' ? 'rgba(45,90,74,0.08)' : 'rgba(192,57,43,0.06)',
+                        }}
+                      >
+                        {status === 'over' ? 'Above proof' : 'Below proof'}
+                      </span>
+                    </div>
+                  </motion.div>
+                )
+              })}
             </div>
           )}
         </div>
 
         <div style={{ marginTop: 22 }}>
-          <Link href={`/project/${idStr}/results`} className="btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <Link href={`/project/${projectId}/results`} className="btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             <ArrowLeft style={{ width: 14, height: 14 }} /> Back to proofs
           </Link>
         </div>

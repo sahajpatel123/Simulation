@@ -4,10 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 
+import api from '@/lib/api'
 import { IntakeModeSelector, type IntakeMode } from '@/components/IntakeModeSelector'
-import { getApiV1Base } from '@/lib/api-v1-base'
-
-const apiV1 = () => getApiV1Base()
 
 const PRODUCT_TYPES = [
   { value: 'saas', label: 'SaaS', icon: '💻' },
@@ -81,11 +79,7 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  }
+  const apiInstance = api
 
   useEffect(() => {
     const saved = loadProgress()
@@ -128,18 +122,12 @@ export default function OnboardingPage() {
           ? `${description.trim()}\n\n(Product type: ${productType.replace(/_/g, ' ')})`
           : description.trim()
 
-      const r = await fetch(`${apiV1()}/projects`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          title: projectName.trim(),
-          description: desc,
-          intake_mode: intakeMode,
-          dossier_axis: axis,
-        }),
+      const { data } = await apiInstance.post<{ id: number }>('/projects', {
+        title: projectName.trim(),
+        description: desc,
+        intake_mode: intakeMode,
+        dossier_axis: axis,
       })
-      if (!r.ok) throw new Error(await r.text())
-      const data = (await r.json()) as { id: number }
       setProjectId(data.id)
       persist({
         projectId: data.id,
@@ -160,20 +148,12 @@ export default function OnboardingPage() {
     setLoading(true)
     setError('')
     try {
-      const envR = await fetch(`${apiV1()}/projects/${projectId}/environments`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ mode: 'MANUAL' }),
-      })
-      if (!envR.ok) throw new Error((await envR.text()) || 'Failed to set environment')
+      await apiInstance.post(`/projects/${projectId}/environments`, { mode: 'MANUAL' })
 
-      const simR = await fetch(`${apiV1()}/simulations`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ project_id: projectId, consumer_volume: 10000 }),
+      const { data } = await apiInstance.post<{ id: number }>('/simulations', {
+        project_id: projectId,
+        consumer_volume: 10000,
       })
-      if (!simR.ok) throw new Error(await simR.text())
-      const data = (await simR.json()) as { id: number }
       setSimId(data.id)
       persist({ simId: data.id, step: 5 })
       setStep(5)
