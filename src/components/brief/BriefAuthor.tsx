@@ -120,7 +120,7 @@ function EditorLoading() {
   )
 }
 
-/* ─── Single GET HELP dropdown (top-right, by page title) ── */
+/* ─── Editor's Desk — creative dropdown ──────────────────── */
 
 function HelpDropdown({
   open, onToggle, onAssist, disabled, activeField,
@@ -131,66 +131,134 @@ function HelpDropdown({
   disabled?: boolean
   activeField?: FieldName | null
 }) {
-  const items: { field: FieldName; label: string; modes: { k: 'refine' | 'suggest' | 'critique'; t: string }[] }[] = [
+  const items: { field: FieldName; label: string; modes: { k: 'refine' | 'suggest' | 'critique'; t: string; desc: string }[] }[] = [
     { field: 'positioning', label: 'Positioning', modes: [
-      { k: 'refine', t: 'Refine' }, { k: 'suggest', t: 'Suggest' }, { k: 'critique', t: 'Critique' },
+      { k: 'refine', t: 'Refine', desc: 'tighten your sentence' },
+      { k: 'suggest', t: 'Suggest', desc: '3 fresh angles' },
+      { k: 'critique', t: 'Critique', desc: 'find the weakness' },
     ]},
     { field: 'features', label: 'Features', modes: [
-      { k: 'suggest', t: 'Suggest' }, { k: 'refine', t: 'Refine' }, { k: 'critique', t: 'Critique' },
+      { k: 'suggest', t: 'Suggest', desc: '3 defining specs' },
+      { k: 'refine', t: 'Refine', desc: 'sharpen the list' },
+      { k: 'critique', t: 'Critique', desc: 'spot the holes' },
     ]},
     { field: 'hook', label: 'Hook', modes: [
-      { k: 'refine', t: 'Refine' }, { k: 'suggest', t: 'Suggest' }, { k: 'critique', t: 'Critique' },
+      { k: 'refine', t: 'Refine', desc: 'make it cut' },
+      { k: 'suggest', t: 'Suggest', desc: '3 headline options' },
+      { k: 'critique', t: 'Critique', desc: 'test the hook' },
     ]},
   ]
 
   return (
     <div style={{ position: 'relative' }}>
+      {/* Trigger button — flips to ink on open */}
       <button onClick={onToggle} disabled={disabled}
         style={{
           background: open ? s.ink : 'transparent',
           color: open ? s.cream : s.ink,
           border: '0.5px solid #1a1a1a',
-          padding: '8px 18px', fontFamily: s.mono, fontSize: 10,
-          letterSpacing: '0.22em', cursor: disabled ? 'not-allowed' : 'pointer',
-          opacity: disabled ? 0.4 : 1, transition: 'all 0.2s ease',
+          padding: '10px 20px', fontFamily: s.mono, fontSize: 10,
+          letterSpacing: '0.18em', cursor: disabled ? 'not-allowed' : 'pointer',
+          opacity: disabled ? 0.35 : 1, transition: 'all 0.25s ease',
+          position: 'relative', overflow: 'hidden',
         }}
-        onMouseEnter={(e) => { if (!open && !disabled) e.currentTarget.style.background = 'rgba(26,26,26,0.04)' }}
-        onMouseLeave={(e) => { if (!open && !disabled) e.currentTarget.style.background = 'transparent' }}
+        onMouseEnter={(e) => { if (!open && !disabled) { e.currentTarget.style.borderColor = s.red; e.currentTarget.style.color = s.red; }}}
+        onMouseLeave={(e) => { if (!open && !disabled) { e.currentTarget.style.borderColor = s.ink; e.currentTarget.style.color = s.ink; }}}
       >
-        {disabled ? 'EDITING\u00A0\u00A0\u2022\u2022\u2022' : `GET HELP ${open ? '\u25B4' : '\u25BE'}`}
+        {disabled ? '\u2713 EDITING...' : `${open ? '\u2013' : '+'}\u00A0HELP`}
       </button>
+
+      {/* Dropdown card — editor's notepad */}
       {open && !disabled && (
         <div style={{
-          position: 'absolute', top: 'calc(100% + 6px)', right: 0,
-          background: s.cream, border: '0.5px solid #1a1a1a', zIndex: 10,
-          minWidth: 280, boxShadow: '0 8px 24px rgba(0,0,0,0.10)',
-          opacity: 0, animation: 'fadeSlideIn 0.2s ease-out forwards',
+          position: 'absolute', top: 'calc(100% + 10px)', right: 0,
+          width: 340, zIndex: 20,
+          opacity: 0, animation: 'deskDrawerIn 0.35s cubic-bezier(0.16,1,0.3,1) forwards',
         }}>
-          {items.map((group, gi) => (
-            <div key={group.field}>
-              {gi > 0 && <div style={{ height: 1, background: '#e8e3d8', margin: '4px 12px' }} />}
-              <div style={{ padding: '8px 12px 4px', fontFamily: s.mono, fontSize: 8, letterSpacing: '0.24em', color: s.mute }}>
-                {group.label}
+          {/* Styled notepad card — #1a1a1a border, red left stroke */}
+          <div style={{
+            background: '#fcf9f4', border: '1px solid #1a1a1a',
+            borderLeft: '3px solid #c0392b', boxShadow: '0 12px 40px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.06)',
+            position: 'relative',
+          }}>
+            {/* Brass pin */}
+            <div style={{
+              position: 'absolute', top: -6, right: 24, width: 12, height: 12,
+              borderRadius: '50%', background: '#c9a94e',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.4)',
+              zIndex: 1,
+            }} />
+
+            {/* Header */}
+            <div style={{ padding: '20px 20px 0', marginBottom: 4 }}>
+              <div style={{
+                fontFamily: s.mono, fontSize: 7, letterSpacing: '0.3em', color: s.red, marginBottom: 6,
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                <span style={{ display: 'inline-block', width: 20, height: 1, background: s.red }} />
+                EDITOR&apos;S DESK
               </div>
-              <div style={{ display: 'flex', gap: 0 }}>
-                {group.modes.map((mode) => (
-                  <button key={mode.k} onClick={() => { onAssist(group.field, mode.k); onToggle(); }}
-                    style={{
-                      flex: 1, padding: '8px 4px', background: 'transparent', border: 'none',
-                      fontFamily: s.mono, fontSize: 9, letterSpacing: '0.16em',
-                      color: s.ink, cursor: 'pointer', textAlign: 'center',
-                      opacity: activeField === group.field ? 0.3 : 1,
-                      transition: 'background 0.12s ease',
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(192,57,43,0.05)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                  >
-                    {mode.t}
-                  </button>
-                ))}
+              <div style={{
+                fontFamily: s.serif, fontSize: 16, fontStyle: 'italic', color: s.ink, lineHeight: 1.3,
+              }}>
+                Choose a field and what kind of help you need.
               </div>
             </div>
-          ))}
+
+            {/* Items */}
+            <div style={{ padding: '12px 4px 16px' }}>
+              {items.map((group, gi) => (
+                <div key={group.field} style={{
+                  opacity: 0, animation: `deskItemIn 0.3s ease-out forwards`,
+                  animationDelay: `${0.1 + gi * 0.08}s`,
+                }}>
+                  {/* Field label — red ink */}
+                  <div style={{
+                    padding: '10px 16px 4px',
+                    fontFamily: s.serif, fontSize: 12, fontStyle: 'italic', letterSpacing: '0.02em', color: s.red,
+                  }}>
+                    {group.label}
+                  </div>
+                  {/* Mode options — inline, monospace buttons */}
+                  <div style={{ display: 'flex', gap: 0, padding: '0 12px 4px' }}>
+                    {group.modes.map((mode) => (
+                      <button key={mode.k} onClick={() => { onAssist(group.field, mode.k); onToggle(); }}
+                        style={{
+                          flex: 1, padding: '8px 2px', background: 'transparent', border: 'none',
+                          fontFamily: s.mono, fontSize: 8, letterSpacing: '0.12em',
+                          color: activeField === group.field ? s.mute : s.ink,
+                          cursor: 'pointer', textAlign: 'center', lineHeight: 1.4,
+                          borderRight: '0.5px solid rgba(0,0,0,0.06)',
+                          transition: 'all 0.12s ease', position: 'relative',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.color = s.red;
+                          e.currentTarget.style.background = 'rgba(192,57,43,0.04)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.color = activeField === group.field ? s.mute : s.ink;
+                          e.currentTarget.style.background = 'transparent';
+                        }}
+                      >
+                        <div style={{ fontWeight: 600 }}>{mode.t}</div>
+                        <div style={{ color: s.mute, fontWeight: 400, fontSize: 7, marginTop: 2 }}>{mode.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Footer — brass rule */}
+            <div style={{ height: 1, background: '#e8e3d8', margin: '0 16px' }} />
+            <div style={{
+              padding: '10px 16px',
+              fontFamily: s.mono, fontSize: 6, letterSpacing: '0.25em', color: '#bbb',
+              textAlign: 'right',
+            }}>
+              THE BRIEF · FOLIO {new Date().getFullYear()}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -430,6 +498,8 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
         @keyframes blink { 0%,100%{opacity:0.3} 50%{opacity:1} }
         @keyframes fadeSlideIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
         @keyframes pulseWidth { 0%,100%{width:60%} 50%{width:75%} }
+        @keyframes deskDrawerIn { from{opacity:0;transform:translateY(-4px) scale(0.97)} to{opacity:1;transform:translateY(0) scale(1)} }
+        @keyframes deskItemIn { from{opacity:0;transform:translateX(-6px)} to{opacity:1;transform:translateX(0)} }
       `}</style>
 
       {/* TOP LABEL */}
