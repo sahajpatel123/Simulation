@@ -2,17 +2,17 @@
 Brief assistance service for TheCee.
 Supports three modes: refine, suggest, critique.
 Each operates on one field at a time.
+
+Uses the project's primary LLM provider (Grok via claude_call_with_fallback)
+rather than hardcoding Anthropic, so it works with whatever API key is configured.
 """
 from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Literal
 
-from anthropic import Anthropic
-
-from app.core.config import settings
+from app.core.claude_client import claude_call_with_fallback
 from app.core.prompts import (
     BRIEF_CRITIQUE_SYSTEM,
     BRIEF_REFINE_SYSTEM,
@@ -21,22 +21,8 @@ from app.core.prompts import (
 
 logger = logging.getLogger(__name__)
 
-_client: Anthropic | None = None
-
-BRIEF_MODEL = os.getenv(
-    "BRIEF_MODEL",
-    "claude-haiku-4-5-20251001",
-)
-
 FieldName = Literal["positioning", "features", "hook"]
 Mode = Literal["refine", "suggest", "critique"]
-
-
-def _get_client() -> Anthropic:
-    global _client
-    if _client is None:
-        _client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-    return _client
 
 
 def _field_context(field: FieldName) -> str:
@@ -89,7 +75,6 @@ def assist(
             f"Founder's draft:\n{current_value}\n\n"
             f"Refined version:"
         )
-        max_tokens = 200
     elif mode == "suggest":
         system = BRIEF_SUGGEST_SYSTEM
         user_msg = (
@@ -99,7 +84,6 @@ def assist(
             f"Return 3 distinct options as a "
             f"JSON array of strings."
         )
-        max_tokens = 400
     elif mode == "critique":
         if not current_value.strip():
             return {}
@@ -109,28 +93,28 @@ def assist(
             f"Founder's draft:\n{current_value}\n\n"
             f"Critique:"
         )
-        max_tokens = 250
     else:
         return {}
 
     try:
-        client = _get_client()
-        response = client.messages.create(
-            model=BRIEF_MODEL,
-            max_tokens=max_tokens,
-            system=system,
+        out = claude_call_with_fallback(
             messages=[{"role": "user", "content": user_msg}],
+            system=system,
+            max_tokens=400,
+            fallback_key="brief_assistance",
         )
-        text = response.content[0].text.strip()
-        text = text.strip("```json").strip("```").strip()
+        text = (out.get("content") or "").strip()
+        if not text:
+            return {}
 
         if mode == "suggest":
+            cleaned = text.strip("```json").strip("```").strip()
             try:
-                parsed = json.loads(text)
+                parsed = json.loads(cleaned)
                 if isinstance(parsed, list):
                     return {"mode": mode, "result": [str(s) for s in parsed[:3]]}
             except json.JSONDecodeError:
-                return {}
+                pass
             return {}
 
         return {"mode": mode, "result": text}

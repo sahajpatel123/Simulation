@@ -120,78 +120,79 @@ function EditorLoading() {
   )
 }
 
-/* ─── Sub-components ────────────────────────────────────── */
+/* ─── Single GET HELP dropdown (top-right, by page title) ── */
 
-function FieldHeader({
-  label, hint, helpOpen, onToggleHelp, onAssist,
-  disabled,
+function HelpDropdown({
+  open, onToggle, onAssist, disabled, activeField,
 }: {
-  label: string
-  hint: string
-  helpOpen: boolean
-  onToggleHelp: () => void
-  onAssist: (mode: 'refine' | 'suggest' | 'critique') => void
+  open: boolean
+  onToggle: () => void
+  onAssist: (field: FieldName, mode: 'refine' | 'suggest' | 'critique') => void
   disabled?: boolean
+  activeField?: FieldName | null
 }) {
+  const items: { field: FieldName; label: string; modes: { k: 'refine' | 'suggest' | 'critique'; t: string }[] }[] = [
+    { field: 'positioning', label: 'Positioning', modes: [
+      { k: 'refine', t: 'Refine' }, { k: 'suggest', t: 'Suggest' }, { k: 'critique', t: 'Critique' },
+    ]},
+    { field: 'features', label: 'Features', modes: [
+      { k: 'suggest', t: 'Suggest' }, { k: 'refine', t: 'Refine' }, { k: 'critique', t: 'Critique' },
+    ]},
+    { field: 'hook', label: 'Hook', modes: [
+      { k: 'refine', t: 'Refine' }, { k: 'suggest', t: 'Suggest' }, { k: 'critique', t: 'Critique' },
+    ]},
+  ]
+
   return (
-    <div style={{
-      display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-      marginBottom: 16, position: 'relative',
-    }}>
-      <div>
+    <div style={{ position: 'relative' }}>
+      <button onClick={onToggle} disabled={disabled}
+        style={{
+          background: open ? s.ink : 'transparent',
+          color: open ? s.cream : s.ink,
+          border: '0.5px solid #1a1a1a',
+          padding: '8px 18px', fontFamily: s.mono, fontSize: 10,
+          letterSpacing: '0.22em', cursor: disabled ? 'not-allowed' : 'pointer',
+          opacity: disabled ? 0.4 : 1, transition: 'all 0.2s ease',
+        }}
+        onMouseEnter={(e) => { if (!open && !disabled) e.currentTarget.style.background = 'rgba(26,26,26,0.04)' }}
+        onMouseLeave={(e) => { if (!open && !disabled) e.currentTarget.style.background = 'transparent' }}
+      >
+        {disabled ? 'EDITING\u00A0\u00A0\u2022\u2022\u2022' : `GET HELP ${open ? '\u25B4' : '\u25BE'}`}
+      </button>
+      {open && !disabled && (
         <div style={{
-          fontFamily: s.mono, fontSize: 10, letterSpacing: '0.22em', color: s.ink, marginBottom: 6,
-        }}>{label}</div>
-        <div style={{
-          fontFamily: s.serif, fontStyle: 'italic', fontSize: 14, color: s.mute,
-        }}>{hint}</div>
-      </div>
-      <div style={{ position: 'relative' }}>
-        <button
-          onClick={onToggleHelp}
-          disabled={disabled}
-          style={{
-            background: 'transparent',
-            border: disabled ? '0.5px solid #ddd' : '0.5px solid #1a1a1a',
-            padding: '6px 14px',
-            fontFamily: s.mono, fontSize: 9, letterSpacing: '0.20em',
-            cursor: disabled ? 'not-allowed' : 'pointer',
-            color: disabled ? '#ccc' : s.ink,
-            transition: 'all 0.18s ease',
-            opacity: disabled ? 0.5 : 1,
-          }}
-        >
-          {disabled ? 'EDITING...' : `GET HELP ${helpOpen ? '▴' : '▾'}`}
-        </button>
-        {helpOpen && !disabled && (
-          <div style={{
-            position: 'absolute', top: 'calc(100% + 6px)', right: 0,
-            background: s.cream, border: '0.5px solid #1a1a1a', zIndex: 10,
-            minWidth: 200, boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
-            opacity: 0, animation: 'fadeSlideIn 0.2s ease-out forwards',
-          }}>
-            {[
-              { k: 'refine' as const, t: 'REFINE MY DRAFT' },
-              { k: 'suggest' as const, t: 'SUGGEST OPTIONS' },
-              { k: 'critique' as const, t: 'CRITIQUE MY WRITING' },
-            ].map((opt, i, arr) => (
-              <button key={opt.k} onClick={() => onAssist(opt.k)} style={{
-                display: 'block', width: '100%', padding: '10px 14px',
-                background: 'transparent', border: 'none',
-                borderBottom: i < arr.length - 1 ? '0.5px solid #e8e3d8' : 'none',
-                fontFamily: s.mono, fontSize: 10, letterSpacing: '0.18em',
-                color: s.ink, cursor: 'pointer', textAlign: 'left',
-                transition: 'background 0.12s ease',
-              }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(192,57,43,0.04)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-              >
-                {opt.t}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+          position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+          background: s.cream, border: '0.5px solid #1a1a1a', zIndex: 10,
+          minWidth: 280, boxShadow: '0 8px 24px rgba(0,0,0,0.10)',
+          opacity: 0, animation: 'fadeSlideIn 0.2s ease-out forwards',
+        }}>
+          {items.map((group, gi) => (
+            <div key={group.field}>
+              {gi > 0 && <div style={{ height: 1, background: '#e8e3d8', margin: '4px 12px' }} />}
+              <div style={{ padding: '8px 12px 4px', fontFamily: s.mono, fontSize: 8, letterSpacing: '0.24em', color: s.mute }}>
+                {group.label}
+              </div>
+              <div style={{ display: 'flex', gap: 0 }}>
+                {group.modes.map((mode) => (
+                  <button key={mode.k} onClick={() => { onAssist(group.field, mode.k); onToggle(); }}
+                    style={{
+                      flex: 1, padding: '8px 4px', background: 'transparent', border: 'none',
+                      fontFamily: s.mono, fontSize: 9, letterSpacing: '0.16em',
+                      color: s.ink, cursor: 'pointer', textAlign: 'center',
+                      opacity: activeField === group.field ? 0.3 : 1,
+                      transition: 'background 0.12s ease',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(192,57,43,0.05)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    {mode.t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -275,7 +276,7 @@ function HelpResultPanel({
 
 function BriefField({
   label, hint, placeholder, value, onChange, multiline,
-  helpOpen, onToggleHelp, onAssist, helpResult, onApplySuggestion, onClearResult,
+  helpResult, onApplySuggestion, onClearResult,
   isWaiting, isFieldLoading,
 }: {
   label: string
@@ -284,9 +285,6 @@ function BriefField({
   value: string
   onChange: (v: string) => void
   multiline?: boolean
-  helpOpen: boolean
-  onToggleHelp: () => void
-  onAssist: (mode: 'refine' | 'suggest' | 'critique') => void
   helpResult: { mode: string; result: string | string[] } | null
   onApplySuggestion: (v: string) => void
   onClearResult: () => void
@@ -295,7 +293,12 @@ function BriefField({
 }) {
   return (
     <div style={{ marginBottom: 56 }}>
-      <FieldHeader label={label} hint={hint} helpOpen={helpOpen} onToggleHelp={onToggleHelp} onAssist={onAssist} disabled={isWaiting} />
+      <div style={{
+        fontFamily: s.mono, fontSize: 10, letterSpacing: '0.22em', color: s.ink, marginBottom: 6,
+      }}>{label}</div>
+      <div style={{
+        fontFamily: s.serif, fontStyle: 'italic', fontSize: 14, color: s.mute, marginBottom: 16,
+      }}>{hint}</div>
       {isFieldLoading ? (
         <EditorLoading />
       ) : (
@@ -351,7 +354,7 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
   const [positioning, setPositioning] = useState('')
   const [features, setFeatures] = useState<string[]>(['', '', ''])
   const [hook, setHook] = useState('')
-  const [helpOpenField, setHelpOpenField] = useState<FieldName | null>(null)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [activeField, setActiveField] = useState<FieldName | null>(null)
   const [helpResult, setHelpResult] = useState<{
     field: FieldName
@@ -391,9 +394,11 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
     if (field === 'hook') current_value = hook
     if (field === 'features') current_value = features.filter((f) => f.trim()).join(' / ')
 
-    if (!current_value.trim() && mode !== 'suggest') return
+    if (!current_value.trim() && mode !== 'suggest') {
+      setErrorMsg(`Write a draft for ${field} first, then use ${mode}.`)
+      return
+    }
 
-    setHelpOpenField(null)
     setActiveField(field)
     setErrorMsg(null)
     setHelpResult(null)
@@ -432,12 +437,20 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
         — {copy.topLabel}
       </div>
 
-      {/* PAGE TITLE */}
-      <h1 style={{
-        fontFamily: s.serif, fontSize: 'clamp(48px, 6vw, 76px)', fontWeight: 700,
-        lineHeight: 0.95, letterSpacing: '-0.03em', color: s.ink,
-        margin: 0, marginBottom: 12,
-      }}>{copy.pageTitle}</h1>
+      {/* PAGE TITLE + GET HELP (single dropdown, top-right) */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+        <h1 style={{
+          fontFamily: s.serif, fontSize: 'clamp(48px, 6vw, 76px)', fontWeight: 700,
+          lineHeight: 0.95, letterSpacing: '-0.03em', color: s.ink, margin: 0,
+        }}>{copy.pageTitle}</h1>
+        <HelpDropdown
+          open={helpOpen}
+          onToggle={() => setHelpOpen(!helpOpen)}
+          onAssist={handleAssist}
+          disabled={isWaiting}
+          activeField={activeField}
+        />
+      </div>
       <p style={{
         fontFamily: s.serif, fontStyle: 'italic', fontSize: 20, color: s.mute,
         margin: 0, marginBottom: 56,
@@ -458,9 +471,6 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
         label={copy.positioningLabel} hint={copy.positioningHint}
         placeholder={copy.positioningPlaceholder} value={positioning} onChange={setPositioning}
         multiline
-        helpOpen={helpOpenField === 'positioning'}
-        onToggleHelp={() => setHelpOpenField(helpOpenField === 'positioning' ? null : 'positioning')}
-        onAssist={(mode) => handleAssist('positioning', mode)}
         helpResult={helpResult?.field === 'positioning' ? helpResult : null}
         onApplySuggestion={(v) => applySuggestion('positioning', v)}
         onClearResult={() => setHelpResult(null)}
@@ -470,12 +480,12 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
 
       {/* FIELD: FEATURES */}
       <div style={{ marginBottom: 56 }}>
-        <FieldHeader label={copy.featuresLabel} hint={copy.featuresHint}
-          helpOpen={helpOpenField === 'features'}
-          onToggleHelp={() => setHelpOpenField(helpOpenField === 'features' ? null : 'features')}
-          onAssist={(mode) => handleAssist('features', mode)}
-          disabled={isWaiting}
-        />
+        <div style={{
+          fontFamily: s.mono, fontSize: 10, letterSpacing: '0.22em', color: s.ink, marginBottom: 6,
+        }}>{copy.featuresLabel}</div>
+        <div style={{
+          fontFamily: s.serif, fontStyle: 'italic', fontSize: 14, color: s.mute, marginBottom: 16,
+        }}>{copy.featuresHint}</div>
         {activeField === 'features' ? (
           <EditorLoading />
         ) : (
@@ -511,9 +521,6 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
       <BriefField
         label={copy.hookLabel} hint={copy.hookHint}
         placeholder={copy.hookPlaceholder} value={hook} onChange={setHook}
-        helpOpen={helpOpenField === 'hook'}
-        onToggleHelp={() => setHelpOpenField(helpOpenField === 'hook' ? null : 'hook')}
-        onAssist={(mode) => handleAssist('hook', mode)}
         helpResult={helpResult?.field === 'hook' ? helpResult : null}
         onApplySuggestion={(v) => applySuggestion('hook', v)}
         onClearResult={() => setHelpResult(null)}
