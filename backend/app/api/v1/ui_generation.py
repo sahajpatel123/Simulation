@@ -27,7 +27,14 @@ from app.models.generated_ui import GeneratedUI
 from app.models.project import Project
 from app.models.ui_simulation_run import UISimulationRun
 from app.models.user import User
-from app.schemas.ui_generation import GeneratedUIResponse, UIRefineRequest, UIGenerateRequest
+from app.schemas.ui_generation import (
+    GeneratedUIResponse,
+    UIDiffResponse,
+    UIVersionHistoryResponse,
+    UIRefineRequest,
+    UIGenerateRequest,
+    UIRollbackResponse,
+)
 
 router = APIRouter(tags=["ui-generation"])
 logger = logging.getLogger("thecee.ui_generation")
@@ -185,6 +192,20 @@ def _inject_base_css(html: str, css: str) -> str:
     if re.search(r'</head\s*>', html, re.IGNORECASE):
         return re.sub(r'</head\s*>', tag + '</head>', html, count=1, flags=re.IGNORECASE)
     return tag + html
+
+
+def _parse_change_manifest(raw: str) -> tuple[list[dict], str]:
+    """Extract change manifest JSON from /* CHANGES: ... */ prefix, return (manifest, clean_html)."""
+    m = re.search(r'/\*\s*CHANGES:\s*(\[.*?\])\s*\*/', raw, re.DOTALL)
+    if not m:
+        return [], raw
+    try:
+        import json
+        manifest = json.loads(m.group(1))
+    except (json.JSONDecodeError, Exception):
+        manifest = []
+    clean = raw[:m.start()] + raw[m.end():]
+    return manifest, clean.strip()
 
 
 def _strip_injected_tags(html: str) -> str:
@@ -588,12 +609,18 @@ async def refine_ui(
             detail="Generator returned no content. Please retry.",
         )
 
-    html = _build_safe_html(raw)
+    changes_meta, raw_html = _parse_change_manifest(raw)
+    html = _build_safe_html(raw_html)
 
     _lock_project_for_ui_version(db, project_id, current_user.id)
+    import json as _json
+    stored_prompt = body.refinement_prompt
+    if changes_meta:
+        stored_prompt += "\n/* CHANGES: " + _json.dumps(changes_meta) + " */"
+
     new_ui = GeneratedUI(
         project_id=project_id,
-        prompt=body.refinement_prompt,
+        prompt=stored_prompt,
         html_content=html,
         version=_next_ui_version(db, project_id),
         product_type=existing.product_type,
@@ -680,6 +707,132 @@ async def get_generated_ui(
         "html_preview_url": _preview_url(ui),
         "created_at": ui.created_at.isoformat() if ui.created_at else None,
     }
+
+
+# ── Version History ──────────────────────────────────────────────────
+
+
+@router.get(
+    "/projects/{project_id}/generated-uis/versions",
+    response_model=UIVersionHistoryResponse,
+    summary="List all UI versions for a project (version history)",
+    responses=_JSON_200,
+)
+async def list_ui_versions(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = get_owned_project(db, current_user.id, project_id)
+    uis = (
+        db.query(GeneratedUI)
+        .filter(GeneratedUI.project_id == project_id)
+        .order_by(GeneratedUI.version.desc())
+        .all()
+    )
+    return UIVersionHistoryResponse(
+        uis=[
+            UIVersionRow(
+                id=u.id,
+                version=u.version,
+                product_type=u.product_type,
+                prompt=(u.prompt or "")[:200],
+                html_preview_url=_preview_url(u),
+                created_at=u.created_at.isoformat() if u.created_at else None,
+            )
+            for u in uis
+        ]
+    )
+
+
+# ── Diff between versions ────────────────────────────────────────────
+
+
+@router.get(
+    "/projects/{project_id}/generated-uis/diff",
+    response_model=UIDiffResponse,
+    summary="Get change manifest between two UI versions",
+    responses=_JSON_200,
+)
+async def diff_ui_versions(
+    project_id: int,
+    from_version: int,
+    to_version: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = get_owned_project(db, current_user.id, project_id)
+    from_ui = (
+        db.query(GeneratedUI)
+        .filter(GeneratedUI.project_id == project_id, GeneratedUI.version == from_version)
+        .first()
+    )
+    to_ui = (
+        db.query(GeneratedUI)
+        .filter(GeneratedUI.project_id == project_id, GeneratedUI.version == to_version)
+        .first()
+    )
+    if not from_ui or not to_ui:
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    # Extract changes manifest from the target version's prompt
+    m = re.search(r"/\*\s*CHANGES:\s*(\[.*?\])\s*\*/", to_ui.prompt or "", re.DOTALL)
+    changes = []
+    if m:
+        try:
+            import json as _json
+            raw = _json.loads(m.group(1))
+            changes = [{"selector": c.get("selector", ""), "action": c.get("action", ""), "from_": c.get("from", ""), "to": c.get("to", "")} for c in raw]
+        except Exception:
+            pass
+
+    return UIDiffResponse(from_version=from_version, to_version=to_version, changes=changes)
+
+
+# ── Rollback ──────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/projects/{project_id}/generated-uis/rollback/{version}",
+    response_model=UIRollbackResponse,
+    summary="Rollback to a previous UI version (creates new version copy)",
+    responses=_JSON_200,
+)
+async def rollback_ui(
+    project_id: int,
+    version: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = get_owned_project(db, current_user.id, project_id)
+    source = (
+        db.query(GeneratedUI)
+        .filter(GeneratedUI.project_id == project_id, GeneratedUI.version == version)
+        .first()
+    )
+    if not source:
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    _lock_project_for_ui_version(db, project_id, current_user.id)
+    new_ui = GeneratedUI(
+        project_id=project_id,
+        prompt=f"Rollback to version {version}",
+        html_content=source.html_content,
+        version=_next_ui_version(db, project_id),
+        product_type=source.product_type,
+        pages_generated=source.pages_generated,
+        preview_token=_new_preview_token(),
+    )
+    db.add(new_ui)
+    db.commit()
+    db.refresh(new_ui)
+
+    return UIRollbackResponse(
+        id=new_ui.id,
+        version=new_ui.version,
+        html_preview_url=_preview_url(new_ui),
+        message=f"Rolled back to version {version}",
+    )
 
 
 @router.get(

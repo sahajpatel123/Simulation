@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel
 
@@ -24,3 +24,38 @@ class GeneratedUIResponse(BaseModel):
     html_content: str
     pages_detected: list[str]
     message: str = "UI generated successfully"
+
+
+class UIVersionRow(BaseModel):
+    id: int
+    version: int
+    product_type: str | None = None
+    prompt: str | None = None
+    html_preview_url: str
+    created_at: str | None = None
+
+
+class UIVersionHistoryResponse(BaseModel):
+    uis: list[UIVersionRow]
+
+
+class UIDiffEntry(BaseModel):
+    selector: str = ""
+    action: str = ""
+    from_: str = ""
+    to: str = ""
+
+    model_config = {"populate_by_name": True}
+
+
+class UIDiffResponse(BaseModel):
+    from_version: int
+    to_version: int
+    changes: list[UIDiffEntry] = []
+
+
+class UIRollbackResponse(BaseModel):
+    id: int
+    version: int
+    html_preview_url: str
+    message: str
