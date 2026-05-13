@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { useBrief, useBriefAssist, useSaveBrief } from '@/hooks/useProjects'
@@ -60,105 +60,131 @@ const COPY: Record<Variant, BriefCopy> = {
   },
 }
 
-/* ─── Sub-components ────────────────────────── */
+/* ─── Inline styles for reused patterns ──────────────────── */
+
+const s = {
+  mono: 'var(--font-mono), monospace',
+  serif: 'var(--font-serif), serif',
+  red: '#c0392b',
+  ink: '#1a1a1a',
+  mute: '#888',
+  cream: '#f5f0e8',
+}
+
+/* ─── Loading ellipsis animation ─────────────────────────── */
+
+function LoadingDots() {
+  return (
+    <span style={{ display: 'inline-flex', gap: 2, verticalAlign: 'middle' }}>
+      <span style={{
+        width: 4, height: 4, borderRadius: '50%', background: s.red, display: 'inline-block',
+        animation: 'blink 1.2s ease-in-out infinite',
+      }} />
+      <span style={{
+        width: 4, height: 4, borderRadius: '50%', background: s.red, display: 'inline-block',
+        animation: 'blink 1.2s ease-in-out infinite',
+        animationDelay: '0.2s',
+      }} />
+      <span style={{
+        width: 4, height: 4, borderRadius: '50%', background: s.red, display: 'inline-block',
+        animation: 'blink 1.2s ease-in-out infinite',
+        animationDelay: '0.4s',
+      }} />
+    </span>
+  )
+}
+
+/* ─── Editor loading panel (replaces field while waiting) ── */
+
+function EditorLoading() {
+  return (
+    <div style={{
+      marginTop: 18, padding: 24, border: '0.5px solid #c0392b', opacity: 0,
+      animation: 'fadeSlideIn 0.35s ease-out forwards',
+    }}>
+      <div style={{
+        fontFamily: s.mono, fontSize: 9, letterSpacing: '0.22em', color: s.red, marginBottom: 14,
+      }}>
+        THE EDITOR IS READING <LoadingDots />
+      </div>
+      <div style={{
+        width: '60%', height: 10, background: 'rgba(192,57,43,0.06)', borderRadius: 2,
+        marginBottom: 8, animation: 'pulseWidth 1.8s ease-in-out infinite',
+      }} />
+      <div style={{
+        width: '40%', height: 10, background: 'rgba(192,57,43,0.04)', borderRadius: 2,
+        animation: 'pulseWidth 1.8s ease-in-out infinite',
+        animationDelay: '0.3s',
+      }} />
+    </div>
+  )
+}
+
+/* ─── Sub-components ────────────────────────────────────── */
 
 function FieldHeader({
-  label,
-  hint,
-  helpOpen,
-  onToggleHelp,
-  onAssist,
+  label, hint, helpOpen, onToggleHelp, onAssist,
+  disabled,
 }: {
   label: string
   hint: string
   helpOpen: boolean
   onToggleHelp: () => void
   onAssist: (mode: 'refine' | 'suggest' | 'critique') => void
+  disabled?: boolean
 }) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'baseline',
-        marginBottom: 16,
-        position: 'relative',
-      }}
-    >
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+      marginBottom: 16, position: 'relative',
+    }}>
       <div>
-        <div
-          style={{
-            fontFamily: 'var(--font-mono), monospace',
-            fontSize: 10,
-            letterSpacing: '0.22em',
-            color: '#1a1a1a',
-            marginBottom: 6,
-          }}
-        >
-          {label}
-        </div>
-        <div
-          style={{
-            fontFamily: 'var(--font-serif), serif',
-            fontStyle: 'italic',
-            fontSize: 14,
-            color: '#888',
-          }}
-        >
-          {hint}
-        </div>
+        <div style={{
+          fontFamily: s.mono, fontSize: 10, letterSpacing: '0.22em', color: s.ink, marginBottom: 6,
+        }}>{label}</div>
+        <div style={{
+          fontFamily: s.serif, fontStyle: 'italic', fontSize: 14, color: s.mute,
+        }}>{hint}</div>
       </div>
       <div style={{ position: 'relative' }}>
         <button
           onClick={onToggleHelp}
+          disabled={disabled}
           style={{
             background: 'transparent',
-            border: '0.5px solid #1a1a1a',
+            border: disabled ? '0.5px solid #ddd' : '0.5px solid #1a1a1a',
             padding: '6px 14px',
-            fontFamily: 'var(--font-mono), monospace',
-            fontSize: 9,
-            letterSpacing: '0.20em',
-            cursor: 'pointer',
-            color: '#1a1a1a',
+            fontFamily: s.mono, fontSize: 9, letterSpacing: '0.20em',
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            color: disabled ? '#ccc' : s.ink,
+            transition: 'all 0.18s ease',
+            opacity: disabled ? 0.5 : 1,
           }}
         >
-          GET HELP {helpOpen ? '▴' : '▾'}
+          {disabled ? 'EDITING...' : `GET HELP ${helpOpen ? '▴' : '▾'}`}
         </button>
-        {helpOpen && (
-          <div
-            style={{
-              position: 'absolute',
-              top: 'calc(100% + 6px)',
-              right: 0,
-              background: '#f5f0e8',
-              border: '0.5px solid #1a1a1a',
-              zIndex: 10,
-              minWidth: 200,
-              boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
-            }}
-          >
+        {helpOpen && !disabled && (
+          <div style={{
+            position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+            background: s.cream, border: '0.5px solid #1a1a1a', zIndex: 10,
+            minWidth: 200, boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+            opacity: 0, animation: 'fadeSlideIn 0.2s ease-out forwards',
+          }}>
             {[
               { k: 'refine' as const, t: 'REFINE MY DRAFT' },
               { k: 'suggest' as const, t: 'SUGGEST OPTIONS' },
               { k: 'critique' as const, t: 'CRITIQUE MY WRITING' },
             ].map((opt, i, arr) => (
-              <button
-                key={opt.k}
-                onClick={() => onAssist(opt.k)}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  padding: '10px 14px',
-                  background: 'transparent',
-                  border: 'none',
-                  borderBottom: i < arr.length - 1 ? '0.5px solid #e8e3d8' : 'none',
-                  fontFamily: 'var(--font-mono), monospace',
-                  fontSize: 10,
-                  letterSpacing: '0.18em',
-                  color: '#1a1a1a',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                }}
+              <button key={opt.k} onClick={() => onAssist(opt.k)} style={{
+                display: 'block', width: '100%', padding: '10px 14px',
+                background: 'transparent', border: 'none',
+                borderBottom: i < arr.length - 1 ? '0.5px solid #e8e3d8' : 'none',
+                fontFamily: s.mono, fontSize: 10, letterSpacing: '0.18em',
+                color: s.ink, cursor: 'pointer', textAlign: 'left',
+                transition: 'background 0.12s ease',
+              }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(192,57,43,0.04)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               >
                 {opt.t}
               </button>
@@ -171,94 +197,52 @@ function FieldHeader({
 }
 
 function HelpResultPanel({
-  result,
-  onClose,
-  onApply,
+  result, onClose, onApply,
 }: {
   result: { mode: string; result: string | string[] }
   onClose: () => void
   onApply: (value: string) => void
 }) {
   return (
-    <div
-      style={{
-        marginTop: 18,
-        padding: 18,
-        background: 'rgba(192,57,43,0.04)',
-        border: '0.5px solid #c0392b',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 12,
-        }}
-      >
-        <span
-          style={{
-            fontFamily: 'var(--font-mono), monospace',
-            fontSize: 9,
-            letterSpacing: '0.22em',
-            color: '#c0392b',
-          }}
-        >
+    <div style={{
+      marginTop: 18, padding: 18, background: 'rgba(192,57,43,0.04)',
+      border: '0.5px solid #c0392b',
+      opacity: 0, animation: 'fadeSlideIn 0.35s ease-out forwards',
+    }}>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12,
+      }}>
+        <span style={{
+          fontFamily: s.mono, fontSize: 9, letterSpacing: '0.22em', color: s.red,
+        }}>
           EDITOR&apos;S {result.mode.toUpperCase()}
         </span>
-        <button
-          onClick={onClose}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            fontFamily: 'var(--font-mono), monospace',
-            fontSize: 9,
-            letterSpacing: '0.20em',
-            color: '#888',
-          }}
-        >
-          DISMISS
-        </button>
+        <button onClick={onClose} style={{
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          fontFamily: s.mono, fontSize: 9, letterSpacing: '0.20em', color: s.mute,
+        }}>DISMISS</button>
       </div>
       {Array.isArray(result.result) ? (
         <div>
           {result.result.map((opt, i, arr) => (
-            <div
-              key={i}
-              style={{
-                paddingBottom: 12,
-                marginBottom: 12,
-                borderBottom: i < arr.length - 1 ? '0.5px solid rgba(0,0,0,0.07)' : 'none',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'baseline',
-                gap: 16,
+            <div key={i} style={{
+              paddingBottom: 12, marginBottom: 12,
+              borderBottom: i < arr.length - 1 ? '0.5px solid rgba(0,0,0,0.07)' : 'none',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16,
+              opacity: 0, animation: 'fadeSlideIn 0.3s ease-out forwards',
+              animationDelay: `${i * 0.12}s`,
+            }}>
+              <span style={{
+                fontFamily: s.serif, fontSize: 17, color: s.ink, lineHeight: 1.5,
+              }}>{opt}</span>
+              <button onClick={() => onApply(opt)} style={{
+                background: s.ink, color: s.cream, border: 'none',
+                padding: '6px 12px', fontFamily: s.mono, fontSize: 9,
+                letterSpacing: '0.18em', cursor: 'pointer', flexShrink: 0,
+                transition: 'opacity 0.15s ease',
               }}
-            >
-              <span
-                style={{
-                  fontFamily: 'var(--font-serif), serif',
-                  fontSize: 17,
-                  color: '#1a1a1a',
-                  lineHeight: 1.5,
-                }}
-              >
-                {opt}
-              </span>
-              <button
-                onClick={() => onApply(opt)}
-                style={{
-                  background: '#1a1a1a',
-                  color: '#f5f0e8',
-                  border: 'none',
-                  padding: '6px 12px',
-                  fontFamily: 'var(--font-mono), monospace',
-                  fontSize: 9,
-                  letterSpacing: '0.18em',
-                  cursor: 'pointer',
-                  flexShrink: 0,
-                }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
               >
                 USE THIS
               </button>
@@ -266,23 +250,90 @@ function HelpResultPanel({
           ))}
         </div>
       ) : (
-        <div
-          style={{
-            fontFamily: 'var(--font-serif), serif',
-            fontSize: 16,
-            color: '#1a1a1a',
-            lineHeight: 1.55,
-            whiteSpace: 'pre-wrap',
-          }}
+        <div style={{
+          fontFamily: s.serif, fontSize: 16, color: s.ink, lineHeight: 1.55, whiteSpace: 'pre-wrap',
+        }}>{result.result}</div>
+      )}
+      {!Array.isArray(result.result) && (
+        <button onClick={() => onApply(result.result as string)} style={{
+          marginTop: 14, background: s.ink, color: s.cream, border: 'none',
+          padding: '8px 16px', fontFamily: s.mono, fontSize: 9,
+          letterSpacing: '0.20em', cursor: 'pointer',
+          transition: 'opacity 0.15s ease',
+        }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
         >
-          {result.result}
-        </div>
+          APPLY THIS VERSION
+        </button>
       )}
     </div>
   )
 }
 
-/* ─── Main component ────────────────────────── */
+/* ─── Brief field wrapper ────────────────────────────────── */
+
+function BriefField({
+  label, hint, placeholder, value, onChange, multiline,
+  helpOpen, onToggleHelp, onAssist, helpResult, onApplySuggestion, onClearResult,
+  isWaiting, isFieldLoading,
+}: {
+  label: string
+  hint: string
+  placeholder: string
+  value: string
+  onChange: (v: string) => void
+  multiline?: boolean
+  helpOpen: boolean
+  onToggleHelp: () => void
+  onAssist: (mode: 'refine' | 'suggest' | 'critique') => void
+  helpResult: { mode: string; result: string | string[] } | null
+  onApplySuggestion: (v: string) => void
+  onClearResult: () => void
+  isWaiting: boolean
+  isFieldLoading: boolean
+}) {
+  return (
+    <div style={{ marginBottom: 56 }}>
+      <FieldHeader label={label} hint={hint} helpOpen={helpOpen} onToggleHelp={onToggleHelp} onAssist={onAssist} disabled={isWaiting} />
+      {isFieldLoading ? (
+        <EditorLoading />
+      ) : (
+        <>
+          {multiline ? (
+            <textarea value={value} onChange={(e) => onChange(e.target.value)}
+              placeholder={placeholder} rows={2}
+              style={{
+                width: '100%', background: 'transparent', border: 'none',
+                borderBottom: '0.5px solid #1a1a1a',
+                fontFamily: s.serif, fontSize: 22, color: s.ink,
+                padding: '8px 0', outline: 'none', resize: 'none',
+                boxSizing: 'border-box',
+                opacity: isWaiting ? 0.4 : 1,
+                transition: 'opacity 0.2s ease',
+              }} />
+          ) : (
+            <input value={value} onChange={(e) => onChange(e.target.value)}
+              placeholder={placeholder}
+              style={{
+                width: '100%', background: 'transparent', border: 'none',
+                borderBottom: '0.5px solid #1a1a1a',
+                fontFamily: s.serif, fontSize: 22, color: s.ink,
+                padding: '8px 0', outline: 'none', boxSizing: 'border-box',
+                opacity: isWaiting ? 0.4 : 1,
+                transition: 'opacity 0.2s ease',
+              }} />
+          )}
+          {helpResult && (
+            <HelpResultPanel result={helpResult} onClose={onClearResult} onApply={onApplySuggestion} />
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+/* ─── Main component ────────────────────────────────────── */
 
 interface BriefAuthorProps {
   projectId: string | number
@@ -301,11 +352,13 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
   const [features, setFeatures] = useState<string[]>(['', '', ''])
   const [hook, setHook] = useState('')
   const [helpOpenField, setHelpOpenField] = useState<FieldName | null>(null)
+  const [activeField, setActiveField] = useState<FieldName | null>(null)
   const [helpResult, setHelpResult] = useState<{
     field: FieldName
     mode: 'refine' | 'suggest' | 'critique'
     result: string | string[]
   } | null>(null)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   useEffect(() => {
     if (brief) {
@@ -317,33 +370,47 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
   }, [brief])
 
   const isComplete = positioning.trim() && features.filter((f) => f.trim()).length >= 1 && hook.trim()
+  const isWaiting = saveBrief.isPending || assistBrief.isPending
 
   const handleSave = async (markComplete: boolean) => {
-    await saveBrief.mutateAsync({
-      positioning,
-      features: features.filter((f) => f.trim()),
-      hook,
-      mark_complete: markComplete,
-    })
-    if (markComplete) {
-      router.push(`/project/${projectId}`)
+    setErrorMsg(null)
+    try {
+      await saveBrief.mutateAsync({
+        positioning, features: features.filter((f) => f.trim()), hook,
+        mark_complete: markComplete,
+      })
+      if (markComplete) router.push(`/project/${projectId}`)
+    } catch {
+      setErrorMsg('Failed to save. Check your connection and try again.')
     }
   }
 
-  const handleAssist = async (field: FieldName, mode: 'refine' | 'suggest' | 'critique') => {
+  const handleAssist = useCallback(async (field: FieldName, mode: 'refine' | 'suggest' | 'critique') => {
     let current_value = ''
     if (field === 'positioning') current_value = positioning
     if (field === 'hook') current_value = hook
     if (field === 'features') current_value = features.filter((f) => f.trim()).join(' / ')
 
+    if (!current_value.trim() && mode !== 'suggest') return
+
+    setHelpOpenField(null)
+    setActiveField(field)
+    setErrorMsg(null)
+    setHelpResult(null)
+
     try {
       const result = await assistBrief.mutateAsync({ mode, field, current_value })
-      setHelpResult({ field, mode, result: result.result })
+      if (result?.result) {
+        setHelpResult({ field, mode, result: result.result })
+      } else {
+        setErrorMsg('The editor returned no response. Try again.')
+      }
     } catch {
-      setHelpResult(null)
+      setErrorMsg('The editor could not be reached. Check your API connection and try again.')
+    } finally {
+      setActiveField(null)
     }
-    setHelpOpenField(null)
-  }
+  }, [positioning, features, hook, assistBrief])
 
   const applySuggestion = (field: FieldName, value: string) => {
     if (field === 'positioning') setPositioning(value)
@@ -351,229 +418,142 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
     setHelpResult(null)
   }
 
-  const loading = assistBrief.isPending
-
   return (
-    <div style={{ maxWidth: 880, margin: '0 auto', padding: '60px 48px 120px', background: '#f5f0e8', minHeight: '100vh' }}>
+    <div style={{ maxWidth: 880, margin: '0 auto', padding: '60px 48px 120px', background: s.cream, minHeight: '100vh' }}>
+      {/* Global animation keyframes injected once */}
+      <style>{`
+        @keyframes blink { 0%,100%{opacity:0.3} 50%{opacity:1} }
+        @keyframes fadeSlideIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes pulseWidth { 0%,100%{width:60%} 50%{width:75%} }
+      `}</style>
+
       {/* TOP LABEL */}
-      <div
-        style={{
-          fontFamily: 'var(--font-mono), monospace',
-          fontSize: 10,
-          letterSpacing: '0.22em',
-          color: '#c0392b',
-          marginBottom: 24,
-        }}
-      >
+      <div style={{ fontFamily: s.mono, fontSize: 10, letterSpacing: '0.22em', color: s.red, marginBottom: 24 }}>
         — {copy.topLabel}
       </div>
 
       {/* PAGE TITLE */}
-      <h1
-        style={{
-          fontFamily: 'var(--font-serif), serif',
-          fontSize: 'clamp(48px, 6vw, 76px)',
-          fontWeight: 700,
-          lineHeight: 0.95,
-          letterSpacing: '-0.03em',
-          color: '#1a1a1a',
-          margin: 0,
-          marginBottom: 12,
-        }}
-      >
-        {copy.pageTitle}
-      </h1>
-      <p
-        style={{
-          fontFamily: 'var(--font-serif), serif',
-          fontStyle: 'italic',
-          fontSize: 20,
-          color: '#888',
-          margin: 0,
-          marginBottom: 56,
-        }}
-      >
-        {copy.pageSubtitle}
-      </p>
+      <h1 style={{
+        fontFamily: s.serif, fontSize: 'clamp(48px, 6vw, 76px)', fontWeight: 700,
+        lineHeight: 0.95, letterSpacing: '-0.03em', color: s.ink,
+        margin: 0, marginBottom: 12,
+      }}>{copy.pageTitle}</h1>
+      <p style={{
+        fontFamily: s.serif, fontStyle: 'italic', fontSize: 20, color: s.mute,
+        margin: 0, marginBottom: 56,
+      }}>{copy.pageSubtitle}</p>
 
       {/* DOSSIER REFERENCE */}
       <div style={{ paddingBottom: 24, marginBottom: 48, borderBottom: '0.5px solid #1a1a1a' }}>
-        <div
-          style={{
-            fontFamily: 'var(--font-mono), monospace',
-            fontSize: 9,
-            letterSpacing: '0.24em',
-            color: '#888',
-            marginBottom: 8,
-          }}
-        >
+        <div style={{ fontFamily: s.mono, fontSize: 9, letterSpacing: '0.24em', color: s.mute, marginBottom: 8 }}>
           ON FILE
         </div>
-        <div style={{ fontFamily: 'var(--font-serif), serif', fontStyle: 'italic', fontSize: 16, color: '#1a1a1a' }}>
+        <div style={{ fontFamily: s.serif, fontStyle: 'italic', fontSize: 16, color: s.ink }}>
           {dossierTitle}
         </div>
       </div>
 
       {/* FIELD: POSITIONING */}
-      <div style={{ marginBottom: 56 }}>
-        <FieldHeader
-          label={copy.positioningLabel}
-          hint={copy.positioningHint}
-          helpOpen={helpOpenField === 'positioning'}
-          onToggleHelp={() => setHelpOpenField(helpOpenField === 'positioning' ? null : 'positioning')}
-          onAssist={(mode) => handleAssist('positioning', mode)}
-        />
-        <textarea
-          value={positioning}
-          onChange={(e) => setPositioning(e.target.value)}
-          placeholder={copy.positioningPlaceholder}
-          rows={2}
-          style={{
-            width: '100%',
-            background: 'transparent',
-            border: 'none',
-            borderBottom: '0.5px solid #1a1a1a',
-            fontFamily: 'var(--font-serif), serif',
-            fontSize: 22,
-            color: '#1a1a1a',
-            padding: '8px 0',
-            outline: 'none',
-            resize: 'none',
-            boxSizing: 'border-box',
-          }}
-        />
-        {loading && helpOpenField !== 'positioning' && (
-          <div style={{ marginTop: 12, fontFamily: 'var(--font-mono), monospace', fontSize: 10, letterSpacing: '0.18em', color: '#888' }}>
-            THE EDITOR IS READING...
-          </div>
-        )}
-        {helpResult?.field === 'positioning' && (
-          <HelpResultPanel result={helpResult} onClose={() => setHelpResult(null)} onApply={(v) => applySuggestion('positioning', v)} />
-        )}
-      </div>
+      <BriefField
+        label={copy.positioningLabel} hint={copy.positioningHint}
+        placeholder={copy.positioningPlaceholder} value={positioning} onChange={setPositioning}
+        multiline
+        helpOpen={helpOpenField === 'positioning'}
+        onToggleHelp={() => setHelpOpenField(helpOpenField === 'positioning' ? null : 'positioning')}
+        onAssist={(mode) => handleAssist('positioning', mode)}
+        helpResult={helpResult?.field === 'positioning' ? helpResult : null}
+        onApplySuggestion={(v) => applySuggestion('positioning', v)}
+        onClearResult={() => setHelpResult(null)}
+        isWaiting={isWaiting}
+        isFieldLoading={activeField === 'positioning'}
+      />
 
       {/* FIELD: FEATURES */}
       <div style={{ marginBottom: 56 }}>
-        <FieldHeader
-          label={copy.featuresLabel}
-          hint={copy.featuresHint}
+        <FieldHeader label={copy.featuresLabel} hint={copy.featuresHint}
           helpOpen={helpOpenField === 'features'}
           onToggleHelp={() => setHelpOpenField(helpOpenField === 'features' ? null : 'features')}
           onAssist={(mode) => handleAssist('features', mode)}
+          disabled={isWaiting}
         />
-        {[0, 1, 2].map((i) => (
-          <div
-            key={i}
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '32px 1fr',
-              alignItems: 'baseline',
-              gap: 16,
-              marginBottom: 12,
-            }}
-          >
-            <span
-              style={{
-                fontFamily: 'var(--font-mono), monospace',
-                fontSize: 11,
-                color: '#c0392b',
-                letterSpacing: '0.18em',
-              }}
-            >
-              {String(i + 1).padStart(2, '0')}
-            </span>
-            <input
-              value={features[i]}
-              onChange={(e) => {
-                const next = [...features]
-                next[i] = e.target.value
-                setFeatures(next)
-              }}
-              placeholder={copy.featuresPlaceholder}
-              style={{
-                width: '100%',
-                background: 'transparent',
-                border: 'none',
-                borderBottom: '0.5px solid #1a1a1a',
-                fontFamily: 'var(--font-serif), serif',
-                fontSize: 18,
-                color: '#1a1a1a',
-                padding: '8px 0',
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
-        ))}
-        {helpResult?.field === 'features' && (
-          <HelpResultPanel result={helpResult} onClose={() => setHelpResult(null)} onApply={() => {}} />
+        {activeField === 'features' ? (
+          <EditorLoading />
+        ) : (
+          <>
+            {[0, 1, 2].map((i) => (
+              <div key={i} style={{
+                display: 'grid', gridTemplateColumns: '32px 1fr',
+                alignItems: 'baseline', gap: 16, marginBottom: 12,
+                opacity: isWaiting ? 0.4 : 1, transition: 'opacity 0.2s ease',
+              }}>
+                <span style={{
+                  fontFamily: s.mono, fontSize: 11, color: s.red, letterSpacing: '0.18em',
+                }}>{String(i + 1).padStart(2, '0')}</span>
+                <input value={features[i]}
+                  onChange={(e) => { const n = [...features]; n[i] = e.target.value; setFeatures(n) }}
+                  placeholder={copy.featuresPlaceholder}
+                  style={{
+                    width: '100%', background: 'transparent', border: 'none',
+                    borderBottom: '0.5px solid #1a1a1a',
+                    fontFamily: s.serif, fontSize: 18, color: s.ink,
+                    padding: '8px 0', outline: 'none', boxSizing: 'border-box',
+                  }} />
+              </div>
+            ))}
+            {helpResult?.field === 'features' && (
+              <HelpResultPanel result={helpResult} onClose={() => setHelpResult(null)} onApply={() => {}} />
+            )}
+          </>
         )}
       </div>
 
       {/* FIELD: HOOK */}
-      <div style={{ marginBottom: 56 }}>
-        <FieldHeader
-          label={copy.hookLabel}
-          hint={copy.hookHint}
-          helpOpen={helpOpenField === 'hook'}
-          onToggleHelp={() => setHelpOpenField(helpOpenField === 'hook' ? null : 'hook')}
-          onAssist={(mode) => handleAssist('hook', mode)}
-        />
-        <input
-          value={hook}
-          onChange={(e) => setHook(e.target.value)}
-          placeholder={copy.hookPlaceholder}
-          style={{
-            width: '100%',
-            background: 'transparent',
-            border: 'none',
-            borderBottom: '0.5px solid #1a1a1a',
-            fontFamily: 'var(--font-serif), serif',
-            fontSize: 22,
-            color: '#1a1a1a',
-            padding: '8px 0',
-            outline: 'none',
-            boxSizing: 'border-box',
-          }}
-        />
-        {helpResult?.field === 'hook' && (
-          <HelpResultPanel result={helpResult} onClose={() => setHelpResult(null)} onApply={(v) => applySuggestion('hook', v)} />
-        )}
-      </div>
+      <BriefField
+        label={copy.hookLabel} hint={copy.hookHint}
+        placeholder={copy.hookPlaceholder} value={hook} onChange={setHook}
+        helpOpen={helpOpenField === 'hook'}
+        onToggleHelp={() => setHelpOpenField(helpOpenField === 'hook' ? null : 'hook')}
+        onAssist={(mode) => handleAssist('hook', mode)}
+        helpResult={helpResult?.field === 'hook' ? helpResult : null}
+        onApplySuggestion={(v) => applySuggestion('hook', v)}
+        onClearResult={() => setHelpResult(null)}
+        isWaiting={isWaiting}
+        isFieldLoading={activeField === 'hook'}
+      />
+
+      {/* ERROR MESSAGE */}
+      {errorMsg && (
+        <div style={{
+          marginTop: 16, padding: 12, background: 'rgba(192,57,43,0.06)',
+          border: '0.5px solid #c0392b', fontFamily: s.mono, fontSize: 10,
+          letterSpacing: '0.12em', color: s.red, lineHeight: 1.5,
+          opacity: 0, animation: 'fadeSlideIn 0.3s ease-out forwards',
+        }}>
+          {errorMsg}
+        </div>
+      )}
 
       {/* CTA */}
       <div style={{ marginTop: 64, display: 'flex', gap: 12 }}>
-        <button
-          onClick={() => handleSave(true)}
-          disabled={!isComplete || saveBrief.isPending}
+        <button onClick={() => handleSave(true)} disabled={!isComplete || saveBrief.isPending}
           style={{
-            background: isComplete ? '#c0392b' : '#bbb',
-            color: '#f5f0e8',
-            border: 'none',
-            padding: '16px 28px',
-            fontFamily: 'var(--font-mono), monospace',
-            fontSize: 11,
-            letterSpacing: '0.20em',
+            background: isComplete ? s.red : '#bbb', color: s.cream,
+            border: 'none', padding: '16px 28px',
+            fontFamily: s.mono, fontSize: 11, letterSpacing: '0.20em',
             cursor: isComplete ? 'pointer' : 'not-allowed',
-            transition: 'background 0.18s ease',
-          }}
-        >
+            transition: 'background 0.25s ease, opacity 0.2s ease',
+            opacity: saveBrief.isPending ? 0.6 : 1,
+          }}>
           {saveBrief.isPending ? 'FILING...' : isComplete ? copy.ctaReady : copy.ctaNotReady}
         </button>
-        <button
-          onClick={() => handleSave(false)}
-          disabled={saveBrief.isPending}
+        <button onClick={() => handleSave(false)} disabled={saveBrief.isPending}
           style={{
-            background: 'transparent',
-            color: '#1a1a1a',
-            border: '0.5px solid #1a1a1a',
-            padding: '16px 24px',
-            fontFamily: 'var(--font-mono), monospace',
-            fontSize: 11,
-            letterSpacing: '0.20em',
-            cursor: 'pointer',
-          }}
-        >
+            background: 'transparent', color: s.ink, border: '0.5px solid #1a1a1a',
+            padding: '16px 24px', fontFamily: s.mono, fontSize: 11,
+            letterSpacing: '0.20em', cursor: 'pointer',
+            opacity: saveBrief.isPending ? 0.4 : 1,
+            transition: 'opacity 0.2s ease',
+          }}>
           SAVE DRAFT
         </button>
       </div>
