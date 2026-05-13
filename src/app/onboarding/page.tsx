@@ -79,8 +79,6 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const apiInstance = api
-
   useEffect(() => {
     const saved = loadProgress()
     if (saved.step) setStep(saved.step)
@@ -122,7 +120,7 @@ export default function OnboardingPage() {
           ? `${description.trim()}\n\n(Product type: ${productType.replace(/_/g, ' ')})`
           : description.trim()
 
-      const { data } = await apiInstance.post<{ id: number }>('/projects', {
+      const { data } = await api.post<{ id: number }>('/projects', {
         title: projectName.trim(),
         description: desc,
         intake_mode: intakeMode,
@@ -148,9 +146,9 @@ export default function OnboardingPage() {
     setLoading(true)
     setError('')
     try {
-      await apiInstance.post(`/projects/${projectId}/environments`, { mode: 'MANUAL' })
+      await api.post(`/projects/${projectId}/environments`, { mode: 'MANUAL' })
 
-      const { data } = await apiInstance.post<{ id: number }>('/simulations', {
+      const { data } = await api.post<{ id: number }>('/simulations', {
         project_id: projectId,
         consumer_volume: 10000,
       })

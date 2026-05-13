@@ -27,7 +27,6 @@ function optionalNumber(v: unknown): number | undefined {
 }
 
 
-
 const inputStyle: CSSProperties = {
   width: '100%',
   padding: '12px 14px',
@@ -335,7 +334,7 @@ export default function TrackerPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {outcomes.slice(0, 10).map((o, i) => {
                 const pred = o.predicted_conversion_rate ?? 0
-                const actual = o.actual_conversion_rate
+                const actual = o.actual_conversion_rate ?? 0
                 const diff = pred > 0 ? ((actual - pred) / pred) * 100 : 0
                 const status = diff > 0 ? 'over' as const : 'under' as const
                 const date = o.recorded_at ? new Date(o.recorded_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
