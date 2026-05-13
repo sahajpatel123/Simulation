@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class AgentTier(str, Enum):
@@ -49,7 +52,35 @@ MICRO_CLUSTERS = {
 }
 
 
+_VALIDATED_HIERARCHY_IDS: set[str] | None = None
+
+
+def _validate_hierarchy_ids() -> None:
+    """Warn if any hardcoded cluster ID in hierarchy maps is unknown."""
+    global _VALIDATED_HIERARCHY_IDS
+    if _VALIDATED_HIERARCHY_IDS is not None:
+        return
+    try:
+        from app.simulation.clusters.registry import ClusterRegistry
+
+        known = {c.cluster_id for c in ClusterRegistry().all_clusters()}
+    except Exception:
+        known = set()
+    all_ids = SUPERVISOR_CLUSTERS | MICRO_CLUSTERS
+    unknown = all_ids - known
+    for uid in sorted(unknown):
+        logger.warning(
+            "[AgentHierarchy] Unknown cluster ID '%s' in hierarchy rules — "
+            "may be renamed in registry but not updated here.",
+            uid,
+        )
+    _VALIDATED_HIERARCHY_IDS = all_ids
+
+
 class AgentHierarchyRouter:
+
+    def __init__(self) -> None:
+        _validate_hierarchy_ids()
 
     def route(
         self,

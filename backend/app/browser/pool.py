@@ -46,7 +46,20 @@ class BrowserPool:
             self.run_session(cluster_id, profile, architect_outputs, url)
             for profile in agent_profiles
         ]
-        return await asyncio.gather(*tasks, return_exceptions=False)
+        raw = await asyncio.gather(*tasks, return_exceptions=True)
+        results: list[dict[str, Any]] = []
+        for r in raw:
+            if isinstance(r, Exception):
+                results.append({
+                    "converted": False,
+                    "events": [{"action": "error", "reason": str(r)}],
+                    "pages_visited": 1,
+                    "duration_seconds": 0,
+                    "action_count": 0,
+                })
+            else:
+                results.append(r)
+        return results
 
     @property
     def active_count(self) -> int:

@@ -354,6 +354,7 @@ _TEMPLATE_MAP = {
     "device": HARDWARE_CSS,
     "wearable": HARDWARE_CSS,
     "b2b_hardware": HARDWARE_CSS,
+    "mobile_app": DARK_SAAS_CSS,
 }
 
 

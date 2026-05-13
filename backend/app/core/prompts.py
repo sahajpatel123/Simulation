@@ -442,7 +442,7 @@ Place these exact attributes on visible interactive elements (DO NOT ALTER THEM)
 - data-thecee-id="add-to-cart"      (product add-to-cart button)
 
 ═══════════════════════════════════════════════════════════
-PAGE STRUCTURE & JAVASCRIPT BOILERPLATE
+PAGE STRUCTURE & BOILERPLATE (TheCee injects JS server-side)
 ═══════════════════════════════════════════════════════════
 Inside <body>:
 
@@ -451,153 +451,16 @@ Inside <body>:
 
 2. Create a sticky Navbar `<nav id="main-nav">` with a mobile drawer `<div id="mobile-drawer">` and an overlay `<div id="drawer-overlay">`.
 
-3. Create these pages wrapped in a `<main>`:
-<div data-page="home" class="page active"> Landing page (Hero, Bento Features, Social Proof, Pricing, FAQ)</div>
-<div data-page="product" class="page"> Product detail (Tabs, Add to Cart) </div>
-<div data-page="cart" class="page"> Cart page (Cart List `id="cart-list"`, Subtotal, Total, Checkout Button) </div>
-<div data-page="payment" class="page"> Payment form (Form with `data-thecee-id="checkout-form"`) </div>
+3. Create these pages wrapped in a `<main>`, using `data-page` and `class="page active"`:
+<div data-page="home" class="page active"> Landing hero, features, pricing, FAQ </div>
+<div data-page="product" class="page"> Product detail with tabs, Add to Cart </div>
+<div data-page="cart" class="page"> Cart list with `id="cart-list"`, subtotal, total </div>
+<div data-page="payment" class="page"> Payment form with `data-thecee-id="checkout-form"` </div>
 <div data-page="confirmation" class="page"> Order confirmation </div>
 
-4. Write THIS EXACT complete bottom-of-body <script> to handle all complex interactivity (DO NOT SKIP THIS):
-<script>
-  const S = {{
-    page:'home', cart:[], plan:'monthly',
-    navOpen:false, openFaq:-1, qty:1, activeThumb:0
-  }};
-
-  const $ = s => document.querySelector(s);
-  const $$ = s => document.querySelectorAll(s);
-  const on = (el,ev,fn) => el?.addEventListener(ev,fn);
-
-  function goTo(page) {{
-    $$('.page').forEach(p => p.classList.remove('active'));
-    $(`[data-page="${{page}}"]`)?.classList.add('active');
-    window.scrollTo({{top:0, behavior:'smooth'}});
-    S.page = page;
-    if(S.navOpen) closeDrawer();
-  }}
-
-  function initNavbar() {{
-    const nav = $('#main-nav');
-    window.addEventListener('scroll', () => nav?.classList.toggle('shadow-sm', scrollY > 10), {{passive:true}});
-    on($('#menu-btn'), 'click', () => {{
-      S.navOpen = !S.navOpen;
-      $('#mobile-drawer')?.classList.toggle('translate-x-full', !S.navOpen);
-      $('#drawer-overlay')?.classList.toggle('opacity-0', !S.navOpen);
-      $('#drawer-overlay')?.classList.toggle('pointer-events-none', !S.navOpen);
-    }});
-    on($('#drawer-overlay'), 'click', closeDrawer);
-  }}
-  
-  function closeDrawer() {{
-    S.navOpen = false;
-    $('#mobile-drawer')?.classList.add('translate-x-full');
-    $('#drawer-overlay')?.classList.add('opacity-0', 'pointer-events-none');
-  }}
-
-  function addToCart(name, price) {{
-    const existing = S.cart.find(i => i.name === name);
-    if(existing) existing.qty += S.qty; else S.cart.push({{name, price, qty:S.qty}});
-    renderCart();
-    showToast(`${{name}} added to cart!`);
-  }}
-  
-  function removeFromCart(idx) {{ S.cart.splice(idx,1); renderCart(); }}
-  
-  function renderCart() {{
-    const badge = $('#cart-count');
-    const count = S.cart.reduce((sum, item) => sum + item.qty, 0);
-    if(badge) {{ badge.textContent = count; badge.style.display = count ? 'flex' : 'none'; }}
-    
-    const list = $('#cart-list');
-    if(!list) return;
-    if(!S.cart.length) {{ list.innerHTML = '<div class="p-12 text-center text-muted-foreground bg-secondary/30 rounded-xl border border-border">Your cart is empty. Let\'s find you something amazing!</div>'; return; }}
-    
-    list.innerHTML = S.cart.map((item, i) => `
-      <div class="flex items-center justify-between py-4 border-b border-border">
-        <div>
-          <div class="font-medium text-foreground text-lg">${{item.name}}</div>
-          <div class="text-sm text-muted-foreground mt-1">Qty: ${{item.qty}} × ₹${{item.price.toLocaleString('en-IN')}}</div>
-        </div>
-        <button onclick="removeFromCart(${{i}})" class="p-2 rounded-md text-destructive hover:bg-destructive/10 transition-colors"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
-      </div>
-    `).join('');
-    lucide.createIcons();
-    
-    const subtotal = S.cart.reduce((sum, item) => sum + item.price * item.qty, 0);
-    const gst = Math.round(subtotal * 0.18);
-    if($('#cart-subtotal')) $('#cart-subtotal').textContent = `₹${{subtotal.toLocaleString('en-IN')}}`;
-    if($('#cart-gst')) $('#cart-gst').textContent = `₹${{gst.toLocaleString('en-IN')}}`;
-    if($('#cart-total')) $('#cart-total').textContent = `₹${{(subtotal + gst).toLocaleString('en-IN')}}`;
-  }}
-
-  function showToast(msg) {{
-    const t = $('#toast'); if (!t) return;
-    t.innerHTML = `<i data-lucide="check-circle-2" class="w-5 h-5 text-green-400"></i> ${{msg}}`;
-    lucide.createIcons();
-    t.classList.remove('translate-y-full', 'opacity-0');
-    clearTimeout(t._tid); 
-    t._tid = setTimeout(() => t.classList.add('translate-y-full', 'opacity-0'), 3500);
-  }}
-
-  function initFAQ() {{
-    $$('.faq-item').forEach((item, i) => {{
-      const btn = item.querySelector('.faq-q');
-      const ans = item.querySelector('.faq-answer');
-      const icon = item.querySelector('.faq-icon');
-      if(!btn || !ans) return;
-      on(btn, 'click', () => {{
-        const isOpen = S.openFaq === i;
-        $$('.faq-answer').forEach(a => {{ a.style.maxHeight = '0px'; a.style.opacity = '0'; }});
-        $$('.faq-icon').forEach(ic => ic.style.transform = 'rotate(0deg)');
-        S.openFaq = isOpen ? -1 : i;
-        if (!isOpen) {{ ans.style.maxHeight = ans.scrollHeight + 'px'; ans.style.opacity = '1'; }}
-        if (!isOpen && icon) icon.style.transform = 'rotate(180deg)';
-      }});
-    }});
-  }}
-
-  function initTabs() {{
-    $$('.tab-btn').forEach(btn => on(btn, 'click', (e) => {{
-      const group = btn.closest('.tabs-container');
-      if(!group) return;
-      const target = btn.dataset.tabTarget;
-      $$('.tab-btn', group).forEach(b => b.classList.remove('border-primary', 'text-foreground'));
-      $$('.tab-btn', group).forEach(b => b.classList.add('border-transparent', 'text-muted-foreground'));
-      btn.classList.remove('border-transparent', 'text-muted-foreground');
-      btn.classList.add('border-primary', 'text-foreground');
-      
-      $$('.tab-panel', group).forEach(p => p.classList.add('hidden'));
-      $(`.tab-panel[data-tab-id="${{target}}"]`, group)?.classList.remove('hidden');
-    }}));
-  }}
-
-  document.addEventListener("DOMContentLoaded", () => {{
-    lucide.createIcons();
-    initNavbar();
-    initFAQ();
-    initTabs();
-    
-    $$('[data-thecee-id="nav-home"]').forEach(el => on(el, 'click', () => goTo('home')));
-    $$('[data-thecee-id="nav-products"]').forEach(el => on(el, 'click', () => goTo('product')));
-    $$('[data-thecee-id="nav-cart"]').forEach(el => on(el, 'click', () => goTo('cart')));
-    
-    $$('[data-thecee-id="add-to-cart"]').forEach(el => on(el, 'click', () => {{
-      const name = el.dataset.productName || 'Premium License';
-      const price = parseInt(el.dataset.productPrice || '999');
-      addToCart(name, price);
-    }}));
-
-    $$('[data-thecee-id="checkout-form"]').forEach(el => on(el, 'submit', (e) => {{ 
-      e.preventDefault(); 
-      if(S.cart.length === 0) return showToast("Your cart is empty!");
-      S.cart = []; renderCart();
-      goTo('confirmation'); 
-    }}));
-    
-    renderCart();
-  }});
-</script>
+4. TheCee automatically injects full SPA JavaScript (goTo, addToCart, renderCart, initNavbar,
+   showToast, initFAQ, initTabs, Lucide integration). Just wire up your HTML elements with the
+   correct CSS classes and data attributes above — no need to write the JS yourself.
 
 ═══════════════════════════════════════════════════════════
 CONTENT STANDARDS

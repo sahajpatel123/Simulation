@@ -18,6 +18,7 @@ from app.core.prompts import (
     UI_GENERATION_SYSTEM,
     UI_REFINE_PROMPT_TEMPLATE,
     UI_REFINE_SYSTEM,
+    validate_generated_html,
 )
 from app.api.v1.common import get_owned_project
 from app.models.generated_ui import GeneratedUI
@@ -35,6 +36,52 @@ _PDF_200 = {200: {"description": "PDF file", "content": {"application/pdf": {}}}
 
 ALLOWED_CDNS = ["tailwindcss", "cdn.tailwindcss"]
 TAILWIND_CDN = '<script src="https://cdn.tailwindcss.com"></script>'
+
+
+def _load_conductor_results(
+    run: UISimulationRun,
+) -> tuple[dict[str, dict[str, dict]], list[dict[str, Any]], str]:
+    """Load conductor results from cached run data, avoiding recomputation.
+
+    Returns (cluster_results, cluster_list, product_type_str).
+    Falls back to fresh Conductor run if cache is incomplete.
+    """
+    from app.simulation.clusters.registry import ClusterRegistry
+    from app.simulation.conductor import Conductor
+    from app.simulation.product_type import ProductType
+
+    cached = run.conductor_result_json or {}
+
+    if cached.get("cluster_results"):
+        cluster_results = cached["cluster_results"]
+        registry = ClusterRegistry()
+        cluster_list = [
+            {"cluster_id": c.cluster_id, "name": c.name, "population_weight": c.population_weight}
+            for c in registry.all_clusters()
+        ]
+        product_type_str = cached.get("product_type", "saas")
+        return cluster_results, cluster_list, product_type_str
+
+    # Fallback: run fresh Conductor
+    product_type_str = (run.results_json or {}).get("product_type", "saas")
+    try:
+        pt = ProductType(product_type_str)
+    except Exception:
+        pt = ProductType.SAAS
+    conductor = Conductor()
+    cond_result = conductor.run(
+        agents=[], env_params={"product_type": pt.value}, assumptions=[], product_type=pt,
+    )
+    cluster_results = {
+        cid: {name: {"metrics": o.metrics, "flags": o.flags} for name, o in arch.items()}
+        for cid, arch in cond_result.cluster_results.items()
+    }
+    registry = ClusterRegistry()
+    cluster_list = [
+        {"cluster_id": c.cluster_id, "name": c.name, "population_weight": c.population_weight}
+        for c in registry.all_clusters()
+    ]
+    return cluster_results, cluster_list, product_type_str
 
 
 def _new_preview_token() -> str:
@@ -271,6 +318,42 @@ window.addEventListener('load',function(){
     return html + script
 
 
+_UI_JS_BOILERPLATE = """<script id="thecee-app">
+const S={page:'home',cart:[],plan:'monthly',navOpen:false,openFaq:-1,qty:1,activeThumb:0};
+const $=s=>document.querySelector(s);const $$=s=>document.querySelectorAll(s);
+const on=(el,ev,fn)=>el?.addEventListener(ev,fn);
+function goTo(p){$$('.page').forEach(x=>x.classList.remove('active'));$(`[data-page="${p}"]`)?.classList.add('active');window.scrollTo({top:0,behavior:'smooth'});S.page=p;if(S.navOpen)closeDrawer();}
+function initNavbar(){const n=$('#main-nav');window.addEventListener('scroll',()=>n?.classList.toggle('shadow-sm',scrollY>10),{passive:true});on($('#menu-btn'),'click',()=>{S.navOpen=!S.navOpen;$('#mobile-drawer')?.classList.toggle('translate-x-full',!S.navOpen);$('#drawer-overlay')?.classList.toggle('opacity-0',!S.navOpen);$('#drawer-overlay')?.classList.toggle('pointer-events-none',!S.navOpen);});on($('#drawer-overlay'),'click',closeDrawer);}
+function closeDrawer(){S.navOpen=false;$('#mobile-drawer')?.classList.add('translate-x-full');$('#drawer-overlay')?.classList.add('opacity-0','pointer-events-none');}
+function addToCart(n,p){const e=S.cart.find(i=>i.name===n);if(e)e.qty+=S.qty;else S.cart.push({name:n,price:p,qty:S.qty});renderCart();showToast(n+' added to cart!');}
+function removeFromCart(i){S.cart.splice(i,1);renderCart();}
+function renderCart(){const b=$('#cart-count');const c=S.cart.reduce((s,i)=>s+i.qty,0);if(b){b.textContent=c;b.style.display=c?'flex':'none';}
+const l=$('#cart-list');if(!l)return;if(!S.cart.length){l.innerHTML='<div class="p-12 text-center text-muted-foreground bg-secondary/30 rounded-xl border border-border">Your cart is empty.</div>';return;}
+l.innerHTML=S.cart.map((i,idx)=>'<div class="flex items-center justify-between py-4 border-b border-border"><div><div class="font-medium text-foreground text-lg">'+i.name+'</div><div class="text-sm text-muted-foreground mt-1">Qty: '+i.qty+' × ₹'+i.price.toLocaleString('en-IN')+'</div></div><button onclick="removeFromCart('+idx+')" class="p-2 rounded-md text-destructive hover:bg-destructive/10 transition-colors"><i data-lucide="trash-2" class="w-5 h-5"></i></button></div>').join('');lucide.createIcons();
+const sub=S.cart.reduce((s,i)=>s+i.price*i.qty,0);const gst=Math.round(sub*0.18);
+if($('#cart-subtotal'))$('#cart-subtotal').textContent='₹'+sub.toLocaleString('en-IN');
+if($('#cart-gst'))$('#cart-gst').textContent='₹'+gst.toLocaleString('en-IN');
+if($('#cart-total'))$('#cart-total').textContent='₹'+(sub+gst).toLocaleString('en-IN');}
+function showToast(m){const t=$('#toast');if(!t)return;t.innerHTML='<i data-lucide="check-circle-2" class="w-5 h-5 text-green-400"></i> '+m;lucide.createIcons();t.classList.remove('translate-y-full','opacity-0');clearTimeout(t._tid);t._tid=setTimeout(()=>t.classList.add('translate-y-full','opacity-0'),3500);}
+function initFAQ(){$$('.faq-item').forEach((item,i)=>{const b=item.querySelector('.faq-q');const a=item.querySelector('.faq-answer');const ic=item.querySelector('.faq-icon');if(!b||!a)return;on(b,'click',()=>{const o=S.openFaq===i;$$('.faq-answer').forEach(x=>{x.style.maxHeight='0px';x.style.opacity='0';});$$('.faq-icon').forEach(x=>x.style.transform='rotate(0deg)');S.openFaq=o?-1:i;if(!o){a.style.maxHeight=a.scrollHeight+'px';a.style.opacity='1';}if(!o&&ic)ic.style.transform='rotate(180deg)';});});}
+function initTabs(){$$('.tab-btn').forEach(btn=>on(btn,'click',(e)=>{const g=btn.closest('.tabs-container');if(!g)return;const t=btn.dataset.tabTarget;$$('.tab-btn',g).forEach(b=>b.classList.remove('border-primary','text-foreground'));$$('.tab-btn',g).forEach(b=>b.classList.add('border-transparent','text-muted-foreground'));btn.classList.remove('border-transparent','text-muted-foreground');btn.classList.add('border-primary','text-foreground');$$('.tab-panel',g).forEach(p=>p.classList.add('hidden'));$(`.tab-panel[data-tab-id="${t}"]`,g)?.classList.remove('hidden');}));}
+document.addEventListener("DOMContentLoaded",()=>{lucide.createIcons();initNavbar();initFAQ();initTabs();$$('[data-thecee-id="nav-home"]').forEach(el=>on(el,'click',()=>goTo('home')));$$('[data-thecee-id="nav-products"]').forEach(el=>on(el,'click',()=>goTo('product')));$$('[data-thecee-id="nav-cart"]').forEach(el=>on(el,'click',()=>goTo('cart')));$$('[data-thecee-id="add-to-cart"]').forEach(el=>on(el,'click',()=>{const n=el.dataset.productName||'Premium License';const p=parseInt(el.dataset.productPrice||'999');addToCart(n,p);}));$$('[data-thecee-id="checkout-form"]').forEach(el=>on(el,'submit',(e)=>{e.preventDefault();if(S.cart.length===0)return showToast("Your cart is empty!");S.cart=[];renderCart();goTo('confirmation');}));renderCart();});
+</script>"""
+
+
+def _inject_js_boilerplate(html: str) -> str:
+    """Inject TheCee SPA JavaScript boilerplate before </body>.
+
+    Kept server-side so Claude doesn't have to reproduce ~140 lines of JS
+    every generation, making the prompt shorter and output more reliable.
+    """
+    if re.search(r'<script\b[^>]*\bid=["\']thecee-app["\']', html):
+        return html
+    if re.search(r"</body\s*>", html, re.IGNORECASE):
+        return re.sub(r"</body\s*>", _UI_JS_BOILERPLATE + "</body>", html, count=1, flags=re.IGNORECASE)
+    return html + _UI_JS_BOILERPLATE
+
+
 def _build_safe_html(raw: str, css_template: str = "") -> str:
     """Coerce raw model output into a self-contained, valid prototype document.
 
@@ -289,6 +372,10 @@ def _build_safe_html(raw: str, css_template: str = "") -> str:
     doc = _ensure_cdns(doc)
     doc = _ensure_tracking_ids(doc)
     doc = _inject_enhancements(doc)
+    doc = _inject_js_boilerplate(doc)
+    is_valid, msg = validate_generated_html(doc)
+    if not is_valid:
+        logger.warning("[UI] Generated HTML validation: %s", msg)
     return doc
 
 
@@ -787,9 +874,6 @@ async def get_channel_attribution(
     current_user: User = Depends(get_current_user),
 ):
     from app.simulation.channel_attribution import ChannelAttributionEngine
-    from app.simulation.clusters.registry import ClusterRegistry
-    from app.simulation.conductor import Conductor
-    from app.simulation.product_type import ProductType
 
     project = get_owned_project(db, current_user.id, project_id)
 
@@ -809,35 +893,7 @@ async def get_channel_attribution(
     if not run.generated_ui_id:
         raise HTTPException(status_code=400, detail="Run has no generated UI")
 
-    product_type_str = (run.results_json or {}).get("product_type", "saas")
-    try:
-        pt = ProductType(product_type_str)
-    except Exception:
-        pt = ProductType.SAAS
-
-    registry = ClusterRegistry()
-    conductor = Conductor()
-    cond_result = conductor.run(
-        agents=[],
-        env_params={"product_type": pt.value},
-        assumptions=[],
-        product_type=pt,
-    )
-    conductor_results = {
-        cid: {
-            name: {"metrics": out.metrics, "flags": out.flags}
-            for name, out in arch.items()
-        }
-        for cid, arch in cond_result.cluster_results.items()
-    }
-    cluster_list = [
-        {
-            "cluster_id": c.cluster_id,
-            "name": c.name,
-            "population_weight": c.population_weight,
-        }
-        for c in registry.all_clusters()
-    ]
+    conductor_results, cluster_list, product_type_str = _load_conductor_results(run)
 
     engine = ChannelAttributionEngine()
     result = engine.generate(
@@ -861,9 +917,6 @@ async def get_retention_churn(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from app.simulation.clusters.registry import ClusterRegistry
-    from app.simulation.conductor import Conductor
-    from app.simulation.product_type import ProductType
     from app.simulation.retention_churn import RetentionChurnEngine
 
     project = get_owned_project(db, current_user.id, project_id)
@@ -884,35 +937,7 @@ async def get_retention_churn(
     if not run.generated_ui_id:
         raise HTTPException(status_code=400, detail="Run has no generated UI")
 
-    product_type_str = (run.results_json or {}).get("product_type", "saas")
-    try:
-        pt = ProductType(product_type_str)
-    except Exception:
-        pt = ProductType.SAAS
-
-    registry = ClusterRegistry()
-    conductor = Conductor()
-    cond_result = conductor.run(
-        agents=[],
-        env_params={"average_order_value": aov, "product_type": pt.value},
-        assumptions=[],
-        product_type=pt,
-    )
-    conductor_results = {
-        cid: {
-            name: {"metrics": out.metrics, "flags": out.flags}
-            for name, out in arch_outputs.items()
-        }
-        for cid, arch_outputs in cond_result.cluster_results.items()
-    }
-    cluster_list = [
-        {
-            "cluster_id": c.cluster_id,
-            "name": c.name,
-            "population_weight": c.population_weight,
-        }
-        for c in registry.all_clusters()
-    ]
+    conductor_results, cluster_list, product_type_str = _load_conductor_results(run)
 
     engine = RetentionChurnEngine()
     result = engine.generate(
@@ -936,10 +961,7 @@ async def get_infra_scaling(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from app.simulation.clusters.registry import ClusterRegistry
-    from app.simulation.conductor import Conductor
     from app.simulation.infra_scaling import InfraScalingEngine
-    from app.simulation.product_type import ProductType
     from app.simulation.retention_churn import RetentionChurnEngine
 
     project = get_owned_project(db, current_user.id, project_id)
@@ -963,34 +985,7 @@ async def get_infra_scaling(
     product_type_str = (run.results_json or {}).get("product_type", "saas")
     overall_cr = (run.results_json or {}).get("overall_conversion_rate", 0.05)
 
-    try:
-        pt = ProductType(product_type_str)
-    except Exception:
-        pt = ProductType.SAAS
-
-    registry = ClusterRegistry()
-    conductor = Conductor()
-    cond_result = conductor.run(
-        agents=[],
-        env_params={"product_type": pt.value},
-        assumptions=[],
-        product_type=pt,
-    )
-    conductor_results = {
-        cid: {
-            name: {"metrics": out.metrics, "flags": out.flags}
-            for name, out in arch.items()
-        }
-        for cid, arch in cond_result.cluster_results.items()
-    }
-    cluster_list = [
-        {
-            "cluster_id": c.cluster_id,
-            "name": c.name,
-            "population_weight": c.population_weight,
-        }
-        for c in registry.all_clusters()
-    ]
+    conductor_results, cluster_list, product_type_str = _load_conductor_results(run)
 
     retention_engine = RetentionChurnEngine()
     retention_result = retention_engine.generate(
@@ -1059,34 +1054,7 @@ async def get_simulation_report_pdf(
     aov = float(results_json.get("aov", 999))
     overall_cr = float(results_json.get("overall_conversion_rate", 0.05))
 
-    try:
-        pt = ProductType(product_type_str)
-    except Exception:
-        pt = ProductType.SAAS
-
-    registry = ClusterRegistry()
-    conductor = Conductor()
-    cond_result = conductor.run(
-        agents=[],
-        env_params={"average_order_value": aov, "product_type": pt.value},
-        assumptions=[],
-        product_type=pt,
-    )
-    conductor_results = {
-        cid: {
-            name: {"metrics": out.metrics, "flags": out.flags}
-            for name, out in arch.items()
-        }
-        for cid, arch in cond_result.cluster_results.items()
-    }
-    cluster_list = [
-        {
-            "cluster_id": c.cluster_id,
-            "name": c.name,
-            "population_weight": c.population_weight,
-        }
-        for c in registry.all_clusters()
-    ]
+    conductor_results, cluster_list, product_type_str = _load_conductor_results(run)
 
     rows = db.execute(
         text(

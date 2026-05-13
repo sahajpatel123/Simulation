@@ -160,6 +160,10 @@ def run_ui_simulation(
 
             if decision.tier == AgentTier.MICRO or serve_url is None:
                 session_data = _micro_evaluate(cid, agent_profile, arch_dicts, n)
+            elif decision.tier == AgentTier.SUPERVISOR:
+                sup_n = max(1, int(n * 1.5))
+                browser_batches.append((cid, cluster, agent_profile, arch_dicts, sup_n))
+                continue
             else:
                 browser_batches.append((cid, cluster, agent_profile, arch_dicts, n))
                 continue
@@ -210,9 +214,16 @@ def run_ui_simulation(
             for cid, cluster, agent_profile, session_data in asyncio.run(_run_browser_batches()):
                 converted = sum(1 for s in session_data if s.get("converted"))
                 cr = converted / max(len(session_data), 1)
+                tier = AgentTier.SUPERVISOR.value if "SUPERVISOR" in str(cid) or cid in {
+                    "senior_enterprise_decision_maker", "enterprise_procurement_gatekeeper",
+                    "mid_market_it_decision_maker", "technical_founder_evaluator",
+                    "non_technical_co_founder_buyer", "health_hardware_skeptic",
+                    "health_hardware_enthusiast", "wealthy_health_conscious_buyer",
+                    "anxiety_driven_researcher", "considered_hardware_researcher",
+                } else AgentTier.WORKER.value
                 cluster_results[cid] = {
                     "cluster_name": cluster.name,
-                    "tier": AgentTier.WORKER.value,
+                    "tier": tier,
                     "agents_run": len(session_data),
                     "converted": converted,
                     "conversion_rate": round(cr, 4),
@@ -252,8 +263,17 @@ def run_ui_simulation(
         if run_row:
             run_row.status = "COMPLETED"
             run_row.results_json = results
+            cluster_results_json: dict[str, dict] = {}
+            for cid, arch_outputs in conductor_result.cluster_results.items():
+                cluster_results_json[cid] = {
+                    name: {"metrics": o.metrics, "flags": o.flags}
+                    for name, o in arch_outputs.items()
+                }
             run_row.conductor_result_json = {
                 "cluster_breakdown": conductor_result.cluster_breakdown,
+                "cluster_results": cluster_results_json,
+                "architect_accountability": conductor_result.architect_accountability,
+                "product_type": conductor_result.product_type.value,
             }
             run_row.completed_at = datetime.now(timezone.utc)
         db.commit()

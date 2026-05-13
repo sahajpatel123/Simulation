@@ -146,6 +146,10 @@ class BrowserSession:
                 await el.click(timeout=3000)
                 events.append({"action": "click", "target": thecee_id, "t": round(time.time() - start, 2)})
 
+                # Track page navigation (SPA page switches)
+                if thecee_id in ("nav-home", "nav-products", "nav-cart", "nav-checkout"):
+                    pages_visited += 1
+
                 # Detect conversion
                 current_url = self._page.url
                 if any(x in current_url.lower() for x in ["confirm", "success", "thank"]):
