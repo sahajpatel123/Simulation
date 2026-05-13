@@ -13,10 +13,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (!pathname) return
-    if (pathname.match(/^\/project\/\d+\/prototype\/?$/)) {
+    if (pathname.match(/^\/project\/\d+\/(?:prototype|briefs)\/?$/)) {
       setSidebarCollapsed(true)
     }
-    if (pathname.match(/^\/project\/\d+\/hardware\/?$/)) {
+    if (pathname.match(/^\/project\/\d+\/(?:hardware|briefh)\/?$/)) {
       setSidebarCollapsed(true)
     }
   }, [pathname])

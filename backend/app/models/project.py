@@ -1,6 +1,7 @@
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -42,6 +43,10 @@ class Project(Base, TimestampMixin):
     stress_test_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     interventions_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     competitive_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    brief_positioning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    brief_features_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    brief_hook: Mapped[str | None] = mapped_column(Text, nullable=True)
+    brief_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user: Mapped["User"] = relationship("User", back_populates="projects")
     assumptions: Mapped[list["Assumption"]] = relationship(

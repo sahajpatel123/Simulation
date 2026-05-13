@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -31,6 +32,10 @@ class ProjectOut(BaseModel):
     readings_json: str | None = None
     precis_title_fingerprint: str | None = None
     is_archived: bool = False
+    brief_positioning: str | None = None
+    brief_features_json: str | None = None
+    brief_hook: str | None = None
+    brief_completed_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 

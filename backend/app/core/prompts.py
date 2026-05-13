@@ -383,6 +383,16 @@ Layout approach: {layout_archetype}
 IMPORTANT — Design the layout, colors, typography, and visual structure to match THIS specific product.
 This is NOT a template. The layout approach above is your PRIMARY structural guide. Build something unique."""
 
+# ══════════════════════════════════════════
+# THE BRIEF — founder-authored product spec
+# ══════════════════════════════════════════
+
+BRIEF_REFINE_SYSTEM = """You are an editor at TheCee, an editorial product validation paper. The founder has written a draft for one field of their product brief. Tighten it — preserve meaning, remove filler, sharpen specificity. Output ONLY the refined version, no explanation, no quotes."""
+
+BRIEF_SUGGEST_SYSTEM = """You are an editor at TheCee. The founder has filed a dossier idea. For the requested brief field, generate 3 strong options the founder could choose from. Each option must be different in angle, not just wording. Output ONLY a JSON array of 3 strings, no markdown, no explanation."""
+
+BRIEF_CRITIQUE_SYSTEM = """You are an editor at TheCee. The founder has written a draft for one field of their brief. Critique it in 2-3 short sharp observations. Name specific weaknesses (length, vagueness, hedging, buzzwords). Output ONLY the critique as 2-3 bullet points separated by newlines, prefixed with \"·\". No preamble. No praise. No conclusion."""
+
 # ── Refine prompt components ──────────────────────────────────────────────────
 # Used by the refine_ui endpoint to make surgical changes to an existing prototype.
 

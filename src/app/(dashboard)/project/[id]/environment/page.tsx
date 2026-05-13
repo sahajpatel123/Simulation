@@ -173,8 +173,8 @@ export default function EnvironmentPage() {
             className="kicker"
             style={{ color: 'var(--red)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
           >
-            <Link href={`/project/${idStr}/prototype`} style={{ color: 'inherit', textDecoration: 'none' }}>
-              Reader&apos;s proof
+            <Link href={`/project/${idStr}/${project?.dossier_axis === 'hardware' ? 'briefh' : 'briefs'}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+              {project?.dossier_axis === 'hardware' ? 'Hardware brief' : 'The Brief'}
             </Link>
             <span style={{ color: 'var(--ink-tertiary)' }}>·</span>
             <span style={{ color: 'var(--ink-secondary)' }}>Press room</span>
@@ -375,8 +375,8 @@ export default function EnvironmentPage() {
             flexWrap: 'wrap',
           }}
         >
-          <Link href={`/project/${idStr}/prototype`} className="btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <ArrowLeft style={{ width: 14, height: 14 }} /> Reader&apos;s proof
+          <Link href={`/project/${idStr}/${project?.dossier_axis === 'hardware' ? 'briefh' : 'briefs'}`} className="btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <ArrowLeft style={{ width: 14, height: 14 }} /> {project?.dossier_axis === 'hardware' ? 'Hardware brief' : 'The Brief'}
           </Link>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button

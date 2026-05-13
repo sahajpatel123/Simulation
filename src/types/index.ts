@@ -39,6 +39,10 @@ export interface Project {
   readings_json?: string | null
   /** Title snapshot after last display-précis mint (rename detection). */
   precis_title_fingerprint?: string | null
+  brief_positioning?: string | null
+  brief_features_json?: string | null
+  brief_hook?: string | null
+  brief_completed_at?: string | null
   is_archived?: boolean
   created_at?: string
   updated_at?: string

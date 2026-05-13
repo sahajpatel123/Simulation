@@ -765,7 +765,7 @@ export default function ProjectPage() {
           {/* ─── Prototype plate (software) / Hardware atelier — gated by dossier_axis for new dossiers ─── */}
           {showSoftwarePlate && (
             <Link
-              href={`/project/${projectId}/prototype`}
+              href={`/project/${projectId}/briefs`}
               style={{
                 textDecoration: "none",
                 color: "var(--ink)",
@@ -849,7 +849,7 @@ export default function ProjectPage() {
 
           {showHardwareFolio && (
             <Link
-              href={`/project/${projectId}/hardware`}
+              href={`/project/${projectId}/briefh`}
               style={{
                 textDecoration: "none",
                 color: "var(--ink)",

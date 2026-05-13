@@ -115,71 +115,144 @@ def _backfill_display_precis_lazy(db: Session, project: Project) -> None:
             project.precis = line
         project.precis_title_fingerprint = _title_fingerprint(project.title)
         db.add(project)
-        db.commit()
-        db.refresh(project)
-    except Exception as exc:
-        logger.warning(
-            "lazy précis backfill failed for project %s: %s",
-            project.id,
-            exc,
-        )
-        db.rollback()
-@router.post(
-    "",
-    response_model=ProjectOut,
-    status_code=status.HTTP_201_CREATED,
-    summary="Create a new project (dossier)",
+    db.commit()
+    db.refresh(project)
+    return ProjectOut.model_validate(project)
+
+
+# ── THE BRIEF — founder-authored product spec ────────────────────────────
+
+
+@router.get(
+    "/{project_id}/brief",
+    summary="Get the current brief for a dossier",
 )
-def create_project(
-    payload: ProjectCreate,
+def get_brief(
+    project_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    intake_mode = payload.intake_mode or "IDEA"
-    mvp_list = payload.mvp_feature_list or []
-    enriched_description, _ = build_enriched_description(
-        description=payload.description,
-        intake_mode=intake_mode,
-        landing_page_url=payload.landing_page_url,
-        mvp_feature_list=mvp_list if mvp_list else None,
-        existing_product_description=payload.existing_product_description,
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
     )
-    project = Project(
-        user_id=current_user.id,
-        title=payload.title,
-        description=enriched_description,
-        status="DRAFT",
-        intake_mode=intake_mode,
-        landing_page_url=payload.landing_page_url,
-        mvp_feature_list=mvp_list if mvp_list else None,
-        existing_product_description=payload.existing_product_description,
-        dossier_axis=payload.dossier_axis,
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    import json as _json
+
+    features = []
+    if project.brief_features_json:
+        try:
+            features = _json.loads(project.brief_features_json)
+        except Exception:
+            features = []
+    return {
+        "positioning": project.brief_positioning or "",
+        "features": features,
+        "hook": project.brief_hook or "",
+        "completed_at": (
+            project.brief_completed_at.isoformat() if project.brief_completed_at else None
+        ),
+    }
+
+
+@router.put(
+    "/{project_id}/brief",
+    summary="Save brief fields for a dossier",
+)
+def save_brief(
+    project_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    import json as _json
+
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
     )
-    db.add(project)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    positioning = (payload.get("positioning") or "").strip()
+    features = payload.get("features") or []
+    hook = (payload.get("hook") or "").strip()
+    mark_complete = bool(payload.get("mark_complete", False))
+
+    if positioning is not None:
+        project.brief_positioning = positioning
+    if isinstance(features, list):
+        project.brief_features_json = _json.dumps([str(f).strip() for f in features if str(f).strip()][:5])
+    if hook is not None:
+        project.brief_hook = hook
+
+    if mark_complete and positioning and hook:
+        project.brief_completed_at = datetime.now(timezone.utc)
+
     db.commit()
     db.refresh(project)
-    # Fire-and-store dossier intelligence
-    try:
-        from app.services.dossier_intelligence import generate_both, readings_json_payload
 
-        intel = generate_both(project.title, project.description)
-        project.precis = intel["precis"] or None
-        project.readings_json = readings_json_payload(
-            intel["readings"],
-            intel.get("ledger") or {},
-        )
-        project.precis_title_fingerprint = _title_fingerprint(project.title)
-        db.commit()
-        db.refresh(project)
-    except Exception as _exc:
-        logger.warning(
-            "%s precis/readings on create failed: %s",
-            __name__,
-            _exc,
-            exc_info=True,
-        )
+    features_out = []
+    if project.brief_features_json:
+        try:
+            features_out = _json.loads(project.brief_features_json)
+        except Exception:
+            features_out = []
 
-    return ProjectOut.model_validate(project)
+    return {
+        "positioning": project.brief_positioning or "",
+        "features": features_out,
+        "hook": project.brief_hook or "",
+        "completed_at": (
+            project.brief_completed_at.isoformat() if project.brief_completed_at else None
+        ),
+    }
+
+
+@router.post(
+    "/{project_id}/brief/assist",
+    summary="Get editorial assistance for a brief field",
+)
+def assist_brief(
+    project_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.services.brief_assistance import assist
+
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    mode = payload.get("mode")
+    field = payload.get("field")
+    current_value = payload.get("current_value", "")
+
+    if mode not in ("refine", "suggest", "critique"):
+        raise HTTPException(status_code=400, detail="Invalid mode")
+    if field not in ("positioning", "features", "hook"):
+        raise HTTPException(status_code=400, detail="Invalid field")
+
+    result = assist(
+        mode=mode,
+        field=field,
+        dossier_title=project.title,
+        dossier_description=project.description,
+        current_value=current_value,
+    )
+
+    if not result:
+        raise HTTPException(status_code=500, detail="Assistance generation failed")
+
+    return result
 
 
 @router.get(

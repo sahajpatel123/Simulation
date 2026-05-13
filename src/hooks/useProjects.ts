@@ -152,6 +152,48 @@ export const useArchiveProject = () => {
   )
 }
 
+// ── THE BRIEF ─────────────────────────────────────────────────────────
+
+
+export interface BriefData {
+  positioning: string
+  features: string[]
+  hook: string
+  completed_at: string | null
+}
+
+export function useBrief(projectId: number | string) {
+  return useQuery<BriefData>({
+    queryKey: ['brief', projectId],
+    queryFn: async () => (await api.get(`/projects/${projectId}/brief`)).data,
+    enabled: !!projectId,
+  })
+}
+
+export function useSaveBrief(projectId: number | string) {
+  const qc = useQueryClient()
+  return useCeeMutation(
+    (payload: {
+      positioning?: string
+      features?: string[]
+      hook?: string
+      mark_complete?: boolean
+    }) => api.put(`/projects/${projectId}/brief`, payload).then((r) => r.data),
+    [['brief', projectId], ['project', projectId]],
+  )
+}
+
+export function useBriefAssist(projectId: number | string) {
+  return useCeeMutation(
+    (payload: {
+      mode: 'refine' | 'suggest' | 'critique'
+      field: 'positioning' | 'features' | 'hook'
+      current_value?: string
+    }) => api.post(`/projects/${projectId}/brief/assist`, payload).then((r) => r.data),
+    [],
+  )
+}
+
 export const useUnarchiveProject = () => {
   const qc = useQueryClient()
   return useCeeMutation(
