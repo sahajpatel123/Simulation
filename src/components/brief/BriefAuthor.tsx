@@ -125,8 +125,8 @@ function FieldWithMarks({
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: '1fr 220px',
-        gap: 32,
+        gridTemplateColumns: '1fr 340px',
+        gap: 40,
         marginBottom: 56,
         position: 'relative',
       }}
@@ -272,7 +272,7 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
       {/* Main content — desaturates in press room mode */}
       <div
         style={{
-          maxWidth: 1180, margin: '0 auto', padding: '60px 48px 120px',
+          maxWidth: 1280, margin: '0 auto', padding: '60px 48px 120px',
           filter: pressRoomMode ? 'saturate(0.85)' : 'saturate(1)',
           transition: 'filter 320ms ease 50ms',
         }}
@@ -335,7 +335,7 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
             )}
             {helpResult?.field === 'positioning' && (
               <div style={{ marginTop: 12, position: 'relative' }}>
-                <MarginConnector visible={true} />
+                {helpResult.mode !== 'suggest' && <MarginConnector visible={true} />}
                 <MarginNote mode={helpResult.mode as 'refine' | 'suggest' | 'critique'} result={helpResult.result} onClose={() => setHelpResult(null)} onApply={(v) => applySuggestion('positioning', v)} />
               </div>
             )}
@@ -373,7 +373,7 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
             )}
             {helpResult?.field === 'features' && (
               <div style={{ marginTop: 12, position: 'relative' }}>
-                <MarginConnector visible={true} />
+                {helpResult.mode !== 'suggest' && <MarginConnector visible={true} />}
                 <MarginNote mode={helpResult.mode as 'refine' | 'suggest' | 'critique'} result={helpResult.result} onClose={() => setHelpResult(null)} onApply={applyFeatureSuggestion} />
               </div>
             )}
@@ -405,7 +405,7 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
             )}
             {helpResult?.field === 'hook' && (
               <div style={{ marginTop: 12, position: 'relative' }}>
-                <MarginConnector visible={true} />
+                {helpResult.mode !== 'suggest' && <MarginConnector visible={true} />}
                 <MarginNote mode={helpResult.mode as 'refine' | 'suggest' | 'critique'} result={helpResult.result} onClose={() => setHelpResult(null)} onApply={(v) => applySuggestion('hook', v)} />
               </div>
             )}
