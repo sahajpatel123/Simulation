@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useBrief, useBriefAssist, useSaveBrief } from '@/hooks/useProjects'
 import { MarginMark, CritiqueUnderline } from './PressRoomMarks'
 import MarginNote from './MarginNote'
+import MarginConnector from './MarginConnector'
 
 type Variant = 'software' | 'hardware'
 type FieldName = 'positioning' | 'features' | 'hook'
@@ -237,6 +238,19 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
     setHelpResult(null)
   }
 
+  const applyFeatureSuggestion = (value: string) => {
+    setFeatures((prev) => {
+      const next = [...prev]
+      const emptyIdx = next.findIndex((f) => !f.trim())
+      if (emptyIdx !== -1) {
+        next[emptyIdx] = value
+      } else {
+        next[2] = value
+      }
+      return next
+    })
+  }
+
   return (
     <div>
       {/* Fixed HELP button — top right */}
@@ -320,7 +334,10 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
               </>
             )}
             {helpResult?.field === 'positioning' && (
-              <div style={{ marginTop: 12 }}><MarginNote mode={helpResult.mode as 'refine' | 'suggest' | 'critique'} result={helpResult.result} onClose={() => setHelpResult(null)} onApply={(v) => applySuggestion('positioning', v)} /></div>
+              <div style={{ marginTop: 12, position: 'relative' }}>
+                <MarginConnector visible={true} />
+                <MarginNote mode={helpResult.mode as 'refine' | 'suggest' | 'critique'} result={helpResult.result} onClose={() => setHelpResult(null)} onApply={(v) => applySuggestion('positioning', v)} />
+              </div>
             )}
           </div>
         </div>
@@ -355,7 +372,10 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
               </>
             )}
             {helpResult?.field === 'features' && (
-              <div style={{ marginTop: 12 }}><MarginNote mode={helpResult.mode as 'refine' | 'suggest' | 'critique'} result={helpResult.result} onClose={() => setHelpResult(null)} onApply={() => {}} /></div>
+              <div style={{ marginTop: 12, position: 'relative' }}>
+                <MarginConnector visible={true} />
+                <MarginNote mode={helpResult.mode as 'refine' | 'suggest' | 'critique'} result={helpResult.result} onClose={() => setHelpResult(null)} onApply={applyFeatureSuggestion} />
+              </div>
             )}
           </div>
         </div>
@@ -384,7 +404,10 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
               </>
             )}
             {helpResult?.field === 'hook' && (
-              <div style={{ marginTop: 12 }}><MarginNote mode={helpResult.mode as 'refine' | 'suggest' | 'critique'} result={helpResult.result} onClose={() => setHelpResult(null)} onApply={(v) => applySuggestion('hook', v)} /></div>
+              <div style={{ marginTop: 12, position: 'relative' }}>
+                <MarginConnector visible={true} />
+                <MarginNote mode={helpResult.mode as 'refine' | 'suggest' | 'critique'} result={helpResult.result} onClose={() => setHelpResult(null)} onApply={(v) => applySuggestion('hook', v)} />
+              </div>
             )}
           </div>
         </div>
