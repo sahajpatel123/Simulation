@@ -272,7 +272,7 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
       {/* Main content — desaturates in press room mode */}
       <div
         style={{
-          maxWidth: 1280, margin: '0 auto', padding: '60px 48px 120px',
+          maxWidth: 1360, margin: '0 auto', padding: '60px 48px 120px',
           filter: pressRoomMode ? 'saturate(0.85)' : 'saturate(1)',
           transition: 'filter 320ms ease 50ms',
         }}
@@ -306,7 +306,7 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
         </div>
 
         {/* === POSITIONING === */}
-        <div className="field-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: 32, marginBottom: 56, position: 'relative' }}>
+        <div className="field-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 420px', gap: 40, marginBottom: 56, position: 'relative' }}>
           <div style={{ position: 'relative' }}>
             <FieldLabel label={copy.positioningLabel} hint={copy.positioningHint} />
             {activeField === 'positioning' ? (
@@ -343,7 +343,7 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
         </div>
 
         {/* === FEATURES === */}
-        <div className="field-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: 32, marginBottom: 56, position: 'relative' }}>
+        <div className="field-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 420px', gap: 40, marginBottom: 56, position: 'relative' }}>
           <div style={{ position: 'relative' }}>
             <FieldLabel label={copy.featuresLabel} hint={copy.featuresHint} />
             {activeField === 'features' ? (
@@ -381,7 +381,7 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
         </div>
 
         {/* === HOOK === */}
-        <div className="field-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: 32, marginBottom: 56, position: 'relative' }}>
+        <div className="field-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 420px', gap: 40, marginBottom: 56, position: 'relative' }}>
           <div style={{ position: 'relative' }}>
             <FieldLabel label={copy.hookLabel} hint={copy.hookHint} />
             {activeField === 'hook' ? (
