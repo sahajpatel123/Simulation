@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { useBrief, useBriefAssist, useSaveBrief } from '@/hooks/useProjects'
+import { MarginMark, CritiqueUnderline } from './PressRoomMarks'
+import MarginNote from './MarginNote'
 
 type Variant = 'software' | 'hardware'
 type FieldName = 'positioning' | 'features' | 'hook'
@@ -60,8 +62,6 @@ const COPY: Record<Variant, BriefCopy> = {
   },
 }
 
-/* ─── Inline styles for reused patterns ──────────────────── */
-
 const s = {
   mono: 'var(--font-mono), monospace',
   serif: 'var(--font-serif), serif',
@@ -71,272 +71,81 @@ const s = {
   cream: '#f5f0e8',
 }
 
-/* ─── Loading ellipsis animation ─────────────────────────── */
+/* ─── Field input label ─────────────────────────────────── */
+
+function FieldLabel({ label, hint }: { label: string; hint: string }) {
+  return (
+    <>
+      <div style={{ fontFamily: s.mono, fontSize: 10, letterSpacing: '0.22em', color: s.ink, marginBottom: 6 }}>{label}</div>
+      <div style={{ fontFamily: s.serif, fontStyle: 'italic', fontSize: 14, color: s.mute, marginBottom: 16 }}>{hint}</div>
+    </>
+  )
+}
+
+/* ─── Loading state ─────────────────────────────────────── */
 
 function LoadingDots() {
   return (
     <span style={{ display: 'inline-flex', gap: 2, verticalAlign: 'middle' }}>
-      <span style={{
-        width: 4, height: 4, borderRadius: '50%', background: s.red, display: 'inline-block',
-        animation: 'blink 1.2s ease-in-out infinite',
-      }} />
-      <span style={{
-        width: 4, height: 4, borderRadius: '50%', background: s.red, display: 'inline-block',
-        animation: 'blink 1.2s ease-in-out infinite',
-        animationDelay: '0.2s',
-      }} />
-      <span style={{
-        width: 4, height: 4, borderRadius: '50%', background: s.red, display: 'inline-block',
-        animation: 'blink 1.2s ease-in-out infinite',
-        animationDelay: '0.4s',
-      }} />
+      <span style={{ width: 4, height: 4, borderRadius: '50%', background: s.red, display: 'inline-block', animation: 'blink 1.2s ease-in-out infinite' }} />
+      <span style={{ width: 4, height: 4, borderRadius: '50%', background: s.red, display: 'inline-block', animation: 'blink 1.2s ease-in-out infinite', animationDelay: '0.2s' }} />
+      <span style={{ width: 4, height: 4, borderRadius: '50%', background: s.red, display: 'inline-block', animation: 'blink 1.2s ease-in-out infinite', animationDelay: '0.4s' }} />
     </span>
   )
 }
 
-/* ─── Editor loading panel (replaces field while waiting) ── */
-
 function EditorLoading() {
   return (
-    <div style={{
-      marginTop: 18, padding: 24, border: '0.5px solid #c0392b', opacity: 0,
-      animation: 'fadeSlideIn 0.35s ease-out forwards',
-    }}>
-      <div style={{
-        fontFamily: s.mono, fontSize: 9, letterSpacing: '0.22em', color: s.red, marginBottom: 14,
-      }}>
+    <div style={{ marginTop: 18, padding: 24, border: '0.5px solid #c0392b', opacity: 0, animation: 'fadeSlideIn 0.35s ease-out forwards' }}>
+      <div style={{ fontFamily: s.mono, fontSize: 9, letterSpacing: '0.22em', color: s.red, marginBottom: 14 }}>
         THE EDITOR IS READING <LoadingDots />
       </div>
-      <div style={{
-        width: '60%', height: 10, background: 'rgba(192,57,43,0.06)', borderRadius: 2,
-        marginBottom: 8, animation: 'pulseWidth 1.8s ease-in-out infinite',
-      }} />
-      <div style={{
-        width: '40%', height: 10, background: 'rgba(192,57,43,0.04)', borderRadius: 2,
-        animation: 'pulseWidth 1.8s ease-in-out infinite',
-        animationDelay: '0.3s',
-      }} />
+      <div style={{ width: '60%', height: 10, background: 'rgba(192,57,43,0.06)', borderRadius: 2, marginBottom: 8, animation: 'pulseWidth 1.8s ease-in-out infinite' }} />
+      <div style={{ width: '40%', height: 10, background: 'rgba(192,57,43,0.04)', borderRadius: 2, animation: 'pulseWidth 1.8s ease-in-out infinite', animationDelay: '0.3s' }} />
     </div>
   )
 }
 
-/* ─── Help dropdown — minimal editorial card ─────────────── */
+/* ─── Field section with margin marks ───────────────────── */
 
-function HelpDropdown({
-  open, onToggle, onAssist, disabled,
+function FieldWithMarks({
+  field, children, pressRoomMode, markDefs, critiqueDelay, helpResult, onClearResult, onApplySuggestion,
 }: {
-  open: boolean
-  onToggle: () => void
-  onAssist: (field: FieldName, mode: 'refine' | 'suggest' | 'critique') => void
-  disabled?: boolean
-}) {
-  const items: { field: FieldName; label: string; action: string; mode: 'refine' | 'suggest' | 'critique' }[] = [
-    { field: 'positioning', label: 'Positioning', action: 'Refine draft', mode: 'refine' },
-    { field: 'positioning', label: 'Positioning', action: 'Suggest options', mode: 'suggest' },
-    { field: 'positioning', label: 'Positioning', action: 'Critique writing', mode: 'critique' },
-    { field: 'features', label: 'Features', action: 'Suggest options', mode: 'suggest' },
-    { field: 'features', label: 'Features', action: 'Refine draft', mode: 'refine' },
-    { field: 'features', label: 'Features', action: 'Critique writing', mode: 'critique' },
-    { field: 'hook', label: 'Hook', action: 'Refine draft', mode: 'refine' },
-    { field: 'hook', label: 'Hook', action: 'Suggest options', mode: 'suggest' },
-    { field: 'hook', label: 'Hook', action: 'Critique writing', mode: 'critique' },
-  ]
-
-  return (
-    <div style={{ position: 'relative' }}>
-      <button onClick={onToggle} disabled={disabled}
-        style={{
-          background: 'transparent', color: s.ink,
-          border: 'none', borderBottom: '1px solid #1a1a1a',
-          padding: '0 0 2px', fontFamily: s.mono, fontSize: 10,
-          letterSpacing: '0.12em', cursor: disabled ? 'not-allowed' : 'pointer',
-          opacity: disabled ? 0.3 : 1, transition: 'opacity 0.2s',
-        }}
-      >
-        {disabled ? 'EDITING...' : open ? '[ close help ]' : '[ + help ]'}
-      </button>
-
-      {open && !disabled && (
-        <div style={{
-          position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 280, zIndex: 20,
-          opacity: 0, animation: 'fadeSlideIn 0.18s ease-out forwards',
-        }}>
-          <div style={{
-            background: '#fff', border: '1px solid #1a1a1a',
-            boxShadow: '0 12px 32px rgba(0,0,0,0.10)',
-            borderRadius: 4, overflow: 'hidden',
-          }}>
-            {/* Options */}
-            {items.map((item, i) => (
-              <button key={i} onClick={() => { onAssist(item.field, item.mode); onToggle(); }}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  width: '100%', padding: '10px 14px',
-                  background: 'transparent', border: 'none',
-                  borderBottom: i < items.length - 1 ? '1px solid #eee' : 'none',
-                  cursor: 'pointer', textAlign: 'left',
-                  transition: 'background 0.1s',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f0e8' }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
-              >
-                {/* Field tag */}
-                <span style={{
-                  fontFamily: s.mono, fontSize: 8, letterSpacing: '0.12em',
-                  color: s.red, whiteSpace: 'nowrap', minWidth: 70,
-                }}>
-                  {item.label.toUpperCase()}
-                </span>
-                {/* Action */}
-                <span style={{
-                  fontFamily: s.serif, fontSize: 13, color: s.ink, lineHeight: 1.3,
-                }}>
-                  {item.action}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function HelpResultPanel({
-  result, onClose, onApply,
-}: {
-  result: { mode: string; result: string | string[] }
-  onClose: () => void
-  onApply: (value: string) => void
-}) {
-  return (
-    <div style={{
-      marginTop: 18, padding: 18, background: 'rgba(192,57,43,0.04)',
-      border: '0.5px solid #c0392b',
-      opacity: 0, animation: 'fadeSlideIn 0.35s ease-out forwards',
-    }}>
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12,
-      }}>
-        <span style={{
-          fontFamily: s.mono, fontSize: 9, letterSpacing: '0.22em', color: s.red,
-        }}>
-          EDITOR&apos;S {result.mode.toUpperCase()}
-        </span>
-        <button onClick={onClose} style={{
-          background: 'transparent', border: 'none', cursor: 'pointer',
-          fontFamily: s.mono, fontSize: 9, letterSpacing: '0.20em', color: s.mute,
-        }}>DISMISS</button>
-      </div>
-      {Array.isArray(result.result) ? (
-        <div>
-          {result.result.map((opt, i, arr) => (
-            <div key={i} style={{
-              paddingBottom: 12, marginBottom: 12,
-              borderBottom: i < arr.length - 1 ? '0.5px solid rgba(0,0,0,0.07)' : 'none',
-              display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16,
-              opacity: 0, animation: 'fadeSlideIn 0.3s ease-out forwards',
-              animationDelay: `${i * 0.12}s`,
-            }}>
-              <span style={{
-                fontFamily: s.serif, fontSize: 17, color: s.ink, lineHeight: 1.5,
-              }}>{opt}</span>
-              <button onClick={() => onApply(opt)} style={{
-                background: s.ink, color: s.cream, border: 'none',
-                padding: '6px 12px', fontFamily: s.mono, fontSize: 9,
-                letterSpacing: '0.18em', cursor: 'pointer', flexShrink: 0,
-                transition: 'opacity 0.15s ease',
-              }}
-                onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
-                onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
-              >
-                USE THIS
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div style={{
-          fontFamily: s.serif, fontSize: 16, color: s.ink, lineHeight: 1.55, whiteSpace: 'pre-wrap',
-        }}>{result.result}</div>
-      )}
-      {!Array.isArray(result.result) && (
-        <button onClick={() => onApply(result.result as string)} style={{
-          marginTop: 14, background: s.ink, color: s.cream, border: 'none',
-          padding: '8px 16px', fontFamily: s.mono, fontSize: 9,
-          letterSpacing: '0.20em', cursor: 'pointer',
-          transition: 'opacity 0.15s ease',
-        }}
-          onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
-          onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
-        >
-          APPLY THIS VERSION
-        </button>
-      )}
-    </div>
-  )
-}
-
-/* ─── Brief field wrapper ────────────────────────────────── */
-
-function BriefField({
-  label, hint, placeholder, value, onChange, multiline,
-  helpResult, onApplySuggestion, onClearResult,
-  isWaiting, isFieldLoading,
-}: {
-  label: string
-  hint: string
-  placeholder: string
-  value: string
-  onChange: (v: string) => void
-  multiline?: boolean
+  field: FieldName
+  children: React.ReactNode
+  pressRoomMode: boolean
+  markDefs: { label: string; hint: string; mode: 'refine' | 'suggest'; delay: number }[]
+  critiqueDelay: number
   helpResult: { mode: string; result: string | string[] } | null
-  onApplySuggestion: (v: string) => void
   onClearResult: () => void
-  isWaiting: boolean
-  isFieldLoading: boolean
+  onApplySuggestion: (v: string) => void
 }) {
   return (
-    <div style={{ marginBottom: 56 }}>
-      <div style={{
-        fontFamily: s.mono, fontSize: 10, letterSpacing: '0.22em', color: s.ink, marginBottom: 6,
-      }}>{label}</div>
-      <div style={{
-        fontFamily: s.serif, fontStyle: 'italic', fontSize: 14, color: s.mute, marginBottom: 16,
-      }}>{hint}</div>
-      {isFieldLoading ? (
-        <EditorLoading />
-      ) : (
-        <>
-          {multiline ? (
-            <textarea value={value} onChange={(e) => onChange(e.target.value)}
-              placeholder={placeholder} rows={2}
-              style={{
-                width: '100%', background: 'transparent', border: 'none',
-                borderBottom: '0.5px solid #1a1a1a',
-                fontFamily: s.serif, fontSize: 22, color: s.ink,
-                padding: '8px 0', outline: 'none', resize: 'none',
-                boxSizing: 'border-box',
-                opacity: isWaiting ? 0.4 : 1,
-                transition: 'opacity 0.2s ease',
-              }} />
-          ) : (
-            <input value={value} onChange={(e) => onChange(e.target.value)}
-              placeholder={placeholder}
-              style={{
-                width: '100%', background: 'transparent', border: 'none',
-                borderBottom: '0.5px solid #1a1a1a',
-                fontFamily: s.serif, fontSize: 22, color: s.ink,
-                padding: '8px 0', outline: 'none', boxSizing: 'border-box',
-                opacity: isWaiting ? 0.4 : 1,
-                transition: 'opacity 0.2s ease',
-              }} />
-          )}
-          {helpResult && (
-            <HelpResultPanel result={helpResult} onClose={onClearResult} onApply={onApplySuggestion} />
-          )}
-        </>
-      )}
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 220px',
+        gap: 32,
+        marginBottom: 56,
+        position: 'relative',
+      }}
+    >
+      {/* Left — field content */}
+      <div style={{ position: 'relative' }}>
+        {children}
+      </div>
+
+      {/* Right — margin column */}
+      <div style={{ position: 'relative' }}>
+        {pressRoomMode && markDefs.map((m) => (
+          <MarginMark key={m.mode} field={field} label={m.label} hint={m.hint} onClick={() => {}} delay={m.delay} visible={pressRoomMode} />
+        ))}
+        {helpResult && (
+          <div style={{ marginTop: 12 }}>
+            <MarginNote mode={helpResult.mode as 'refine' | 'suggest' | 'critique'} result={helpResult.result} onClose={onClearResult} onApply={onApplySuggestion} />
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -359,7 +168,7 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
   const [positioning, setPositioning] = useState('')
   const [features, setFeatures] = useState<string[]>(['', '', ''])
   const [hook, setHook] = useState('')
-  const [helpOpen, setHelpOpen] = useState(false)
+  const [pressRoomMode, setPressRoomMode] = useState(false)
   const [activeField, setActiveField] = useState<FieldName | null>(null)
   const [helpResult, setHelpResult] = useState<{
     field: FieldName
@@ -429,145 +238,175 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
   }
 
   return (
-    <div style={{ maxWidth: 880, margin: '0 auto', padding: '60px 48px 120px', background: s.cream, minHeight: '100vh' }}>
-      {/* Global animation keyframes injected once */}
-      <style>{`
-        @keyframes blink { 0%,100%{opacity:0.3} 50%{opacity:1} }
-        @keyframes fadeSlideIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes pulseWidth { 0%,100%{width:60%} 50%{width:75%} }
-      `}</style>
+    <div>
+      {/* Fixed HELP button — top right */}
+      <button
+        onClick={() => { setPressRoomMode(!pressRoomMode); setActiveField(null); setHelpResult(null) }}
+        style={{
+          position: 'fixed', top: 28, right: 36, zIndex: 200,
+          background: pressRoomMode ? s.red : s.ink,
+          color: s.cream, border: 'none',
+          padding: '12px 22px', fontFamily: s.mono, fontSize: 10,
+          letterSpacing: '0.22em', cursor: 'pointer',
+          transition: 'background 0.3s ease, padding 0.3s ease, box-shadow 0.3s ease',
+          boxShadow: pressRoomMode ? '0 4px 18px rgba(192,57,43,0.30)' : '0 2px 8px rgba(0,0,0,0.12)',
+        }}
+      >
+        {pressRoomMode ? '✕ CLOSE THE PROOF' : '— HELP'}
+      </button>
 
-      {/* TOP LABEL */}
-      <div style={{ fontFamily: s.mono, fontSize: 10, letterSpacing: '0.22em', color: s.red, marginBottom: 24 }}>
-        — {copy.topLabel}
-      </div>
+      {/* Main content — desaturates in press room mode */}
+      <div
+        style={{
+          maxWidth: 1180, margin: '0 auto', padding: '60px 48px 120px',
+          filter: pressRoomMode ? 'saturate(0.85)' : 'saturate(1)',
+          transition: 'filter 320ms ease 50ms',
+        }}
+      >
+        <style>{`
+          @keyframes blink { 0%,100%{opacity:0.3} 50%{opacity:1} }
+          @keyframes fadeSlideIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+          @keyframes pulseWidth { 0%,100%{width:60%} 50%{width:75%} }
+          @media (max-width: 1100px) { .field-grid { grid-template-columns: 1fr !important; } }
+        `}</style>
 
-      {/* PAGE TITLE + GET HELP (single dropdown, top-right) */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+        {/* TOP LABEL */}
+        <div style={{ fontFamily: s.mono, fontSize: 10, letterSpacing: '0.22em', color: s.red, marginBottom: 24 }}>
+          — {copy.topLabel}
+        </div>
+
+        {/* PAGE TITLE */}
         <h1 style={{
           fontFamily: s.serif, fontSize: 'clamp(48px, 6vw, 76px)', fontWeight: 700,
-          lineHeight: 0.95, letterSpacing: '-0.03em', color: s.ink, margin: 0,
+          lineHeight: 0.95, letterSpacing: '-0.03em', color: s.ink, margin: 0, marginBottom: 12,
         }}>{copy.pageTitle}</h1>
-        <HelpDropdown
-          open={helpOpen}
-          onToggle={() => setHelpOpen(!helpOpen)}
-          onAssist={handleAssist}
-          disabled={isWaiting}
-          activeField={activeField}
-        />
-      </div>
-      <p style={{
-        fontFamily: s.serif, fontStyle: 'italic', fontSize: 20, color: s.mute,
-        margin: 0, marginBottom: 56,
-      }}>{copy.pageSubtitle}</p>
+        <p style={{
+          fontFamily: s.serif, fontStyle: 'italic', fontSize: 20, color: s.mute,
+          margin: 0, marginBottom: 56,
+        }}>{copy.pageSubtitle}</p>
 
-      {/* DOSSIER REFERENCE */}
-      <div style={{ paddingBottom: 24, marginBottom: 48, borderBottom: '0.5px solid #1a1a1a' }}>
-        <div style={{ fontFamily: s.mono, fontSize: 9, letterSpacing: '0.24em', color: s.mute, marginBottom: 8 }}>
-          ON FILE
+        {/* DOSSIER REFERENCE */}
+        <div style={{ paddingBottom: 24, marginBottom: 48, borderBottom: '0.5px solid #1a1a1a' }}>
+          <div style={{ fontFamily: s.mono, fontSize: 9, letterSpacing: '0.24em', color: s.mute, marginBottom: 8 }}>ON FILE</div>
+          <div style={{ fontFamily: s.serif, fontStyle: 'italic', fontSize: 16, color: s.ink }}>{dossierTitle}</div>
         </div>
-        <div style={{ fontFamily: s.serif, fontStyle: 'italic', fontSize: 16, color: s.ink }}>
-          {dossierTitle}
-        </div>
-      </div>
 
-      {/* FIELD: POSITIONING */}
-      <BriefField
-        label={copy.positioningLabel} hint={copy.positioningHint}
-        placeholder={copy.positioningPlaceholder} value={positioning} onChange={setPositioning}
-        multiline
-        helpResult={helpResult?.field === 'positioning' ? helpResult : null}
-        onApplySuggestion={(v) => applySuggestion('positioning', v)}
-        onClearResult={() => setHelpResult(null)}
-        isWaiting={isWaiting}
-        isFieldLoading={activeField === 'positioning'}
-      />
-
-      {/* FIELD: FEATURES */}
-      <div style={{ marginBottom: 56 }}>
-        <div style={{
-          fontFamily: s.mono, fontSize: 10, letterSpacing: '0.22em', color: s.ink, marginBottom: 6,
-        }}>{copy.featuresLabel}</div>
-        <div style={{
-          fontFamily: s.serif, fontStyle: 'italic', fontSize: 14, color: s.mute, marginBottom: 16,
-        }}>{copy.featuresHint}</div>
-        {activeField === 'features' ? (
-          <EditorLoading />
-        ) : (
-          <>
-            {[0, 1, 2].map((i) => (
-              <div key={i} style={{
-                display: 'grid', gridTemplateColumns: '32px 1fr',
-                alignItems: 'baseline', gap: 16, marginBottom: 12,
-                opacity: isWaiting ? 0.4 : 1, transition: 'opacity 0.2s ease',
-              }}>
-                <span style={{
-                  fontFamily: s.mono, fontSize: 11, color: s.red, letterSpacing: '0.18em',
-                }}>{String(i + 1).padStart(2, '0')}</span>
-                <input value={features[i]}
-                  onChange={(e) => { const n = [...features]; n[i] = e.target.value; setFeatures(n) }}
-                  placeholder={copy.featuresPlaceholder}
+        {/* === POSITIONING === */}
+        <div className="field-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: 32, marginBottom: 56, position: 'relative' }}>
+          <div style={{ position: 'relative' }}>
+            <FieldLabel label={copy.positioningLabel} hint={copy.positioningHint} />
+            {activeField === 'positioning' ? (
+              <EditorLoading />
+            ) : (
+              <>
+                <textarea value={positioning} onChange={(e) => setPositioning(e.target.value)}
+                  placeholder={copy.positioningPlaceholder} rows={2}
                   style={{
-                    width: '100%', background: 'transparent', border: 'none',
-                    borderBottom: '0.5px solid #1a1a1a',
-                    fontFamily: s.serif, fontSize: 18, color: s.ink,
-                    padding: '8px 0', outline: 'none', boxSizing: 'border-box',
+                    width: '100%', background: 'transparent', border: 'none', borderBottom: '0.5px solid #1a1a1a',
+                    fontFamily: s.serif, fontSize: 22, color: s.ink, padding: '8px 0', outline: 'none', resize: 'none',
+                    boxSizing: 'border-box', opacity: isWaiting ? 0.4 : 1, transition: 'opacity 0.2s ease',
                   }} />
-              </div>
-            ))}
-            {helpResult?.field === 'features' && (
-              <HelpResultPanel result={helpResult} onClose={() => setHelpResult(null)} onApply={() => {}} />
+                {pressRoomMode && (
+                  <CritiqueUnderline visible={pressRoomMode} delay={260} onClick={() => handleAssist('positioning', 'critique')} />
+                )}
+              </>
             )}
-          </>
-        )}
-      </div>
-
-      {/* FIELD: HOOK */}
-      <BriefField
-        label={copy.hookLabel} hint={copy.hookHint}
-        placeholder={copy.hookPlaceholder} value={hook} onChange={setHook}
-        helpResult={helpResult?.field === 'hook' ? helpResult : null}
-        onApplySuggestion={(v) => applySuggestion('hook', v)}
-        onClearResult={() => setHelpResult(null)}
-        isWaiting={isWaiting}
-        isFieldLoading={activeField === 'hook'}
-      />
-
-      {/* ERROR MESSAGE */}
-      {errorMsg && (
-        <div style={{
-          marginTop: 16, padding: 12, background: 'rgba(192,57,43,0.06)',
-          border: '0.5px solid #c0392b', fontFamily: s.mono, fontSize: 10,
-          letterSpacing: '0.12em', color: s.red, lineHeight: 1.5,
-          opacity: 0, animation: 'fadeSlideIn 0.3s ease-out forwards',
-        }}>
-          {errorMsg}
+          </div>
+          <div style={{ position: 'relative' }}>
+            {pressRoomMode && (
+              <>
+                <MarginMark field="positioning" label="refine" hint="tighten your sentence" onClick={() => handleAssist('positioning', 'refine')} delay={180} visible={pressRoomMode} />
+                <MarginMark field="positioning" label="suggest" hint="three fresh angles" onClick={() => handleAssist('positioning', 'suggest')} delay={220} visible={pressRoomMode} />
+              </>
+            )}
+            {helpResult?.field === 'positioning' && (
+              <div style={{ marginTop: 12 }}><MarginNote mode={helpResult.mode as 'refine' | 'suggest' | 'critique'} result={helpResult.result} onClose={() => setHelpResult(null)} onApply={(v) => applySuggestion('positioning', v)} /></div>
+            )}
+          </div>
         </div>
-      )}
 
-      {/* CTA */}
-      <div style={{ marginTop: 64, display: 'flex', gap: 12 }}>
-        <button onClick={() => handleSave(true)} disabled={!isComplete || saveBrief.isPending}
-          style={{
-            background: isComplete ? s.red : '#bbb', color: s.cream,
-            border: 'none', padding: '16px 28px',
-            fontFamily: s.mono, fontSize: 11, letterSpacing: '0.20em',
-            cursor: isComplete ? 'pointer' : 'not-allowed',
-            transition: 'background 0.25s ease, opacity 0.2s ease',
-            opacity: saveBrief.isPending ? 0.6 : 1,
-          }}>
-          {saveBrief.isPending ? 'FILING...' : isComplete ? copy.ctaReady : copy.ctaNotReady}
-        </button>
-        <button onClick={() => handleSave(false)} disabled={saveBrief.isPending}
-          style={{
-            background: 'transparent', color: s.ink, border: '0.5px solid #1a1a1a',
-            padding: '16px 24px', fontFamily: s.mono, fontSize: 11,
-            letterSpacing: '0.20em', cursor: 'pointer',
-            opacity: saveBrief.isPending ? 0.4 : 1,
-            transition: 'opacity 0.2s ease',
-          }}>
-          SAVE DRAFT
-        </button>
+        {/* === FEATURES === */}
+        <div className="field-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: 32, marginBottom: 56, position: 'relative' }}>
+          <div style={{ position: 'relative' }}>
+            <FieldLabel label={copy.featuresLabel} hint={copy.featuresHint} />
+            {activeField === 'features' ? (
+              <EditorLoading />
+            ) : (
+              <>
+                {[0, 1, 2].map((i) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '32px 1fr', alignItems: 'baseline', gap: 16, marginBottom: 12, opacity: isWaiting ? 0.4 : 1, transition: 'opacity 0.2s ease' }}>
+                    <span style={{ fontFamily: s.mono, fontSize: 11, color: s.red, letterSpacing: '0.18em' }}>{String(i + 1).padStart(2, '0')}</span>
+                    <input value={features[i]} onChange={(e) => { const n = [...features]; n[i] = e.target.value; setFeatures(n) }}
+                      placeholder={copy.featuresPlaceholder}
+                      style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '0.5px solid #1a1a1a', fontFamily: s.serif, fontSize: 18, color: s.ink, padding: '8px 0', outline: 'none', boxSizing: 'border-box' }} />
+                  </div>
+                ))}
+                {pressRoomMode && (
+                  <CritiqueUnderline visible={pressRoomMode} delay={340} onClick={() => handleAssist('features', 'critique')} />
+                )}
+              </>
+            )}
+          </div>
+          <div style={{ position: 'relative' }}>
+            {pressRoomMode && (
+              <>
+                <MarginMark field="features" label="suggest" hint="three defining specs" onClick={() => handleAssist('features', 'suggest')} delay={260} visible={pressRoomMode} />
+                <MarginMark field="features" label="refine" hint="sharpen the list" onClick={() => handleAssist('features', 'refine')} delay={300} visible={pressRoomMode} />
+              </>
+            )}
+            {helpResult?.field === 'features' && (
+              <div style={{ marginTop: 12 }}><MarginNote mode={helpResult.mode as 'refine' | 'suggest' | 'critique'} result={helpResult.result} onClose={() => setHelpResult(null)} onApply={() => {}} /></div>
+            )}
+          </div>
+        </div>
+
+        {/* === HOOK === */}
+        <div className="field-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: 32, marginBottom: 56, position: 'relative' }}>
+          <div style={{ position: 'relative' }}>
+            <FieldLabel label={copy.hookLabel} hint={copy.hookHint} />
+            {activeField === 'hook' ? (
+              <EditorLoading />
+            ) : (
+              <>
+                <input value={hook} onChange={(e) => setHook(e.target.value)} placeholder={copy.hookPlaceholder}
+                  style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '0.5px solid #1a1a1a', fontFamily: s.serif, fontSize: 22, color: s.ink, padding: '8px 0', outline: 'none', boxSizing: 'border-box', opacity: isWaiting ? 0.4 : 1, transition: 'opacity 0.2s ease' }} />
+                {pressRoomMode && (
+                  <CritiqueUnderline visible={pressRoomMode} delay={420} onClick={() => handleAssist('hook', 'critique')} />
+                )}
+              </>
+            )}
+          </div>
+          <div style={{ position: 'relative' }}>
+            {pressRoomMode && (
+              <>
+                <MarginMark field="hook" label="refine" hint="make it cut" onClick={() => handleAssist('hook', 'refine')} delay={340} visible={pressRoomMode} />
+                <MarginMark field="hook" label="suggest" hint="three headline options" onClick={() => handleAssist('hook', 'suggest')} delay={380} visible={pressRoomMode} />
+              </>
+            )}
+            {helpResult?.field === 'hook' && (
+              <div style={{ marginTop: 12 }}><MarginNote mode={helpResult.mode as 'refine' | 'suggest' | 'critique'} result={helpResult.result} onClose={() => setHelpResult(null)} onApply={(v) => applySuggestion('hook', v)} /></div>
+            )}
+          </div>
+        </div>
+
+        {/* ERROR */}
+        {errorMsg && (
+          <div style={{ marginTop: 16, padding: 12, background: 'rgba(192,57,43,0.06)', border: '0.5px solid #c0392b', fontFamily: s.mono, fontSize: 10, letterSpacing: '0.12em', color: s.red, lineHeight: 1.5, opacity: 0, animation: 'fadeSlideIn 0.3s ease-out forwards' }}>
+            {errorMsg}
+          </div>
+        )}
+
+        {/* CTA */}
+        <div style={{ marginTop: 64, display: 'flex', gap: 12 }}>
+          <button onClick={() => handleSave(true)} disabled={!isComplete || saveBrief.isPending}
+            style={{ background: isComplete ? s.red : '#bbb', color: s.cream, border: 'none', padding: '16px 28px', fontFamily: s.mono, fontSize: 11, letterSpacing: '0.20em', cursor: isComplete ? 'pointer' : 'not-allowed', transition: 'background 0.25s ease, opacity 0.2s ease', opacity: saveBrief.isPending ? 0.6 : 1 }}>
+            {saveBrief.isPending ? 'FILING...' : isComplete ? copy.ctaReady : copy.ctaNotReady}
+          </button>
+          <button onClick={() => handleSave(false)} disabled={saveBrief.isPending}
+            style={{ background: 'transparent', color: s.ink, border: '0.5px solid #1a1a1a', padding: '16px 24px', fontFamily: s.mono, fontSize: 11, letterSpacing: '0.20em', cursor: 'pointer', opacity: saveBrief.isPending ? 0.4 : 1, transition: 'opacity 0.2s ease' }}>
+            SAVE DRAFT
+          </button>
+        </div>
       </div>
     </div>
   )
