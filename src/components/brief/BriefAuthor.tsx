@@ -243,13 +243,13 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
       <button
         onClick={() => { setPressRoomMode(!pressRoomMode); setActiveField(null); setHelpResult(null) }}
         style={{
-          position: 'fixed', top: 28, right: 36, zIndex: 200,
+          position: 'fixed', top: 120, right: 36, zIndex: 200,
           background: pressRoomMode ? s.red : s.ink,
           color: s.cream, border: 'none',
           padding: '12px 22px', fontFamily: s.mono, fontSize: 10,
           letterSpacing: '0.22em', cursor: 'pointer',
           transition: 'background 0.3s ease, padding 0.3s ease, box-shadow 0.3s ease',
-          boxShadow: pressRoomMode ? '0 4px 18px rgba(192,57,43,0.30)' : '0 2px 8px rgba(0,0,0,0.12)',
+          boxShadow: pressRoomMode ? '0 6px 24px rgba(192,57,43,0.35)' : '0 4px 14px rgba(0,0,0,0.18)',
         }}
       >
         {pressRoomMode ? '✕ CLOSE THE PROOF' : '— HELP'}
