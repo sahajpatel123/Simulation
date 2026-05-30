@@ -153,11 +153,6 @@ interface Revision {
   errorMsg?: string
 }
 
-const withPreviewNonce = (htmlPreviewUrl: string): string => {
-  const separator = htmlPreviewUrl.includes('?') ? '&' : '?'
-  return `${htmlPreviewUrl}${separator}preview_nonce=${Date.now()}`
-}
-
 export default function PrototypePage() {
   const params = useParams()
   const router = useRouter()
@@ -190,6 +185,13 @@ export default function PrototypePage() {
   })
 
   useEffect(() => {
+    const latest = uiHistory?.uis?.[0]
+    if (!latest || uiPreviewPath) return
+    setUiPreviewPath(latest.html_preview_url)
+    setGeneratedUiId(latest.id)
+  }, [uiHistory, uiPreviewPath])
+
+  useEffect(() => {
     promptSeededRef.current = false
     setPrompt('')
   }, [projectId])
@@ -207,23 +209,9 @@ export default function PrototypePage() {
       return data
     },
     onSuccess: (data) => {
-      setUiPreviewPath(withPreviewNonce(data.html_preview_url))
+      setUiPreviewPath(data.html_preview_url)
       setGeneratedUiId(data.id)
       setSimStatus(null)
-      qc.setQueryData<GeneratedUIHistoryResponse>(['generated-uis', projectId], (current) => ({
-        uis: [
-          {
-            id: data.id,
-            version: data.version,
-            product_type: data.product_type,
-            html_preview_url: data.html_preview_url,
-            html_content: data.html_content,
-            pages_detected: data.pages_detected,
-            created_at: new Date().toISOString(),
-          },
-          ...(current?.uis ?? []).filter((ui) => ui.id !== data.id),
-        ],
-      }))
       void qc.invalidateQueries({ queryKey: ['generated-uis', projectId] })
     },
   })
@@ -238,23 +226,9 @@ export default function PrototypePage() {
     },
     onSuccess: (data) => {
       setRevisions(prev => prev.map((r, i) => i === 0 ? { ...r, status: 'applied' as const } : r))
-      setUiPreviewPath(withPreviewNonce(data.html_preview_url))
+      setUiPreviewPath(data.html_preview_url)
       setGeneratedUiId(data.id)
       setEditApplied(true)
-      qc.setQueryData<GeneratedUIHistoryResponse>(['generated-uis', projectId], (current) => ({
-        uis: [
-          {
-            id: data.id,
-            version: data.version,
-            product_type: data.product_type,
-            html_preview_url: data.html_preview_url,
-            html_content: data.html_content,
-            pages_detected: data.pages_detected,
-            created_at: new Date().toISOString(),
-          },
-          ...(current?.uis ?? []).filter((ui) => ui.id !== data.id),
-        ],
-      }))
       void qc.invalidateQueries({ queryKey: ['generated-uis', projectId] })
     },
     onError: (err) => {
@@ -271,14 +245,6 @@ export default function PrototypePage() {
       setSimStatus(`Simulation queued — run #${data.ui_simulation_run_id}`)
     },
   })
-
-  useEffect(() => {
-    const latest = uiHistory?.uis?.[0]
-    if (!latest || generateMutation.isPending || refineMutation.isPending) return
-    if (generatedUiId != null && latest.id < generatedUiId) return
-    setUiPreviewPath((current) => (current?.startsWith(latest.html_preview_url) ? current : withPreviewNonce(latest.html_preview_url)))
-    setGeneratedUiId((current) => (current === latest.id ? current : latest.id))
-  }, [uiHistory, generatedUiId, generateMutation.isPending, refineMutation.isPending])
 
   useEffect(() => {
     if (!project?.description?.trim() || promptSeededRef.current) return
@@ -1091,69 +1057,78 @@ export default function PrototypePage() {
 
                   <button
                     type="button"
-                    onClick={handleExitEdit}
+                    onClick={() => setView(v => v === 'desktop' ? 'mobile' : 'desktop')}
                     style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 8,
-                      padding: '10px 24px', borderRadius: 30,
-                      background: editApplied ? 'var(--red)' : '#1a1714',
-                      color: '#fff', border: 'none', fontFamily: 'var(--font-body)',
-                      fontSize: 10, fontWeight: 800, letterSpacing: '0.15em',
-                      textTransform: 'uppercase', cursor: 'pointer',
-                      transition: 'all 0.3s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '8px 14px',
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      fontFamily: 'var(--font-body)',
+                      fontSize: 10,
+                      fontWeight: 600,
+                      letterSpacing: '0.12em',
+                      textTransform: 'uppercase',
+                      color: 'var(--ink-secondary)',
                     }}
                   >
-                    {editApplied ? 'Save & Close' : 'Close'}
-                    <Check style={{ width: 12, height: 12 }} />
+                    {view === 'desktop' ? <Monitor style={{ width: 14, height: 14 }} /> : <Smartphone style={{ width: 14, height: 14 }} />}
+                    {view === 'desktop' ? 'Broadsheet' : 'Folio'}
+                  </button>
+
+                  <div style={{ width: 1, height: 20, background: 'var(--border-color)' }} />
+
+                  <button
+                    type="button"
+                    onClick={handleExitEdit}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '8px 14px',
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      fontFamily: 'var(--font-body)',
+                      fontSize: 10,
+                      fontWeight: 600,
+                      letterSpacing: '0.12em',
+                      textTransform: 'uppercase',
+                      color: 'var(--ink-secondary)',
+                    }}
+                  >
+                    <X style={{ width: 14, height: 14 }} />
+                    Exit
                   </button>
                 </div>
 
-                {/* Magical Compositor Glow (Stitch inspired) */}
-                <AnimatePresence>
+                {/* The actual preview */}
+                <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', paddingTop: 60 }}>
                   {refineMutation.isPending && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
+                    <div
                       style={{
-                        position: 'absolute', inset: 0, zIndex: 10,
-                        background: 'radial-gradient(circle at center, rgba(255,255,255,0.7) 0%, rgba(242,236,224,0.4) 100%)',
+                        position: 'absolute',
+                        inset: 0,
+                        zIndex: 10,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 12,
+                        background: 'rgba(242,236,224,0.88)',
                         backdropFilter: 'blur(4px)',
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                       }}
                     >
-                      <motion.div
-                        animate={{ scale: [0.9, 1.1, 0.9], opacity: [0.4, 0.8, 0.4], rotate: [0, 90, 180] }}
-                        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                        style={{ width: 180, height: 180, background: 'conic-gradient(from 0deg, transparent, rgba(192,57,43,0.2), transparent)', borderRadius: '50%', filter: 'blur(10px)', position: 'absolute' }}
-                      />
-                      <Loader2 className="animate-spin" style={{ width: 36, height: 36, color: 'var(--red)', position: 'relative', zIndex: 2 }} />
-                      <h3 className="font-serif" style={{ fontSize: 26, fontStyle: 'italic', fontWeight: 500, color: 'var(--ink)', marginTop: 28, position: 'relative', zIndex: 2 }}>
-                        Stitching layout...
-                      </h3>
-                      <p style={{ fontSize: 11, letterSpacing: '0.24em', textTransform: 'uppercase', color: 'var(--ink-secondary)', fontWeight: 800, fontFamily: 'var(--font-body)', marginTop: 10, position: 'relative', zIndex: 2 }}>
-                        Compositor active
-                      </p>
-                    </motion.div>
+                      <Loader2 className="animate-spin" style={{ width: 22, height: 22, color: 'var(--red)' }} />
+                      <span className="kicker" style={{ color: 'var(--ink-secondary)' }}>
+                        Compositor is re-pressing…
+                      </span>
+                    </div>
                   )}
-                </AnimatePresence>
-
-                {/* The Floating iFrame */}
-                <div style={{ flex: 1, padding: '100px 48px 48px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 5 }}>
-                  <motion.div
-                    animate={{ scale: refineMutation.isPending ? 0.97 : 1, y: refineMutation.isPending ? 10 : 0 }}
-                    transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                    style={{
-                      width: '100%', height: '100%', maxWidth: 1200,
-                      background: '#fff', borderRadius: 16, overflow: 'hidden',
-                      boxShadow: refineMutation.isPending ? '0 12px 30px rgba(0,0,0,0.05)' : '0 30px 80px rgba(0,0,0,0.1), 0 4px 16px rgba(0,0,0,0.06)',
-                      border: '1px solid rgba(0,0,0,0.08)',
-                      display: 'flex', flexDirection: 'column',
-                    }}
-                  >
-                    {previewIframe}
-                  </motion.div>
+                  {previewIframe}
                 </div>
-
               </div>
             </div>
           </motion.div>
