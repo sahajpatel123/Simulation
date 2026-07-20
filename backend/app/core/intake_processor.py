@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+import httpx
+
 from app.core.claude_client import claude_call_with_fallback
 
 # Claim confidence adjustment per intake_mode
@@ -34,8 +36,6 @@ def fetch_landing_page_summary(url: str) -> str:
     Returns a 2-3 sentence summary of product claims.
     """
     try:
-        import httpx
-
         resp = httpx.get(url, timeout=10, follow_redirects=True)
         html = resp.text[:8000]
         text_body = re.sub(r"<[^>]+>", " ", html)
