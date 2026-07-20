@@ -1,9 +1,40 @@
 'use client'
 
 import React, { useRef } from 'react'
-import { motion, useScroll, useTransform, useSpring } from 'framer-motion'
+import { motion, useScroll, useTransform, useSpring, type MotionValue } from 'framer-motion'
 import Link from 'next/link'
 import { ArrowLeft, Target, GitMerge, Activity } from 'lucide-react'
+
+function GridCell({ index, progress }: { index: number; progress: MotionValue<number> }) {
+  const initialY = ((index * 73 + 29) % 201) - 100
+  const initialRotateY = ((index * 47 + 17) % 91) - 45
+  const revealEnd = 0.2 + ((index * 37 + 11) % 50) / 100
+  const y = useTransform(progress, [0, 1], [initialY, 0])
+  const rotateY = useTransform(progress, [0, 1], [initialRotateY, 0])
+  const cellOpacity = useTransform(progress, [0, revealEnd], [0, 1])
+
+  return (
+    <motion.div
+      style={{
+        background: 'var(--paper)',
+        border: '1px solid rgba(26,23,20,0.1)',
+        borderRadius: 16,
+        boxShadow: '0 10px 30px rgba(0,0,0,0.05)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: 'var(--ink)',
+        y,
+        rotateY,
+        opacity: cellOpacity,
+      }}
+    >
+      {index % 3 === 0 ? <Target size={32} color="var(--red)" opacity={0.5} /> :
+       index % 3 === 1 ? <GitMerge size={32} opacity={0.2} /> :
+       <Activity size={32} opacity={0.2} />}
+    </motion.div>
+  )
+}
 
 export default function MethodologyPage() {
   const ref = useRef(null)
@@ -60,26 +91,7 @@ export default function MethodologyPage() {
           transformStyle: 'preserve-3d'
         }}>
           {Array.from({ length: 16 }).map((_, i) => (
-            <motion.div 
-              key={i}
-              style={{
-                background: 'var(--paper)',
-                border: '1px solid rgba(26,23,20,0.1)',
-                borderRadius: 16,
-                boxShadow: '0 10px 30px rgba(0,0,0,0.05)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--ink)',
-                y: useTransform(smoothProgress, [0, 1], [Math.random() * 200 - 100, 0]),
-                rotateY: useTransform(smoothProgress, [0, 1], [Math.random() * 90 - 45, 0]),
-                opacity: useTransform(smoothProgress, [0, 0.2 + Math.random() * 0.5], [0, 1])
-              }}
-            >
-              {i % 3 === 0 ? <Target size={32} color="var(--red)" opacity={0.5} /> : 
-               i % 3 === 1 ? <GitMerge size={32} opacity={0.2} /> : 
-               <Activity size={32} opacity={0.2} />}
-            </motion.div>
+            <GridCell key={i} index={i} progress={smoothProgress} />
           ))}
         </motion.div>
 

@@ -52,7 +52,7 @@ function RadialConstellation({ options, onClose, onApply }: { options: string[];
       <button onClick={onClose} style={{ position: 'absolute', top: 0, right: 0, background: 'transparent', border: 'none', cursor: 'pointer', color: '#999', fontSize: 18, lineHeight: 1, padding: 4, zIndex: 20 }} aria-label="Dismiss">✕</button>
 
       <div style={{ fontFamily: 'var(--font-mono), monospace', fontSize: 8, letterSpacing: '0.28em', color: RED, fontWeight: 600, marginBottom: 6, animation: 'fadeSlide 380ms ease both' }}>
-        ── THE EDITOR'S CONSTELLATION ──
+        ── THE EDITOR’S CONSTELLATION ──
       </div>
       <div style={{ fontFamily: 'var(--font-serif), serif', fontStyle: 'italic', fontSize: 12, color: '#888', marginBottom: 18, animation: 'fadeSlide 420ms ease 60ms both' }}>
         Three angles, drawn outward —

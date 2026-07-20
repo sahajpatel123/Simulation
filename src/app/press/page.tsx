@@ -57,7 +57,7 @@ export default function PressPage() {
           </motion.div>
           <motion.h1 initial="hidden" animate="visible" custom={1} variants={variants} className="font-serif" style={{ fontSize: 'clamp(50px, 8vw, 120px)', fontWeight: 900, lineHeight: 0.9, letterSpacing: '-0.04em', margin: 0 }}>
             The headlines <br />
-            <span style={{ fontStyle: 'italic', color: 'rgba(255,255,255,0.6)' }}>we didn't write.</span>
+            <span style={{ fontStyle: 'italic', color: 'rgba(255,255,255,0.6)' }}>we didn’t write.</span>
           </motion.h1>
         </div>
 
