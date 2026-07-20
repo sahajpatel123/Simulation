@@ -36,6 +36,7 @@ jobs:
       GROK_API_KEY: sk-test-placeholder
       SECRET_KEY: ci-secret-key-not-used
       FRONTEND_URL: http://localhost:3000
+      PYTHONPATH: ${{ github.workspace }}/backend
 
     steps:
       - name: Checkout

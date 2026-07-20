@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from scipy.stats import beta
 
-from backend.app.simulation.profiles import AgentProfileGenerator
+from app.simulation.profiles import AgentProfileGenerator
 
 
 def test_sample_beta_variance_multiplier():
