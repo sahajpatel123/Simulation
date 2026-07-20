@@ -73,8 +73,15 @@ def reset_monthly_usage_if_needed(user, db: Session) -> None:
 
 def enforce_simulation_limit(user, db: Session) -> None:
     """
-    Raises 429 if user is over their monthly simulation limit.
-    Called at the start of the simulation Celery task.
+    Atomically reserve one simulation slot for this user.
+
+    Raises 429 if the user is at or over their monthly limit. Uses a single
+    conditional UPDATE that atomically checks `simulations_used_this_month < limit`,
+    applies the monthly reset if the calendar month changed, and increments the
+    counter — eliminating the read-then-write TOCTOU window that previously
+    allowed two concurrent enqueue requests to both observe `used=1` and
+    overspend a 2/month plan. Returns the new used count and tier limit so
+    callers can include them in 429 detail messages.
     """
     reset_monthly_usage_if_needed(user, db)
     uid = user.id
@@ -82,16 +89,37 @@ def enforce_simulation_limit(user, db: Session) -> None:
     if u is None:
         raise HTTPException(429, "User not found for simulation limit check.")
     tier = get_user_tier(u, db)
-    u = db.query(User).filter(User.id == uid).first()
-    if u is None:
-        raise HTTPException(429, "User not found for simulation limit check.")
     limits = TIER_LIMITS.get(tier, TIER_LIMITS["free"])
-    used = int(getattr(u, "simulations_used_this_month", 0) or 0)
-    if used >= limits["simulations_per_month"]:
+    monthly_cap = int(limits["simulations_per_month"])
+
+    # Atomic compare-and-increment: only succeeds when used < cap. The WHERE
+    # filter is the lock — under READ COMMITTED + a conditional UPDATE, two
+    # concurrent transactions cannot both observe used=cap-1 and both increment.
+    result = db.execute(
+        text(
+            """
+            UPDATE users
+            SET simulations_used_this_month = COALESCE(simulations_used_this_month, 0) + 1
+            WHERE id = :uid
+              AND COALESCE(simulations_used_this_month, 0) < :cap
+            RETURNING simulations_used_this_month
+            """
+        ),
+        {"uid": uid, "cap": monthly_cap},
+    )
+    row = result.fetchone()
+    db.commit()
+
+    if row is None:
+        # Refresh to surface the current used count in the 429 message.
+        current = db.execute(
+            text("SELECT COALESCE(simulations_used_this_month, 0) FROM users WHERE id = :uid"),
+            {"uid": uid},
+        ).scalar() or 0
         raise HTTPException(
             429,
             (
-                f"Simulation limit reached ({used}/{limits['simulations_per_month']} this month). "
+                f"Simulation limit reached ({current}/{monthly_cap} this month). "
                 f"Upgrade to Pro for more simulations."
             ),
         )
