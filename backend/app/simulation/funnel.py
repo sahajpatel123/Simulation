@@ -252,7 +252,12 @@ class FunnelExecutionEngine:
             for i in range(n)
         ]
 
-        logger.info(f"[Funnel] Starting batch: n={n} workers={self.num_workers} seed={seed}")
+        logger.info(
+            "[Funnel] Starting batch: n=%d workers=%d seed=%d",
+            n,
+            self.num_workers,
+            seed,
+        )
 
         raw_results: list[dict[str, Any]] = []
 
@@ -260,12 +265,18 @@ class FunnelExecutionEngine:
             raw_results = [_run_single_agent(a) for a in agent_args]
         else:
             with ProcessPoolExecutor(max_workers=self.num_workers) as executor:
-                futures = {executor.submit(_run_single_agent, a): i for i, a in enumerate(agent_args)}
+                futures = {
+                    executor.submit(_run_single_agent, a): i
+                    for i, a in enumerate(agent_args)
+                }
                 for future in as_completed(futures):
+                    agent_idx = futures[future]
                     try:
                         raw_results.append(future.result())
                     except Exception as exc:
-                        logger.warning(f"[Funnel] Agent {futures[future]} failed: {exc}")
+                        logger.exception(
+                            "[Funnel] Agent %d failed: %s", agent_idx, exc
+                        )
                         raw_results.append(
                             {
                                 "final_state": "ABANDON",
@@ -350,9 +361,12 @@ class FunnelExecutionEngine:
 
         wall_time = time.perf_counter() - t_start
         logger.info(
-            f"[Funnel] Complete: n={n} converted={converted} "
-            f"rate={conversion_rate:.3f} wall={wall_time:.2f}s "
-            f"aps={n / wall_time:.0f}"
+            "[Funnel] Complete: n=%d converted=%d rate=%.3f wall=%.2fs aps=%.0f",
+            n,
+            converted,
+            conversion_rate,
+            wall_time,
+            n / wall_time if wall_time > 0 else 0.0,
         )
 
         return FunnelResult(
