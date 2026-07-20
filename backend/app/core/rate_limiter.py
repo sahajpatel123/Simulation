@@ -95,9 +95,15 @@ def rate_limit(limit: int = 30, window_s: int = 60):
         allowed = _redis_limiter.is_allowed(key, limit, window_s)
         if allowed is None:
             if settings.ENVIRONMENT.lower() == "production":
-                raise RuntimeError(
-                    "Redis is unavailable in production — rate limiting bypass not allowed. "
-                    "Check REDIS_URL configuration."
+                # Fail closed but signal retryability to the client instead of
+                # relying on the generic 500 handler.
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        "Rate limiting temporarily unavailable. "
+                        "Redis connectivity is required in production; retry shortly."
+                    ),
+                    headers={"Retry-After": str(window_s)},
                 )
             allowed = _memory_limiter.is_allowed(key, limit, window_s)
         if not allowed:
