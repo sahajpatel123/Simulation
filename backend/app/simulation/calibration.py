@@ -16,6 +16,31 @@ MIN_OUTCOMES_FOR_CALIBRATION: int = 3
 RECENT_WINDOW: int = 5
 ADJUSTMENT_CAP: float = 0.08
 
+# _outcome_accuracy(): accuracy_pct = 100 - 2 * |variance_pct|
+ACCURACY_VARIANCE_DAMPING: float = 2.0
+
+# _bias_direction(): mean variance thresholds (in pct-points)
+BIAS_UNDER_PREDICTED_MIN: float = 5.0
+BIAS_OVER_PREDICTED_MAX: float = -5.0
+
+# _reliability(): accuracy + sample cutoffs
+RELIABILITY_HIGH_ACCURACY: float = 75.0
+RELIABILITY_HIGH_SAMPLES: int = 10
+RELIABILITY_MEDIUM_ACCURACY: float = 55.0
+RELIABILITY_MEDIUM_SAMPLES: int = 5
+
+# _trend(): recent-vs-overall delta cutoffs (in accuracy points)
+TREND_IMPROVING_MIN: float = 4.0
+TREND_DEGRADING_MAX: float = -4.0
+
+# _compute_markov_adjustments() bounds
+MARKOV_DELTA_MIN_ABS: float = 0.001
+MARKOV_CLIP_LO: float = 0.05
+MARKOV_CLIP_HI: float = 0.60
+RETENTION_BOOST_DELTA: float = 0.02
+RETENTION_BOOST_ACCURACY_MAX: float = 60.0
+RETURN_CLIP_LO: float = 0.10
+
 CATEGORY_ACCURACY_WEIGHTS: dict[str, float] = {
     "conversion": 0.40,
     "revenue": 0.25,
@@ -80,24 +105,24 @@ class CalibrationEngine:
         if variance_pct is None:
             return None
         abs_var = abs(variance_pct)
-        return max(0.0, round(100.0 - abs_var * 2.0, 2))
+        return max(0.0, round(100.0 - abs_var * ACCURACY_VARIANCE_DAMPING, 2))
 
     def _bias_direction(self, variance_values: list[float]) -> str:
         if not variance_values:
             return "NEUTRAL"
         mean_v = float(np.mean(variance_values))
-        if mean_v > 5.0:
+        if mean_v > BIAS_UNDER_PREDICTED_MIN:
             return "UNDER_PREDICTED"
-        if mean_v < -5.0:
+        if mean_v < BIAS_OVER_PREDICTED_MAX:
             return "OVER_PREDICTED"
         return "NEUTRAL"
 
     def _reliability(self, sample_count: int, accuracy: float) -> str:
         if sample_count < MIN_OUTCOMES_FOR_CALIBRATION:
             return "INSUFFICIENT_DATA"
-        if accuracy >= 75 and sample_count >= 10:
+        if accuracy >= RELIABILITY_HIGH_ACCURACY and sample_count >= RELIABILITY_HIGH_SAMPLES:
             return "HIGH"
-        if accuracy >= 55 or sample_count >= 5:
+        if accuracy >= RELIABILITY_MEDIUM_ACCURACY or sample_count >= RELIABILITY_MEDIUM_SAMPLES:
             return "MEDIUM"
         return "LOW"
 
@@ -154,9 +179,9 @@ class CalibrationEngine:
         recent_avg = float(np.mean(recent))
         delta = round(recent_avg - overall_avg, 2)
 
-        if delta > 4.0:
+        if delta > TREND_IMPROVING_MIN:
             return "IMPROVING", delta
-        if delta < -4.0:
+        if delta < TREND_DEGRADING_MAX:
             return "DEGRADING", delta
         return "STABLE", delta
 
@@ -197,13 +222,16 @@ class CalibrationEngine:
             else:
                 delta = 0.0
 
-            if abs(delta) > 0.001:
+            if abs(delta) > MARKOV_DELTA_MIN_ABS:
                 adjustments.append(
                     MarkovAdjustment(
                         from_state="DECIDE",
                         to_state="PURCHASE",
                         current_val=round(current, 4),
-                        suggested_val=round(float(np.clip(current + delta, 0.05, 0.60)), 4),
+                        suggested_val=round(
+                            float(np.clip(current + delta, MARKOV_CLIP_LO, MARKOV_CLIP_HI)),
+                            4,
+                        ),
                         delta=round(delta, 4),
                         rationale=(
                             f"Conversion {conv_cat.bias_direction.lower().replace('_', ' ')} "
@@ -214,15 +242,18 @@ class CalibrationEngine:
                 )
 
         ret_cat = next((c for c in categories if c.category == "retention"), None)
-        if ret_cat and ret_cat.accuracy_score < 60:
+        if ret_cat and ret_cat.accuracy_score < RETENTION_BOOST_ACCURACY_MAX:
             current = BASE_TRANSITIONS.get(State.PURCHASE, {}).get(State.RETURN, 0.28)
-            delta = 0.02
+            delta = RETENTION_BOOST_DELTA
             adjustments.append(
                 MarkovAdjustment(
                     from_state="PURCHASE",
                     to_state="RETURN",
                     current_val=round(current, 4),
-                    suggested_val=round(float(np.clip(current + delta, 0.10, 0.60)), 4),
+                    suggested_val=round(
+                        float(np.clip(current + delta, RETURN_CLIP_LO, MARKOV_CLIP_HI)),
+                        4,
+                    ),
                     delta=round(delta, 4),
                     rationale=(
                         f"Retention accuracy is {ret_cat.accuracy_score:.0f}/100 — "
