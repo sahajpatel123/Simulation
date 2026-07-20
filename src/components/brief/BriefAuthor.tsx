@@ -179,45 +179,91 @@ function EditorLoading() {
   )
 }
 
-/* ─── Field section with margin marks ───────────────────── */
+/* ─── Per-field press-room margin marks ─────────────────── */
 
-function FieldWithMarks({
-  field, children, pressRoomMode, markDefs, critiqueDelay, helpResult, onClearResult, onApplySuggestion,
+type MarginMode = 'refine' | 'suggest'
+
+interface MarginMarkDef {
+  label: string
+  hint: string
+  mode: MarginMode
+  delay: number
+}
+
+const POSITIONING_MARKS: MarginMarkDef[] = [
+  { label: 'refine', hint: 'tighten your sentence', mode: 'refine', delay: 180 },
+  { label: 'suggest', hint: 'three fresh angles', mode: 'suggest', delay: 220 },
+]
+
+const FEATURES_MARKS: MarginMarkDef[] = [
+  { label: 'suggest', hint: 'three defining specs', mode: 'suggest', delay: 260 },
+  { label: 'refine', hint: 'sharpen the list', mode: 'refine', delay: 300 },
+]
+
+const HOOK_MARKS: MarginMarkDef[] = [
+  { label: 'refine', hint: 'make it cut', mode: 'refine', delay: 340 },
+  { label: 'suggest', hint: 'three headline options', mode: 'suggest', delay: 380 },
+]
+
+/* ─── Help-result block (right column, second row) ───────── */
+
+function HelpNote({
+  helpResult, onClose, onApply,
+}: {
+  helpResult: { mode: 'refine' | 'suggest' | 'critique'; result: string | string[] }
+  onClose: () => void
+  onApply: (v: string) => void
+}) {
+  return (
+    <div style={{ marginTop: 12, position: 'relative' }}>
+      {helpResult.mode !== 'suggest' && <MarginConnector visible={true} />}
+      <MarginNote
+        mode={helpResult.mode}
+        result={helpResult.result}
+        onClose={onClose}
+        onApply={onApply}
+      />
+    </div>
+  )
+}
+
+/* ─── Field section: 2-column grid + margin marks ────────── */
+
+function FieldSection({
+  field, children, pressRoomMode, marks, helpNode, onMarginMode,
 }: {
   field: FieldName
   children: React.ReactNode
   pressRoomMode: boolean
-  markDefs: { label: string; hint: string; mode: 'refine' | 'suggest'; delay: number }[]
-  critiqueDelay: number
-  helpResult: { mode: string; result: string | string[] } | null
-  onClearResult: () => void
-  onApplySuggestion: (v: string) => void
+  marks: MarginMarkDef[]
+  helpNode: React.ReactNode
+  onMarginMode: (mode: MarginMode) => void
 }) {
   return (
     <div
+      className="field-grid"
       style={{
         display: 'grid',
-        gridTemplateColumns: '1fr 340px',
+        gridTemplateColumns: '1fr 420px',
         gap: 40,
         marginBottom: 56,
         position: 'relative',
       }}
     >
-      {/* Left — field content */}
+      <div style={{ position: 'relative' }}>{children}</div>
       <div style={{ position: 'relative' }}>
-        {children}
-      </div>
-
-      {/* Right — margin column */}
-      <div style={{ position: 'relative' }}>
-        {pressRoomMode && markDefs.map((m) => (
-          <MarginMark key={m.mode} field={field} label={m.label} hint={m.hint} onClick={() => {}} delay={m.delay} visible={pressRoomMode} />
+        {pressRoomMode && marks.map((m) => (
+          <MarginMark
+            key={`${field}-${m.mode}`}
+            field={field}
+            label={m.label}
+            hint={m.hint}
+            onClick={() => onMarginMode(m.mode)}
+            delay={m.delay}
+            visible={pressRoomMode}
+          />
         ))}
-        {helpResult && (
-          <div style={{ marginTop: 12 }}>
-            <MarginNote mode={helpResult.mode as 'refine' | 'suggest' | 'critique'} result={helpResult.result} onClose={onClearResult} onApply={onApplySuggestion} />
-          </div>
-        )}
+        {helpNode}
       </div>
     </div>
   )
@@ -446,111 +492,105 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
         </div>
 
         {/* === POSITIONING === */}
-        <div className="field-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 420px', gap: 40, marginBottom: 56, position: 'relative' }}>
-          <div style={{ position: 'relative' }}>
-            <FieldLabel label={copy.positioningLabel} hint={copy.positioningHint} />
-            {activeField === 'positioning' ? (
-              <EditorLoading />
-            ) : (
-              <>
-                <textarea value={positioning} onChange={(e) => setPositioning(e.target.value)}
-                  placeholder={copy.positioningPlaceholder} rows={2}
-                  style={{
-                    width: '100%', background: 'transparent', border: 'none', borderBottom: '0.5px solid #1a1a1a',
-                    fontFamily: s.serif, fontSize: 22, color: s.ink, padding: '8px 0', outline: 'none', resize: 'none',
-                    boxSizing: 'border-box', opacity: isWaiting ? 0.4 : 1, transition: 'opacity 0.2s ease',
-                  }} />
-                {pressRoomMode && (
-                  <CritiqueUnderline visible={pressRoomMode} delay={260} onClick={() => handleAssist('positioning', 'critique')} />
-                )}
-              </>
-            )}
-          </div>
-          <div style={{ position: 'relative' }}>
-            {pressRoomMode && (
-              <>
-                <MarginMark field="positioning" label="refine" hint="tighten your sentence" onClick={() => handleAssist('positioning', 'refine')} delay={180} visible={pressRoomMode} />
-                <MarginMark field="positioning" label="suggest" hint="three fresh angles" onClick={() => handleAssist('positioning', 'suggest')} delay={220} visible={pressRoomMode} />
-              </>
-            )}
-            {helpResult?.field === 'positioning' && (
-              <div style={{ marginTop: 12, position: 'relative' }}>
-                {helpResult.mode !== 'suggest' && <MarginConnector visible={true} />}
-                <MarginNote mode={helpResult.mode as 'refine' | 'suggest' | 'critique'} result={helpResult.result} onClose={() => setHelpResult(null)} onApply={(v) => applySuggestion('positioning', v)} />
-              </div>
-            )}
-          </div>
-        </div>
+        <FieldSection
+          field="positioning"
+          pressRoomMode={pressRoomMode}
+          marks={POSITIONING_MARKS}
+          onMarginMode={(mode) => handleAssist('positioning', mode)}
+          helpNode={
+            helpResult?.field === 'positioning' ? (
+              <HelpNote
+                helpResult={helpResult}
+                onClose={() => setHelpResult(null)}
+                onApply={(v) => applySuggestion('positioning', v)}
+              />
+            ) : null
+          }
+        >
+          <FieldLabel label={copy.positioningLabel} hint={copy.positioningHint} />
+          {activeField === 'positioning' ? (
+            <EditorLoading />
+          ) : (
+            <>
+              <textarea value={positioning} onChange={(e) => setPositioning(e.target.value)}
+                placeholder={copy.positioningPlaceholder} rows={2}
+                style={{
+                  width: '100%', background: 'transparent', border: 'none', borderBottom: '0.5px solid #1a1a1a',
+                  fontFamily: s.serif, fontSize: 22, color: s.ink, padding: '8px 0', outline: 'none', resize: 'none',
+                  boxSizing: 'border-box', opacity: isWaiting ? 0.4 : 1, transition: 'opacity 0.2s ease',
+                }} />
+              {pressRoomMode && (
+                <CritiqueUnderline visible={pressRoomMode} delay={260} onClick={() => handleAssist('positioning', 'critique')} />
+              )}
+            </>
+          )}
+        </FieldSection>
 
         {/* === FEATURES === */}
-        <div className="field-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 420px', gap: 40, marginBottom: 56, position: 'relative' }}>
-          <div style={{ position: 'relative' }}>
-            <FieldLabel label={copy.featuresLabel} hint={copy.featuresHint} />
-            {activeField === 'features' ? (
-              <EditorLoading />
-            ) : (
-              <>
-                {[0, 1, 2].map((i) => (
-                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '32px 1fr', alignItems: 'baseline', gap: 16, marginBottom: 12, opacity: isWaiting ? 0.4 : 1, transition: 'opacity 0.2s ease' }}>
-                    <span style={{ fontFamily: s.mono, fontSize: 11, color: s.red, letterSpacing: '0.18em' }}>{String(i + 1).padStart(2, '0')}</span>
-                    <input value={features[i]} onChange={(e) => { const n = [...features]; n[i] = e.target.value; setFeatures(n) }}
-                      placeholder={copy.featuresPlaceholder}
-                      style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '0.5px solid #1a1a1a', fontFamily: s.serif, fontSize: 18, color: s.ink, padding: '8px 0', outline: 'none', boxSizing: 'border-box' }} />
-                  </div>
-                ))}
-                {pressRoomMode && (
-                  <CritiqueUnderline visible={pressRoomMode} delay={340} onClick={() => handleAssist('features', 'critique')} />
-                )}
-              </>
-            )}
-          </div>
-          <div style={{ position: 'relative' }}>
-            {pressRoomMode && (
-              <>
-                <MarginMark field="features" label="suggest" hint="three defining specs" onClick={() => handleAssist('features', 'suggest')} delay={260} visible={pressRoomMode} />
-                <MarginMark field="features" label="refine" hint="sharpen the list" onClick={() => handleAssist('features', 'refine')} delay={300} visible={pressRoomMode} />
-              </>
-            )}
-            {helpResult?.field === 'features' && (
-              <div style={{ marginTop: 12, position: 'relative' }}>
-                {helpResult.mode !== 'suggest' && <MarginConnector visible={true} />}
-                <MarginNote mode={helpResult.mode as 'refine' | 'suggest' | 'critique'} result={helpResult.result} onClose={() => setHelpResult(null)} onApply={applyFeatureSuggestion} />
-              </div>
-            )}
-          </div>
-        </div>
+        <FieldSection
+          field="features"
+          pressRoomMode={pressRoomMode}
+          marks={FEATURES_MARKS}
+          onMarginMode={(mode) => handleAssist('features', mode)}
+          helpNode={
+            helpResult?.field === 'features' ? (
+              <HelpNote
+                helpResult={helpResult}
+                onClose={() => setHelpResult(null)}
+                onApply={applyFeatureSuggestion}
+              />
+            ) : null
+          }
+        >
+          <FieldLabel label={copy.featuresLabel} hint={copy.featuresHint} />
+          {activeField === 'features' ? (
+            <EditorLoading />
+          ) : (
+            <>
+              {[0, 1, 2].map((i) => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '32px 1fr', alignItems: 'baseline', gap: 16, marginBottom: 12, opacity: isWaiting ? 0.4 : 1, transition: 'opacity 0.2s ease' }}>
+                  <span style={{ fontFamily: s.mono, fontSize: 11, color: s.red, letterSpacing: '0.18em' }}>{String(i + 1).padStart(2, '0')}</span>
+                  <input value={features[i]} onChange={(e) => { const n = [...features]; n[i] = e.target.value; setFeatures(n) }}
+                    placeholder={copy.featuresPlaceholder}
+                    style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '0.5px solid #1a1a1a', fontFamily: s.serif, fontSize: 18, color: s.ink, padding: '8px 0', outline: 'none', boxSizing: 'border-box' }} />
+                </div>
+              ))}
+              {pressRoomMode && (
+                <CritiqueUnderline visible={pressRoomMode} delay={340} onClick={() => handleAssist('features', 'critique')} />
+              )}
+            </>
+          )}
+        </FieldSection>
 
         {/* === HOOK === */}
-        <div className="field-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 420px', gap: 40, marginBottom: 56, position: 'relative' }}>
-          <div style={{ position: 'relative' }}>
-            <FieldLabel label={copy.hookLabel} hint={copy.hookHint} />
-            {activeField === 'hook' ? (
-              <EditorLoading />
-            ) : (
-              <>
-                <input value={hook} onChange={(e) => setHook(e.target.value)} placeholder={copy.hookPlaceholder}
-                  style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '0.5px solid #1a1a1a', fontFamily: s.serif, fontSize: 22, color: s.ink, padding: '8px 0', outline: 'none', boxSizing: 'border-box', opacity: isWaiting ? 0.4 : 1, transition: 'opacity 0.2s ease' }} />
-                {pressRoomMode && (
-                  <CritiqueUnderline visible={pressRoomMode} delay={420} onClick={() => handleAssist('hook', 'critique')} />
-                )}
-              </>
-            )}
-          </div>
-          <div style={{ position: 'relative' }}>
-            {pressRoomMode && (
-              <>
-                <MarginMark field="hook" label="refine" hint="make it cut" onClick={() => handleAssist('hook', 'refine')} delay={340} visible={pressRoomMode} />
-                <MarginMark field="hook" label="suggest" hint="three headline options" onClick={() => handleAssist('hook', 'suggest')} delay={380} visible={pressRoomMode} />
-              </>
-            )}
-            {helpResult?.field === 'hook' && (
-              <div style={{ marginTop: 12, position: 'relative' }}>
-                {helpResult.mode !== 'suggest' && <MarginConnector visible={true} />}
-                <MarginNote mode={helpResult.mode as 'refine' | 'suggest' | 'critique'} result={helpResult.result} onClose={() => setHelpResult(null)} onApply={(v) => applySuggestion('hook', v)} />
-              </div>
-            )}
-          </div>
-        </div>
+        <FieldSection
+          field="hook"
+          pressRoomMode={pressRoomMode}
+          marks={HOOK_MARKS}
+          onMarginMode={(mode) => handleAssist('hook', mode)}
+          helpNode={
+            helpResult?.field === 'hook' ? (
+              <HelpNote
+                helpResult={helpResult}
+                onClose={() => setHelpResult(null)}
+                onApply={(v) => applySuggestion('hook', v)}
+              />
+            ) : null
+          }
+        >
+          <FieldLabel label={copy.hookLabel} hint={copy.hookHint} />
+          {activeField === 'hook' ? (
+            <EditorLoading />
+          ) : (
+            <>
+              <input value={hook} onChange={(e) => setHook(e.target.value)} placeholder={copy.hookPlaceholder}
+                style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '0.5px solid #1a1a1a', fontFamily: s.serif, fontSize: 22, color: s.ink, padding: '8px 0', outline: 'none', boxSizing: 'border-box', opacity: isWaiting ? 0.4 : 1, transition: 'opacity 0.2s ease' }} />
+              {pressRoomMode && (
+                <CritiqueUnderline visible={pressRoomMode} delay={420} onClick={() => handleAssist('hook', 'critique')} />
+              )}
+            </>
+          )}
+        </FieldSection>
 
         {/* ERROR */}
         {errorMsg && (
