@@ -549,11 +549,16 @@ class Conductor:
             except Exception:
                 pass
 
-        # Fallback: direct multiplication (overrides from architects)
-        decide_purchase = 0.5
-        arrive_browse   = 0.8
-        browse_consider = 0.7
-        consider_decide = 0.6
+        # Fallback: chain product with architect overrides applied to
+        # BASE_TRANSITIONS scalars. The previous hardcoded 0.5/0.8/0.7/0.6
+        # magic numbers diverged from BASE_TRANSITIONS by 60%+ and produced
+        # a 0.168 default that contradicted the canonical 0.077 chain.
+        from app.simulation.markov import BASE_TRANSITIONS, State
+
+        decide_purchase = float(BASE_TRANSITIONS[State.DECIDE][State.PURCHASE])
+        arrive_browse = float(BASE_TRANSITIONS[State.ARRIVE][State.BROWSE])
+        browse_consider = float(BASE_TRANSITIONS[State.BROWSE][State.CONSIDER])
+        consider_decide = float(BASE_TRANSITIONS[State.CONSIDER][State.DECIDE])
 
         for arch_name, output in cluster_outputs.items():
             architect = self._architects.get(arch_name)
