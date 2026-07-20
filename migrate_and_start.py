@@ -73,6 +73,7 @@ def run_migrations():
             ("simulations", "task_id", "VARCHAR(255)"),
             ("simulations", "error_message", "TEXT"),
             ("simulations", "consumer_volume", "INTEGER DEFAULT 10000"),
+            ("simulations", "run_trace", "JSONB"),
             ("decisions", "title", "VARCHAR(200)"),
             ("decisions", "status", "VARCHAR(50) DEFAULT 'PENDING'"),
             ("decisions", "results_json", "JSONB"),

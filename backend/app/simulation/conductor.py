@@ -5,13 +5,13 @@ for the learning system.
 """
 from __future__ import annotations
 
+import json
 import logging
 logger = logging.getLogger(__name__)
-import traceback
 from dataclasses import dataclass, replace
 from typing import Any
 
-from sqlalchemy import delete
+from sqlalchemy import delete, text
 
 from app.simulation.architects.base import ArchitectOutput, DomainReport
 from app.simulation.cluster_reweighting import ClusterReweightingEngine
@@ -19,6 +19,7 @@ from app.simulation.cognitive_state import CognitiveStateMutator
 from app.simulation.clusters.definitions import ClusterDefinition
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.product_type import ProductType
+from app.simulation.run_trace import RunTrace
 
 
 # Keyword → ProductType scoring
@@ -354,6 +355,8 @@ class Conductor:
             product_type = self.detect_product_type(desc, assumptions)
 
         env_params = {**env_params, "product_type": product_type.value}
+        trace = RunTrace()
+        trace.begin("product_type_and_reweighting")
         reweighter = ClusterReweightingEngine()
         cluster_weights = reweighter.compute_weights(
             product_type=product_type,
@@ -378,11 +381,17 @@ class Conductor:
             for c in all_clusters
         }
 
+        trace.end(items=len(all_clusters))
+
         cluster_results: dict[str, dict[str, ArchitectOutput]] = {}
         cluster_breakdown: dict[str, float] = {}
         per_cluster_matrices: dict[str, dict[tuple[str, str], float]] = {}
         cluster_mutation_logs: dict[str, dict[str, float]] = {}
 
+        arch_calls = 0
+        arch_failures = 0
+        arch_skipped = 0
+        trace.begin("architect_loop")
         for cluster in all_clusters:
             cluster_outputs: dict[str, ArchitectOutput] = {}
             _mutation_log: dict[str, float] = {}
@@ -391,12 +400,14 @@ class Conductor:
             for arch_name in stack:
                 architect = self._architects.get(arch_name)
                 if architect is None:
+                    arch_skipped += 1
                     continue
                 pt_ok = (
                     product_type.value in architect.product_types
                     or len(architect.product_types) == 0
                 )
                 if not pt_ok:
+                    arch_skipped += 1
                     continue
 
                 deps = self._resolve_deps(arch_name, cluster_outputs)
@@ -437,9 +448,15 @@ class Conductor:
                         env_params=env_params,
                     )
                     cluster_outputs[arch_name] = output
+                    arch_calls += 1
                 except Exception as e:
-                    print(f"WARN: {arch_name} failed for {cluster.cluster_id}: {e}")
-                    traceback.print_exc()
+                    arch_failures += 1
+                    logger.warning(
+                        "Architect %s failed for cluster %s: %s",
+                        arch_name,
+                        cluster.cluster_id,
+                        e,
+                    )
 
             cluster_mutation_logs[cluster.cluster_id] = _mutation_log
             cluster_results[cluster.cluster_id] = cluster_outputs
@@ -453,12 +470,20 @@ class Conductor:
                 if arch:
                     overrides_acc.update(arch.transition_overrides(output))
             per_cluster_matrices[cluster.cluster_id] = overrides_acc
+        trace.end(items=arch_calls + arch_skipped)
+        trace.add_summary(
+            architect_calls=arch_calls,
+            architect_failures=arch_failures,
+            architect_skipped=arch_skipped,
+            clusters_processed=len(cluster_results),
+        )
 
         pwc = sum(
             cluster_breakdown.get(c.cluster_id, 0.0) * cluster_weights.get(c.cluster_id, 0.0)
             for c in all_clusters
         )
 
+        trace.begin("domain_reports")
         domain_reports: list[DomainReport] = []
         for arch_name in stack:
             architect = self._architects.get(arch_name)
@@ -478,10 +503,13 @@ class Conductor:
                         __name__,
                         _exc,
                     )
+        trace.end(items=len(domain_reports))
 
+        trace.begin("accountability")
         architect_accountability = self._compute_accountability(
             cluster_results, cluster_weights, all_clusters
         )
+        trace.end(items=len(architect_accountability))
 
         result = ConductorResult(
             product_type=product_type,
@@ -506,6 +534,7 @@ class Conductor:
                 claim_confidence_distribution=claim_conf_dist,
                 cluster_mutation_logs=cluster_mutation_logs,
             )
+            self._persist_run_trace(db, simulation_id, trace)
 
         if db is not None and user_id is not None:
             from app.simulation.blindspot_detector import BlindspotDetector
@@ -624,7 +653,7 @@ class Conductor:
                 )
             )
         except Exception as e:
-            print(f"WARN: cluster_run_summaries delete failed: {e}")
+            logger.warning("cluster_run_summaries delete failed: %s", e)
 
         for cluster_id, arch_outputs in cluster_results.items():
             conversion_rate = cluster_breakdown.get(cluster_id, 0.0)
@@ -676,8 +705,48 @@ class Conductor:
                     )
                 )
             except Exception as e:
-                print(f"WARN: ClusterRunSummary ORM add failed for {cluster_id}: {e}")
+                logger.warning("ClusterRunSummary ORM add failed for %s: %s", cluster_id, e)
         try:
             db.commit()
         except Exception:
             db.rollback()
+
+    def _persist_run_trace(
+        self,
+        db: Any,
+        simulation_id: int,
+        trace: RunTrace,
+    ) -> None:
+        """Persist the run trace JSONB to ``simulations.run_trace``.
+
+        Separate UPDATE so failure here does not roll back the rest of
+        the conductor's writes. Failures are logged so they don't show
+        up as silent stdout noise."""
+        try:
+            payload = json.dumps(trace.to_dict())
+        except (TypeError, ValueError) as e:
+            logger.warning("run_trace to_dict not JSON-serialisable: %s", e)
+            return
+        try:
+            db.execute(
+                text(
+                    """
+                    UPDATE simulations
+                    SET run_trace = CAST(:trace AS JSONB), updated_at = NOW()
+                    WHERE id = :sid
+                    """
+                ),
+                {"trace": payload, "sid": simulation_id},
+            )
+            db.commit()
+        except Exception as e:
+            logger.warning(
+                "Failed to persist run_trace for simulation %s: %s",
+                simulation_id,
+                e,
+            )
+            try:
+                db.rollback()
+            except Exception:
+                pass
+
