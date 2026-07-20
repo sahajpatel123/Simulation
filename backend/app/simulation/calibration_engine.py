@@ -346,8 +346,9 @@ class CalibrationEngine:
 
             alpha = 1.0 / (count + 2.0)
             signal = prior + abs(wmean_error) * 0.3 if wmean_error < 0 else prior - abs(wmean_error) * 0.3
-            new_val = prior * (1.0 - alpha) + float(np.clip(signal, 0.0, 1.0)) * alpha
-            new_val = round(float(np.clip(new_val, 0.01, 0.99)), 4)
+            clamped_signal = max(0.0, min(1.0, signal))
+            new_val = prior * (1.0 - alpha) + clamped_signal * alpha
+            new_val = round(max(0.01, min(0.99, new_val)), 4)
 
             db.execute(
                 text("""
