@@ -59,7 +59,7 @@ def test_sample_beta_variance_multiplier_clipping():
 
 def test_generate_one_applies_variance_multiplier(monkeypatch):
     """Test that AgentProfileGenerator.generate_one uses the config variance multiplier."""
-    import backend.app.simulation.profiles as profiles_module
+    import app.simulation.profiles as profiles_module
     monkeypatch.setattr(profiles_module.settings, "CLUSTER_VARIANCE_MULTIPLIER", 1.5)
 
     generator = AgentProfileGenerator()
