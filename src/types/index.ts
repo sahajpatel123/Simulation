@@ -376,3 +376,25 @@ export interface ScenarioResult {
   confidence_score:     number
   rank:                 number
 }
+
+/* ── Scenario Stress Analysis ── */
+export interface ScenarioImpactItem {
+  scenario_key: string
+  scenario_name: string
+  description: string
+  projected_conversion_rate: number
+  conversion_delta_pct: number
+  vulnerability_score: number
+  risk_level: 'LOW' | 'MODERATE' | 'HIGH' | 'SEVERE'
+  impact_summary: string
+  mitigation_recommendation: string
+}
+
+export interface ScenarioStressResponse {
+  simulation_id: number
+  base_conversion_rate: number
+  overall_resilience_score: number
+  most_vulnerable_scenario: string
+  most_resilient_scenario: string
+  scenario_impacts: ScenarioImpactItem[]
+}

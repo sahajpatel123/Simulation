@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useCeeMutation } from './useMutationFactory'
 
 import api, { apiLong } from '@/lib/api'
-import type { SimulationResult, SimulationStatusResponse } from '@/types'
+import type { ScenarioStressResponse, SimulationResult, SimulationStatusResponse } from '@/types'
 
 export const useSimulations = (projectId: number | string | null) =>
   useQuery<SimulationStatusResponse[]>({
@@ -27,6 +27,17 @@ export const useSimulationResults = (simulationId: number | null) =>
   useQuery<SimulationResult>({
     queryKey: ['simulation-results', simulationId],
     queryFn: async () => (await api.get(`/simulations/${simulationId}/results`)).data,
+    enabled: !!simulationId,
+    retry: (count, err: unknown) => {
+      const status = (err as { response?: { status: number } })?.response?.status
+      return status !== 409 && count < 1
+    },
+  })
+
+export const useSimulationStressScenarios = (simulationId: number | null) =>
+  useQuery<ScenarioStressResponse>({
+    queryKey: ['simulation-stress-scenarios', simulationId],
+    queryFn: async () => (await api.get(`/simulations/${simulationId}/stress-scenarios`)).data,
     enabled: !!simulationId,
     retry: (count, err: unknown) => {
       const status = (err as { response?: { status: number } })?.response?.status
