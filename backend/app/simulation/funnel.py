@@ -177,7 +177,11 @@ class FunnelExecutionEngine:
                     avg_time_seconds=round(avg_time, 2),
                 )
             )
-            prev_count = max(1, count)
+            # Carry the count forward only when non-zero; otherwise leave
+            # prev_count at 0 so subsequent stages report 0 drop-off instead
+            # of an artificial 100% drop caused by max(1, 0) bumping it.
+            if count > 0:
+                prev_count = count
 
         return metrics
 

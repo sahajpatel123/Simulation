@@ -189,10 +189,10 @@ def test_build_stage_metrics_all_agents_reach_every_stage(
         assert sm.entry_rate == sm.agent_count / 100
 
     arrive, browse = metrics[0], metrics[1]
-    # ARRIVE -> BROWSE drop-off: (100 - 90) / 100 = 0.10
-    assert arrive.drop_off_rate == pytest.approx(0.10)
-    # BROWSE drop-off from ARRIVE's count (100): (100 - 90) / 100 still applies
-    # because prev_count for BROWSE = max(1, ARRIVE.count) = 100.
+    # ARRIVE is the first stage — there is no previous stage, so its
+    # drop_off_rate is 0 by definition (not 0.10; that's BROWSE's drop).
+    assert arrive.drop_off_rate == pytest.approx(0.0)
+    # BROWSE drops from ARRIVE's count (100) to 90: (100 - 90) / 100 = 0.10.
     assert browse.drop_off_rate == pytest.approx(0.10)
     assert browse.entry_rate == pytest.approx(0.90)
     assert browse.avg_time_seconds == pytest.approx(2.0)
