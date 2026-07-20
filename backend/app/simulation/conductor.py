@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import logging
-logger = logging.getLogger(__name__)
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -20,6 +19,8 @@ from app.simulation.clusters.definitions import ClusterDefinition
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.product_type import ProductType
 from app.simulation.run_trace import RunTrace
+
+logger = logging.getLogger(__name__)
 
 
 # Keyword → ProductType scoring
@@ -218,8 +219,25 @@ class ConductorResult:
 
 
 def _mean_metric(output: ArchitectOutput) -> float:
-    nums = [v for v in output.metrics.values() if isinstance(v, (int, float))]
+    """Mean of numeric metrics on an ArchitectOutput.
+
+    Includes numpy scalars (np.integer / np.floating) and bools since
+    architects may return either. Falls back to 0.5 (neutral on a
+    [0,1] scale) when there are no numeric values at all; a DEBUG log
+    is emitted so the silent fallback is observable in production.
+    """
+    nums = [
+        float(v)
+        for v in output.metrics.values()
+        if isinstance(v, (int, float, bool))
+        or hasattr(v, "item")  # numpy scalar duck-type
+    ]
     if not nums:
+        logger.debug(
+            "_mean_metric: no numeric metrics on output cluster_id=%s; "
+            "returning neutral 0.5",
+            output.cluster_id,
+        )
         return 0.5
     return float(sum(nums) / len(nums))
 
@@ -451,7 +469,7 @@ class Conductor:
                     arch_calls += 1
                 except Exception as e:
                     arch_failures += 1
-                    logger.warning(
+                    logger.exception(
                         "Architect %s failed for cluster %s: %s",
                         arch_name,
                         cluster.cluster_id,
@@ -497,11 +515,12 @@ class Conductor:
             if arch_outputs:
                 try:
                     domain_reports.append(architect.generate_report(arch_outputs))
-                except Exception as _exc:
+                except Exception as exc:
                     logger.debug(
-                        "%s suppressed: %s",
-                        __name__,
-                        _exc,
+                        "%s generate_report suppressed: %s",
+                        arch_name,
+                        exc,
+                        exc_info=logger.isEnabledFor(logging.DEBUG),
                     )
         trace.end(items=len(domain_reports))
 
@@ -574,7 +593,11 @@ class Conductor:
                 if isinstance(result, ClusterTransitionMatrix):
                     return round(float(result.conversion_estimate), 6)
             except Exception:
-                pass
+                logger.exception(
+                    "MarkovBehaviourModel.build failed for cluster %s; "
+                    "falling back to manual override multiplication",
+                    cluster_def.cluster_id,
+                )
 
         # Fallback: direct multiplication (overrides from architects)
         decide_purchase = 0.5
