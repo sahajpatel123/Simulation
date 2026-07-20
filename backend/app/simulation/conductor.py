@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import logging
 logger = logging.getLogger(__name__)
-import traceback
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -437,9 +436,12 @@ class Conductor:
                         env_params=env_params,
                     )
                     cluster_outputs[arch_name] = output
-                except Exception as e:
-                    print(f"WARN: {arch_name} failed for {cluster.cluster_id}: {e}")
-                    traceback.print_exc()
+                except Exception:
+                    logger.exception(
+                        "Architect %s failed for cluster %s",
+                        arch_name,
+                        cluster.cluster_id,
+                    )
 
             cluster_mutation_logs[cluster.cluster_id] = _mutation_log
             cluster_results[cluster.cluster_id] = cluster_outputs
