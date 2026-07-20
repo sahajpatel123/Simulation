@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
 from app.api.v1.common import get_owned_project
+from app.core.tier_enforcement import enforce_simulation_limit
 from app.models.assumption import Assumption
 from app.models.environment import Environment
 from app.models.project import Project
@@ -89,6 +90,21 @@ def create_simulation(
             status_code=400,
             detail="The Brief must be completed before running a simulation. "
             "Fill in positioning, features, and hook at /briefs first.",
+        )
+
+    # Enforce tier quota at enqueue time so over-limit users see a 429
+    # immediately rather than receiving a 201 + FAILED row after the
+    # Celery task retries twice.
+    try:
+        enforce_simulation_limit(current_user, db)
+    except HTTPException:
+        raise
+    except Exception:
+        # If the quota check itself errors, fall back to the Celery task's
+        # own enforcement rather than blocking the request.
+        logger.exception(
+            "[API] Tier quota pre-check failed for user_id=%s; deferring to worker",
+            current_user.id,
         )
 
     running = (
