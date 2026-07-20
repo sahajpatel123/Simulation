@@ -58,7 +58,7 @@ export default function AboutPage() {
             The Realization
           </div>
           <h2 className="font-serif" style={{ fontSize: 'clamp(40px, 6vw, 90px)', fontWeight: 900, lineHeight: 1, letterSpacing: '-0.03em' }}>
-            The code wasn't the risk. <br />
+            The code wasn’t the risk. <br />
             <motion.span style={{ fontStyle: 'italic', color: accentColor }}>The desire was.</motion.span>
           </h2>
           <p style={{ fontSize: 20, marginTop: 40, fontWeight: 500, lineHeight: 1.6, opacity: 0.7 }}>
@@ -76,7 +76,7 @@ export default function AboutPage() {
             <span style={{ fontStyle: 'italic' }}>filed quarterly.</span>
           </h2>
           <p style={{ fontSize: 22, marginTop: 40, fontWeight: 500, lineHeight: 1.6, opacity: 0.8 }}>
-            TheCee wraps 10,000 synthetic readers and 21 domain architects into the familiar, urgent form of a broadsheet. Because the truth about your idea shouldn't take a quarter to read.
+            TheCee wraps 10,000 synthetic readers and 21 domain architects into the familiar, urgent form of a broadsheet. Because the truth about your idea shouldn’t take a quarter to read.
           </p>
         </motion.div>
 

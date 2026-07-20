@@ -18,6 +18,8 @@ const eslintConfig = defineConfig([
     "node_modules/**",
     "node_modules 2/**",
     ".claude/**",
+    // Fallback source tree is not part of the active Next.js app.
+    "Lovable/**",
     // Python backend + any venv (never lint third-party JS)
     "thecee-backend/**",
     "backend/app/**",
