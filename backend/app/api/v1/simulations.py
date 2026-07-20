@@ -26,6 +26,7 @@ from app.simulation.scored_assumption import (
     score_assumptions,
     signal_quality_tier,
 )
+from app.simulation.scenario_stress import ScenarioStressAnalyzer
 from app.tasks.simulation_tasks import run_full_simulation
 from app.worker import celery_app
 
@@ -378,6 +379,51 @@ def websocket_info():
         "protocol": "ws",
         "endpoint": "/api/v1/ws/simulation/{simulation_id} — auth: first JSON frame {\"type\":\"auth\",\"access_token\":\"<jwt>\"}",
     }
+
+
+@router.get(
+    "/{simulation_id}/stress-scenarios",
+    summary="Evaluate simulation resilience across macroeconomic and market stress scenarios",
+    responses=_JSON_200,
+)
+def get_simulation_stress_scenarios(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+    if sim.status != "COMPLETED" or not sim.results_json:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Simulation is {sim.status} - stress scenario analysis requires completed results.",
+        )
+
+    results = sim.results_json or {}
+    base_rate = float(results.get("overall_conversion_rate", 0.0))
+    cluster_breakdown = results.get("cluster_breakdown", {})
+    domain_findings = results.get("domain_findings", [])
+    product_type = results.get("product_type_detected", "saas")
+
+    registry_clusters = [
+        {
+            "cluster_id": c.cluster_id,
+            "name": c.name,
+            "population_weight": c.population_weight,
+        }
+        for c in ClusterRegistry().all_clusters()
+    ]
+
+    analyzer = ScenarioStressAnalyzer()
+    stress_result = analyzer.analyze(
+        simulation_id=sim.id,
+        base_conversion_rate=base_rate,
+        cluster_breakdown=cluster_breakdown,
+        cluster_registry=registry_clusters,
+        domain_findings=domain_findings,
+        product_type=product_type,
+    )
+
+    return analyzer.to_dict(stress_result)
 
 
 @router.get(
