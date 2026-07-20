@@ -91,3 +91,36 @@ def test_zero_agents_produces_zero_counts():
     fr = _funnel_result_from_conductor(cr, 0, {"average_order_value": 999.0}, 42, 1.0)
     for stage, count in fr.stage_counts.items():
         assert count == 0, f"{stage} expected 0, got {count}"
+
+
+def test_purchase_equals_converted_even_when_chain_underestimates():
+    """When per-cluster override sets drive a high cluster_breakdown ratio
+    that the chain product under-estimates, PURCHASE must still match the
+    conductor-derived converted count (do not silently under-report)."""
+    cr = ConductorResult(
+        product_type=None,
+        cluster_results={},
+        population_weighted_conversion=0.50,
+        domain_reports=[],
+        cluster_breakdown={"A": 0.10, "B": 0.90},
+        architect_accountability={},
+        per_cluster_matrices={
+            "A": {
+                ("ARRIVE", "BROWSE"): 0.90,
+                ("BROWSE", "CONSIDER"): 0.80,
+                ("CONSIDER", "DECIDE"): 0.70,
+                ("DECIDE", "PURCHASE"): 0.30,
+            },
+            "B": {
+                ("ARRIVE", "BROWSE"): 0.40,
+                ("BROWSE", "CONSIDER"): 0.30,
+                ("CONSIDER", "DECIDE"): 0.20,
+                ("DECIDE", "PURCHASE"): 0.95,
+            },
+        },
+        signal_quality=0.0,
+    )
+    fr = _funnel_result_from_conductor(cr, 10000, {"average_order_value": 999.0}, 42, 1.0)
+    assert fr.stage_counts["PURCHASE"] == 5000
+    assert fr.converted == 5000
+    assert fr.stage_counts["ABANDON"] == 5000

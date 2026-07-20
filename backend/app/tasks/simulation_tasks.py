@@ -158,7 +158,11 @@ def _funnel_result_from_conductor(
         browse_count = min(n, int(round(n * arrive_to_browse)))
         consider_count = min(browse_count, int(round(browse_count * browse_to_consider)))
         decide_count = min(consider_count, int(round(consider_count * consider_to_decide)))
-        purchase_count = min(decide_count, converted)
+        # PURCHASE equals `converted` directly. Capping by decide_count
+        # would silently under-report the headline conversion whenever the
+        # cluster-weighted transition chain implies fewer DECIDE rows than
+        # the conductor-derived population_weighted_conversion produces.
+        purchase_count = converted
     else:
         browse_count = consider_count = decide_count = purchase_count = 0
 

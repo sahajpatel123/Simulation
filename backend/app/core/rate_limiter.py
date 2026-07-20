@@ -90,7 +90,17 @@ def rate_limit(limit: int = 30, window_s: int = 60):
     """
 
     async def _check(request: Request) -> None:
-        ip = request.client.host if request.client else "unknown"
+        # Prefer X-Forwarded-For when present (e.g. behind a reverse proxy),
+        # then request.client.host, then a per-call UUID bucket so a missing
+        # peer address never collapses all anonymous traffic into one global
+        # bucket that a single actor can saturate.
+        xff = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+        if xff:
+            ip = xff
+        elif request.client is not None:
+            ip = request.client.host
+        else:
+            ip = f"anon-{uuid.uuid4().hex[:12]}"
         key = f"rate-limit:{request.url.path}:{ip}"
         allowed = _redis_limiter.is_allowed(key, limit, window_s)
         if allowed is None:

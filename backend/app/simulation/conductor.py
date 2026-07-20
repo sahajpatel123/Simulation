@@ -623,8 +623,21 @@ class Conductor:
                     ClusterRunSummary.simulation_id == simulation_id
                 )
             )
-        except Exception as e:
-            print(f"WARN: cluster_run_summaries delete failed: {e}")
+        except Exception:
+            logger.exception(
+                "cluster_run_summaries delete failed for sim=%s", simulation_id
+            )
+            # The PG transaction is now aborted; roll back so the per-cluster
+            # db.add() and final commit below operate on a clean session,
+            # then surface the failure so the Celery task can retry instead
+            # of silently keeping stale rows in cluster_run_summaries.
+            try:
+                db.rollback()
+            except Exception:
+                logger.debug(
+                    "%s rollback suppressed", __name__, exc_info=True
+                )
+            raise
 
         for cluster_id, arch_outputs in cluster_results.items():
             conversion_rate = cluster_breakdown.get(cluster_id, 0.0)
@@ -680,4 +693,13 @@ class Conductor:
         try:
             db.commit()
         except Exception:
-            db.rollback()
+            logger.exception(
+                "cluster_run_summaries commit failed for sim=%s", simulation_id
+            )
+            try:
+                db.rollback()
+            except Exception:
+                logger.debug(
+                    "%s rollback suppressed", __name__, exc_info=True
+                )
+            raise

@@ -16,6 +16,7 @@ class _StubRequest:
 
     client = _StubClient()
     url = type("U", (), {"path": "/protected"})()
+    headers: dict = {}
 
 
 async def _invoke(window_s: int = 30) -> HTTPException | None:
