@@ -55,3 +55,35 @@ class SimulationResultOut(BaseModel):
     user_blindspots: list[dict[str, Any]] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
+
+
+class RunTraceStageOut(BaseModel):
+    """One stage entry in a simulation's run trace (elapsed_ms + items)."""
+
+    name: str
+    elapsed_ms: float
+    items: int | None = None
+    status: str = "ok"
+
+
+class SimulationRunTraceOut(BaseModel):
+    """Structured per-stage timing for a completed simulation.
+
+    Stages: product_type_and_reweighting, architect_loop, domain_reports,
+    accountability. The summary dict carries scalar counters
+    (architect_calls, architect_failures, architect_skipped,
+    clusters_processed). Use ``stages`` for waterfall UI and
+    ``summary`` / ``total_ms`` for log-style inspection.
+    """
+
+    id: int
+    project_id: int
+    status: str
+    total_ms: float | None = None
+    stage_count: int = 0
+    summary: dict[str, Any] = Field(default_factory=dict)
+    stages: list[RunTraceStageOut] = Field(default_factory=list)
+    available: bool = False
+    message: str = ""
+
+    model_config = {"from_attributes": True}

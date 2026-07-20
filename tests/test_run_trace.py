@@ -175,3 +175,59 @@ def test_persist_run_trace_swallows_non_serialisable_payload(db_mock: MagicMock)
     conductor._persist_run_trace(db_mock, simulation_id=1, trace=trace)
 
     db_mock.execute.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Schema shape: SimulationRunTraceOut
+# ---------------------------------------------------------------------------
+
+
+def test_run_trace_schema_roundtrip() -> None:
+    """The endpoint's Pydantic schema serialises a conductor payload
+    without dropping the stage or summary fields."""
+    from app.schemas.simulation import RunTraceStageOut, SimulationRunTraceOut
+
+    payload = {
+        "id": 42,
+        "project_id": 7,
+        "status": "COMPLETED",
+        "total_ms": 1234.5,
+        "stage_count": 2,
+        "summary": {
+            "architect_calls": 100,
+            "architect_failures": 1,
+            "architect_skipped": 0,
+            "clusters_processed": 52,
+        },
+        "stages": [
+            {"name": "architect_loop", "elapsed_ms": 900.0, "items": 100, "status": "ok"},
+            {"name": "domain_reports", "elapsed_ms": 12.3, "items": 11, "status": "ok"},
+        ],
+        "available": True,
+        "message": "",
+    }
+    schema = SimulationRunTraceOut(**payload)
+    assert schema.total_ms == 1234.5
+    assert schema.stage_count == 2
+    assert schema.summary["architect_failures"] == 1
+    assert schema.stages[0].name == "architect_loop"
+    assert schema.stages[0].items == 100
+    assert isinstance(schema.stages[0], RunTraceStageOut)
+
+
+def test_run_trace_schema_unavailable_state() -> None:
+    """available=False messages flow through unchanged."""
+    from app.schemas.simulation import SimulationRunTraceOut
+
+    schema = SimulationRunTraceOut(
+        id=1,
+        project_id=2,
+        status="RUNNING",
+        available=False,
+        message="Run trace will be available when the simulation completes.",
+    )
+    assert schema.total_ms is None
+    assert schema.stage_count == 0
+    assert schema.stages == []
+    assert schema.available is False
+    assert schema.message.startswith("Run trace")

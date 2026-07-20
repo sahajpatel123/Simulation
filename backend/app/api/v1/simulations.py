@@ -15,9 +15,11 @@ from app.models.project import Project
 from app.models.simulation import Simulation
 from app.models.user import User
 from app.schemas.simulation import (
+    RunTraceStageOut,
     SimulationCreate,
     SimulationOut,
     SimulationResultOut,
+    SimulationRunTraceOut,
     SimulationStatusOut,
 )
 from app.simulation.clusters.registry import ClusterRegistry
@@ -311,6 +313,82 @@ def get_simulation_results(
         cluster_narrative=results_json.get("cluster_narrative", ""),
         signal_quality=float(sim.signal_quality or 0.0),
         user_blindspots=user_blindspots,
+    )
+
+
+@router.get(
+    "/{simulation_id}/run-trace",
+    response_model=SimulationRunTraceOut,
+    summary="Per-stage timing trace captured during the conductor run",
+    responses=_JSON_200,
+)
+def get_simulation_run_trace(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Surface the structured ``simulations.run_trace`` JSONB column.
+
+    Returns ``available=False`` (with a ``message``) when the simulation
+    has not yet produced a trace — for example, it is still running or
+    it completed before this feature shipped. Frontends should treat
+    that as a normal not-yet-available state, not an error.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    raw = sim.run_trace
+    if raw is None:
+        if sim.status in ("QUEUED", "RUNNING"):
+            return SimulationRunTraceOut(
+                id=sim.id,
+                project_id=sim.project_id,
+                status=sim.status,
+                available=False,
+                message="Run trace will be available when the simulation completes.",
+            )
+        return SimulationRunTraceOut(
+            id=sim.id,
+            project_id=sim.project_id,
+            status=sim.status,
+            available=False,
+            message=(
+                "Run trace is unavailable for this simulation. "
+                "It may have been created before trace instrumentation "
+                "shipped, or the conductor failed before persisting."
+            ),
+        )
+
+    raw_stages = raw.get("stages") or []
+    stages = [
+        RunTraceStageOut(
+            name=str(s.get("name", "unnamed")),
+            elapsed_ms=float(s.get("elapsed_ms", 0.0)),
+            items=(int(s["items"]) if s.get("items") is not None else None),
+            status=str(s.get("status", "ok")),
+        )
+        for s in raw_stages
+    ]
+
+    summary_keys = {
+        "total_ms",
+        "stage_count",
+        "architect_calls",
+        "architect_failures",
+        "architect_skipped",
+        "clusters_processed",
+    }
+    summary = {k: raw[k] for k in summary_keys if k in raw}
+
+    return SimulationRunTraceOut(
+        id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        total_ms=float(raw.get("total_ms", 0.0)) or None,
+        stage_count=int(raw.get("stage_count", len(stages))),
+        summary=summary,
+        stages=stages,
+        available=True,
+        message="",
     )
 
 
