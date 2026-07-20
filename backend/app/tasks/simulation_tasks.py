@@ -88,6 +88,48 @@ def _mark_failed(db: Session, sim: Simulation, exc: Exception) -> None:
             )
 
 
+def _derive_chain_scalars(conductor_result: ConductorResult) -> tuple[float, float, float, float]:
+    """Derive population-weighted transition scalars from a ConductorResult.
+
+    Returns (arrive_to_browse, browse_to_consider, consider_to_decide,
+    decide_to_purchase) in [0, 1]. Falls back to a per-cluster conversion
+    decomposition when the per-cluster override map is empty.
+    """
+    from app.simulation.markov import BASE_TRANSITIONS, State
+
+    pairs = (
+        (State.ARRIVE, State.BROWSE),
+        (State.BROWSE, State.CONSIDER),
+        (State.CONSIDER, State.DECIDE),
+        (State.DECIDE, State.PURCHASE),
+    )
+    base = [float(BASE_TRANSITIONS[f][t]) for f, t in pairs]
+
+    cluster_breakdown = conductor_result.cluster_breakdown or {}
+    per_cluster_matrices = conductor_result.per_cluster_matrices or {}
+
+    weighted_numer: list[float] = [0.0, 0.0, 0.0, 0.0]
+    weighted_denom: float = 0.0
+    for cluster_id, conversion in cluster_breakdown.items():
+        overrides = per_cluster_matrices.get(cluster_id) or {}
+        weight = max(0.0, float(conversion)) if conversion else 0.0
+        weighted_denom += weight
+        for i, (from_s, to_s) in enumerate(pairs):
+            if (from_s.value, to_s.value) in overrides:
+                weighted_numer[i] += weight * float(overrides[(from_s.value, to_s.value)])
+
+    if weighted_denom <= 0.0:
+        # No usable per-cluster data — fall back to the base transition
+        # scalars so downstream consumers still receive a coherent chain.
+        return tuple(base)
+
+    scalars = tuple(
+        max(0.0, min(1.0, numer / weighted_denom)) if weighted_denom > 0 else base[i]
+        for i, numer in enumerate(weighted_numer)
+    )
+    return scalars  # type: ignore[return-value]
+
+
 def _funnel_result_from_conductor(
     conductor_result: ConductorResult,
     total_agents: int,
@@ -104,14 +146,33 @@ def _funnel_result_from_conductor(
     eps = max(0.001, pwc * 0.05)
 
     n = total_agents
+    arrive_to_browse, browse_to_consider, consider_to_decide, decide_to_purchase = (
+        _derive_chain_scalars(conductor_result)
+    )
+
+    if n > 0:
+        # Build the funnel chain top-down so counts are monotonically
+        # non-increasing, then anchor PURCHASE to the conductor-derived
+        # `converted` so the funnel narrative never contradicts
+        # population_weighted_conversion.
+        browse_count = min(n, int(round(n * arrive_to_browse)))
+        consider_count = min(browse_count, int(round(browse_count * browse_to_consider)))
+        decide_count = min(consider_count, int(round(consider_count * consider_to_decide)))
+        purchase_count = min(decide_count, converted)
+    else:
+        browse_count = consider_count = decide_count = purchase_count = 0
+
+    abandon_count = max(0, n - converted)
+    return_count = max(0, min(n // 50, n)) if n else 0
+
     stage_counts = {
         "ARRIVE": n,
-        "BROWSE": max(converted, int(n * 0.88)) if n else 0,
-        "CONSIDER": max(converted, int(n * 0.62)) if n else 0,
-        "DECIDE": max(converted, int(n * 0.42)) if n else 0,
-        "PURCHASE": converted,
-        "ABANDON": max(0, n - converted),
-        "RETURN": max(0, min(n // 50, n)) if n else 0,
+        "BROWSE": browse_count,
+        "CONSIDER": consider_count,
+        "DECIDE": decide_count,
+        "PURCHASE": purchase_count,
+        "ABANDON": abandon_count,
+        "RETURN": return_count,
     }
 
     ordered_stages = [s.value for s in STATES]
