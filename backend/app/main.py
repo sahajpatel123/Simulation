@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -16,6 +17,8 @@ from app.core.redis_client import get_redis_client
 from app.core.timing_middleware import TimingMiddleware
 from app.worker import celery_app as _celery_app
 
+logger = logging.getLogger(__name__)
+
 if settings.SENTRY_DSN:
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
@@ -28,21 +31,21 @@ if settings.SENTRY_DSN:
 async def lifespan(app: FastAPI):
     configure_logging()
     init_extensions()
-    print("✅ TheCee backend running — pgvector enabled")
+    logger.info("TheCee backend running — pgvector enabled")
 
     from app.simulation.clusters.registry import ClusterRegistry
     from app.core.database import SessionLocal
     db = SessionLocal()
     try:
         ClusterRegistry().sync_to_db(db)
-        print("✅ Cluster parameters synced to DB")
+        logger.info("Cluster parameters synced to DB")
     except Exception as e:
-        print(f"⚠️ Cluster sync warning: {e}")
+        logger.warning("Cluster sync warning: %s", e)
     finally:
         db.close()
 
     yield
-    print("TheCee backend shutting down")
+    logger.info("TheCee backend shutting down")
 
 
 app = FastAPI(

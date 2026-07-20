@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import logging
+
 from app.core.database import SessionLocal
 from app.simulation.calibration_engine import CalibrationEngine
 from app.simulation.product_type import ProductType
 from app.worker import celery_app
+
+logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name="calibration.run_systematic_bias_update")
@@ -13,9 +17,9 @@ def run_systematic_bias_update() -> None:
     try:
         for pt in ProductType:
             eng.update_systematic_bias(pt.value, db)
-        print("✅ Systematic bias update complete")
+        logger.info("Systematic bias update complete")
     except Exception as e:
-        print(f"⚠️ Bias update error: {e}")
+        logger.exception("Bias update error: %s", e)
     finally:
         db.close()
 
@@ -26,8 +30,8 @@ def run_structural_pattern_update() -> None:
     eng = CalibrationEngine()
     try:
         eng.update_structural_patterns(db)
-        print("✅ Structural pattern update complete")
+        logger.info("Structural pattern update complete")
     except Exception as e:
-        print(f"⚠️ Pattern update error: {e}")
+        logger.exception("Pattern update error: %s", e)
     finally:
         db.close()
