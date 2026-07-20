@@ -22,7 +22,10 @@ function decodePayload(token: string): Record<string, unknown> | null {
     if (!base64) return null
     const normalized = base64.replace(/-/g, '+').replace(/_/g, '/')
     const pad = normalized.length % 4 === 0 ? '' : '='.repeat(4 - (normalized.length % 4))
-    const json = atob(normalized + pad)
+    const raw = normalized + pad
+    const json = typeof atob === 'function'
+      ? atob(raw)
+      : Buffer.from(raw, 'base64').toString('binary')
     return JSON.parse(json)
   } catch {
     return null
