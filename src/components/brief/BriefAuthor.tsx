@@ -72,6 +72,78 @@ const s = {
   cream: '#f5f0e8',
 }
 
+/* ─── Local draft persistence ──────────────────────────── */
+
+const DRAFT_VERSION = 1
+const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
+const draftKey = (pid: string | number) => `thecee_brief_draft_${pid}`
+const pressKey = (pid: string | number) => `thecee_brief_pressroom_${pid}`
+
+interface DraftPayload {
+  version: number
+  positioning: string
+  features: string[]
+  hook: string
+  savedAt: number
+}
+
+function loadDraft(projectId: string | number): DraftPayload | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(draftKey(projectId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<DraftPayload>
+    if (parsed.version !== DRAFT_VERSION) return null
+    if (!parsed.savedAt || Date.now() - parsed.savedAt > DRAFT_TTL_MS) return null
+    return {
+      version: DRAFT_VERSION,
+      positioning: typeof parsed.positioning === 'string' ? parsed.positioning : '',
+      features: Array.isArray(parsed.features) ? parsed.features.slice(0, 3).map((f) => String(f)) : ['', '', ''],
+      hook: typeof parsed.hook === 'string' ? parsed.hook : '',
+      savedAt: parsed.savedAt,
+    }
+  } catch {
+    return null
+  }
+}
+
+function saveDraft(projectId: string | number, payload: DraftPayload): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(draftKey(projectId), JSON.stringify(payload))
+  } catch {
+    /* quota exceeded or private mode — ignore */
+  }
+}
+
+function clearDraft(projectId: string | number): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.removeItem(draftKey(projectId))
+  } catch {
+    /* ignore */
+  }
+}
+
+function loadPressRoom(projectId: string | number): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(pressKey(projectId)) === '1'
+  } catch {
+    return false
+  }
+}
+
+function savePressRoom(projectId: string | number, value: boolean): void {
+  if (typeof window === 'undefined') return
+  try {
+    if (value) window.localStorage.setItem(pressKey(projectId), '1')
+    else window.localStorage.removeItem(pressKey(projectId))
+  } catch {
+    /* ignore */
+  }
+}
+
 /* ─── Field input label ─────────────────────────────────── */
 
 function FieldLabel({ label, hint }: { label: string; hint: string }) {
@@ -177,16 +249,65 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
     result: string | string[]
   } | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [draftHydrated, setDraftHydrated] = useState(false)
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null)
 
+  // 1. On mount (client-only): hydrate from local draft + press room preference.
+  //    Run before any server-brief sync so a draft isn't clobbered.
   useEffect(() => {
-    if (brief) {
-      setPositioning(brief.positioning || '')
-      const f = brief.features || []
+    const draft = loadDraft(projectId)
+    if (draft) {
+      setPositioning(draft.positioning)
+      const f = draft.features
       setFeatures([f[0] || '', f[1] || '', f[2] || ''])
-      setHook(brief.hook || '')
+      setHook(draft.hook)
+      setDraftSavedAt(draft.savedAt)
     }
-  }, [brief])
+    setPressRoomMode(loadPressRoom(projectId))
+    setDraftHydrated(true)
+  }, [projectId])
 
+  // 2. When the server brief arrives, only sync if we haven't already loaded
+  //    a local draft — otherwise the draft wins (it represents fresher intent).
+  useEffect(() => {
+    if (!brief || !draftHydrated) return
+    const userHasContent = positioning.trim() || hook.trim() || features.some((f) => f.trim())
+    if (userHasContent) return
+    setPositioning(brief.positioning || '')
+    const f = brief.features || []
+    setFeatures([f[0] || '', f[1] || '', f[2] || ''])
+    setHook(brief.hook || '')
+  }, [brief, draftHydrated, positioning, features, hook])
+
+  // 3. Debounced draft persistence — only after hydration completes so the
+  //    initial render doesn't wipe a freshly loaded draft.
+  useEffect(() => {
+    if (!draftHydrated) return
+    const hasContent = positioning.trim() || hook.trim() || features.some((f) => f.trim())
+    const handle = window.setTimeout(() => {
+      if (!hasContent) {
+        clearDraft(projectId)
+        setDraftSavedAt(null)
+        return
+      }
+      const payload: DraftPayload = {
+        version: DRAFT_VERSION,
+        positioning, features, hook,
+        savedAt: Date.now(),
+      }
+      saveDraft(projectId, payload)
+      setDraftSavedAt(payload.savedAt)
+    }, 400)
+    return () => window.clearTimeout(handle)
+  }, [positioning, features, hook, projectId, draftHydrated])
+
+  // 4. Persist the press room toggle across visits.
+  useEffect(() => {
+    if (!draftHydrated) return
+    savePressRoom(projectId, pressRoomMode)
+  }, [pressRoomMode, projectId, draftHydrated])
+
+  const hasUnsavedDraft = draftSavedAt !== null
   const isComplete = positioning.trim() && features.filter((f) => f.trim()).length >= 1 && hook.trim()
   const isWaiting = saveBrief.isPending || assistBrief.isPending
 
@@ -197,6 +318,9 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
         positioning, features: features.filter((f) => f.trim()), hook,
         mark_complete: markComplete,
       })
+      // Successful server save supersedes the local draft.
+      clearDraft(projectId)
+      setDraftSavedAt(null)
       if (markComplete) router.push(`/project/${projectId}`)
     } catch {
       setErrorMsg('Failed to save. Check your connection and try again.')
@@ -300,9 +424,25 @@ export default function BriefAuthor({ projectId, variant, dossierTitle }: BriefA
         }}>{copy.pageSubtitle}</p>
 
         {/* DOSSIER REFERENCE */}
-        <div style={{ paddingBottom: 24, marginBottom: 48, borderBottom: '0.5px solid #1a1a1a' }}>
-          <div style={{ fontFamily: s.mono, fontSize: 9, letterSpacing: '0.24em', color: s.mute, marginBottom: 8 }}>ON FILE</div>
-          <div style={{ fontFamily: s.serif, fontStyle: 'italic', fontSize: 16, color: s.ink }}>{dossierTitle}</div>
+        <div style={{ paddingBottom: 24, marginBottom: 48, borderBottom: '0.5px solid #1a1a1a', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 24 }}>
+          <div>
+            <div style={{ fontFamily: s.mono, fontSize: 9, letterSpacing: '0.24em', color: s.mute, marginBottom: 8 }}>ON FILE</div>
+            <div style={{ fontFamily: s.serif, fontStyle: 'italic', fontSize: 16, color: s.ink }}>{dossierTitle}</div>
+          </div>
+          {hasUnsavedDraft && (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                fontFamily: s.mono, fontSize: 9, letterSpacing: '0.22em',
+                color: s.red, border: '0.5px solid #c0392b',
+                padding: '6px 10px', whiteSpace: 'nowrap', flexShrink: 0,
+                animation: 'fadeSlideIn 0.35s ease-out',
+              }}
+            >
+              LOCAL DRAFT · UNFILED
+            </div>
+          )}
         </div>
 
         {/* === POSITIONING === */}
