@@ -258,8 +258,12 @@ def run_decision_comparison(self, decision_id: int) -> dict[str, Any]:
 
         logger.info("[Decision] Dispatching %s scenarios decision_id=%s", len(scenarios), decision_id)
 
-        raw_results: list[dict[str, Any]] = [
-            run_single_scenario.run(
+        # Dispatch each scenario through Celery so they run concurrently
+        # across workers instead of blocking the orchestrator's 900s soft
+        # time limit. Use .delay() (which is .apply_async() with defaults)
+        # and collect results via AsyncResult.get().
+        async_results = [
+            run_single_scenario.delay(
                 project_id=decision.project_id,
                 scenario=scenario,
                 base_env_params=base_env_params,
@@ -268,6 +272,7 @@ def run_decision_comparison(self, decision_id: int) -> dict[str, Any]:
             )
             for index, scenario in enumerate(scenarios)
         ]
+        raw_results: list[dict[str, Any]] = [ar.get() for ar in async_results]
 
         valid = [result for result in raw_results if not result.get("error")]
         failed = [result for result in raw_results if result.get("error")]
