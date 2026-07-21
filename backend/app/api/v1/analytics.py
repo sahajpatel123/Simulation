@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
 from app.schemas.portfolio import UserPortfolioOut
+from app.schemas.calibration import CalibrationStatusOut
 from app.simulation.portfolio_analytics import (
     build_conversion_distribution,
     build_failure_domain_counts,
@@ -18,6 +19,13 @@ from app.simulation.portfolio_analytics import (
     build_status_breakdown,
     build_stress_test_coverage,
 )
+from app.simulation.calibration_insights import (
+    build_architect_health,
+    build_outcome_coverage,
+    build_product_type_breakdown,
+    summarise_calibration,
+)
+from app.simulation.calibration_engine import ALL_ARCHITECT_NAMES
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -414,5 +422,73 @@ def my_portfolio(
             "with_outcome": int(outcome_with or 0),
         },
         recent_projects=build_recent_projects([dict(r) for r in recent_rows]),
+        generated_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+
+@router.get(
+    "/calibration/status",
+    response_model=CalibrationStatusOut,
+    summary="Calibration engine state (admin only)",
+    responses=_JSON_200,
+)
+def calibration_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CalibrationStatusOut:
+    """
+    Returns the current calibration state across the 5-layer engine:
+    founder-outcome coverage, per-architect correction factors,
+    confidence/samples, and a list of architects that still need more data.
+
+    Admin-only — calibration is a global signal shared across all users.
+    """
+    _require_admin(current_user)
+
+    outcome_total = int(
+        db.execute(text("SELECT COUNT(*)::int FROM founder_outcomes")).scalar_one() or 0
+    )
+    outcome_validated = int(
+        db.execute(
+            text(
+                "SELECT COUNT(*)::int FROM founder_outcomes WHERE validated=true AND learning_weight > 0"
+            )
+        ).scalar_one()
+        or 0
+    )
+    outcome_rejected = int(
+        db.execute(
+            text(
+                "SELECT COUNT(*)::int FROM founder_outcomes WHERE validated=false AND learning_weight = 0"
+            )
+        ).scalar_one()
+        or 0
+    )
+
+    correction_rows = db.execute(
+        text("""
+        SELECT architect_name, product_type, product_attribute, cluster_id,
+               correction_scalar, confidence_weight, effective_sample_count,
+               scope, last_updated
+        FROM architect_corrections
+        ORDER BY architect_name, product_type, cluster_id
+    """)
+    ).mappings().all()
+
+    corrections_list = [dict(r) for r in correction_rows]
+    by_architect = build_architect_health(corrections_list, list(ALL_ARCHITECT_NAMES))
+    summary = summarise_calibration(by_architect, corrections_list)
+    product_breakdown = build_product_type_breakdown(corrections_list)
+
+    return CalibrationStatusOut(
+        outcome_coverage=build_outcome_coverage(
+            outcome_total, outcome_validated, outcome_rejected
+        ),
+        total_correction_rows=summary["total_correction_rows"],
+        by_architect=by_architect,
+        by_product_type=product_breakdown,
+        calibrated_architects=summary["calibrated_architects"],
+        under_calibrated_architects=summary["under_calibrated_architects"],
+        under_calibrated_list=summary["under_calibrated_list"],
         generated_at=datetime.now(timezone.utc).isoformat(),
     )

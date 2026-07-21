@@ -1,7 +1,7 @@
 {
   "status": "COMPLETED",
-  "start_time": "2026-07-21 20:11:10",
-  "end_time": "2026-07-21 20:18:27",
-  "next_scheduled_run": "2026-07-21 20:33:27",
-  "executed_task": "Added GET /analytics/me/portfolio: a user-scoped dashboard rollup with status breakdowns, conversion distribution, primary failure domain frequency, stress-test coverage, outcome coverage, and recent activity. Pure helpers in app/simulation/portfolio_analytics.py and Pydantic schema in app/schemas/portfolio.py. 20 new tests; full suite 150 passed."
+  "start_time": "2026-07-21 20:35:14",
+  "end_time": "2026-07-21 20:41:52",
+  "next_scheduled_run": "2026-07-21 20:56:52",
+  "executed_task": "Added admin-gated GET /analytics/calibration/status: founder outcome coverage, per-architect correction factors, confidence/samples, calibrated vs under-calibrated list, and product-type breakdown. New schemas, pure helpers, and 18 new tests; full suite 168 passed."
 }
