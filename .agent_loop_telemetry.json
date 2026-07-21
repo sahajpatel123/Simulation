@@ -1,7 +1,7 @@
 {
   "status": "COMPLETED",
-  "start_time": "2026-07-21 23:25:22",
-  "end_time": "2026-07-21 23:30:40",
-  "next_scheduled_run": "2026-07-21 23:45:40",
-  "executed_task": "Added 19 regression tests for ResultsAggregator pure helpers: _ci degenerate/single/multi-value handling and unit-interval clipping, _revenue_ci zero-flooring and level-driven width, _price_curve point count, single-optimal flag, sorted prices, decreasing conversion, and high-sensitivity optimal shift. Full suite 334 passed."
+  "start_time": "2026-07-21 23:47:37",
+  "end_time": "2026-07-21 23:51:24",
+  "next_scheduled_run": "2026-07-22 00:06:24",
+  "executed_task": "Added 24 regression tests for Conductor.detect_product_type: empty input fallback, every product type from keyword descriptions, assumption-driven detection, multi-keyword scoring, hardware-priority tie-breaking, defensive inputs (missing keys, empty text), case-insensitivity, and PRODUCT_TYPE_KEYWORDS structural integrity. Full suite 358 passed."
 }
