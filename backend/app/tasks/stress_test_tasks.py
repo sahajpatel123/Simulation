@@ -23,6 +23,11 @@ logger = logging.getLogger(__name__)
 
 STRESS_MULTIPLIER: float = 1.9
 KILL_SHOT_THRESHOLD: float = 0.01
+# HIGH-risk boundary from _overall_risk(): rows with delta below this but
+# conversion still ≥ KILL_SHOT_THRESHOLD are "partial kill shots" — they
+# don't collapse the funnel outright, but they are severe enough to demand
+# surface-level attention from downstream context (interventions, etc).
+PARTIAL_KILL_SHOT_DELTA_THRESHOLD: float = -0.018
 AGENT_VOLUME: int = 5000
 BASE_SEED: int = 7777
 
@@ -80,6 +85,23 @@ def _kill_shot_probability(delta: float, sensitivity: str) -> float:
     sev_w = sev_weights.get(sensitivity.upper(), 0.4)
     magnitude = min(1.0, abs(delta) * 25)
     return round(magnitude * sev_w, 3)
+
+
+def _is_partial_kill_shot(row: dict[str, Any]) -> bool:
+    """
+    A "partial kill shot" is a HIGH-severity risk row that did not collapse
+    conversion below KILL_SHOT_THRESHOLD but moved the needle hard enough
+    to demand explicit intervention context.
+
+    Concretely: kill_shot=False AND delta < PARTIAL_KILL_SHOT_DELTA_THRESHOLD.
+    Sorted by delta ascending (worst first) when surfaced.
+    """
+    delta = row.get("delta")
+    return bool(
+        row.get("kill_shot") is False
+        and isinstance(delta, (int, float))
+        and delta < PARTIAL_KILL_SHOT_DELTA_THRESHOLD
+    )
 
 
 def _overall_risk(sensitivity_matrix: list[dict[str, Any]]) -> str:
@@ -174,6 +196,7 @@ def run_assumption_stress_test(self, project_id: int) -> dict[str, Any]:
                 "status": "COMPLETED",
                 "sensitivity_matrix": [],
                 "kill_shots": [],
+                "partial_kill_shots": [],
                 "overall_risk_level": "LOW",
                 "baseline_conversion": 0.0,
                 "assumptions_tested": 0,
@@ -267,12 +290,14 @@ def run_assumption_stress_test(self, project_id: int) -> dict[str, Any]:
 
         sensitivity_matrix.sort(key=lambda row: row["delta"])
         kill_shots = [row for row in sensitivity_matrix if row["kill_shot"]]
+        partial_kill_shots = [row for row in sensitivity_matrix if _is_partial_kill_shot(row)]
         overall_risk = _overall_risk(sensitivity_matrix)
 
         final_result = {
             "status": "COMPLETED",
             "sensitivity_matrix": sensitivity_matrix,
             "kill_shots": kill_shots,
+            "partial_kill_shots": partial_kill_shots,
             "overall_risk_level": overall_risk,
             "baseline_conversion": baseline_conv,
             "assumptions_tested": len(sensitivity_matrix),

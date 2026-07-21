@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AssumptionStressResult(BaseModel):
@@ -19,6 +19,7 @@ class StressTestOut(BaseModel):
     status: str
     sensitivity_matrix: list[AssumptionStressResult]
     kill_shots: list[AssumptionStressResult]
+    partial_kill_shots: list[AssumptionStressResult] = Field(default_factory=list)
     overall_risk_level: str
     baseline_conversion: float
     assumptions_tested: int
