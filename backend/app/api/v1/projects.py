@@ -1090,12 +1090,16 @@ def get_stress_test(
 
     matrix = [AssumptionStressResult(**row) for row in raw.get("sensitivity_matrix", [])]
     shots = [AssumptionStressResult(**row) for row in raw.get("kill_shots", [])]
+    partial_shots = [
+        AssumptionStressResult(**row) for row in raw.get("partial_kill_shots", [])
+    ]
 
     result = StressTestOut(
         project_id=project_id,
         status="COMPLETED",
         sensitivity_matrix=matrix,
         kill_shots=shots,
+        partial_kill_shots=partial_shots,
         overall_risk_level=raw.get("overall_risk_level", "UNKNOWN"),
         baseline_conversion=raw.get("baseline_conversion", 0.0),
         assumptions_tested=raw.get("assumptions_tested", 0),
@@ -1176,7 +1180,17 @@ def generate_interventions(
         "assumptions": len(assumptions) > 0,
         "simulation": latest_sim is not None,
         "premortem": bool(premortem_data and premortem_data.get("failure_modes")),
-        "stress_test": bool(stress_test_data and stress_test_data.get("kill_shots")),
+        # A stress test contributes evidence whenever it COMPLETED with a
+        # populated sensitivity_matrix — even when zero kill_shots were found
+        # (a valid low-risk outcome). Keying off kill_shots alone wrongly
+        # reported those runs as "no contribution"; keying off status +
+        # sensitivity_matrix reflects the real persisted contract and excludes
+        # RUNNING/FAILED/no-assumption payloads that carry no matrix.
+        "stress_test": bool(
+            stress_test_data
+            and stress_test_data.get("status") == "COMPLETED"
+            and stress_test_data.get("sensitivity_matrix")
+        ),
     }
 
     results = latest_sim.results_json or {} if latest_sim else {}
