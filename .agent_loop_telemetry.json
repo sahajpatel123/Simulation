@@ -1,7 +1,7 @@
 {
   "status": "COMPLETED",
-  "start_time": "2026-07-21 22:22:13",
-  "end_time": "2026-07-21 22:27:51",
-  "next_scheduled_run": "2026-07-21 22:42:51",
-  "executed_task": "Added GET /projects/{id}/simulation-trend: status breakdown, best/worst/latest run details, conversion rate stats, OLS trend slope, and stability score (1/(1+cv)). Defensive JSON-string coercion in the helper. New schemas, pure helpers, and 21 new tests; full suite 272 passed."
+  "start_time": "2026-07-21 22:45:25",
+  "end_time": "2026-07-21 22:48:42",
+  "next_scheduled_run": "2026-07-21 23:03:42",
+  "executed_task": "Added 29 regression tests for the sanitiser: length caps (default + custom), HTML escaping, dangerous-pattern stripping (script/javascript:/data:/vbscript:/event handlers), dict + list recursion, non-string preservation, whitespace handling, and constants. Full suite 301 passed."
 }
