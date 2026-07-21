@@ -1,7 +1,7 @@
 {
   "status": "COMPLETED",
-  "start_time": "2026-07-21 23:05:17",
-  "end_time": "2026-07-21 23:07:37",
-  "next_scheduled_run": "2026-07-21 23:22:37",
-  "executed_task": "Added 14 regression tests for simulation_report.py: _severity_color mappings (CRITICAL/WARNING/INFO + unknown fallback), _top_channel_label defensive parsing (dict/list-tuple/empty/missing-key), brand color constants, and _styles paragraph-style contract. Full suite 315 passed."
+  "start_time": "2026-07-21 23:25:22",
+  "end_time": "2026-07-21 23:30:40",
+  "next_scheduled_run": "2026-07-21 23:45:40",
+  "executed_task": "Added 19 regression tests for ResultsAggregator pure helpers: _ci degenerate/single/multi-value handling and unit-interval clipping, _revenue_ci zero-flooring and level-driven width, _price_curve point count, single-optimal flag, sorted prices, decreasing conversion, and high-sensitivity optimal shift. Full suite 334 passed."
 }
