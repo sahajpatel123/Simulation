@@ -23,7 +23,12 @@ from app.schemas.simulation import (
     SimulationResultOut,
     SimulationStatusOut,
 )
+from app.schemas.simulation_comparison import (
+    SimulationCompareRequest,
+    SimulationComparisonOut,
+)
 from app.simulation.clusters.registry import ClusterRegistry
+from app.simulation.comparison import build_simulation_comparison
 from app.simulation.funnel_diagnosis import build_funnel_diagnosis
 from app.simulation.scored_assumption import (
     ClaimConfidence,
@@ -227,6 +232,84 @@ def get_signal_quality(
         "claim_confidence_distribution": dist,
         "improvement_suggestions": _signal_suggestions(sq, dist),
     }
+
+
+@router.post(
+    "/compare",
+    response_model=SimulationComparisonOut,
+    summary="Compare 2–5 simulations side-by-side (A/B winner, cluster & domain deltas)",
+    responses=_JSON_200,
+)
+def compare_simulations(
+    payload: SimulationCompareRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SimulationComparisonOut:
+    """
+    Side-by-side comparison of 2–5 owned simulations from the **same** project.
+
+    Returns conversion winner / spread / verdict, per-cluster conversion table,
+    and cross-simulation domain-finding consensus. Pure analytics — no Celery
+    dispatch and no LLM calls.
+    """
+    sims = (
+        db.query(Simulation)
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(
+            Simulation.id.in_(payload.simulation_ids),
+            Project.user_id == current_user.id,
+        )
+        .all()
+    )
+    by_id = {s.id: s for s in sims}
+
+    missing = [sid for sid in payload.simulation_ids if sid not in by_id]
+    if missing:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Simulation(s) not found or not owned: {missing}",
+        )
+
+    project_ids = {s.project_id for s in sims}
+    if len(project_ids) != 1:
+        raise HTTPException(
+            status_code=400,
+            detail="All simulations must belong to the same project.",
+        )
+
+    incomplete = [
+        s.id for s in sims if s.status != "COMPLETED" or not s.results_json
+    ]
+    if incomplete:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "All simulations must be COMPLETED with results. "
+                f"Not ready: {incomplete}"
+            ),
+        )
+
+    # Preserve caller order so winner labels A/B/C map to request order.
+    ordered = [by_id[sid] for sid in payload.simulation_ids]
+    rows = [
+        {
+            "id": s.id,
+            "project_id": s.project_id,
+            "status": s.status,
+            "results_json": s.results_json,
+            "signal_quality": s.signal_quality,
+            "created_at": s.created_at,
+        }
+        for s in ordered
+    ]
+    registry = {
+        cid: {
+            "name": cluster.name,
+            "population_weight": cluster.population_weight,
+        }
+        for cid, cluster in _clusters_map.items()
+    }
+    return build_simulation_comparison(rows, cluster_registry=registry)
 
 
 @router.get(
