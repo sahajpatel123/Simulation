@@ -1,7 +1,7 @@
 {
   "status": "COMPLETED",
-  "start_time": "2026-07-21 19:30:05",
-  "end_time": "2026-07-21 19:34:17",
-  "next_scheduled_run": "2026-07-21 19:49:17",
-  "executed_task": "Polished ClusterRegistry: memoised all_clusters() and clusters_for_product_type() at the class level with RLock-guarded lazy init, pre-computed population weight sum, defensive validation in get_cluster(), and a reset_cache test hook. 13 new tests; full suite 104 passed."
+  "start_time": "2026-07-21 19:51:13",
+  "end_time": "2026-07-21 19:54:37",
+  "next_scheduled_run": "2026-07-21 20:09:37",
+  "executed_task": "Added 26 regression tests for the MarkovBehaviourModel state machine: state/index invariants, row-stochasticity, keyword-rule first-match semantics, sensitivity-weight scaling, env-param effects, deterministic seeding, terminal-state contract, and build factory routing. Full suite 130 passed."
 }
