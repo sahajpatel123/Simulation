@@ -1,7 +1,7 @@
 {
   "status": "COMPLETED",
-  "start_time": "2026-07-21 19:51:13",
-  "end_time": "2026-07-21 19:54:37",
-  "next_scheduled_run": "2026-07-21 20:09:37",
-  "executed_task": "Added 26 regression tests for the MarkovBehaviourModel state machine: state/index invariants, row-stochasticity, keyword-rule first-match semantics, sensitivity-weight scaling, env-param effects, deterministic seeding, terminal-state contract, and build factory routing. Full suite 130 passed."
+  "start_time": "2026-07-21 20:11:10",
+  "end_time": "2026-07-21 20:18:27",
+  "next_scheduled_run": "2026-07-21 20:33:27",
+  "executed_task": "Added GET /analytics/me/portfolio: a user-scoped dashboard rollup with status breakdowns, conversion distribution, primary failure domain frequency, stress-test coverage, outcome coverage, and recent activity. Pure helpers in app/simulation/portfolio_analytics.py and Pydantic schema in app/schemas/portfolio.py. 20 new tests; full suite 150 passed."
 }
