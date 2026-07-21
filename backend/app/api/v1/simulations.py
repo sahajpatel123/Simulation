@@ -16,6 +16,7 @@ from app.models.project import Project
 from app.models.simulation import Simulation
 from app.models.user import User
 from app.models.cluster_run_summary import ClusterRunSummary
+from app.schemas.cluster_opportunity import ClusterOpportunityMatrixOut
 from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
 from app.schemas.simulation import (
     SimulationCreate,
@@ -28,6 +29,7 @@ from app.schemas.simulation_comparison import (
     SimulationComparisonOut,
 )
 from app.simulation.clusters.registry import ClusterRegistry
+from app.simulation.cluster_opportunity import build_cluster_opportunity_matrix
 from app.simulation.comparison import build_simulation_comparison
 from app.simulation.funnel_diagnosis import build_funnel_diagnosis
 from app.simulation.scored_assumption import (
@@ -600,6 +602,96 @@ def get_funnel_diagnosis(
         else None,
         cluster_summaries=summaries or None,
         cluster_limit=limit,
+    )
+
+
+@router.get(
+    "/{simulation_id}/cluster-opportunities",
+    response_model=ClusterOpportunityMatrixOut,
+    summary="Rank clusters by addressable conversion opportunity for GTM focus",
+    responses=_JSON_200,
+)
+def get_cluster_opportunities(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    limit: int = 52,
+    benchmark: float = 0.05,
+) -> ClusterOpportunityMatrixOut:
+    """
+    Build a cluster opportunity matrix from completed results:
+
+      * ``opportunity_score = weight × gap × addressability``
+      * Segments: QUICK_WIN / TRANSFORM / NICHE / DEPRIORITIZE
+      * Addressable lift estimate + focus recommendations
+
+    Optional ``cluster_run_summaries`` enrich weights and drop triggers.
+    Pure analytics — no Celery, no LLM.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — cluster opportunities require "
+                "completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    effective_limit = limit if isinstance(limit, int) else 52
+    effective_limit = max(1, min(effective_limit, 52))
+    effective_benchmark = (
+        float(benchmark) if isinstance(benchmark, (int, float)) else 0.05
+    )
+    effective_benchmark = max(0.01, min(effective_benchmark, 0.5))
+
+    summary_rows = (
+        db.query(ClusterRunSummary)
+        .filter(ClusterRunSummary.simulation_id == sim.id)
+        .all()
+    )
+    summaries = [
+        {
+            "cluster_id": row.cluster_id,
+            "agents_assigned": row.agents_assigned,
+            "agents_converted": row.agents_converted,
+            "conversion_rate": row.conversion_rate,
+            "primary_drop_trigger": row.primary_drop_trigger,
+            "mean_drop_state": row.mean_drop_state,
+        }
+        for row in summary_rows
+    ]
+    registry = {
+        cid: {
+            "name": cluster.name,
+            "population_weight": cluster.population_weight,
+        }
+        for cid, cluster in _clusters_map.items()
+    }
+
+    return build_cluster_opportunity_matrix(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        signal_quality=float(sim.signal_quality)
+        if sim.signal_quality is not None
+        else None,
+        cluster_summaries=summaries or None,
+        cluster_registry=registry,
+        benchmark=effective_benchmark,
+        limit=effective_limit,
     )
 
 
