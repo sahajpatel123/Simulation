@@ -1,7 +1,7 @@
 {
   "status": "COMPLETED",
-  "start_time": "2026-07-21 18:34:50",
-  "end_time": "2026-07-21 18:41:57",
-  "next_scheduled_run": "2026-07-21 18:56:57",
-  "executed_task": "Completed stress-test partial_kill_shots hardening: propagated partial results through the GET response and schema, added a safe default factory, fixed the missing-kill_shot predicate edge case, and verified the complete 73-test suite."
+  "start_time": "2026-07-21 19:01:09",
+  "end_time": "2026-07-21 19:13:32",
+  "next_scheduled_run": "2026-07-21 19:28:32",
+  "executed_task": "Added accountability insights API: filterable GET /projects/{id}/domain-findings with severity/architect/metric/limit/offset and new GET /projects/{id}/findings/summary with group-by rollup. New schemas (FindingsListOut, FindingsSummaryOut, group-by models) and pure helper module. 18 new tests; full suite 91 passed."
 }

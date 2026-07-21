@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -56,6 +56,17 @@ from app.schemas.stress_test import (
     AssumptionStressResult,
     StressTestOut,
     StressTestStatusOut,
+)
+from app.schemas.accountability import (
+    FindingsListOut,
+    FindingsSummaryOut,
+    VALID_SEVERITIES,
+)
+from app.simulation.accountability_summary import (
+    DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
+    MAX_LIMIT as _FINDINGS_MAX_LIMIT,
+    build_findings_summary as _build_findings_summary,
+    filter_findings as _filter_findings,
 )
 from app.api.v1.common import get_owned_project
 from app.core.utils import extract_json_from_markdown
@@ -406,10 +417,98 @@ def get_project_clusters(
 
 @router.get(
     "/{project_id}/domain-findings",
-    summary="Architect domain findings from the latest completed run",
+    response_model=FindingsListOut,
+    summary="Architect domain findings from the latest completed run (filterable)",
     responses=_JSON_200,
 )
 def get_domain_findings(
+    project_id: int,
+    severity: str | None = Query(
+        default=None,
+        description="Filter by severity: CRITICAL | WARNING | INFO",
+    ),
+    architect: str | None = Query(
+        default=None,
+        description="Case-insensitive substring match on architect name",
+    ),
+    metric: str | None = Query(
+        default=None,
+        description="Exact match on the metric_affected field",
+    ),
+    limit: int = Query(default=_FINDINGS_DEFAULT_LIMIT, ge=1, le=_FINDINGS_MAX_LIMIT),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = get_owned_project(db, current_user.id, project_id)
+
+    if severity is not None and severity.strip().upper() not in VALID_SEVERITIES:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Invalid severity '{severity}'. "
+                f"Allowed: {sorted(VALID_SEVERITIES)}"
+            ),
+        )
+
+    latest_sim = (
+        db.query(Simulation)
+        .filter(Simulation.project_id == project_id, Simulation.status == "COMPLETED")
+        .order_by(Simulation.created_at.desc())
+        .first()
+    )
+    if not latest_sim or not latest_sim.results_json:
+        return FindingsListOut(
+            project_id=project_id,
+            simulation_id=latest_sim.id if latest_sim else None,
+            primary_failure_domain="unknown",
+            highest_value_cluster={},
+            total=0,
+            findings=[],
+            filters={
+                "severity": severity,
+                "architect": architect,
+                "metric": metric,
+                "limit": limit,
+                "offset": offset,
+            },
+        )
+
+    results = latest_sim.results_json
+    raw = results.get("domain_findings", [])
+    filtered = _filter_findings(
+        raw,
+        severity=severity,
+        architect=architect,
+        metric=metric,
+        limit=limit,
+        offset=offset,
+    )
+
+    return FindingsListOut(
+        project_id=project_id,
+        simulation_id=latest_sim.id,
+        primary_failure_domain=results.get("primary_failure_domain", "unknown"),
+        highest_value_cluster=results.get("highest_value_cluster", {}),
+        total=len(_filter_findings(raw)),  # count after filters, before pagination
+        findings=filtered,
+        filters={
+            "severity": severity,
+            "architect": architect,
+            "metric": metric,
+            "limit": limit,
+            "offset": offset,
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/findings/summary",
+    response_model=FindingsSummaryOut,
+    summary="Group-by rollup of persisted domain findings (architect/cluster/metric/action)",
+    responses=_JSON_200,
+)
+def get_findings_summary(
     project_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -423,16 +522,19 @@ def get_domain_findings(
         .first()
     )
     if not latest_sim or not latest_sim.results_json:
-        return {"findings": [], "message": "No completed simulation found"}
+        return FindingsSummaryOut(
+            project_id=project_id,
+            simulation_id=latest_sim.id if latest_sim else None,
+        )
 
     results = latest_sim.results_json
-    return {
-        "findings": results.get("domain_findings", []),
-        "primary_failure_domain": results.get("primary_failure_domain", "unknown"),
-        "highest_value_cluster": results.get("highest_value_cluster", {}),
-        "cluster_narrative": results.get("cluster_narrative", ""),
-        "simulation_id": latest_sim.id,
-    }
+    raw = results.get("domain_findings", [])
+    summary = _build_findings_summary(raw)
+    summary.project_id = project_id
+    summary.simulation_id = latest_sim.id
+    summary.primary_failure_domain = results.get("primary_failure_domain", "unknown")
+    summary.highest_value_cluster = results.get("highest_value_cluster", {})
+    return summary
 
 
 @router.get(
