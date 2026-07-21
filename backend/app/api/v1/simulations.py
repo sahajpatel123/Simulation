@@ -28,10 +28,12 @@ from app.schemas.simulation_comparison import (
     SimulationCompareRequest,
     SimulationComparisonOut,
 )
+from app.schemas.cohort_retention import CohortRetentionOut
 from app.schemas.what_if import WhatIfOut, WhatIfRequest
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.cluster_opportunity import build_cluster_opportunity_matrix
 from app.simulation.comparison import build_simulation_comparison
+from app.simulation.cohort_retention import build_cohort_retention
 from app.simulation.funnel_diagnosis import build_funnel_diagnosis
 from app.simulation.scored_assumption import (
     ClaimConfidence,
@@ -611,6 +613,98 @@ def post_what_if(
         new_assumptions=[a.model_dump() for a in payload.assumptions],
         override_price_sensitivity=payload.override_price_sensitivity,
         override_market_maturity=payload.override_market_maturity,
+    )
+
+
+@router.get(
+    "/{simulation_id}/cohort-retention",
+    response_model=CohortRetentionOut,
+    summary="Project per-cluster retention curves, churn rates, and LTV estimates",
+    responses=_JSON_200,
+)
+def get_cohort_retention(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    cluster_limit: int = 52,
+) -> CohortRetentionOut:
+    """
+    Cohort retention projection from a completed simulation's results.
+
+    Uses the cluster conversion rate as a retention proxy, adjusted by
+    RetentionArchitect findings when available. Projects survival curves at
+    day 1, 7, 30, 90, 180, 365 with churn-risk segmentation and LTV estimates.
+
+    Pure post-hoc analysis — no Celery dispatch, no LLM calls.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Simulation is {sim.status} — cohort retention projection requires completed results.",
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    # Fetch cluster_run_summaries for agent counts and drop triggers
+    summary_rows = (
+        db.query(ClusterRunSummary)
+        .filter(ClusterRunSummary.simulation_id == sim.id)
+        .all()
+    )
+    summaries = [
+        {
+            "cluster_id": row.cluster_id,
+            "agents_assigned": row.agents_assigned,
+            "agents_converted": row.agents_converted,
+            "conversion_rate": row.conversion_rate,
+            "primary_drop_trigger": row.primary_drop_trigger,
+            "mean_drop_state": row.mean_drop_state,
+        }
+        for row in summary_rows
+    ]
+
+    # Build cluster registry for names/weights
+    registry = {
+        cid: {
+            "name": cluster.name,
+            "population_weight": cluster.population_weight,
+        }
+        for cid, cluster in _clusters_map.items()
+    }
+
+    # Get AOV from environment
+    aov = 999.0
+    if sim.environment_id:
+        env = (
+            db.query(Environment)
+            .filter(Environment.id == sim.environment_id)
+            .first()
+        )
+        if env:
+            aov = float(env.average_order_value or 999.0)
+
+    limit = max(1, min(cluster_limit, 52))
+
+    return build_cohort_retention(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
+        cluster_summaries=summaries or None,
+        cluster_registry=registry,
+        aov=aov,
+        limit=limit,
     )
 
 
