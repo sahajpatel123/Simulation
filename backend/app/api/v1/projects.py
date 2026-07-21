@@ -63,6 +63,7 @@ from app.schemas.accountability import (
     VALID_SEVERITIES,
 )
 from app.schemas.reweighting import ReweightingPreviewOut
+from app.schemas.simulation_trend import SimulationTrendOut
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -71,6 +72,9 @@ from app.simulation.accountability_summary import (
 )
 from app.simulation.reweighting_preview import (
     summarise_rule_bundle as _summarise_rule_bundle,
+)
+from app.simulation.simulation_trend import (
+    build_simulation_trend as _build_simulation_trend,
 )
 from app.api.v1.common import get_owned_project
 from app.core.utils import extract_json_from_markdown
@@ -2072,6 +2076,52 @@ def get_simulation_history(
         if history
         else None,
     }
+
+
+@router.get(
+    "/{project_id}/simulation-trend",
+    response_model=SimulationTrendOut,
+    summary="Aggregated simulation trend analytics: status, best/worst run, volatility, slope",
+    responses=_JSON_200,
+)
+def get_simulation_trend(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Returns a richer rollup than ``/simulation-history``:
+
+      * ``status_breakdown`` — counts by status.
+      * ``best_run``, ``worst_run``, ``latest_run`` — RunDetail blocks.
+      * ``conversion_stats`` — count/min/max/mean/median/std of completed runs.
+      * ``trend_slope`` — simple OLS slope of conversion_rate over run-index
+        (None when fewer than 2 completed runs).
+      * ``stability_score`` — ``1 / (1 + cv)`` where ``cv = std / mean``
+        (None when fewer than 2 completed runs or mean == 0).
+    """
+    from datetime import datetime, timezone
+
+    project = get_owned_project(db, current_user.id, project_id)
+    sims = (
+        db.query(Simulation)
+        .filter(Simulation.project_id == project_id)
+        .order_by(Simulation.created_at.asc())
+        .all()
+    )
+    rows = [
+        {
+            "id": s.id,
+            "status": s.status,
+            "signal_quality": s.signal_quality,
+            "results_json": s.results_json,
+            "created_at": s.created_at,
+        }
+        for s in sims
+    ]
+    trend = _build_simulation_trend(rows, project_id=project_id)
+    trend["generated_at"] = datetime.now(timezone.utc).isoformat()
+    return SimulationTrendOut(**trend)
 
 
 @router.post(

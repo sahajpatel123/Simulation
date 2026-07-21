@@ -1,7 +1,7 @@
 {
   "status": "COMPLETED",
-  "start_time": "2026-07-21 22:02:17",
-  "end_time": "2026-07-21 22:05:19",
-  "next_scheduled_run": "2026-07-21 22:20:19",
-  "executed_task": "Added 21 regression tests for FunnelExecutionEngine helpers (_derive_assumption_impact sensitivity ordering, _derive_product_strength floors/ceilings, _build_stage_metrics rate math, _build_demographic_breakdown decade bucketing), StageMetrics/DemographicBreakdown round-trips, and run_batch empty-agents rejection. Full suite 251 passed."
+  "start_time": "2026-07-21 22:22:13",
+  "end_time": "2026-07-21 22:27:51",
+  "next_scheduled_run": "2026-07-21 22:42:51",
+  "executed_task": "Added GET /projects/{id}/simulation-trend: status breakdown, best/worst/latest run details, conversion rate stats, OLS trend slope, and stability score (1/(1+cv)). Defensive JSON-string coercion in the helper. New schemas, pure helpers, and 21 new tests; full suite 272 passed."
 }
