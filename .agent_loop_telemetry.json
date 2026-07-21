@@ -1,7 +1,7 @@
 {
   "status": "COMPLETED",
-  "start_time": "2026-07-21 19:01:09",
-  "end_time": "2026-07-21 19:13:32",
-  "next_scheduled_run": "2026-07-21 19:28:32",
-  "executed_task": "Added accountability insights API: filterable GET /projects/{id}/domain-findings with severity/architect/metric/limit/offset and new GET /projects/{id}/findings/summary with group-by rollup. New schemas (FindingsListOut, FindingsSummaryOut, group-by models) and pure helper module. 18 new tests; full suite 91 passed."
+  "start_time": "2026-07-21 19:30:05",
+  "end_time": "2026-07-21 19:34:17",
+  "next_scheduled_run": "2026-07-21 19:49:17",
+  "executed_task": "Polished ClusterRegistry: memoised all_clusters() and clusters_for_product_type() at the class level with RLock-guarded lazy init, pre-computed population weight sum, defensive validation in get_cluster(), and a reset_cache test hook. 13 new tests; full suite 104 passed."
 }

@@ -4,8 +4,17 @@ ClusterRegistry — all 52 TheCee consumer clusters.
 Population weights sum to exactly 1.0.
 Each cluster carries 8 canonical traits (matching cluster_parameters table).
 sync_to_db() updates cluster_parameters.base_value on every app startup.
+
+Performance contract:
+    The registry is immutable after module load. ``all_clusters`` and
+    ``clusters_for_product_type`` are memoised at the class level so repeated
+    calls (a hot path during conductor runs) reuse a single list per
+    product-type. ``_WEIGHT_SUM`` is computed once at import time.
 """
 from __future__ import annotations
+
+from threading import RLock
+from typing import Any
 
 from app.simulation.clusters.definitions import ClusterDefinition
 
@@ -977,14 +986,37 @@ class ClusterRegistry:
         saas     = registry.clusters_for_product_type("saas")
         ok       = registry.total_weight_check()            # True
         registry.sync_to_db(db_session)                     # on startup
+
+    Performance:
+        ``all_clusters()`` and ``clusters_for_product_type()`` are memoised
+        at the class level — the registry is immutable after import, so
+        repeated calls reuse a single list per product_type. This converts
+        O(n) per-call work into O(1) lookups on the conductor hot path.
     """
 
     _clusters: dict[str, ClusterDefinition] = _CLUSTERS
+    _weight_sum: float = _WEIGHT_SUM
+    _all_clusters_cache: list[ClusterDefinition] | None = None
+    _product_type_cache: dict[str, list[ClusterDefinition]] = {}
+    _cache_lock: RLock = RLock()
 
     def all_clusters(self) -> list[ClusterDefinition]:
-        return list(self._clusters.values())
+        cached = ClusterRegistry._all_clusters_cache
+        if cached is not None:
+            return cached
+        with ClusterRegistry._cache_lock:
+            cached = ClusterRegistry._all_clusters_cache
+            if cached is None:
+                cached = list(self._clusters.values())
+                ClusterRegistry._all_clusters_cache = cached
+            return cached
 
     def get_cluster(self, cluster_id: str) -> ClusterDefinition:
+        if not isinstance(cluster_id, str) or not cluster_id:
+            raise KeyError(
+                f"ClusterRegistry.get_cluster requires a non-empty str, "
+                f"got {cluster_id!r}"
+            )
         try:
             return self._clusters[cluster_id]
         except KeyError:
@@ -994,14 +1026,46 @@ class ClusterRegistry:
             )
 
     def clusters_for_product_type(self, product_type: str) -> list[ClusterDefinition]:
-        return [
-            c for c in self._clusters.values()
-            if product_type in c.product_affinities
-        ]
+        if not isinstance(product_type, str) or not product_type:
+            return []
+        cached = ClusterRegistry._product_type_cache.get(product_type)
+        if cached is not None:
+            return cached
+        with ClusterRegistry._cache_lock:
+            cached = ClusterRegistry._product_type_cache.get(product_type)
+            if cached is None:
+                cached = [
+                    c for c in self._clusters.values()
+                    if product_type in c.product_affinities
+                ]
+                ClusterRegistry._product_type_cache[product_type] = cached
+            return cached
 
     def total_weight_check(self) -> bool:
-        total = sum(c.population_weight for c in self._clusters.values())
-        return abs(total - 1.0) <= 0.001
+        # Pre-computed at import — registry is immutable so we can avoid
+        # re-summing 52 weights on every call.
+        return abs(ClusterRegistry._weight_sum - 1.0) <= 0.001
+
+    def cache_stats(self) -> dict[str, Any]:
+        """Diagnostic for tests: counts of cached entries."""
+        with ClusterRegistry._cache_lock:
+            return {
+                "all_clusters_cached": ClusterRegistry._all_clusters_cache is not None,
+                "product_types_cached": sorted(
+                    ClusterRegistry._product_type_cache.keys()
+                ),
+                "weight_sum": ClusterRegistry._weight_sum,
+            }
+
+    @classmethod
+    def reset_cache(cls) -> None:
+        """
+        Clear memoised caches. Primarily for tests that monkey-patch the
+        registry; production code should never need this.
+        """
+        with cls._cache_lock:
+            cls._all_clusters_cache = None
+            cls._product_type_cache = {}
 
     def sync_to_db(self, db_session) -> None:
         """
