@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -8,6 +10,22 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
+from app.schemas.portfolio import UserPortfolioOut
+from app.schemas.calibration import CalibrationStatusOut
+from app.simulation.portfolio_analytics import (
+    build_conversion_distribution,
+    build_failure_domain_counts,
+    build_recent_projects,
+    build_status_breakdown,
+    build_stress_test_coverage,
+)
+from app.simulation.calibration_insights import (
+    build_architect_health,
+    build_outcome_coverage,
+    build_product_type_breakdown,
+    summarise_calibration,
+)
+from app.simulation.calibration_engine import ALL_ARCHITECT_NAMES
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -255,3 +273,222 @@ def check_outcome_gate(
         "prev_sim_id": int(prev_sim.id),
         "message": "Unlock full report by sharing how your last product performed",
     }
+
+
+@router.get(
+    "/me/portfolio",
+    response_model=UserPortfolioOut,
+    summary="Authenticated user's portfolio rollup (no admin gate)",
+    responses=_JSON_200,
+)
+def my_portfolio(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserPortfolioOut:
+    """
+    Returns a single dashboard view across the authenticated user's projects:
+    counts by status, latest-completed conversion rate distribution, primary
+    failure domain frequency, stress-test coverage, and recent activity.
+
+    Scoped strictly to ``current_user.id`` — does not require admin.
+    """
+    user_id = int(current_user.id)
+
+    # 1. Project counts by status (excludes archived by default — they're
+    # still counted in the total but separated so the UI can filter).
+    project_rows = db.execute(
+        text("""
+        SELECT status, COUNT(*)::int AS count FROM projects
+        WHERE user_id = :uid
+        GROUP BY status
+    """),
+        {"uid": user_id},
+    ).mappings().all()
+
+    # 2. Simulation counts by status (across the user's projects).
+    sim_rows = db.execute(
+        text("""
+        SELECT s.status, COUNT(*)::int AS count
+        FROM simulations s
+        JOIN projects p ON p.id = s.project_id
+        WHERE p.user_id = :uid
+        GROUP BY s.status
+    """),
+        {"uid": user_id},
+    ).mappings().all()
+
+    # 3. Latest completed simulation per project → conversion_rate.
+    latest_per_project = db.execute(
+        text("""
+        WITH latest AS (
+            SELECT DISTINCT ON (s.project_id)
+                s.project_id,
+                s.results_json->>'overall_conversion_rate' AS conversion_rate
+            FROM simulations s
+            JOIN projects p ON p.id = s.project_id
+            WHERE p.user_id = :uid
+              AND UPPER(s.status) = 'COMPLETED'
+              AND s.results_json IS NOT NULL
+              AND s.results_json ? 'overall_conversion_rate'
+            ORDER BY s.project_id, s.created_at DESC
+        )
+        SELECT conversion_rate FROM latest
+    """),
+        {"uid": user_id},
+    ).mappings().all()
+
+    # 4. Primary failure domain distribution.
+    failure_rows = db.execute(
+        text("""
+        SELECT results_json->>'primary_failure_domain' AS architect,
+               COUNT(*)::int AS count
+        FROM simulations s
+        JOIN projects p ON p.id = s.project_id
+        WHERE p.user_id = :uid
+          AND UPPER(s.status) = 'COMPLETED'
+          AND results_json->>'primary_failure_domain' IS NOT NULL
+        GROUP BY architect
+        ORDER BY count DESC LIMIT 10
+    """),
+        {"uid": user_id},
+    ).mappings().all()
+
+    # 5. Stress-test coverage — pull the JSONB so the helper can inspect it.
+    stress_rows = db.execute(
+        text("""
+        SELECT stress_test_json FROM projects
+        WHERE user_id = :uid
+    """),
+        {"uid": user_id},
+    ).mappings().all()
+
+    # 6. Outcome coverage.
+    outcome_total = db.execute(
+        text("""
+        SELECT COUNT(*)::int AS total FROM simulations s
+        JOIN projects p ON p.id = s.project_id
+        WHERE p.user_id = :uid AND UPPER(s.status) = 'COMPLETED'
+    """),
+        {"uid": user_id},
+    ).scalar_one()
+    outcome_with = db.execute(
+        text("""
+        SELECT COUNT(DISTINCT fo.simulation_id)::int AS with_outcome
+        FROM founder_outcomes fo
+        JOIN simulations s ON s.id = fo.simulation_id
+        JOIN projects p ON p.id = s.project_id
+        WHERE p.user_id = :uid
+    """),
+        {"uid": user_id},
+    ).scalar_one()
+
+    # 7. Recent projects (latest 5 by updated_at) with their latest sim.
+    recent_rows = db.execute(
+        text("""
+        SELECT
+            p.id, p.title, p.status, p.updated_at,
+            (s.status = 'COMPLETED') AS has_completed_simulation,
+            s.results_json->>'overall_conversion_rate' AS latest_conversion_rate,
+            s.results_json->>'primary_failure_domain' AS primary_failure_domain
+        FROM projects p
+        LEFT JOIN LATERAL (
+            SELECT status, results_json, created_at
+            FROM simulations
+            WHERE project_id = p.id AND UPPER(status) = 'COMPLETED'
+            ORDER BY created_at DESC LIMIT 1
+        ) s ON true
+        WHERE p.user_id = :uid
+        ORDER BY p.updated_at DESC
+        LIMIT 5
+    """),
+        {"uid": user_id},
+    ).mappings().all()
+
+    return UserPortfolioOut(
+        user_id=user_id,
+        projects=build_status_breakdown([dict(r) for r in project_rows]),
+        simulations=build_status_breakdown([dict(r) for r in sim_rows]),
+        conversion_distribution=build_conversion_distribution(
+            [dict(r) for r in latest_per_project]
+        ),
+        primary_failure_domains=build_failure_domain_counts(
+            [dict(r) for r in failure_rows]
+        ),
+        stress_test_coverage=build_stress_test_coverage(
+            [dict(r) for r in stress_rows]
+        ),
+        outcome_coverage={
+            "simulations_total": int(outcome_total or 0),
+            "with_outcome": int(outcome_with or 0),
+        },
+        recent_projects=build_recent_projects([dict(r) for r in recent_rows]),
+        generated_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+
+@router.get(
+    "/calibration/status",
+    response_model=CalibrationStatusOut,
+    summary="Calibration engine state (admin only)",
+    responses=_JSON_200,
+)
+def calibration_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CalibrationStatusOut:
+    """
+    Returns the current calibration state across the 5-layer engine:
+    founder-outcome coverage, per-architect correction factors,
+    confidence/samples, and a list of architects that still need more data.
+
+    Admin-only — calibration is a global signal shared across all users.
+    """
+    _require_admin(current_user)
+
+    outcome_total = int(
+        db.execute(text("SELECT COUNT(*)::int FROM founder_outcomes")).scalar_one() or 0
+    )
+    outcome_validated = int(
+        db.execute(
+            text(
+                "SELECT COUNT(*)::int FROM founder_outcomes WHERE validated=true AND learning_weight > 0"
+            )
+        ).scalar_one()
+        or 0
+    )
+    outcome_rejected = int(
+        db.execute(
+            text(
+                "SELECT COUNT(*)::int FROM founder_outcomes WHERE validated=false AND learning_weight = 0"
+            )
+        ).scalar_one()
+        or 0
+    )
+
+    correction_rows = db.execute(
+        text("""
+        SELECT architect_name, product_type, product_attribute, cluster_id,
+               correction_scalar, confidence_weight, effective_sample_count,
+               scope, last_updated
+        FROM architect_corrections
+        ORDER BY architect_name, product_type, cluster_id
+    """)
+    ).mappings().all()
+
+    corrections_list = [dict(r) for r in correction_rows]
+    by_architect = build_architect_health(corrections_list, list(ALL_ARCHITECT_NAMES))
+    summary = summarise_calibration(by_architect, corrections_list)
+    product_breakdown = build_product_type_breakdown(corrections_list)
+
+    return CalibrationStatusOut(
+        outcome_coverage=build_outcome_coverage(
+            outcome_total, outcome_validated, outcome_rejected
+        ),
+        total_correction_rows=summary["total_correction_rows"],
+        by_architect=by_architect,
+        by_product_type=product_breakdown,
+        calibrated_architects=summary["calibrated_architects"],
+        under_calibrated_architects=summary["under_calibrated_architects"],
+        under_calibrated_list=summary["under_calibrated_list"],
+        generated_at=datetime.now(timezone.utc).isoformat(),
+    )

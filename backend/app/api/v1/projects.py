@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -56,6 +56,25 @@ from app.schemas.stress_test import (
     AssumptionStressResult,
     StressTestOut,
     StressTestStatusOut,
+)
+from app.schemas.accountability import (
+    FindingsListOut,
+    FindingsSummaryOut,
+    VALID_SEVERITIES,
+)
+from app.schemas.reweighting import ReweightingPreviewOut
+from app.schemas.simulation_trend import SimulationTrendOut
+from app.simulation.accountability_summary import (
+    DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
+    MAX_LIMIT as _FINDINGS_MAX_LIMIT,
+    build_findings_summary as _build_findings_summary,
+    filter_findings as _filter_findings,
+)
+from app.simulation.reweighting_preview import (
+    summarise_rule_bundle as _summarise_rule_bundle,
+)
+from app.simulation.simulation_trend import (
+    build_simulation_trend as _build_simulation_trend,
 )
 from app.api.v1.common import get_owned_project
 from app.core.utils import extract_json_from_markdown
@@ -405,11 +424,172 @@ def get_project_clusters(
 
 
 @router.get(
+    "/{project_id}/reweighting-preview",
+    response_model=ReweightingPreviewOut,
+    summary="Preview the cluster reweighting engine would apply for this project",
+    responses=_JSON_200,
+)
+def get_reweighting_preview(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Returns the rule bundle the ClusterReweightingEngine would apply for
+    the project's environment params, the suppressed + amplified clusters,
+    and the top-/bottom-weighted clusters by final weight. Pure preview —
+    no DB writes, no Celery dispatch.
+    """
+    from app.simulation.cluster_reweighting import (
+        ClusterReweightingEngine,
+        REWEIGHTING_RULES,
+    )
+
+    project = get_owned_project(db, current_user.id, project_id)
+    environment = (
+        db.query(Environment).filter(Environment.project_id == project_id).first()
+    )
+
+    aov = float((environment.average_order_value if environment else 0.0) or 0.0)
+    geo = str((environment.geography if environment else "") or "")
+    segment = str((environment.target_segment if environment else "") or "")
+    age = str((environment.age_target if environment else "") or "")
+    raw_pt = (
+        project.product_type
+        or (getattr(environment, "scenario_type", None) if environment else None)
+        or "saas"
+    )
+    pt = _product_type_enum_from_results(raw_pt)
+
+    engine = ClusterReweightingEngine()
+    final_weights = engine.compute_weights(
+        product_type=pt, aov=aov, geography=geo, segment=segment, age_target=age
+    )
+
+    # Baseline weights (no rule applied) for the weight_sum check.
+    registry = ClusterRegistry()
+    cluster_names = {c.cluster_id: c.name for c in registry.all_clusters()}
+    baseline_weights = {c.cluster_id: c.population_weight for c in registry.all_clusters()}
+
+    # Identify which rule key the engine selected (it may fall back to DEFAULT).
+    selected_rule = engine._select_rule_bundle(
+        product_type=pt, aov=aov, geography=geo, segment=segment, age_target=age
+    )
+    rules = REWEIGHTING_RULES.get(selected_rule, REWEIGHTING_RULES["DEFAULT"])
+
+    preview = _summarise_rule_bundle(
+        rule_key=selected_rule,
+        rules={"suppress": rules.suppress, "amplify": dict(rules.amplify)},
+        final_weights=final_weights,
+        baseline_weights=baseline_weights,
+        cluster_names=cluster_names,
+    )
+
+    return ReweightingPreviewOut(
+        project_id=project_id,
+        product_type=pt.value,
+        aov=aov,
+        geography=geo or None,
+        segment=segment or None,
+        age_target=age or None,
+        **preview,
+    )
+
+
+@router.get(
     "/{project_id}/domain-findings",
-    summary="Architect domain findings from the latest completed run",
+    response_model=FindingsListOut,
+    summary="Architect domain findings from the latest completed run (filterable)",
     responses=_JSON_200,
 )
 def get_domain_findings(
+    project_id: int,
+    severity: str | None = Query(
+        default=None,
+        description="Filter by severity: CRITICAL | WARNING | INFO",
+    ),
+    architect: str | None = Query(
+        default=None,
+        description="Case-insensitive substring match on architect name",
+    ),
+    metric: str | None = Query(
+        default=None,
+        description="Exact match on the metric_affected field",
+    ),
+    limit: int = Query(default=_FINDINGS_DEFAULT_LIMIT, ge=1, le=_FINDINGS_MAX_LIMIT),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = get_owned_project(db, current_user.id, project_id)
+
+    if severity is not None and severity.strip().upper() not in VALID_SEVERITIES:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Invalid severity '{severity}'. "
+                f"Allowed: {sorted(VALID_SEVERITIES)}"
+            ),
+        )
+
+    latest_sim = (
+        db.query(Simulation)
+        .filter(Simulation.project_id == project_id, Simulation.status == "COMPLETED")
+        .order_by(Simulation.created_at.desc())
+        .first()
+    )
+    if not latest_sim or not latest_sim.results_json:
+        return FindingsListOut(
+            project_id=project_id,
+            simulation_id=latest_sim.id if latest_sim else None,
+            primary_failure_domain="unknown",
+            highest_value_cluster={},
+            total=0,
+            findings=[],
+            filters={
+                "severity": severity,
+                "architect": architect,
+                "metric": metric,
+                "limit": limit,
+                "offset": offset,
+            },
+        )
+
+    results = latest_sim.results_json
+    raw = results.get("domain_findings", [])
+    filtered = _filter_findings(
+        raw,
+        severity=severity,
+        architect=architect,
+        metric=metric,
+        limit=limit,
+        offset=offset,
+    )
+
+    return FindingsListOut(
+        project_id=project_id,
+        simulation_id=latest_sim.id,
+        primary_failure_domain=results.get("primary_failure_domain", "unknown"),
+        highest_value_cluster=results.get("highest_value_cluster", {}),
+        total=len(_filter_findings(raw)),  # count after filters, before pagination
+        findings=filtered,
+        filters={
+            "severity": severity,
+            "architect": architect,
+            "metric": metric,
+            "limit": limit,
+            "offset": offset,
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/findings/summary",
+    response_model=FindingsSummaryOut,
+    summary="Group-by rollup of persisted domain findings (architect/cluster/metric/action)",
+    responses=_JSON_200,
+)
+def get_findings_summary(
     project_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -423,16 +603,19 @@ def get_domain_findings(
         .first()
     )
     if not latest_sim or not latest_sim.results_json:
-        return {"findings": [], "message": "No completed simulation found"}
+        return FindingsSummaryOut(
+            project_id=project_id,
+            simulation_id=latest_sim.id if latest_sim else None,
+        )
 
     results = latest_sim.results_json
-    return {
-        "findings": results.get("domain_findings", []),
-        "primary_failure_domain": results.get("primary_failure_domain", "unknown"),
-        "highest_value_cluster": results.get("highest_value_cluster", {}),
-        "cluster_narrative": results.get("cluster_narrative", ""),
-        "simulation_id": latest_sim.id,
-    }
+    raw = results.get("domain_findings", [])
+    summary = _build_findings_summary(raw)
+    summary.project_id = project_id
+    summary.simulation_id = latest_sim.id
+    summary.primary_failure_domain = results.get("primary_failure_domain", "unknown")
+    summary.highest_value_cluster = results.get("highest_value_cluster", {})
+    return summary
 
 
 @router.get(
@@ -1893,6 +2076,52 @@ def get_simulation_history(
         if history
         else None,
     }
+
+
+@router.get(
+    "/{project_id}/simulation-trend",
+    response_model=SimulationTrendOut,
+    summary="Aggregated simulation trend analytics: status, best/worst run, volatility, slope",
+    responses=_JSON_200,
+)
+def get_simulation_trend(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Returns a richer rollup than ``/simulation-history``:
+
+      * ``status_breakdown`` — counts by status.
+      * ``best_run``, ``worst_run``, ``latest_run`` — RunDetail blocks.
+      * ``conversion_stats`` — count/min/max/mean/median/std of completed runs.
+      * ``trend_slope`` — simple OLS slope of conversion_rate over run-index
+        (None when fewer than 2 completed runs).
+      * ``stability_score`` — ``1 / (1 + cv)`` where ``cv = std / mean``
+        (None when fewer than 2 completed runs or mean == 0).
+    """
+    from datetime import datetime, timezone
+
+    project = get_owned_project(db, current_user.id, project_id)
+    sims = (
+        db.query(Simulation)
+        .filter(Simulation.project_id == project_id)
+        .order_by(Simulation.created_at.asc())
+        .all()
+    )
+    rows = [
+        {
+            "id": s.id,
+            "status": s.status,
+            "signal_quality": s.signal_quality,
+            "results_json": s.results_json,
+            "created_at": s.created_at,
+        }
+        for s in sims
+    ]
+    trend = _build_simulation_trend(rows, project_id=project_id)
+    trend["generated_at"] = datetime.now(timezone.utc).isoformat()
+    return SimulationTrendOut(**trend)
 
 
 @router.post(
