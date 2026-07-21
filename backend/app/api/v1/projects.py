@@ -62,11 +62,15 @@ from app.schemas.accountability import (
     FindingsSummaryOut,
     VALID_SEVERITIES,
 )
+from app.schemas.reweighting import ReweightingPreviewOut
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
     build_findings_summary as _build_findings_summary,
     filter_findings as _filter_findings,
+)
+from app.simulation.reweighting_preview import (
+    summarise_rule_bundle as _summarise_rule_bundle,
 )
 from app.api.v1.common import get_owned_project
 from app.core.utils import extract_json_from_markdown
@@ -413,6 +417,79 @@ def get_project_clusters(
         for cid, cr in sorted(breakdown.items(), key=lambda x: -x[1])
     ]
     return {"clusters": clusters_out, "simulation_id": latest_sim.id}
+
+
+@router.get(
+    "/{project_id}/reweighting-preview",
+    response_model=ReweightingPreviewOut,
+    summary="Preview the cluster reweighting engine would apply for this project",
+    responses=_JSON_200,
+)
+def get_reweighting_preview(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Returns the rule bundle the ClusterReweightingEngine would apply for
+    the project's environment params, the suppressed + amplified clusters,
+    and the top-/bottom-weighted clusters by final weight. Pure preview —
+    no DB writes, no Celery dispatch.
+    """
+    from app.simulation.cluster_reweighting import (
+        ClusterReweightingEngine,
+        REWEIGHTING_RULES,
+    )
+
+    project = get_owned_project(db, current_user.id, project_id)
+    environment = (
+        db.query(Environment).filter(Environment.project_id == project_id).first()
+    )
+
+    aov = float((environment.average_order_value if environment else 0.0) or 0.0)
+    geo = str((environment.geography if environment else "") or "")
+    segment = str((environment.target_segment if environment else "") or "")
+    age = str((environment.age_target if environment else "") or "")
+    raw_pt = (
+        project.product_type
+        or (getattr(environment, "scenario_type", None) if environment else None)
+        or "saas"
+    )
+    pt = _product_type_enum_from_results(raw_pt)
+
+    engine = ClusterReweightingEngine()
+    final_weights = engine.compute_weights(
+        product_type=pt, aov=aov, geography=geo, segment=segment, age_target=age
+    )
+
+    # Baseline weights (no rule applied) for the weight_sum check.
+    registry = ClusterRegistry()
+    cluster_names = {c.cluster_id: c.name for c in registry.all_clusters()}
+    baseline_weights = {c.cluster_id: c.population_weight for c in registry.all_clusters()}
+
+    # Identify which rule key the engine selected (it may fall back to DEFAULT).
+    selected_rule = engine._select_rule_bundle(
+        product_type=pt, aov=aov, geography=geo, segment=segment, age_target=age
+    )
+    rules = REWEIGHTING_RULES.get(selected_rule, REWEIGHTING_RULES["DEFAULT"])
+
+    preview = _summarise_rule_bundle(
+        rule_key=selected_rule,
+        rules={"suppress": rules.suppress, "amplify": dict(rules.amplify)},
+        final_weights=final_weights,
+        baseline_weights=baseline_weights,
+        cluster_names=cluster_names,
+    )
+
+    return ReweightingPreviewOut(
+        project_id=project_id,
+        product_type=pt.value,
+        aov=aov,
+        geography=geo or None,
+        segment=segment or None,
+        age_target=age or None,
+        **preview,
+    )
 
 
 @router.get(
