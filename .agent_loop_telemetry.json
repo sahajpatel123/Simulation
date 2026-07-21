@@ -1,7 +1,7 @@
 {
   "status": "COMPLETED",
-  "start_time": "2026-07-21 21:21:18",
-  "end_time": "2026-07-21 21:23:48",
-  "next_scheduled_run": "2026-07-21 21:38:48",
-  "executed_task": "Added 31 regression tests for ClusterReweightingEngine: every product type's rule-bundle routing, sum invariants, suppress/amplify semantics, geo/age tweaks, registry-id consistency, and rule-key reachability coverage. Full suite 210 passed."
+  "start_time": "2026-07-21 22:02:17",
+  "end_time": "2026-07-21 22:05:19",
+  "next_scheduled_run": "2026-07-21 22:20:19",
+  "executed_task": "Added 21 regression tests for FunnelExecutionEngine helpers (_derive_assumption_impact sensitivity ordering, _derive_product_strength floors/ceilings, _build_stage_metrics rate math, _build_demographic_breakdown decade bucketing), StageMetrics/DemographicBreakdown round-trips, and run_batch empty-agents rejection. Full suite 251 passed."
 }
