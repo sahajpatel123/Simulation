@@ -15,6 +15,8 @@ from app.models.environment import Environment
 from app.models.project import Project
 from app.models.simulation import Simulation
 from app.models.user import User
+from app.models.cluster_run_summary import ClusterRunSummary
+from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
 from app.schemas.simulation import (
     SimulationCreate,
     SimulationOut,
@@ -22,6 +24,7 @@ from app.schemas.simulation import (
     SimulationStatusOut,
 )
 from app.simulation.clusters.registry import ClusterRegistry
+from app.simulation.funnel_diagnosis import build_funnel_diagnosis
 from app.simulation.scored_assumption import (
     ClaimConfidence,
     score_assumptions,
@@ -440,6 +443,81 @@ def get_simulation_stress_scenarios(
     )
 
     return analyzer.to_dict(stress_result)
+
+
+@router.get(
+    "/{simulation_id}/funnel-diagnosis",
+    response_model=FunnelDiagnosisOut,
+    summary="Diagnose funnel bottlenecks, cluster drag, and ranked interventions",
+    responses=_JSON_200,
+)
+def get_funnel_diagnosis(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    cluster_limit: int = 10,
+) -> FunnelDiagnosisOut:
+    """
+    Pure post-hoc diagnosis over a completed simulation's ``results_json``
+    plus optional ``cluster_run_summaries`` rows.
+
+    Returns the primary bottleneck stage (vs Markov healthy drop-off
+    benchmarks), population-weighted cluster drag ranking, aggregated
+    drop-trigger histogram, recoverable-conversion estimate, and ranked
+    interventions with estimated lift. No Celery dispatch, no LLM calls.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — funnel diagnosis requires "
+                "completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    limit = cluster_limit if isinstance(cluster_limit, int) else 10
+    limit = max(1, min(limit, 52))
+
+    summary_rows = (
+        db.query(ClusterRunSummary)
+        .filter(ClusterRunSummary.simulation_id == sim.id)
+        .all()
+    )
+    summaries = [
+        {
+            "cluster_id": row.cluster_id,
+            "agents_assigned": row.agents_assigned,
+            "agents_converted": row.agents_converted,
+            "conversion_rate": row.conversion_rate,
+            "primary_drop_trigger": row.primary_drop_trigger,
+            "mean_drop_state": row.mean_drop_state,
+        }
+        for row in summary_rows
+    ]
+
+    return build_funnel_diagnosis(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        signal_quality=float(sim.signal_quality)
+        if sim.signal_quality is not None
+        else None,
+        cluster_summaries=summaries or None,
+        cluster_limit=limit,
+    )
 
 
 @router.get(
