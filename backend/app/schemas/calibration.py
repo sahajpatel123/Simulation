@@ -53,6 +53,26 @@ class ArchitectHealth(BaseModel):
         return self.model_dump()
 
 
+class ArchitectWeightedDrift(BaseModel):
+    """Per-architect confidence-weighted bias summary."""
+
+    architect_name: str
+    weighted_drift: float = 0.0
+    confidence_sum: float = 0.0
+    sample_sum: float = 0.0
+    direction: str = "STABLE"  # one of BIASED_UP / BIASED_DOWN / STABLE
+
+
+class WeightedDriftSummary(BaseModel):
+    """Aggregate rollup of confidence-weighted bias across architects."""
+
+    total_architects: int = 0
+    biased_up_count: int = 0
+    biased_down_count: int = 0
+    stable_count: int = 0
+    by_architect: list[ArchitectWeightedDrift] = Field(default_factory=list)
+
+
 class CalibrationStatusOut(BaseModel):
     """Top-level calibration status payload."""
 
@@ -63,6 +83,7 @@ class CalibrationStatusOut(BaseModel):
     calibrated_architects: int = 0
     under_calibrated_architects: int = 0
     under_calibrated_list: list[str] = Field(default_factory=list)
+    weighted_drift: WeightedDriftSummary = Field(default_factory=WeightedDriftSummary)
     generated_at: str = ""
 
 
@@ -70,5 +91,7 @@ __all__ = [
     "OutcomeCoverage",
     "ArchitectCorrection",
     "ArchitectHealth",
+    "ArchitectWeightedDrift",
+    "WeightedDriftSummary",
     "CalibrationStatusOut",
 ]

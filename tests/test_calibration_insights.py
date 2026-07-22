@@ -324,3 +324,235 @@ def test_calibration_status_module_is_admin_gated() -> None:
     next_def = source.find("\ndef ", fn_start + 1)
     body = source[fn_start:next_def if next_def > 0 else fn_start + 2000]
     assert "_require_admin(current_user)" in body
+
+
+# ---------------------------------------------------------------------------
+# build_weighted_drift (cycle 32 — weighted-drift analytics)
+# ---------------------------------------------------------------------------
+
+
+def test_weighted_drift_empty_input_yields_zero_state() -> None:
+    from app.simulation.calibration_insights import build_weighted_drift
+
+    out = build_weighted_drift(None, known_architect_names=KNOWN_ARCHITECTS)
+    assert out["total_architects"] == len(KNOWN_ARCHITECTS)
+    assert out["biased_up_count"] == 0
+    assert out["biased_down_count"] == 0
+    assert out["stable_count"] == len(KNOWN_ARCHITECTS)
+    by_arch = {row["architect_name"]: row for row in out["by_architect"]}
+    for name in KNOWN_ARCHITECTS:
+        assert by_arch[name]["direction"] == "STABLE"
+        assert by_arch[name]["weighted_drift"] == 0.0
+
+
+def test_weighted_drift_downward_bias_with_confidence() -> None:
+    """Drift = scalar - 1; weight by confidence. Mean < 1 → BIASED_DOWN."""
+    from app.simulation.calibration_insights import build_weighted_drift
+
+    corrections = [
+        {
+            "architect_name": "PricingArchitect",
+            "correction_scalar": 0.9,
+            "confidence_weight": 0.8,
+            "effective_sample_count": 12.0,
+        },
+        {
+            "architect_name": "PricingArchitect",
+            "correction_scalar": 1.0,
+            "confidence_weight": 0.2,
+            "effective_sample_count": 4.0,
+        },
+    ]
+    out = build_weighted_drift(corrections, known_architect_names=KNOWN_ARCHITECTS)
+    row = next(r for r in out["by_architect"] if r["architect_name"] == "PricingArchitect")
+    # (-0.1 * 0.8) + (0.0 * 0.2) = -0.08
+    assert row["weighted_drift"] == -0.08
+    assert row["confidence_sum"] == 1.0
+    assert row["sample_sum"] == 16.0
+    assert row["direction"] == "BIASED_DOWN"
+
+
+def test_weighted_drift_upward_bias_with_confidence() -> None:
+    from app.simulation.calibration_insights import build_weighted_drift
+
+    corrections = [
+        {
+            "architect_name": "OnboardingArchitect",
+            "correction_scalar": 1.2,
+            "confidence_weight": 0.5,
+            "effective_sample_count": 8.0,
+        }
+    ]
+    out = build_weighted_drift(corrections, known_architect_names=KNOWN_ARCHITECTS)
+    row = next(
+        r for r in out["by_architect"] if r["architect_name"] == "OnboardingArchitect"
+    )
+    # (0.2 * 0.5) = +0.1
+    assert row["weighted_drift"] == 0.1
+    assert row["direction"] == "BIASED_UP"
+
+
+def test_weighted_drift_stable_when_corrections_average_to_one() -> None:
+    """Conflicting drifts cancel → STABLE (within 1e-6)."""
+    from app.simulation.calibration_insights import build_weighted_drift
+
+    corrections = [
+        {
+            "architect_name": "RetentionArchitect",
+            "correction_scalar": 0.95,
+            "confidence_weight": 0.4,
+            "effective_sample_count": 5.0,
+        },
+        {
+            "architect_name": "RetentionArchitect",
+            "correction_scalar": 1.05,
+            "confidence_weight": 0.4,
+            "effective_sample_count": 5.0,
+        },
+    ]
+    out = build_weighted_drift(corrections, known_architect_names=KNOWN_ARCHITECTS)
+    row = next(
+        r for r in out["by_architect"] if r["architect_name"] == "RetentionArchitect"
+    )
+    # (-0.05 * 0.4) + (0.05 * 0.4) = 0
+    assert row["weighted_drift"] == 0.0
+    assert row["direction"] == "STABLE"
+
+
+def test_weighted_drift_handles_garbage_inputs_safely() -> None:
+    """Bad scalars / missing fields default to neutral values."""
+    from app.simulation.calibration_insights import build_weighted_drift
+
+    corrections: list[dict[str, Any]] = [
+        {
+            "architect_name": "MarketTimingArchitect",
+            "correction_scalar": "not-a-number",
+            "confidence_weight": None,
+            "effective_sample_count": "twelve",
+        },
+        {
+            # row with no architect_name -> ignored entirely
+            "correction_scalar": 0.5,
+            "confidence_weight": 0.9,
+            "effective_sample_count": 3.0,
+        },
+    ]
+    out = build_weighted_drift(corrections, known_architect_names=KNOWN_ARCHITECTS)
+    row = next(
+        r for r in out["by_architect"] if r["architect_name"] == "MarketTimingArchitect"
+    )
+    # scalar falls back to 1.0 → drift 0 → STABLE
+    assert row["direction"] == "STABLE"
+    assert row["confidence_sum"] == 0.0
+    assert row["sample_sum"] == 0.0
+
+
+def test_weighted_drift_direction_counts_aggregate_correctly() -> None:
+    from app.simulation.calibration_insights import build_weighted_drift
+
+    corrections = [
+        {
+            "architect_name": "PricingArchitect",
+            "correction_scalar": 0.8,
+            "confidence_weight": 0.6,
+            "effective_sample_count": 2.0,
+        },  # BIASED_DOWN
+        {
+            "architect_name": "OnboardingArchitect",
+            "correction_scalar": 1.3,
+            "confidence_weight": 0.4,
+            "effective_sample_count": 2.0,
+        },  # BIASED_UP
+        {
+            "architect_name": "RetentionArchitect",
+            "correction_scalar": 1.0,
+            "confidence_weight": 1.0,
+            "effective_sample_count": 1.0,
+        },  # STABLE
+    ]
+    out = build_weighted_drift(corrections, known_architect_names=KNOWN_ARCHITECTS)
+    assert out["biased_up_count"] == 1
+    assert out["biased_down_count"] == 1
+    assert out["stable_count"] == len(KNOWN_ARCHITECTS) - 2
+
+
+def test_weighted_drift_known_architects_always_present() -> None:
+    """Known architects with no rows surface as STABLE zeros."""
+    from app.simulation.calibration_insights import build_weighted_drift
+
+    out = build_weighted_drift([], known_architect_names=KNOWN_ARCHITECTS)
+    names = [r["architect_name"] for r in out["by_architect"]]
+    assert sorted(names) == sorted(KNOWN_ARCHITECTS)
+
+
+def test_weighted_drift_schema_round_trip() -> None:
+    from app.schemas.calibration import (
+        ArchitectWeightedDrift,
+        CalibrationStatusOut,
+        WeightedDriftSummary,
+    )
+
+    drift_summary = WeightedDriftSummary(
+        total_architects=2,
+        biased_up_count=1,
+        biased_down_count=1,
+        stable_count=0,
+        by_architect=[
+            ArchitectWeightedDrift(
+                architect_name="PricingArchitect",
+                weighted_drift=-0.05,
+                confidence_sum=0.6,
+                sample_sum=12.0,
+                direction="BIASED_DOWN",
+            ),
+            ArchitectWeightedDrift(
+                architect_name="RetentionArchitect",
+                weighted_drift=0.03,
+                confidence_sum=0.4,
+                sample_sum=8.0,
+                direction="BIASED_UP",
+            ),
+        ],
+    )
+    out = CalibrationStatusOut(
+        weighted_drift=drift_summary,
+        generated_at="2026-07-23T00:00:00+00:00",
+    )
+    dumped = out.model_dump()
+    assert dumped["weighted_drift"]["total_architects"] == 2
+    assert dumped["weighted_drift"]["by_architect"][0]["direction"] == "BIASED_DOWN"
+    json.dumps(dumped)
+
+
+def test_weighted_drift_schema_defaults_when_empty() -> None:
+    from app.schemas.calibration import WeightedDriftSummary
+
+    summary = WeightedDriftSummary()
+    assert summary.total_architects == 0
+    assert summary.biased_up_count == 0
+    assert summary.biased_down_count == 0
+    assert summary.stable_count == 0
+    assert summary.by_architect == []
+
+
+def test_calibration_status_out_round_trip_includes_weighted_drift() -> None:
+    """End-to-end schema coverage: weighted_drift defaults carry through."""
+    from app.schemas.calibration import CalibrationStatusOut
+
+    out = CalibrationStatusOut(generated_at="2026-07-23T00:00:00+00:00")
+    assert out.weighted_drift.total_architects == 0
+    dumped = out.model_dump()
+    assert "weighted_drift" in dumped
+    assert dumped["weighted_drift"]["biased_up_count"] == 0
+
+
+def test_analytics_router_wires_weighted_drift_into_calibration_status() -> None:
+    """Source-level check: the calibration route now exposes weighted drift."""
+    src_path = "backend/app/api/v1/analytics.py"
+    with open(src_path) as fh:
+        source = fh.read()
+    assert "build_weighted_drift" in source
+    assert "weighted_drift=drift_summary" in source
+    # The new schemas are imported.
+    assert "ArchitectWeightedDrift" in source
+    assert "WeightedDriftSummary" in source

@@ -23,9 +23,11 @@ from app.simulation.calibration_insights import (
     build_architect_health,
     build_outcome_coverage,
     build_product_type_breakdown,
+    build_weighted_drift,
     summarise_calibration,
 )
 from app.simulation.calibration_engine import ALL_ARCHITECT_NAMES
+from app.schemas.calibration import ArchitectWeightedDrift, WeightedDriftSummary
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -479,6 +481,18 @@ def calibration_status(
     by_architect = build_architect_health(corrections_list, list(ALL_ARCHITECT_NAMES))
     summary = summarise_calibration(by_architect, corrections_list)
     product_breakdown = build_product_type_breakdown(corrections_list)
+    drift_payload = build_weighted_drift(
+        corrections_list, list(ALL_ARCHITECT_NAMES)
+    )
+    drift_summary = WeightedDriftSummary(
+        total_architects=drift_payload["total_architects"],
+        biased_up_count=drift_payload["biased_up_count"],
+        biased_down_count=drift_payload["biased_down_count"],
+        stable_count=drift_payload["stable_count"],
+        by_architect=[
+            ArchitectWeightedDrift(**row) for row in drift_payload["by_architect"]
+        ],
+    )
 
     return CalibrationStatusOut(
         outcome_coverage=build_outcome_coverage(
@@ -490,5 +504,6 @@ def calibration_status(
         calibrated_architects=summary["calibrated_architects"],
         under_calibrated_architects=summary["under_calibrated_architects"],
         under_calibrated_list=summary["under_calibrated_list"],
+        weighted_drift=drift_summary,
         generated_at=datetime.now(timezone.utc).isoformat(),
     )
