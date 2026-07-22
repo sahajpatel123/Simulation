@@ -102,7 +102,10 @@ class ChannelAttributionEngine:
         scores["press_mention"] = min(1.0, press_lift * 3.0 + (0.3 if is_metro else 0.0))
         scores["referral_program"] = min(1.0, invite_cr * 0.5 + organic_t * 0.4)
 
-        return {k: round(min(1.0, v), 4) for k, v in scores.items()}
+        # Clamp to [0, 1] — malformed metrics (e.g. brand_def > 1.0) can
+        # produce negative intermediates which would otherwise poison the
+        # market-wide weighted ranking downstream.
+        return {k: round(max(0.0, min(1.0, v)), 4) for k, v in scores.items()}
 
     def _cac_multiplier(self, scores: dict, primary: str) -> float:
         paid_channels = {"paid_search": 1.8, "social_paid": 1.6, "influencer": 1.4}
@@ -162,7 +165,18 @@ class ChannelAttributionEngine:
                 channel_weighted[ch] += score * p.population_weight
         market_ranking = sorted(channel_weighted.items(), key=lambda x: -x[1])
 
-        highest_roi = min(profiles, key=lambda p: p.cac_multiplier).primary_channel
+        if profiles:
+            highest_roi = min(
+                profiles, key=lambda p: p.cac_multiplier
+            ).primary_channel
+        else:
+            # Fall back to the cheapest organic channel when no clusters
+            # are present — better than crashing on min([]).
+            highest_roi = min(
+                {"word_of_mouth", "referral_program", "community"},
+                key=lambda c: channel_weighted.get(c, 0.0),
+                default="word_of_mouth",
+            )
         lowest_cac_ch = min(
             channel_weighted,
             key=lambda c: (
@@ -178,8 +192,11 @@ class ChannelAttributionEngine:
         viral_possible = any(p.viral_coefficient > 1.0 for p in profiles)
 
         top5 = market_ranking[:5]
-        top5_total = sum(s for _, s in top5) or 1.0
-        channel_mix = {ch: round(s / top5_total, 3) for ch, s in top5}
+        top5_total = sum(s for _, s in top5)
+        if top5_total > 0:
+            channel_mix = {ch: round(s / top5_total, 3) for ch, s in top5}
+        else:
+            channel_mix = {}
 
         return ChannelAttributionResult(
             generated_ui_id=generated_ui_id,
