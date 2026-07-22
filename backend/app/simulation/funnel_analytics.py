@@ -81,7 +81,7 @@ class FunnelAnalyticsEngine:
                 except Exception:
                     events = []
             converted = bool(s.get("converted", False))
-            cluster = s.get("agent_cluster_id", "unknown")
+            cluster = s.get("agent_cluster_id") or "unknown"
             stage = self._infer_stage(events, converted)
             agent_stages.append((cluster, stage))
 
