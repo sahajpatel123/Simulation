@@ -29,6 +29,7 @@ from app.schemas.simulation_comparison import (
     SimulationComparisonOut,
 )
 from app.schemas.cohort_retention import CohortRetentionOut
+from app.schemas.sensitivity import SensitivityOut
 from app.schemas.what_if import WhatIfOut, WhatIfRequest
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.cluster_opportunity import build_cluster_opportunity_matrix
@@ -41,6 +42,7 @@ from app.simulation.scored_assumption import (
     signal_quality_tier,
 )
 from app.simulation.scenario_stress import ScenarioStressAnalyzer
+from app.simulation.sensitivity_analysis import build_sensitivity_analysis
 from app.simulation.what_if import build_what_if_scenario
 from app.tasks.simulation_tasks import run_full_simulation
 from app.worker import celery_app
@@ -870,6 +872,76 @@ def get_cluster_opportunities(
         cluster_registry=registry,
         benchmark=effective_benchmark,
         limit=effective_limit,
+    )
+
+
+@router.get(
+    "/{simulation_id}/sensitivity",
+    response_model=SensitivityOut,
+    summary="Analyse which assumptions have the highest sensitivity on conversion",
+    responses=_JSON_200,
+)
+def get_sensitivity_analysis(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SensitivityOut:
+    """
+    Scenario sensitivity analysis from a completed simulation's results.
+
+    For each project assumption, systematically varies its impact score
+    across 5 levels (0%–100%) and measures the resulting conversion rate
+    delta. Identifies which assumptions are most critical to validate.
+
+    Pure post-hoc analysis — no Celery dispatch, no LLM calls.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Simulation is {sim.status} — sensitivity analysis requires completed results.",
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    # Fetch environment params
+    environment = (
+        db.query(Environment)
+        .filter(Environment.id == sim.environment_id)
+        .first()
+    )
+    env_params: dict = {}
+    if environment:
+        env_params = {
+            "average_order_value": float(environment.average_order_value or 999.0),
+            "price_sensitivity": float(environment.price_sensitivity or 0.5),
+            "market_maturity": float(environment.market_maturity or 0.3),
+            "consumer_volume": int(environment.consumer_volume or 10000),
+            "growth_rate_per_month": float(environment.growth_rate_per_month or 5.0),
+        }
+
+    # Fetch existing assumptions for the project
+    assumptions = (
+        db.query(Assumption)
+        .filter(Assumption.project_id == sim.project_id, Assumption.is_hidden.is_(False))
+        .all()
+    )
+
+    return build_sensitivity_analysis(
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        base_results=sim.results_json,
+        env_params=env_params,
+        existing_assumptions=assumptions,
     )
 
 

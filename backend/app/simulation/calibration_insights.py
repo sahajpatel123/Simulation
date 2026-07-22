@@ -158,10 +158,105 @@ def build_product_type_breakdown(
     return dict(sorted(out.items(), key=lambda kv: (-kv[1], kv[0])))
 
 
+def build_weighted_drift(
+    corrections: list[dict[str, Any]] | None,
+    known_architect_names: list[str],
+) -> dict[str, Any]:
+    """
+    Confidence-weighted bias rollup across the architect corrections.
+
+    ``drift_i = correction_scalar_i - 1.0`` so a scalar of ``0.92`` counts
+    as ``-0.08`` (downward bias) and ``1.07`` as ``+0.07`` (upward bias).
+
+    For each architect we report:
+
+      * ``weighted_drift`` -- Σ drift_i * confidence_weight_i
+      * ``confidence_sum`` -- Σ confidence_weight_i
+      * ``sample_sum``     -- Σ effective_sample_count_i
+      * ``direction``      -- ``"BIASED_UP"`` / ``"BIASED_DOWN"`` /
+                             ``"STABLE"`` (when |weighted_drift| <= 1e-6).
+
+    Unknown / empty architects are surfaced with zeroed values and
+    ``direction="STABLE"`` so the dashboard never has to special-case them.
+    """
+    by_arch: dict[str, list[dict[str, Any]]] = {
+        n: [] for n in known_architect_names
+    }
+    for row in corrections or []:
+        name = row.get("architect_name")
+        if not name:
+            continue
+        bucket = by_arch.setdefault(str(name), [])
+        bucket.append(row)
+
+    out: list[dict[str, Any]] = []
+    for name in sorted(by_arch.keys()):
+        rows = by_arch[name]
+        if not rows:
+            out.append(
+                {
+                    "architect_name": name,
+                    "weighted_drift": 0.0,
+                    "confidence_sum": 0.0,
+                    "sample_sum": 0.0,
+                    "direction": "STABLE",
+                }
+            )
+            continue
+
+        weighted_drift = 0.0
+        confidence_sum = 0.0
+        sample_sum = 0.0
+        for row in rows:
+            try:
+                scalar = float(row.get("correction_scalar", 1.0) or 1.0)
+            except (TypeError, ValueError):
+                scalar = 1.0
+            try:
+                conf = float(row.get("confidence_weight", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                conf = 0.0
+            try:
+                samples = float(row.get("effective_sample_count", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                samples = 0.0
+            weighted_drift += (scalar - 1.0) * conf
+            confidence_sum += conf
+            sample_sum += samples
+
+        if weighted_drift > 1e-6:
+            direction = "BIASED_UP"
+        elif weighted_drift < -1e-6:
+            direction = "BIASED_DOWN"
+        else:
+            direction = "STABLE"
+
+        out.append(
+            {
+                "architect_name": name,
+                "weighted_drift": round(weighted_drift, 6),
+                "confidence_sum": round(confidence_sum, 6),
+                "sample_sum": round(sample_sum, 6),
+                "direction": direction,
+            }
+        )
+
+    return {
+        "total_architects": len(out),
+        "biased_up_count": sum(1 for r in out if r["direction"] == "BIASED_UP"),
+        "biased_down_count": sum(
+            1 for r in out if r["direction"] == "BIASED_DOWN"
+        ),
+        "stable_count": sum(1 for r in out if r["direction"] == "STABLE"),
+        "by_architect": out,
+    }
+
+
 __all__ = [
     "_CALIBRATED_SAMPLE_THRESHOLD",
     "build_outcome_coverage",
     "build_architect_health",
     "summarise_calibration",
     "build_product_type_breakdown",
+    "build_weighted_drift",
 ]

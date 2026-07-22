@@ -54,7 +54,7 @@ class HeatmapEngine:
                     events = json.loads(events)
                 except Exception:
                     events = []
-            cluster = session.get("agent_cluster_id", "unknown")
+            cluster = session.get("agent_cluster_id") or "unknown"
             converted = bool(session.get("converted", False))
 
             for event in events:
@@ -86,7 +86,7 @@ class HeatmapEngine:
         # Per-cluster heatmaps
         cluster_heatmaps: dict[str, list[HeatmapPoint]] = defaultdict(list)
         for session in sessions:
-            cluster = session.get("agent_cluster_id", "unknown")
+            cluster = session.get("agent_cluster_id") or "unknown"
             events = session.get("events_json") or []
             if isinstance(events, str):
                 try:
@@ -118,8 +118,12 @@ class HeatmapEngine:
                     )
                 )
 
-        top_conv = max(points, key=lambda p: p.conversion_rate).thecee_id if points else "none"
-        top_aband = max(points, key=lambda p: p.abandon_rate).thecee_id if points else "none"
+        if points:
+            top_conv = max(points, key=lambda p: p.conversion_rate).thecee_id
+            top_aband = max(points, key=lambda p: p.abandon_rate).thecee_id
+        else:
+            top_conv = "none"
+            top_aband = "none"
 
         return UIHeatmapResult(
             generated_ui_id=generated_ui_id,
