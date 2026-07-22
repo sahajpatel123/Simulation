@@ -180,14 +180,23 @@ class RetentionChurnEngine:
         mkt_d1 = weighted_avg("day1_survival")
         drops = {
             "day1": 1.0 - mkt_d1,
-            "day7": mkt_d1 - mkt_d7,
-            "day30": mkt_d7 - mkt_d30,
-            "day90": mkt_d30 - mkt_d90,
+            "day7": max(0.0, mkt_d1 - mkt_d7),
+            "day30": max(0.0, mkt_d7 - mkt_d30),
+            "day90": max(0.0, mkt_d30 - mkt_d90),
         }
-        highest_churn_stage = max(drops, key=drops.get)
+        # ``weighted_avg`` returns 0.0 for an empty registry, so the
+        # stage drops would be 1.0 / 0.0 / 0.0 / 0.0 — guard explicitly.
+        if profiles:
+            highest_churn_stage = max(drops, key=drops.get)
+        else:
+            highest_churn_stage = "day1"
 
-        best = max(profiles, key=lambda p: p.day30_survival).cluster_id
-        worst = min(profiles, key=lambda p: p.day30_survival).cluster_id
+        if profiles:
+            best = max(profiles, key=lambda p: p.day30_survival).cluster_id
+            worst = min(profiles, key=lambda p: p.day30_survival).cluster_id
+        else:
+            best = ""
+            worst = ""
         reeng_viable = any(p.reengagement_prob_30d > 0.15 for p in profiles)
 
         return RetentionChurnResult(
