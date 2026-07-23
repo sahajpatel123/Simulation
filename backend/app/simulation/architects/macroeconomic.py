@@ -37,10 +37,19 @@ class MacroeconomicArchitect(BaseArchitect):
 
         # ── Extract signals from assumptions ──────────────────────────────
         signals = extract_assumption_signals(assumptions)
-        usd_pricing = signals.get("price_signal", 0.5)
-        gov_eligible = signals.get("retention_signal", False)  # Simplified - checks for government subsidy keywords
+        # USD pricing is opt-in: applies only when the founder explicitly
+        # mentions USD / dollar pricing in their assumptions. The previous
+        # 0.5 default made the penalty fire on every run without any USD
+        # keyword — correcting that default so severity doesn't default
+        # to WARNING for non-USD products.
+        usd_pricing = False
+        for a in assumptions:
+            text = str(a.get("text", a.get("assumption", ""))).lower()
+            if any(w in text for w in ["usd pricing", "usd-pricing", "in usd", "priced in usd", " dollar pricing", "dollar-denominated"]):
+                usd_pricing = True
+                break
 
-        # Check for subsidy keywords specifically
+        gov_eligible = False
         for a in assumptions:
             text = str(a.get("text", a.get("assumption", ""))).lower()
             if any(w in text for w in [
