@@ -135,6 +135,35 @@ class WhatIfOut(BaseModel):
     def __str__(self) -> str:
         return self.to_log_line()
 
+    @staticmethod
+    def to_csv_header() -> list[str]:
+        """Return the canonical CSV header for batch scenario export."""
+        return [
+            "simulation_id",
+            "project_id",
+            "base_conversion_rate",
+            "projected_conversion_rate",
+            "conversion_delta",
+            "conversion_delta_pct",
+            "dominant_direction",
+            "sensitivity_label",
+            "matched_keyword_categories",
+        ]
+
+    def to_csv_row(self) -> list[str]:
+        """Return the CSV row for this scenario aligned with ``to_csv_header``."""
+        return [
+            str(self.simulation_id),
+            str(self.project_id),
+            f"{self.base_conversion_rate:.6f}",
+            f"{self.projected_conversion_rate:.6f}",
+            f"{self.conversion_delta:.6f}",
+            f"{self.conversion_delta_pct:.2f}",
+            str(self.meta.get("dominant_direction", "")),
+            str(self.meta.get("sensitivity_label", "")),
+            "|".join(self.meta.get("matched_keyword_categories", [])),
+        ]
+
 
 class WhatIfSummaryCategory(BaseModel):
     """One row of the top-categories table in ``WhatIfSummary``."""
