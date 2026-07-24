@@ -45,6 +45,32 @@ _STAGE_LABELS: dict[State, str] = {
     State.DECIDE: "DECIDE",
 }
 
+# Stable labels for each KEYWORD_RULES entry so the API can surface
+# which scenario categories fired without leaking the keyword list itself.
+_KEYWORD_CATEGORY_LABELS: list[str] = [
+    "pricing",
+    "trust",
+    "retention",
+    "growth",
+    "ux",
+    "market_fit",
+    "competition",
+]
+
+
+def _matched_keyword_categories(text: str) -> list[str]:
+    """Return the list of KEYWORD_RULES category labels matched by ``text``.
+
+    Uses the same substring test as ``_build_matrix`` so the labels
+    correspond exactly to the transitions that were adjusted.
+    """
+    text = (text or "").lower()
+    matches: list[str] = []
+    for label, rule in zip(_KEYWORD_CATEGORY_LABELS, KEYWORD_RULES):
+        if any(kw in text for kw in rule["keywords"]):
+            matches.append(label)
+    return matches
+
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
     if value is None:
@@ -469,6 +495,14 @@ def build_what_if_scenario(
     else:
         dominant_direction = "MIXED"
 
+    matched_categories: list[str] = []
+    seen_categories: set[str] = set()
+    for assumption in new_assump_dicts:
+        for label in _matched_keyword_categories(str(assumption.get("text", ""))):
+            if label not in seen_categories:
+                seen_categories.add(label)
+                matched_categories.append(label)
+
     # Recommendations
     recommendations = _build_recommendations(
         base_cr=base_cr,
@@ -513,6 +547,7 @@ def build_what_if_scenario(
             "stage_improvement_count": stage_improvement_count,
             "net_stage_change": net_stage_change,
             "dominant_direction": dominant_direction,
+            "matched_keyword_categories": matched_categories,
             "scale_factor_applied": (
                 round(base_cr / base_matrix_cr, 4) if base_matrix_cr > 0 else 1.0
             ),
