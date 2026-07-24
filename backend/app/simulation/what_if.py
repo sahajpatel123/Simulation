@@ -625,6 +625,7 @@ __all__ = [
     "scenarios_to_csv",
     "scenarios_to_json",
     "scenarios_to_markdown_table",
+    "format_delta_pct",
 ]
 
 
@@ -740,6 +741,16 @@ def diff_what_if_scenarios_summary(diff: WhatIfDiff) -> str:
         f"delta_diff={diff.delta_difference:+.6f} "
         f"shared=[{shared}]"
     )
+
+
+def format_delta_pct(value: float, *, decimals: int = 2) -> str:
+    """Format a percentage delta with a leading sign and fixed decimals.
+
+    Example: ``format_delta_pct(12.34) == "+12.34%"``.
+    Zero renders as ``"+0.00%"`` by design (matches the project convention
+    used elsewhere in the what-if surface).
+    """
+    return f"{value:+.{decimals}f}%"
 
 
 def summarise_what_if_scenarios(
