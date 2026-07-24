@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
 import httpx
 
 from app.core.claude_client import claude_call_with_fallback
+from app.core.ssrf_guard import UnsafeOutboundURLError, assert_safe_outbound_url
+
+logger = logging.getLogger(__name__)
 
 # Claim confidence adjustment per intake_mode
 INTAKE_CONFIDENCE_MAP: dict[str, dict[str, Any]] = {
@@ -34,9 +38,22 @@ def fetch_landing_page_summary(url: str) -> str:
     """
     Fetches a landing page URL and summarises it via Claude.
     Returns a 2-3 sentence summary of product claims.
+
+    The URL is first validated by :func:`assert_safe_outbound_url` to
+    block SSRF — private/loopback/cloud-metadata ranges and non-http
+    schemes are rejected before we ever open a connection.
     """
     try:
-        resp = httpx.get(url, timeout=10, follow_redirects=True)
+        safe_url = assert_safe_outbound_url(url)
+    except UnsafeOutboundURLError as exc:
+        logger.warning("Rejected unsafe landing_page_url: %s", exc)
+        return f"Landing page URL rejected: {exc}"
+
+    try:
+        # Cap redirects — open-redirect chains can pivot to a private
+        # IP after the initial guard pass. httpx enforces
+        # ``max_redirects`` server-side on the response handling path.
+        resp = httpx.get(safe_url, timeout=10, follow_redirects=True, max_redirects=3)
         html = resp.text[:8000]
         text_body = re.sub(r"<[^>]+>", " ", html)
         text_body = re.sub(r"\s+", " ", text_body).strip()[:3000]
