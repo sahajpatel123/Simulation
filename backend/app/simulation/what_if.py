@@ -634,6 +634,7 @@ __all__ = [
     "scenarios_with_positive_delta",
     "scenarios_with_negative_delta",
     "group_scenarios_by_direction",
+    "scenarios_with_significant_delta",
 ]
 
 
@@ -820,6 +821,21 @@ def group_scenarios_by_direction(scenarios: list[WhatIfOut]) -> dict[str, list[W
         direction = str(scenario.meta.get("dominant_direction", "UNKNOWN"))
         groups.setdefault(direction, []).append(scenario)
     return groups
+
+
+def scenarios_with_significant_delta(
+    scenarios: list[WhatIfOut],
+    threshold: float = 0.01,
+) -> list[WhatIfOut]:
+    """Return only scenarios whose absolute conversion_delta meets ``threshold``.
+
+    Symmetric to ``WhatIfOut.is_significant()`` — useful for filtering a
+    batch down to impactful scenarios before exporting or comparing.
+    """
+    return [
+        scenario for scenario in scenarios
+        if scenario.is_significant(threshold=threshold)
+    ]
 
 
 def direction_label(delta: float) -> str:
