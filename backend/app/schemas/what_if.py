@@ -109,13 +109,15 @@ class WhatIfOut(BaseModel):
 
     def to_log_line(self) -> str:
         """Return a compact one-line log string describing the scenario."""
+        from app.simulation.what_if import format_delta_pct
+
         direction = self.meta.get("dominant_direction", "NEUTRAL")
         sensitivity = self.meta.get("sensitivity_label", "NONE")
         return (
             f"what-if sim={self.simulation_id} "
             f"base={self.base_conversion_rate:.4f} "
             f"projected={self.projected_conversion_rate:.4f} "
-            f"delta_pct={self.conversion_delta_pct:+.2f}% "
+            f"delta_pct={format_delta_pct(self.conversion_delta_pct)} "
             f"direction={direction} "
             f"sensitivity={sensitivity}"
         )
