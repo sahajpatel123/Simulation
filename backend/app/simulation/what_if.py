@@ -72,6 +72,34 @@ def _matched_keyword_categories(text: str) -> list[str]:
     return matches
 
 
+# Sensitivity rank ordered from heaviest to lightest adjustment.
+_SENSITIVITY_RANK: tuple[str, ...] = ("CRITICAL", "HIGH", "MEDIUM", "LOW")
+
+
+def _aggregate_sensitivity(
+    assumptions: list[dict[str, Any]],
+) -> tuple[float, str]:
+    """Return (score, label) for the heaviest sensitivity across ``assumptions``.
+
+    ``score`` is the matching ``SENSITIVITY_WEIGHTS`` value (0.0–1.0).
+    ``label`` is the canonical sensitivity name, or ``"NONE"`` when no
+    assumptions were supplied or none matched a known label.
+    """
+    if not assumptions:
+        return 0.0, "NONE"
+    best_label = "NONE"
+    best_score = 0.0
+    for assumption in assumptions:
+        label = str(assumption.get("sensitivity", "MEDIUM")).upper()
+        score = SENSITIVITY_WEIGHTS.get(label, 0.0)
+        if score > best_score:
+            best_score = score
+            best_label = label
+    if best_label not in _SENSITIVITY_RANK:
+        best_label = "NONE"
+    return best_score, best_label
+
+
 def _safe_float(value: Any, default: float = 0.0) -> float:
     if value is None:
         return default
@@ -503,6 +531,8 @@ def build_what_if_scenario(
                 seen_categories.add(label)
                 matched_categories.append(label)
 
+    sensitivity_score, sensitivity_label = _aggregate_sensitivity(new_assump_dicts)
+
     # Recommendations
     recommendations = _build_recommendations(
         base_cr=base_cr,
@@ -548,6 +578,8 @@ def build_what_if_scenario(
             "net_stage_change": net_stage_change,
             "dominant_direction": dominant_direction,
             "matched_keyword_categories": matched_categories,
+            "sensitivity_score": round(sensitivity_score, 4),
+            "sensitivity_label": sensitivity_label,
             "scale_factor_applied": (
                 round(base_cr / base_matrix_cr, 4) if base_matrix_cr > 0 else 1.0
             ),
