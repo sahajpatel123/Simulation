@@ -131,6 +131,17 @@ class WhatIfOut(BaseModel):
         current = self.meta.get("matched_keyword_categories", [])
         return any(category in current for category in categories)
 
+    def has_all_categories(self, categories: list[str] | tuple[str, ...]) -> bool:
+        """Return True if **all** of ``categories`` are present in matched_keyword_categories.
+
+        Empty ``categories`` returns True (vacuous truth) so callers can
+        safely combine it with default-empty inputs.
+        """
+        if not categories:
+            return True
+        current = set(self.meta.get("matched_keyword_categories", []))
+        return all(category in current for category in categories)
+
     def has_recommendations(self) -> bool:
         """Return True when at least one recommendation is attached."""
         return bool(self.recommendations)
