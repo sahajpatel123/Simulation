@@ -159,39 +159,38 @@ def refresh_access_token(payload: RefreshRequest, db: Session = Depends(get_db))
     raw_token = payload.refresh_token
     token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
 
-    row = db.execute(
+    # Atomically claim the refresh token by revoking it in one UPDATE.
+    # The WHERE clause pins it to NOT revoked — if a concurrent request
+    # already rotated the token, this returns rowcount=0 and we reject
+    # the request. The single statement also replaces the prior
+    # read-then-write race where a valid token could be rotated twice
+    # (e.g. when two requests fire simultaneously) and produce duplicate
+    # access sessions.
+    claim = db.execute(
         text(
             """
-            SELECT user_id, expires_at, revoked
-            FROM refresh_tokens
+            UPDATE refresh_tokens
+            SET revoked = TRUE
             WHERE token_hash = :hash
+              AND revoked = FALSE
+              AND (expires_at IS NULL OR expires_at > NOW())
+            RETURNING user_id
             """
         ),
         {"hash": token_hash},
     ).mappings().first()
 
-    if not row:
+    if not claim:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
         )
-    if row["revoked"]:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED, detail="Refresh token revoked"
-        )
-    exp = row["expires_at"]
-    if exp is not None and exp.tzinfo is None:
-        exp = exp.replace(tzinfo=timezone.utc)
-    if exp is not None and datetime.now(timezone.utc) > exp:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED, detail="Refresh token expired"
-        )
 
-    _revoke_refresh_token(db, raw_token)
+    user_id = int(claim["user_id"])
     new_refresh = create_refresh_token()
-    _store_refresh_token(db, int(row["user_id"]), new_refresh)
+    _store_refresh_token(db, user_id, new_refresh)
     db.commit()
 
-    new_access = create_access_token(str(row["user_id"]))
+    new_access = create_access_token(str(user_id))
     return AccessTokenResponse(
         access_token=new_access,
         refresh_token=new_refresh,
