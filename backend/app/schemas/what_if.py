@@ -317,6 +317,18 @@ class WhatIfDiff(BaseModel):
 
         return direction_label(self.delta_difference)
 
+    def has_positive_delta(self) -> bool:
+        """Return True if ``delta_difference`` is strictly positive."""
+        return self.delta_difference > 0.0
+
+    def has_negative_delta(self) -> bool:
+        """Return True if ``delta_difference`` is strictly negative."""
+        return self.delta_difference < 0.0
+
+    def is_neutral(self) -> bool:
+        """Return True if ``delta_difference`` is zero within float tolerance."""
+        return abs(self.delta_difference) < 1e-9
+
 
 __all__ = [
     "WhatIfAssumption",
