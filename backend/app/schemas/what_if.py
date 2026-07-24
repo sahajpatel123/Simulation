@@ -168,6 +168,19 @@ class WhatIfOut(BaseModel):
         """
         return abs(self.conversion_delta) >= abs(threshold)
 
+    def to_one_line(self) -> str:
+        """Return a tight one-line summary suitable for table rows / log tails.
+
+        Example: ``"sim=1 ▲ +12.50%"``.
+        """
+        from app.simulation.what_if import format_delta_pct
+
+        return (
+            f"sim={self.simulation_id} "
+            f"{self.direction_arrow()} "
+            f"{format_delta_pct(self.conversion_delta_pct)}"
+        )
+
     def __str__(self) -> str:
         return self.to_log_line()
 
