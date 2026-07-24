@@ -637,6 +637,7 @@ __all__ = [
     "scenarios_with_significant_delta",
     "scenarios_with_any_category",
     "scenarios_with_all_categories",
+    "count_scenarios",
 ]
 
 
@@ -872,6 +873,16 @@ def scenarios_with_all_categories(
         scenario for scenario in scenarios
         if scenario.has_all_categories(categories)
     ]
+
+
+def count_scenarios(scenarios: list[WhatIfOut]) -> int:
+    """Return the number of scenarios in the input list.
+
+    Trivial wrapper today but gives callers a stable alias so refactors
+    (e.g. counting only scenarios with a populated meta) can swap in
+    without breaking consumer code.
+    """
+    return len(scenarios)
 
 
 def direction_label(delta: float) -> str:
