@@ -126,6 +126,10 @@ class WhatIfOut(BaseModel):
         """Return True if ``category`` is present in matched_keyword_categories."""
         return category in self.meta.get("matched_keyword_categories", [])
 
+    def has_recommendations(self) -> bool:
+        """Return True when at least one recommendation is attached."""
+        return bool(self.recommendations)
+
     def direction_arrow(self) -> str:
         """Return a single-character direction arrow based on conversion_delta.
 
