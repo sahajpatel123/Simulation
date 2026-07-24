@@ -120,6 +120,18 @@ class WhatIfOut(BaseModel):
             f"sensitivity={sensitivity}"
         )
 
+    def has_positive_delta(self) -> bool:
+        """Return True when conversion_delta is strictly positive."""
+        return self.conversion_delta > 0.0
+
+    def has_negative_delta(self) -> bool:
+        """Return True when conversion_delta is strictly negative."""
+        return self.conversion_delta < 0.0
+
+    def is_neutral(self) -> bool:
+        """Return True when conversion_delta is zero (within float tolerance)."""
+        return abs(self.conversion_delta) < 1e-9
+
 
 class WhatIfSummaryCategory(BaseModel):
     """One row of the top-categories table in ``WhatIfSummary``."""
