@@ -626,6 +626,7 @@ __all__ = [
     "scenarios_to_json",
     "scenarios_to_markdown_table",
     "format_delta_pct",
+    "format_categories",
 ]
 
 
@@ -751,6 +752,16 @@ def format_delta_pct(value: float, *, decimals: int = 2) -> str:
     used elsewhere in the what-if surface).
     """
     return f"{value:+.{decimals}f}%"
+
+
+def format_categories(categories: list[str] | None, *, empty: str = "none") -> str:
+    """Render a category list as a comma-joined string.
+
+    Returns ``empty`` (default ``"none"``) when the list is missing or empty.
+    """
+    if not categories:
+        return empty
+    return ",".join(categories)
 
 
 def summarise_what_if_scenarios(
