@@ -91,6 +91,22 @@ class WhatIfOut(BaseModel):
     env_overrides: dict[str, Any] = Field(default_factory=dict)
     meta: dict[str, Any] = Field(default_factory=dict)
 
+    def summary(self) -> dict[str, Any]:
+        """Return a compact summary suitable for logging or compact UI display."""
+        return {
+            "simulation_id": self.simulation_id,
+            "project_id": self.project_id,
+            "base_conversion_rate": self.base_conversion_rate,
+            "projected_conversion_rate": self.projected_conversion_rate,
+            "conversion_delta": self.conversion_delta,
+            "conversion_delta_pct": self.conversion_delta_pct,
+            "dominant_direction": self.meta.get("dominant_direction"),
+            "sensitivity_label": self.meta.get("sensitivity_label"),
+            "matched_keyword_categories": list(
+                self.meta.get("matched_keyword_categories", [])
+            ),
+        }
+
 
 class WhatIfSummaryCategory(BaseModel):
     """One row of the top-categories table in ``WhatIfSummary``."""
