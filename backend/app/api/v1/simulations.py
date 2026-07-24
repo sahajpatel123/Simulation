@@ -85,6 +85,13 @@ def create_simulation(
     project = (
         db.query(Project)
         .filter(Project.id == payload.project_id, Project.user_id == current_user.id)
+        # Lock the project row so the subsequent "no running sim for this
+        # project" check + insert is serialised. Without this, two
+        # concurrent POSTs could both observe an empty QUEUED/RUNNING
+        # set, both pass the check, and both insert — consuming two
+        # tier-quota slots for what the user intended as one click.
+        # The lock is released when the surrounding transaction commits.
+        .with_for_update()
         .first()
     )
     if not project:
