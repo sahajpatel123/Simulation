@@ -622,6 +622,7 @@ __all__ = [
     "top_what_if_scenarios",
     "diff_what_if_scenarios",
     "scenarios_to_csv",
+    "scenarios_to_json",
 ]
 
 
@@ -631,6 +632,17 @@ def scenarios_to_csv(scenarios: list[WhatIfOut]) -> str:
     for scenario in scenarios:
         lines.append(",".join(scenario.to_csv_row()))
     return "\n".join(lines)
+
+
+def scenarios_to_json(scenarios: list[WhatIfOut]) -> str:
+    """Return a JSON array of compact summary dicts for ``scenarios``.
+
+    Uses ``WhatIfOut.summary()`` for a compact shape — pairs naturally with
+    ``scenarios_to_csv`` for spreadsheet-vs-API export paths.
+    """
+    import json
+
+    return json.dumps([scenario.summary() for scenario in scenarios], indent=2)
 
 
 def rank_what_if_scenarios(
