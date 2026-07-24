@@ -436,6 +436,15 @@ def build_what_if_scenario(
     impacts = _stage_impacts(base_matrix, projected_matrix, new_assump_dicts)
     stage_regression_count = sum(1 for impact in impacts if impact.delta < 0)
     stage_improvement_count = sum(1 for impact in impacts if impact.delta > 0)
+    net_stage_change = stage_improvement_count - stage_regression_count
+    if stage_regression_count == 0 and stage_improvement_count == 0:
+        dominant_direction = "NEUTRAL"
+    elif stage_regression_count == 0:
+        dominant_direction = "POSITIVE"
+    elif stage_improvement_count == 0:
+        dominant_direction = "NEGATIVE"
+    else:
+        dominant_direction = "MIXED"
 
     # Recommendations
     recommendations = _build_recommendations(
@@ -479,6 +488,8 @@ def build_what_if_scenario(
             "new_assumptions_count": len(new_assump_dicts),
             "stage_regression_count": stage_regression_count,
             "stage_improvement_count": stage_improvement_count,
+            "net_stage_change": net_stage_change,
+            "dominant_direction": dominant_direction,
             "scale_factor_applied": (
                 round(base_cr / base_matrix_cr, 4) if base_matrix_cr > 0 else 1.0
             ),
