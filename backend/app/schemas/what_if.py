@@ -132,6 +132,9 @@ class WhatIfOut(BaseModel):
         """Return True when conversion_delta is zero (within float tolerance)."""
         return abs(self.conversion_delta) < 1e-9
 
+    def __str__(self) -> str:
+        return self.to_log_line()
+
 
 class WhatIfSummaryCategory(BaseModel):
     """One row of the top-categories table in ``WhatIfSummary``."""
