@@ -621,7 +621,16 @@ __all__ = [
     "rank_what_if_scenarios",
     "top_what_if_scenarios",
     "diff_what_if_scenarios",
+    "scenarios_to_csv",
 ]
+
+
+def scenarios_to_csv(scenarios: list[WhatIfOut]) -> str:
+    """Return a full CSV document for ``scenarios`` with the canonical header."""
+    lines = [",".join(WhatIfOut.to_csv_header())]
+    for scenario in scenarios:
+        lines.append(",".join(scenario.to_csv_row()))
+    return "\n".join(lines)
 
 
 def rank_what_if_scenarios(
