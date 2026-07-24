@@ -9,6 +9,7 @@ No DB / I/O — verifiable without FastAPI or PostgreSQL.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -30,6 +31,14 @@ from app.schemas.what_if import (
     WhatIfSummary,
     WhatIfSummaryCategory,
 )
+
+
+@dataclass(frozen=True)
+class RankedWhatIf:
+    """A WhatIfOut paired with its rank index after sorting by conversion_delta."""
+
+    rank: int
+    scenario: WhatIfOut
 
 # Forward funnel stages whose transition probabilities matter for conversion.
 FORWARD_TRANSITIONS: list[tuple[State, State]] = [
@@ -604,7 +613,23 @@ def build_what_if_scenario(
     )
 
 
-__all__ = ["build_what_if_scenario", "summarise_what_if_scenarios"]
+__all__ = ["build_what_if_scenario", "summarise_what_if_scenarios", "RankedWhatIf", "rank_what_if_scenarios"]
+
+
+def rank_what_if_scenarios(
+    scenarios: list[WhatIfOut],
+) -> list[RankedWhatIf]:
+    """Return scenarios sorted by ``conversion_delta`` descending, with rank.
+
+    Ties retain input order (stable sort). The best scenario gets rank 1.
+    Useful for "best scenario first" UI ordering.
+    """
+    indexed = list(enumerate(scenarios))
+    indexed.sort(key=lambda pair: pair[1].conversion_delta, reverse=True)
+    return [
+        RankedWhatIf(rank=idx + 1, scenario=scenario)
+        for idx, (_, scenario) in enumerate(indexed)
+    ]
 
 
 def summarise_what_if_scenarios(
