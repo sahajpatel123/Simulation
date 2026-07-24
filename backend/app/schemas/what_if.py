@@ -160,6 +160,14 @@ class WhatIfOut(BaseModel):
         """Return True when conversion_delta is zero (within float tolerance)."""
         return abs(self.conversion_delta) < 1e-9
 
+    def is_significant(self, threshold: float = 0.01) -> bool:
+        """Return True when the absolute conversion_delta meets ``threshold``.
+
+        Defaults to a 1% absolute delta threshold — useful for UI flags that
+        highlight impactful changes and ignore noise.
+        """
+        return abs(self.conversion_delta) >= abs(threshold)
+
     def __str__(self) -> str:
         return self.to_log_line()
 
