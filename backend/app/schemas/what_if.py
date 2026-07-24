@@ -124,6 +124,18 @@ class WhatIfOut(BaseModel):
         """Return True if ``category`` is present in matched_keyword_categories."""
         return category in self.meta.get("matched_keyword_categories", [])
 
+    def direction_arrow(self) -> str:
+        """Return a single-character direction arrow based on conversion_delta.
+
+        Positive delta → "↑" (improvement), negative → "↓" (regression),
+        otherwise "→" (neutral / within tolerance).
+        """
+        if self.conversion_delta > 1e-9:
+            return "↑"
+        if self.conversion_delta < -1e-9:
+            return "↓"
+        return "→"
+
     def has_positive_delta(self) -> bool:
         """Return True when conversion_delta is strictly positive."""
         return self.conversion_delta > 0.0
