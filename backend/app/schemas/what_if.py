@@ -135,6 +135,16 @@ class WhatIfOut(BaseModel):
     def __str__(self) -> str:
         return self.to_log_line()
 
+    def top_recommendation(self) -> "WhatIfRecommendation | None":
+        """Return the highest-priority recommendation, or ``None`` if empty.
+
+        Priority is numeric and lower means more important. Stable order is
+        preserved for ties (matches the dedup order in ``_build_recommendations``).
+        """
+        if not self.recommendations:
+            return None
+        return min(self.recommendations, key=lambda rec: rec.priority)
+
     @staticmethod
     def to_csv_header() -> list[str]:
         """Return the canonical CSV header for batch scenario export."""
