@@ -434,6 +434,8 @@ def build_what_if_scenario(
 
     # Stage-by-stage impacts
     impacts = _stage_impacts(base_matrix, projected_matrix, new_assump_dicts)
+    stage_regression_count = sum(1 for impact in impacts if impact.delta < 0)
+    stage_improvement_count = sum(1 for impact in impacts if impact.delta > 0)
 
     # Recommendations
     recommendations = _build_recommendations(
@@ -475,6 +477,8 @@ def build_what_if_scenario(
             "projected_matrix_conversion": round(projected_matrix_cr, 6),
             "existing_assumptions_count": len(base_assumptions),
             "new_assumptions_count": len(new_assump_dicts),
+            "stage_regression_count": stage_regression_count,
+            "stage_improvement_count": stage_improvement_count,
             "scale_factor_applied": (
                 round(base_cr / base_matrix_cr, 4) if base_matrix_cr > 0 else 1.0
             ),
