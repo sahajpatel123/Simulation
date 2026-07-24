@@ -613,7 +613,13 @@ def build_what_if_scenario(
     )
 
 
-__all__ = ["build_what_if_scenario", "summarise_what_if_scenarios", "RankedWhatIf", "rank_what_if_scenarios"]
+__all__ = [
+    "build_what_if_scenario",
+    "summarise_what_if_scenarios",
+    "RankedWhatIf",
+    "rank_what_if_scenarios",
+    "top_what_if_scenarios",
+]
 
 
 def rank_what_if_scenarios(
@@ -630,6 +636,19 @@ def rank_what_if_scenarios(
         RankedWhatIf(rank=idx + 1, scenario=scenario)
         for idx, (_, scenario) in enumerate(indexed)
     ]
+
+
+def top_what_if_scenarios(
+    scenarios: list[WhatIfOut],
+    n: int = 3,
+) -> list[RankedWhatIf]:
+    """Return the top ``n`` scenarios by ``conversion_delta``.
+
+    Caps at ``len(scenarios)`` and returns an empty list when ``n`` <= 0.
+    """
+    if n <= 0 or not scenarios:
+        return []
+    return rank_what_if_scenarios(scenarios)[:n]
 
 
 def summarise_what_if_scenarios(
