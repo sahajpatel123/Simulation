@@ -627,6 +627,7 @@ __all__ = [
     "scenarios_to_markdown_table",
     "format_delta_pct",
     "format_categories",
+    "format_stage_impact",
 ]
 
 
@@ -761,6 +762,18 @@ def format_categories(categories: list[str] | None, *, empty: str = "none") -> s
     if not categories:
         return empty
     return ",".join(categories)
+
+
+def format_stage_impact(impact: "StageImpact") -> str:
+    """Return a one-line summary for a StageImpact.
+
+    Example output: ``"BROWSE→CONSIDER 0.6200→0.5500 (-0.0700)"``.
+    """
+    return (
+        f"{impact.transition} "
+        f"{impact.base_rate:.4f}→{impact.projected_rate:.4f} "
+        f"({impact.delta:+.4f})"
+    )
 
 
 def summarise_what_if_scenarios(
