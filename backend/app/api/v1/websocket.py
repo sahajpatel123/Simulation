@@ -6,6 +6,7 @@ import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.deps import user_from_access_sub
 from app.core.security import decode_token
@@ -16,6 +17,25 @@ from app.models.user import User
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["websocket"])
+
+
+def _origin_allowed(origin: str | None) -> bool:
+    """Return True iff the WebSocket Origin is in the CORS allowlist.
+
+    Browsers send ``Origin`` on the WebSocket handshake; we use the same
+    allowlist the HTTP CORS middleware uses (``settings.cors_allowed_origins``)
+    so a frontend at ``FRONTEND_URL`` (or ``localhost`` in dev) is the only
+    place that can open a socket. Non-browser clients (curl, server-to-server)
+    may not send Origin — we treat absence as "allowed" only in non-production
+    so internal tooling keeps working. In production, missing Origin is
+    rejected as a defence against headless attackers.
+    """
+    allowed = settings.cors_allowed_origins()
+    if not origin:
+        # In production, missing Origin on a WebSocket handshake is treated
+        # as a hostile client — browsers always send it.
+        return settings.ENVIRONMENT.lower() != "production"
+    return origin in allowed
 
 
 async def _get_user_from_token(token: str) -> User | None:
@@ -54,6 +74,19 @@ async def websocket_simulation_progress(
     simulation_id: int,
 ):
     """Auth: first frame must be JSON `{"type":"auth","access_token":"<jwt>"}` (not in URL)."""
+    # Reject cross-origin WebSocket handshakes (CSWSH). The browser sends
+    # ``Origin`` on the upgrade request; we validate against the same
+    # allowlist used for HTTP CORS. Validation runs BEFORE
+    # ``websocket.accept()`` so a hostile origin never establishes a
+    # connection — we close before the protocol upgrade completes.
+    origin = websocket.headers.get("origin") or websocket.headers.get("Origin")
+    if not _origin_allowed(origin):
+        logger.warning(
+            "[WS] Rejected handshake: origin=%r not in allowlist",
+            origin,
+        )
+        await websocket.close(code=4003)
+        return
     await websocket.accept()
     try:
         raw = await asyncio.wait_for(websocket.receive_text(), timeout=20.0)
