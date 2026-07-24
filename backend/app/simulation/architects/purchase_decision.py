@@ -6,6 +6,8 @@ No LLM, no DB, no randomness.
 """
 from __future__ import annotations
 
+import re
+
 from app.simulation.architects.base import ArchitectOutput, BaseArchitect, DomainReport
 from app.simulation.clusters.definitions import ClusterDefinition
 from app.core.utils import geo_tier
@@ -56,7 +58,7 @@ class PurchaseDecisionArchitect(BaseArchitect):
             text = str(a.get("text", a.get("assumption", ""))).lower()
             if any(w in text for w in ["emi", "installment", "no cost emi"]):
                 has_emi = True
-            if any(w in text for w in ["bnpl", "buy now pay later", "simpl", "lazypay"]):
+            if "buy now pay later" in text or re.search(r"\b(?:bnpl|simpl|lazypay)\b", text):
                 has_bnpl = True
             if "30 day" in text or "30-day return" in text:
                 return_days = 30
