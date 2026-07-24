@@ -235,6 +235,16 @@ class WhatIfDiff(BaseModel):
     base_only_categories: list[str] = Field(default_factory=list)
     other_only_categories: list[str] = Field(default_factory=list)
 
+    def direction_label(self) -> str:
+        """Return ``improvement`` / ``regression`` / ``neutral`` for ``delta_difference``.
+
+        Delegates to ``app.simulation.what_if.direction_label`` so the
+        threshold matches ``WhatIfOut.direction_label()`` exactly.
+        """
+        from app.simulation.what_if import direction_label
+
+        return direction_label(self.delta_difference)
+
 
 __all__ = [
     "WhatIfAssumption",
