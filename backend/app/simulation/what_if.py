@@ -343,7 +343,30 @@ def _build_recommendations(
         )
 
     recs.sort(key=lambda r: r.priority)
-    return recs
+    return _dedupe_and_cap_recommendations(recs)
+
+
+def _dedupe_and_cap_recommendations(
+    recs: list[WhatIfRecommendation],
+    max_items: int = 6,
+) -> list[WhatIfRecommendation]:
+    """Drop duplicate titles (keeping the highest-priority occurrence) and cap length.
+
+    Recommendations share the same priority rank when their conditions overlap
+    (e.g. delta == 0 with both pricing and trust assumptions present). Without
+    dedup, the API can return redundant titles; without a cap, a future
+    change could easily grow the list unboundedly.
+    """
+    seen_titles: set[str] = set()
+    deduped: list[WhatIfRecommendation] = []
+    for rec in recs:
+        if rec.title in seen_titles:
+            continue
+        seen_titles.add(rec.title)
+        deduped.append(rec)
+        if len(deduped) >= max_items:
+            break
+    return deduped
 
 
 def build_what_if_scenario(
