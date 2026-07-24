@@ -488,3 +488,27 @@ def test_scan_only_runs_when_user_id_is_not_none(monkeypatch: Any) -> None:
         db=db,
     )
     assert db.added == []
+
+
+def test_scan_skips_high_conv_clusters_without_cluster_result(monkeypatch: Any) -> None:
+    """If cluster_result is missing for a cluster, the scan must not crash and
+    must not flag it as CLUSTER_IGNORED."""
+    from app.simulation.blindspot_detector import BlindspotDetector
+
+    db = _install_fake_helpers(
+        monkeypatch,
+        history=[_sim({"cluster_breakdown": {"metro": 0.3}}), _sim({})],
+    )
+    bd = BlindspotDetector()
+    bd.scan(
+        user_id=1,
+        simulation=None,
+        cluster_weights={"metro": 0.005, "missing": 0.005},
+        conductor_result=_FakeConductorResult(
+            {"metro": object()}, {"metro": 0.30}
+        ),
+        db=db,
+    )
+    # No CLUSTER_IGNORED rows added for "missing" (no cluster_result).
+    cluster_rows = [r for r in db.added if getattr(r, "blindspot_type", "") == "CLUSTER_IGNORED"]
+    assert cluster_rows == []
