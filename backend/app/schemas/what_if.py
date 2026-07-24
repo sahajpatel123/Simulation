@@ -92,10 +92,30 @@ class WhatIfOut(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class WhatIfSummaryCategory(BaseModel):
+    """One row of the top-categories table in ``WhatIfSummary``."""
+
+    category: str
+    count: int
+
+
+class WhatIfSummary(BaseModel):
+    """Aggregate view of multiple ``WhatIfOut`` scenarios for compare-scenarios UI."""
+
+    scenario_count: int = 0
+    avg_delta: float = 0.0
+    best_delta: float = 0.0
+    worst_delta: float = 0.0
+    direction_breakdown: dict[str, int] = Field(default_factory=dict)
+    top_categories: list[WhatIfSummaryCategory] = Field(default_factory=list)
+
+
 __all__ = [
     "WhatIfAssumption",
     "WhatIfRequest",
     "StageImpact",
     "WhatIfRecommendation",
     "WhatIfOut",
+    "WhatIfSummary",
+    "WhatIfSummaryCategory",
 ]

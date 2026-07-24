@@ -27,6 +27,8 @@ from app.schemas.what_if import (
     WhatIfAssumption,
     WhatIfOut,
     WhatIfRecommendation,
+    WhatIfSummary,
+    WhatIfSummaryCategory,
 )
 
 # Forward funnel stages whose transition probabilities matter for conversion.
@@ -607,24 +609,13 @@ __all__ = ["build_what_if_scenario", "summarise_what_if_scenarios"]
 
 def summarise_what_if_scenarios(
     scenarios: list[WhatIfOut],
-) -> dict[str, Any]:
+) -> WhatIfSummary:
     """Aggregate statistics across multiple what-if scenario outputs.
 
-    Returns a small dict suitable for "compare scenarios" UI:
-      - scenario_count
-      - avg_delta / best_delta / worst_delta (across projected_conversion_rate)
-      - direction_breakdown: counts of dominant_direction labels
-      - top_categories: most common matched_keyword_categories
+    Returns a typed ``WhatIfSummary`` suitable for "compare scenarios" UI.
     """
     if not scenarios:
-        return {
-            "scenario_count": 0,
-            "avg_delta": 0.0,
-            "best_delta": 0.0,
-            "worst_delta": 0.0,
-            "direction_breakdown": {},
-            "top_categories": [],
-        }
+        return WhatIfSummary()
 
     deltas = [s.conversion_delta for s in scenarios]
     direction_breakdown: dict[str, int] = {}
@@ -639,14 +630,14 @@ def summarise_what_if_scenarios(
     top_categories = sorted(
         category_counts.items(), key=lambda item: item[1], reverse=True
     )
-    return {
-        "scenario_count": len(scenarios),
-        "avg_delta": round(sum(deltas) / len(deltas), 6),
-        "best_delta": round(max(deltas), 6),
-        "worst_delta": round(min(deltas), 6),
-        "direction_breakdown": direction_breakdown,
-        "top_categories": [
-            {"category": category, "count": count}
+    return WhatIfSummary(
+        scenario_count=len(scenarios),
+        avg_delta=round(sum(deltas) / len(deltas), 6),
+        best_delta=round(max(deltas), 6),
+        worst_delta=round(min(deltas), 6),
+        direction_breakdown=direction_breakdown,
+        top_categories=[
+            WhatIfSummaryCategory(category=category, count=count)
             for category, count in top_categories
         ],
-    }
+    )
