@@ -633,6 +633,7 @@ __all__ = [
     "scenarios_with_category",
     "scenarios_with_positive_delta",
     "scenarios_with_negative_delta",
+    "group_scenarios_by_direction",
 ]
 
 
@@ -807,6 +808,18 @@ def scenarios_with_positive_delta(scenarios: list[WhatIfOut]) -> list[WhatIfOut]
 def scenarios_with_negative_delta(scenarios: list[WhatIfOut]) -> list[WhatIfOut]:
     """Return only the scenarios with a strictly negative conversion_delta."""
     return [scenario for scenario in scenarios if scenario.has_negative_delta()]
+
+
+def group_scenarios_by_direction(scenarios: list[WhatIfOut]) -> dict[str, list[WhatIfOut]]:
+    """Group scenarios by their ``dominant_direction`` meta value.
+
+    Unknown directions fall under ``"UNKNOWN"`` so callers never see a KeyError.
+    """
+    groups: dict[str, list[WhatIfOut]] = {}
+    for scenario in scenarios:
+        direction = str(scenario.meta.get("dominant_direction", "UNKNOWN"))
+        groups.setdefault(direction, []).append(scenario)
+    return groups
 
 
 def direction_label(delta: float) -> str:
