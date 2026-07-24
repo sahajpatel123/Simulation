@@ -120,6 +120,10 @@ class WhatIfOut(BaseModel):
             f"sensitivity={sensitivity}"
         )
 
+    def has_category(self, category: str) -> bool:
+        """Return True if ``category`` is present in matched_keyword_categories."""
+        return category in self.meta.get("matched_keyword_categories", [])
+
     def has_positive_delta(self) -> bool:
         """Return True when conversion_delta is strictly positive."""
         return self.conversion_delta > 0.0
