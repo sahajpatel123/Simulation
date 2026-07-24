@@ -631,6 +631,8 @@ __all__ = [
     "scenarios_to_compact_lines",
     "direction_label",
     "scenarios_with_category",
+    "scenarios_with_positive_delta",
+    "scenarios_with_negative_delta",
 ]
 
 
@@ -795,6 +797,16 @@ def scenarios_with_category(scenarios: list[WhatIfOut], category: str) -> list[W
     batch down to "pricing-driven scenarios" etc.
     """
     return [scenario for scenario in scenarios if scenario.has_category(category)]
+
+
+def scenarios_with_positive_delta(scenarios: list[WhatIfOut]) -> list[WhatIfOut]:
+    """Return only the scenarios with a strictly positive conversion_delta."""
+    return [scenario for scenario in scenarios if scenario.has_positive_delta()]
+
+
+def scenarios_with_negative_delta(scenarios: list[WhatIfOut]) -> list[WhatIfOut]:
+    """Return only the scenarios with a strictly negative conversion_delta."""
+    return [scenario for scenario in scenarios if scenario.has_negative_delta()]
 
 
 def direction_label(delta: float) -> str:
