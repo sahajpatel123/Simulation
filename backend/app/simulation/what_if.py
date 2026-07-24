@@ -621,6 +621,7 @@ __all__ = [
     "rank_what_if_scenarios",
     "top_what_if_scenarios",
     "diff_what_if_scenarios",
+    "diff_what_if_scenarios_summary",
     "scenarios_to_csv",
     "scenarios_to_json",
     "scenarios_to_markdown_table",
@@ -725,6 +726,19 @@ def diff_what_if_scenarios(
         shared_keyword_categories=sorted(base_set & other_set),
         base_only_categories=sorted(base_set - other_set),
         other_only_categories=sorted(other_set - base_set),
+    )
+
+
+def diff_what_if_scenarios_summary(diff: WhatIfDiff) -> str:
+    """Return a one-line, human-readable summary of a ``WhatIfDiff``.
+
+    Useful for chat-style outputs and log lines.
+    """
+    shared = ",".join(diff.shared_keyword_categories) or "none"
+    return (
+        f"diff sim={diff.base_simulation_id}->{diff.other_simulation_id} "
+        f"delta_diff={diff.delta_difference:+.6f} "
+        f"shared=[{shared}]"
     )
 
 
