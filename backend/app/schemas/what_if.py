@@ -181,6 +181,16 @@ class WhatIfOut(BaseModel):
             f"{format_delta_pct(self.conversion_delta_pct)}"
         )
 
+    def compact_delta(self) -> str:
+        """Return a tight direction+pct string without the simulation ID.
+
+        Example: ``"↑ +12.50%"``. Useful for inline UI badges next to a
+        scenario title.
+        """
+        from app.simulation.what_if import format_delta_pct
+
+        return f"{self.direction_arrow()} {format_delta_pct(self.conversion_delta_pct)}"
+
     def __str__(self) -> str:
         return self.to_log_line()
 
