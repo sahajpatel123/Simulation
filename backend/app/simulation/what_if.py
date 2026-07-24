@@ -636,6 +636,7 @@ __all__ = [
     "group_scenarios_by_direction",
     "scenarios_with_significant_delta",
     "scenarios_with_any_category",
+    "scenarios_with_all_categories",
 ]
 
 
@@ -853,6 +854,23 @@ def scenarios_with_any_category(
     return [
         scenario for scenario in scenarios
         if scenario.has_category_any(categories)
+    ]
+
+
+def scenarios_with_all_categories(
+    scenarios: list[WhatIfOut],
+    categories: list[str],
+) -> list[WhatIfOut]:
+    """Return scenarios whose meta matches **all** of the given categories.
+
+    Empty ``categories`` returns all scenarios (vacuous truth matches
+    every scenario).
+    """
+    if not categories:
+        return list(scenarios)
+    return [
+        scenario for scenario in scenarios
+        if scenario.has_all_categories(categories)
     ]
 
 
