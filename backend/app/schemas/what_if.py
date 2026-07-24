@@ -284,6 +284,10 @@ class WhatIfSummary(BaseModel):
         """
         return sum(int(value) for value in self.direction_breakdown.values())
 
+    def has_direction(self, label: str) -> bool:
+        """Return True if ``label`` is a key in ``direction_breakdown`` with count > 0."""
+        return int(self.direction_breakdown.get(label, 0)) > 0
+
 
 class WhatIfDiff(BaseModel):
     """Pairwise comparison of two ``WhatIfOut`` scenarios."""
