@@ -226,6 +226,13 @@ class WhatIfSummary(BaseModel):
             return None
         return self.top_categories[0].category
 
+    def direction_breakdown_total(self) -> int:
+        """Return the sum of all ``direction_breakdown`` counts.
+
+        Sanity-checks ``scenario_count`` when every scenario produces a label.
+        """
+        return sum(int(value) for value in self.direction_breakdown.values())
+
 
 class WhatIfDiff(BaseModel):
     """Pairwise comparison of two ``WhatIfOut`` scenarios."""
