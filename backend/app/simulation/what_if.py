@@ -440,6 +440,21 @@ def build_what_if_scenario(
     ``env_params`` — the environment parameters (price_sensitivity, market_maturity, etc.).
     ``existing_assumptions`` — the project's existing assumptions (dicts or objects).
     ``new_assumptions`` — user-supplied what-if assumptions (dicts).
+
+    Returned ``WhatIfOut.meta`` always includes:
+      - generated_at (ISO timestamp)
+      - base_matrix_conversion, projected_matrix_conversion
+      - existing_assumptions_count, new_assumptions_count
+      - stage_regression_count, stage_improvement_count, net_stage_change
+      - dominant_direction (NEUTRAL | POSITIVE | NEGATIVE | MIXED)
+      - matched_keyword_categories (pricing | trust | retention | growth | ux |
+        market_fit | competition)
+      - sensitivity_score (0.0–1.0) and sensitivity_label (CRITICAL | HIGH |
+        MEDIUM | LOW | NONE)
+      - scale_factor_applied
+
+    Returned ``WhatIfOut.recommendations`` is capped at 6 entries with
+    duplicate titles removed.
     """
     data = _coerce_results(base_results)
 
