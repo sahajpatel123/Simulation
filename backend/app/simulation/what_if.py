@@ -26,6 +26,7 @@ from app.simulation.markov import (
 from app.schemas.what_if import (
     StageImpact,
     WhatIfAssumption,
+    WhatIfDiff,
     WhatIfOut,
     WhatIfRecommendation,
     WhatIfSummary,
@@ -619,6 +620,7 @@ __all__ = [
     "RankedWhatIf",
     "rank_what_if_scenarios",
     "top_what_if_scenarios",
+    "diff_what_if_scenarios",
 ]
 
 
@@ -649,6 +651,33 @@ def top_what_if_scenarios(
     if n <= 0 or not scenarios:
         return []
     return rank_what_if_scenarios(scenarios)[:n]
+
+
+def diff_what_if_scenarios(
+    base: WhatIfOut,
+    other: WhatIfOut,
+) -> WhatIfDiff:
+    """Return a pairwise diff between two ``WhatIfOut`` scenarios.
+
+    Surfaces assumption count delta, delta difference, and the shared,
+    base-only, and other-only keyword categories.
+    """
+    base_categories: list[str] = list(base.meta.get("matched_keyword_categories", []))
+    other_categories: list[str] = list(other.meta.get("matched_keyword_categories", []))
+    base_set = set(base_categories)
+    other_set = set(other_categories)
+    return WhatIfDiff(
+        base_simulation_id=base.simulation_id,
+        other_simulation_id=other.simulation_id,
+        base_new_assumption_count=base.meta.get("new_assumptions_count", 0),
+        other_new_assumption_count=other.meta.get("new_assumptions_count", 0),
+        base_delta=base.conversion_delta,
+        other_delta=other.conversion_delta,
+        delta_difference=round(other.conversion_delta - base.conversion_delta, 6),
+        shared_keyword_categories=sorted(base_set & other_set),
+        base_only_categories=sorted(base_set - other_set),
+        other_only_categories=sorted(other_set - base_set),
+    )
 
 
 def summarise_what_if_scenarios(

@@ -110,6 +110,21 @@ class WhatIfSummary(BaseModel):
     top_categories: list[WhatIfSummaryCategory] = Field(default_factory=list)
 
 
+class WhatIfDiff(BaseModel):
+    """Pairwise comparison of two ``WhatIfOut`` scenarios."""
+
+    base_simulation_id: int
+    other_simulation_id: int
+    base_new_assumption_count: int = 0
+    other_new_assumption_count: int = 0
+    base_delta: float = 0.0
+    other_delta: float = 0.0
+    delta_difference: float = 0.0
+    shared_keyword_categories: list[str] = Field(default_factory=list)
+    base_only_categories: list[str] = Field(default_factory=list)
+    other_only_categories: list[str] = Field(default_factory=list)
+
+
 __all__ = [
     "WhatIfAssumption",
     "WhatIfRequest",
@@ -118,4 +133,5 @@ __all__ = [
     "WhatIfOut",
     "WhatIfSummary",
     "WhatIfSummaryCategory",
+    "WhatIfDiff",
 ]
