@@ -630,6 +630,7 @@ __all__ = [
     "format_stage_impact",
     "scenarios_to_compact_lines",
     "direction_label",
+    "scenarios_with_category",
 ]
 
 
@@ -785,6 +786,15 @@ def scenarios_to_compact_lines(scenarios: list[WhatIfOut]) -> str:
     prefer a quick text view over JSON.
     """
     return "\n".join(scenario.to_log_line() for scenario in scenarios)
+
+
+def scenarios_with_category(scenarios: list[WhatIfOut], category: str) -> list[WhatIfOut]:
+    """Return only the scenarios whose meta includes ``category``.
+
+    Symmetric to ``WhatIfOut.has_category()`` — useful for filtering a
+    batch down to "pricing-driven scenarios" etc.
+    """
+    return [scenario for scenario in scenarios if scenario.has_category(category)]
 
 
 def direction_label(delta: float) -> str:
