@@ -635,6 +635,7 @@ __all__ = [
     "scenarios_with_negative_delta",
     "group_scenarios_by_direction",
     "scenarios_with_significant_delta",
+    "scenarios_with_any_category",
 ]
 
 
@@ -835,6 +836,23 @@ def scenarios_with_significant_delta(
     return [
         scenario for scenario in scenarios
         if scenario.is_significant(threshold=threshold)
+    ]
+
+
+def scenarios_with_any_category(
+    scenarios: list[WhatIfOut],
+    categories: list[str],
+) -> list[WhatIfOut]:
+    """Return scenarios whose meta matches **any** of the given categories.
+
+    Useful for "pricing OR trust" filters. Empty ``categories`` returns
+    an empty list (no categories means no matches).
+    """
+    if not categories:
+        return []
+    return [
+        scenario for scenario in scenarios
+        if scenario.has_category_any(categories)
     ]
 
 
