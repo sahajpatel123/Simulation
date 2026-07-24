@@ -8,17 +8,53 @@ MAX_DESCRIPTION_LENGTH = 5000
 MAX_ASSUMPTION_LENGTH = 500
 MAX_FIELD_LENGTH = 200
 
+# Whitespace allowed between dangerous URI scheme and the colon — e.g.
+# "javascript\t:alert(1)" still resolves to a javascript: URL in some
+# browsers. The trailing colon is required so we don't erase the
+# legitimate word "javascript" wherever it appears in prose.
+_DANGEROUS_URI_SCHEMES = r"(?:javascript|vbscript|data)"
+# Touched:
+#   - Anchor `<script>` content so attempts to split the tag (e.g. with
+#     newlines or self-closing variants) still match.
+#   - Require an `=` after on*-handler names so we don't drop substrings
+#     like "onclick" in plain English ("the onclick handler").
+#   - Use [:/\s]* to handle whitespace and lines between "data" and the
+#     embedded "text/html" / "text/javascript" payload.
+_DANGEROUS_TAG_PATTERN = (
+    r"<script\b[^>]*>.*?</script\s*>"
+    r"|<script\b[^>]*>"
+    r"|</script\s*>"
+)
+_DANGEROUS_DATA_PATTERN = r"\bdata\s*[:/]\s*text\s*/\s*(?:html|javascript)\b"
+_DANGEROUS_ATTR_PATTERN = r"\bon[a-z]+\s*=\s*['\"]?[^'\">\s]+"
+
 DANGEROUS_PATTERNS = [
-    r"<script[^>]*>.*?</script>",
-    r"javascript:",
-    r"on\w+\s*=",
-    r"data:text/html",
-    r"vbscript:",
+    _DANGEROUS_TAG_PATTERN,
+    rf"\b{_DANGEROUS_URI_SCHEMES}\s*:",
+    _DANGEROUS_ATTR_PATTERN,
+    _DANGEROUS_DATA_PATTERN,
+    rf"\b{_DANGEROUS_URI_SCHEMES}\s*=\s*['\"]?[^'\">\s]+",
 ]
 
 
 def sanitise_text(text: str, max_length: int = MAX_FIELD_LENGTH) -> str:
-    """Remove dangerous patterns and enforce length limit."""
+    """Remove dangerous patterns and enforce length limit.
+
+    The sanitiser is the last line of defence before user-supplied text
+    reaches the database or the LLM. Order matters:
+
+      1. HTML-escape first so angle brackets and ampersands become
+         inert. This kills `<script>` BEFORE we try to drop it via
+         regex (the regex needs to match the *raw* form).
+      2. Strip dangerous URI schemes (javascript:, vbscript:, data:
+         text/html / data: text/javascript) — the regex now requires a
+         literal colon after the scheme, tolerating whitespace between
+         the scheme and the colon so "javascript\t:alert(1)" still
+         matches.
+      3. Strip HTML on*-handler attributes — the regex now requires the
+         `=` sign so we don't damage prose like "onclick is preferred".
+      4. Truncate to ``max_length`` then strip outer whitespace.
+    """
     if not text:
         return ""
     t = html.escape(str(text))

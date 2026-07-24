@@ -163,6 +163,60 @@ def test_sanitise_text_strips_uppercase_dangerous_patterns() -> None:
     assert "javascript" not in out.lower()
 
 
+def test_sanitise_text_strips_javascript_with_whitespace_before_colon() -> None:
+    out = sanitise_text("javascript\t:alert(1)")
+    assert "javascript" not in out.lower()
+
+
+def test_sanitise_text_strips_javascript_with_newline_before_colon() -> None:
+    out = sanitise_text("javascript\n:alert(1)")
+    assert "javascript" not in out.lower()
+
+
+def test_sanitise_text_strips_vbscript_with_whitespace_before_colon() -> None:
+    out = sanitise_text("vbscript\t:msgbox(1)")
+    assert "vbscript" not in out.lower()
+
+
+def test_sanitise_text_strips_data_uri_with_whitespace() -> None:
+    out = sanitise_text("data :text/html,<script>alert(1)</script>")
+    assert "data :" not in out.lower()
+    assert "data:text/html" not in out.lower()
+
+
+def test_sanitise_text_strips_data_uri_with_newline_in_scheme() -> None:
+    out = sanitise_text("data:\ntext/html,<script>alert(1)</script>")
+    assert "data:" not in out.lower()
+
+
+def test_sanitise_text_strips_data_uri_with_slash_separator() -> None:
+    out = sanitise_text("data/text/html,<script>alert(1)</script>")
+    assert "data/text/html" not in out.lower()
+
+
+def test_sanitise_text_strips_data_uri_with_text_javascript() -> None:
+    out = sanitise_text("data:text/javascript,alert(1)")
+    assert "data:text/javascript" not in out.lower()
+
+
+def test_sanitise_text_strips_onclick_attribute_with_quotes() -> None:
+    out = sanitise_text("onclick='alert(1)'")
+    assert "onclick" not in out.lower()
+
+
+def test_sanitise_text_drops_nested_script_fragments() -> None:
+    out = sanitise_text("<sc<script>ript>alert(1)</script>")
+    # Raw angle brackets must be neutralised.
+    assert "<" not in out
+    assert ">" not in out
+
+
+def test_sanitise_text_strips_dangerous_patterns_preserves_safe_prose() -> None:
+    out = sanitise_text("the onclick handler is well documented")
+    # Prose shouldn't be damaged by the attribute regex.
+    assert "onclick" in out
+
+
 def test_sanitise_text_preserves_safe_content() -> None:
     safe = "The quick brown fox jumps over the lazy dog. Numbers: 123."
     assert sanitise_text(safe) == safe
