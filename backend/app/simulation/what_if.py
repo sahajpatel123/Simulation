@@ -629,6 +629,7 @@ __all__ = [
     "format_categories",
     "format_stage_impact",
     "scenarios_to_compact_lines",
+    "direction_label",
 ]
 
 
@@ -784,6 +785,19 @@ def scenarios_to_compact_lines(scenarios: list[WhatIfOut]) -> str:
     prefer a quick text view over JSON.
     """
     return "\n".join(scenario.to_log_line() for scenario in scenarios)
+
+
+def direction_label(delta: float) -> str:
+    """Return a human-readable direction label for ``delta``.
+
+    Positive → "improvement", negative → "regression", otherwise "neutral".
+    Uses the same 1e-9 tolerance as ``WhatIfOut.direction_arrow``.
+    """
+    if delta > 1e-9:
+        return "improvement"
+    if delta < -1e-9:
+        return "regression"
+    return "neutral"
 
 
 def summarise_what_if_scenarios(
