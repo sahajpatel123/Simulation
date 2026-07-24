@@ -15,10 +15,39 @@ class ProjectCreate(BaseModel):
     title: str = "Untitled"
     description: str
     intake_mode: Literal["IDEA", "MID_BUILD", "PRE_LAUNCH"] = "IDEA"
-    landing_page_url: str | None = None
-    mvp_feature_list: list[str] = Field(default_factory=list)
-    existing_product_description: str | None = None
+    landing_page_url: str | None = Field(default=None, max_length=2048)
+    mvp_feature_list: list[str] = Field(default_factory=list, max_length=50)
+    existing_product_description: str | None = Field(default=None, max_length=5000)
     dossier_axis: Literal["software", "hardware"] = "software"
+
+
+class BriefSave(BaseModel):
+    """Body for POST /projects/{id}/brief.
+
+    Replaces the prior ``payload: dict`` so Pydantic enforces types,
+    length caps, and field presence — the prior contract accepted any
+    JSON shape and let the handler reach for ``payload.get("...")``
+    with no length cap, so a 10MB ``positioning`` string could be
+    persisted to the DB on a single request.
+    """
+
+    positioning: str = Field(default="", max_length=2000)
+    features: list[str] = Field(default_factory=list, max_length=5)
+    hook: str = Field(default="", max_length=1000)
+    mark_complete: bool = False
+
+
+class BriefAssistRequest(BaseModel):
+    """Body for POST /projects/{id}/brief/assist.
+
+    Replaces the prior ``payload: dict``. ``mode`` and ``field`` are
+    pinned to a known enum so the handler can't be tricked into
+    dispatching to an arbitrary LLM mode.
+    """
+
+    mode: Literal["refine", "suggest", "critique"]
+    field: Literal["positioning", "features", "hook"]
+    current_value: str = Field(default="", max_length=2000)
 
 
 class ProjectOut(BaseModel):

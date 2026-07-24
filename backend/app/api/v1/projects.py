@@ -50,7 +50,14 @@ from app.schemas.environment import (
 )
 from app.schemas.intervention import Intervention, InterventionOut, InterventionRequest
 from app.schemas.premortem import FailureMode, PremortemOut, PremortemRequest
-from app.schemas.project import ProjectCreate, ProjectListResponse, ProjectOut, ProjectPatch
+from app.schemas.project import (
+    BriefAssistRequest,
+    BriefSave,
+    ProjectCreate,
+    ProjectListResponse,
+    ProjectOut,
+    ProjectPatch,
+)
 from app.schemas.prototype import FunnelEdge, FunnelGraph, FunnelNode, PrototypeOut
 from app.schemas.stress_test import (
     AssumptionStressResult,
@@ -182,7 +189,7 @@ def get_brief(
 )
 def save_brief(
     project_id: int,
-    payload: dict,
+    payload: BriefSave,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -196,17 +203,16 @@ def save_brief(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    positioning = (payload.get("positioning") or "").strip()
-    features = payload.get("features") or []
-    hook = (payload.get("hook") or "").strip()
-    mark_complete = bool(payload.get("mark_complete", False))
+    positioning = payload.positioning.strip()
+    features = payload.features
+    hook = payload.hook.strip()
+    mark_complete = payload.mark_complete
 
-    if positioning is not None:
-        project.brief_positioning = positioning
-    if isinstance(features, list):
-        project.brief_features_json = _json.dumps([str(f).strip() for f in features if str(f).strip()][:5])
-    if hook is not None:
-        project.brief_hook = hook
+    project.brief_positioning = positioning
+    project.brief_features_json = _json.dumps(
+        [str(f).strip() for f in features if str(f).strip()][:5]
+    )
+    project.brief_hook = hook
 
     if mark_complete and positioning and hook:
         project.brief_completed_at = datetime.now(timezone.utc)
@@ -237,7 +243,7 @@ def save_brief(
 )
 def assist_brief(
     project_id: int,
-    payload: dict,
+    payload: BriefAssistRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -251,9 +257,9 @@ def assist_brief(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    mode = payload.get("mode")
-    field = payload.get("field")
-    current_value = payload.get("current_value", "")
+    mode = payload.mode
+    field = payload.field
+    current_value = payload.current_value
 
     if mode not in ("refine", "suggest", "critique"):
         raise HTTPException(status_code=400, detail="Invalid mode")
