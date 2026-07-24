@@ -220,6 +220,12 @@ class WhatIfSummary(BaseModel):
     direction_breakdown: dict[str, int] = Field(default_factory=dict)
     top_categories: list[WhatIfSummaryCategory] = Field(default_factory=list)
 
+    def top_category_name(self) -> str | None:
+        """Return the highest-count category name, or None when empty."""
+        if not self.top_categories:
+            return None
+        return self.top_categories[0].category
+
 
 class WhatIfDiff(BaseModel):
     """Pairwise comparison of two ``WhatIfOut`` scenarios."""
