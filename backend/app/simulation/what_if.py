@@ -623,6 +623,7 @@ __all__ = [
     "diff_what_if_scenarios",
     "scenarios_to_csv",
     "scenarios_to_json",
+    "scenarios_to_markdown_table",
 ]
 
 
@@ -643,6 +644,32 @@ def scenarios_to_json(scenarios: list[WhatIfOut]) -> str:
     import json
 
     return json.dumps([scenario.summary() for scenario in scenarios], indent=2)
+
+
+def scenarios_to_markdown_table(scenarios: list[WhatIfOut]) -> str:
+    """Return a markdown table summarising ``scenarios``.
+
+    Columns mirror ``WhatIfOut.summary()`` keys so the markdown view and the
+    JSON view stay consistent.
+    """
+    if not scenarios:
+        return ""
+
+    header_cells = list(scenarios[0].summary().keys())
+    lines = [
+        "| " + " | ".join(header_cells) + " |",
+        "| " + " | ".join("---" for _ in header_cells) + " |",
+    ]
+    for scenario in scenarios:
+        row = scenario.summary()
+        rendered: list[str] = []
+        for key in header_cells:
+            value = row.get(key, "")
+            if isinstance(value, list):
+                value = ", ".join(str(item) for item in value)
+            rendered.append(str(value))
+        lines.append("| " + " | ".join(rendered) + " |")
+    return "\n".join(lines)
 
 
 def rank_what_if_scenarios(
