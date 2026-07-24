@@ -48,10 +48,30 @@ def create_refresh_token() -> str:
 
 
 def decode_token(token: str, token_type: str = "access") -> Optional[str]:
+    """Decode and validate a JWT, returning the subject on success.
+
+    Pins the allowed algorithm to ``settings.ALGORITHM`` to block the
+    classic ``alg=none`` / HS-vs-RS confusion attacks, and explicitly
+    requires ``exp``, ``sub`` and ``type`` so a token missing any of
+    those claims fails closed rather than silently bypassing checks.
+
+    python-jose uses ``require_<claim>`` keys (not a ``require`` array)
+    to gate claim presence — see ``jose.jwt._validate_claims``.
+    """
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        if payload.get("type") != token_type:
-            return None
-        return payload.get("sub")
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            options={
+                "require_exp": True,
+                "require_sub": True,
+                "require_type": True,
+                "verify_exp": True,
+            },
+        )
     except JWTError:
         return None
+    if payload.get("type") != token_type:
+        return None
+    return payload.get("sub")
