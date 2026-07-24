@@ -146,6 +146,10 @@ class WhatIfOut(BaseModel):
         """Return True when at least one recommendation is attached."""
         return bool(self.recommendations)
 
+    def has_recommendation_of_priority(self, priority: int) -> bool:
+        """Return True if any recommendation has the given ``priority``."""
+        return any(rec.priority == priority for rec in self.recommendations)
+
     def direction_arrow(self) -> str:
         """Return a single-character direction arrow based on conversion_delta.
 
