@@ -56,7 +56,7 @@ class PurchaseDecisionArchitect(BaseArchitect):
         warranty_y  = 1
         for a in assumptions:
             text = str(a.get("text", a.get("assumption", ""))).lower()
-            if any(w in text for w in ["emi", "installment", "no cost emi"]):
+            if re.search(r"\b(?:emis?|installments?)\b", text):
                 has_emi = True
             if "buy now pay later" in text or re.search(r"\b(?:bnpl|simpl|lazypay)\b", text):
                 has_bnpl = True

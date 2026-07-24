@@ -77,6 +77,14 @@ def test_simpl_provider_enables_bnpl() -> None:
     assert output.metrics["bnpl_likelihood"] > 0.0
 
 
+def test_semiconductor_text_does_not_enable_emi() -> None:
+    output = _compute(
+        assumptions=[{"text": "The semiconductor sensor is efficient"}],
+    )
+
+    assert output.metrics["emi_adoption_likelihood"] == 0.0
+
+
 def test_buy_now_pay_later_enables_bnpl() -> None:
     output = _compute(
         assumptions=[{"text": "Buy now pay later is available at checkout"}],
