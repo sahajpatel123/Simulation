@@ -138,6 +138,16 @@ class WhatIfOut(BaseModel):
             return "↓"
         return "→"
 
+    def direction_label(self) -> str:
+        """Return a human-readable direction label for conversion_delta.
+
+        Delegates to ``app.simulation.what_if.direction_label``. Symmetric
+        with ``direction_arrow()`` but returns a word instead of a glyph.
+        """
+        from app.simulation.what_if import direction_label
+
+        return direction_label(self.conversion_delta)
+
     def has_positive_delta(self) -> bool:
         """Return True when conversion_delta is strictly positive."""
         return self.conversion_delta > 0.0
