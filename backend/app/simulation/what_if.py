@@ -638,6 +638,7 @@ __all__ = [
     "scenarios_with_any_category",
     "scenarios_with_all_categories",
     "count_scenarios",
+    "scenarios_average_delta",
 ]
 
 
@@ -883,6 +884,19 @@ def count_scenarios(scenarios: list[WhatIfOut]) -> int:
     without breaking consumer code.
     """
     return len(scenarios)
+
+
+def scenarios_average_delta(scenarios: list[WhatIfOut]) -> float:
+    """Return the mean ``conversion_delta`` across ``scenarios``.
+
+    Returns ``0.0`` for an empty input.
+    """
+    if not scenarios:
+        return 0.0
+    return round(
+        sum(scenario.conversion_delta for scenario in scenarios) / len(scenarios),
+        6,
+    )
 
 
 def direction_label(delta: float) -> str:
