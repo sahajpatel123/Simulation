@@ -736,11 +736,10 @@ def diff_what_if_scenarios_summary(diff: WhatIfDiff) -> str:
 
     Useful for chat-style outputs and log lines.
     """
-    shared = ",".join(diff.shared_keyword_categories) or "none"
     return (
         f"diff sim={diff.base_simulation_id}->{diff.other_simulation_id} "
         f"delta_diff={diff.delta_difference:+.6f} "
-        f"shared=[{shared}]"
+        f"shared=[{format_categories(diff.shared_keyword_categories)}]"
     )
 
 
