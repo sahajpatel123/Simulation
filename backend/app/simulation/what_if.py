@@ -628,6 +628,7 @@ __all__ = [
     "format_delta_pct",
     "format_categories",
     "format_stage_impact",
+    "scenarios_to_compact_lines",
 ]
 
 
@@ -774,6 +775,15 @@ def format_stage_impact(impact: "StageImpact") -> str:
         f"{impact.base_rate:.4f}→{impact.projected_rate:.4f} "
         f"({impact.delta:+.4f})"
     )
+
+
+def scenarios_to_compact_lines(scenarios: list[WhatIfOut]) -> str:
+    """Return ``scenarios`` joined by newline via each ``WhatIfOut.to_log_line``.
+
+    Empty input returns an empty string. Useful for ops dashboards that
+    prefer a quick text view over JSON.
+    """
+    return "\n".join(scenario.to_log_line() for scenario in scenarios)
 
 
 def summarise_what_if_scenarios(
