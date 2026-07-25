@@ -659,6 +659,7 @@ __all__ = [
     "all_assumption_texts",
     "sorted_scenarios_by_delta",
     "scenario_ids",
+    "scenario_project_ids",
 ]
 
 
@@ -1063,6 +1064,11 @@ def sorted_scenarios_by_delta(
 def scenario_ids(scenarios: list[WhatIfOut]) -> list[int]:
     """Return the list of ``simulation_id`` values in input order."""
     return [scenario.simulation_id for scenario in scenarios]
+
+
+def scenario_project_ids(scenarios: list[WhatIfOut]) -> list[int]:
+    """Return the list of ``project_id`` values in input order."""
+    return [scenario.project_id for scenario in scenarios]
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
