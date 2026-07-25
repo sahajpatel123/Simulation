@@ -145,3 +145,29 @@ class TestUnicode:
 
     def test_strips_surrounding_whitespace(self) -> None:
         assert _reports._safe_filename("   hello   ") == "hello"
+
+
+class TestShellSafety:
+    def test_leading_dash_passes_through(self) -> None:
+        """``-`` is in the allowed char set, so the function passes
+        it through. This is fine because ``Content-Disposition``
+        ``filename=...`` is parsed by the browser, not a shell —
+        a leading ``-`` doesn't trigger flag interpretation."""
+        assert _reports._safe_filename("-rf") == "-rf"
+
+    def test_leading_dot_replaced(self) -> None:
+        """``.`` is not in the allowed char set, so leading dots are
+        replaced with ``_``. This means ``.env`` becomes ``_env`` —
+        the download won't be a hidden file on POSIX. Acceptable
+        trade-off: a leading-dot title is unusual for a project."""
+        assert _reports._safe_filename(".env") == "_env"
+
+    def test_length_boundary_40_passes(self) -> None:
+        """Exactly 40 chars is allowed; 41 is truncated."""
+        assert len(_reports._safe_filename("a" * 40)) == 40
+        assert len(_reports._safe_filename("a" * 41)) == 40
+
+    def test_null_bytes_replaced(self) -> None:
+        """Null bytes would terminate the path in C-level handlers."""
+        out = _reports._safe_filename("a\x00b\x00c")
+        assert "\x00" not in out
