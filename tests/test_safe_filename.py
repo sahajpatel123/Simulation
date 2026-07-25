@@ -171,3 +171,23 @@ class TestShellSafety:
         """Null bytes would terminate the path in C-level handlers."""
         out = _reports._safe_filename("a\x00b\x00c")
         assert "\x00" not in out
+
+    def test_non_breaking_space_replaced(self) -> None:
+        """NBSP (U+00A0) is whitespace-like but NOT in the allowed
+        set, so it's replaced with ``_``. This matters because the
+        "strip" check wouldn't catch NBSP — ``str.strip()`` only
+        strips standard ASCII whitespace."""
+        assert _reports._safe_filename("\xa0") == "_"
+        assert _reports._safe_filename("\xa0test\xa0") == "_test_"
+
+    def test_tab_replaced(self) -> None:
+        """Tab is a control character — replaced with ``_``."""
+        assert _reports._safe_filename("\t") == "_"
+        assert _reports._safe_filename("\ttest\t") == "_test_"
+
+    def test_only_underscore_passes_through(self) -> None:
+        """A single ``_`` is allowed (in the allowed set) so it
+        passes through unchanged. Not empty after strip, so no
+        ``"project"`` fallback."""
+        assert _reports._safe_filename("_") == "_"
+        assert _reports._safe_filename("___") == "___"
