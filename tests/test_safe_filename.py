@@ -1042,3 +1042,19 @@ class TestShellSafety:
                 f"not deterministic for {t!r}: "
                 f"{out1!r} != {out2!r} != {out3!r}"
             )
+
+    def test_no_leading_whitespace_in_output(self) -> None:
+        """Property test: the output never starts with whitespace
+        (unless the output is the fallback ``\"project\"``).
+
+        The ``str.strip()`` call ensures leading whitespace is
+        removed before the slice. Pin this contract so a future
+        \"simplification\" that removed ``strip()`` wouldn't
+        silently produce filenames with leading spaces — which
+        would be invisible in most file managers and confusing."""
+        for t in ("", " ", "   ", "   a", "!@#", "abc", "  hello  "):
+            out = _reports._safe_filename(t)
+            if out != "project":
+                assert not out.startswith(" "), (
+                    f"output starts with space for {t!r}: {out!r}"
+                )
