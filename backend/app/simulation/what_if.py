@@ -658,6 +658,7 @@ __all__ = [
     "total_assumption_count",
     "all_assumption_texts",
     "sorted_scenarios_by_delta",
+    "scenario_ids",
 ]
 
 
@@ -1057,6 +1058,11 @@ def sorted_scenarios_by_delta(
     (improvements first); pass ``reverse=False`` for ascending (regressions first).
     """
     return sorted(scenarios, key=lambda s: s.conversion_delta, reverse=reverse)
+
+
+def scenario_ids(scenarios: list[WhatIfOut]) -> list[int]:
+    """Return the list of ``simulation_id`` values in input order."""
+    return [scenario.simulation_id for scenario in scenarios]
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
