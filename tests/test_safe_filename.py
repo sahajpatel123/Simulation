@@ -807,3 +807,14 @@ class TestShellSafety:
         # round-trips whatever case is provided.
         assert _reports._safe_filename("con") == "con"
         assert _reports._safe_filename("prn") == "prn"
+
+    def test_single_disallowed_glob_chars(self) -> None:
+        """Pins that single glob / pipe / redirect chars become a
+        single ``_``. These are the chars that the shell would
+        treat as control syntax — a malicious title could otherwise
+        trigger expansion / redirection downstream."""
+        for t in ("?", "/", "|", "<", ">", "*"):
+            assert _reports._safe_filename(t) == "_", (
+                f"single {t!r} did not become '_'; "
+                f"got {_reports._safe_filename(t)!r}"
+            )
