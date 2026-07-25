@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
 from app.api.v1.common import get_owned_project
+from app.core.rate_limiter import rate_limit
 from app.core.tier_enforcement import enforce_simulation_limit
 from app.models.assumption import Assumption
 from app.models.environment import Environment
@@ -76,6 +77,13 @@ def _signal_suggestions(sq: float, dist: dict) -> list[str]:
     response_model=SimulationStatusOut,
     status_code=status.HTTP_201_CREATED,
     summary="Enqueue a full multi-cluster simulation for a project",
+    # Rate limit at the IP+path level: protects the DB against a single
+    # actor (or compromised script) spamming POSTs at the enqueue path.
+    # The per-user monthly quota (2 / 20 / 999 by tier) is enforced
+    # inside the handler via enforce_simulation_limit; this outer limit
+    # stops the path from being used to probe the DB or generate
+    # unhandled errors at high volume.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
 def create_simulation(
     payload: SimulationCreate,
