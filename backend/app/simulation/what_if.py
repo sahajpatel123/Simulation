@@ -654,6 +654,7 @@ __all__ = [
     "scenarios_below_threshold",
     "count_above_threshold",
     "count_below_threshold",
+    "total_assumption_count",
 ]
 
 
@@ -1012,6 +1013,11 @@ def count_below_threshold(
 ) -> int:
     """Return the number of scenarios with ``conversion_delta`` <= ``-abs(threshold)``."""
     return sum(1 for scenario in scenarios if scenario.conversion_delta <= -abs(threshold))
+
+
+def total_assumption_count(scenarios: list[WhatIfOut]) -> int:
+    """Return the total number of ``WhatIfAssumption`` objects across ``scenarios``."""
+    return sum(len(scenario.assumptions_applied) for scenario in scenarios)
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
