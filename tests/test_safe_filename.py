@@ -1201,3 +1201,29 @@ class TestShellSafety:
             assert _reports._safe_filename(c) == c, (
                 f"digit {c!r} not preserved"
             )
+
+    def test_fallback_trigger_cases(self) -> None:
+        """Pins the contract for inputs that trigger the
+        ``\"project\"`` fallback:
+        - Empty input ``\"\"`` → ``\"project\"``
+        - ASCII-space-only input ``\"  \"`` → ``\"project\"``
+        - Disallowed-only input ``\"!\"`` → ``\"_\"`` (not fallback)
+        - Tab/newline/CR are replaced (not stripped) → ``\"_\"``
+
+        Pin so a future \"simplification\" that changes the
+        fallback trigger (e.g. stripping all whitespace including
+        tab/newline, or stripping only when length > 0) wouldn't
+        silently change the contract."""
+        assert _reports._safe_filename("") == "project"
+        for ws in (" ", "  "):
+            assert _reports._safe_filename(ws) == "project", (
+                f"ws {ws!r} -> {_reports._safe_filename(ws)!r}"
+            )
+        for t in ("!", "!!", "###", "!@#", "*"):
+            out = _reports._safe_filename(t)
+            assert out == "_" * len(t), (
+                f"{t!r} -> {out!r} (expected {'_' * len(t)})"
+            )
+        for t in ("\t", "\n", "\r"):
+            out = _reports._safe_filename(t)
+            assert out == "_", f"{t!r} -> {out!r}"
