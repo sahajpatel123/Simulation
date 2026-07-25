@@ -180,6 +180,10 @@ class WhatIfOut(BaseModel):
         """Return True when conversion_delta is strictly negative."""
         return self.conversion_delta < 0.0
 
+    def has_positive_delta_pct(self) -> bool:
+        """Return True when conversion_delta_pct is strictly positive."""
+        return self.conversion_delta_pct > 0.0
+
     def is_neutral(self) -> bool:
         """Return True when conversion_delta is zero (within float tolerance)."""
         return abs(self.conversion_delta) < 1e-9
