@@ -308,6 +308,10 @@ def list_projects(
     "/{project_id}",
     response_model=ProjectOut,
     summary="Update dossier title or description",
+    # DB write — cap path-spam at 30/min/IP for the same reason as
+    # the simulations POST limit. Legitimate users re-save titles a
+    # few times per session; this caps runaway scripts.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
 def patch_project(
     project_id: int,
@@ -358,6 +362,8 @@ def patch_project(
     "/{project_id}/archive",
     response_model=ProjectOut,
     summary="Move dossier to the archive",
+    # DB write — cap path-spam at 20/min/IP.
+    dependencies=[Depends(rate_limit(limit=20, window_s=60))],
 )
 def archive_project(
     project_id: int,
@@ -376,6 +382,8 @@ def archive_project(
     "/{project_id}/unarchive",
     response_model=ProjectOut,
     summary="Restore dossier from the archive",
+    # DB write — cap path-spam at 20/min/IP.
+    dependencies=[Depends(rate_limit(limit=20, window_s=60))],
 )
 def unarchive_project(
     project_id: int,
