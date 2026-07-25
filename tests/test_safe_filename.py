@@ -1058,3 +1058,18 @@ class TestShellSafety:
                 assert not out.startswith(" "), (
                     f"output starts with space for {t!r}: {out!r}"
                 )
+
+    def test_no_trailing_whitespace_in_output(self) -> None:
+        """Property test: the output never ends with whitespace
+        (unless the output is the fallback ``\"project\"``).
+
+        Pin this contract so a future \"simplification\" that
+        removed ``strip()`` wouldn't silently produce filenames
+        with trailing spaces — which some file managers strip and
+        others don't, leading to inconsistent behavior."""
+        for t in ("", " ", "   ", "a ", "a   ", "!@#", "abc"):
+            out = _reports._safe_filename(t)
+            if out != "project":
+                assert not out.endswith(" "), (
+                    f"output ends with space for {t!r}: {out!r}"
+                )
