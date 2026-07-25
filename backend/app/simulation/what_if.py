@@ -640,6 +640,7 @@ __all__ = [
     "count_scenarios",
     "scenarios_average_delta",
     "count_by_category",
+    "scenarios_average_delta_pct",
 ]
 
 
@@ -897,6 +898,19 @@ def scenarios_average_delta(scenarios: list[WhatIfOut]) -> float:
     return round(
         sum(scenario.conversion_delta for scenario in scenarios) / len(scenarios),
         6,
+    )
+
+
+def scenarios_average_delta_pct(scenarios: list[WhatIfOut]) -> float:
+    """Return the mean ``conversion_delta_pct`` across ``scenarios``.
+
+    Returns ``0.0`` for an empty input.
+    """
+    if not scenarios:
+        return 0.0
+    return round(
+        sum(scenario.conversion_delta_pct for scenario in scenarios) / len(scenarios),
+        4,
     )
 
 
