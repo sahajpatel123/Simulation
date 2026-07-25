@@ -11,6 +11,19 @@ class ProjectPatch(BaseModel):
     description: str | None = Field(default=None, max_length=5000)
 
 
+class ProjectDuplicateIn(BaseModel):
+    """Body for ``POST /projects/{id}/duplicate``."""
+
+    new_title: str | None = Field(
+        default=None,
+        max_length=500,
+        description=(
+            "Optional override title. When omitted, the duplicate uses "
+            '"<original> (copy)" / "(copy N)" naming.'
+        ),
+    )
+
+
 class ProjectCreate(BaseModel):
     title: str = Field(default="Untitled", max_length=500)
     description: str = Field(..., max_length=5000)

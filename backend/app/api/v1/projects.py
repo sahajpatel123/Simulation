@@ -54,6 +54,7 @@ from app.schemas.project import (
     BriefAssistRequest,
     BriefSave,
     ProjectCreate,
+    ProjectDuplicateIn,
     ProjectListResponse,
     ProjectOut,
     ProjectPatch,
@@ -89,6 +90,7 @@ from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.competitive_software import CompetitiveSoftwareAnalyser
 from app.simulation.conductor import Conductor
 from app.simulation.product_type import ProductType
+from app.simulation.project_duplicate import duplicate_project_payload
 from app.simulation.scored_assumption import score_assumptions, signal_quality_tier
 from app.tasks.simulation_tasks import run_full_simulation
 from app.tasks.stress_test_tasks import run_assumption_stress_test
@@ -396,6 +398,98 @@ def unarchive_project(
     db.commit()
     db.refresh(project)
     return ProjectOut.model_validate(project)
+
+
+@router.post(
+    "/{project_id}/duplicate",
+    response_model=ProjectOut,
+    status_code=201,
+    summary="Clone a project (and its environment) to a new draft",
+    # DB write — cap path-spam at 20/min/IP. Tier enforcement still
+    # applies via the per-user project-count quota further downstream.
+    dependencies=[Depends(rate_limit(limit=20, window_s=60))],
+)
+def duplicate_project(
+    project_id: int,
+    payload: ProjectDuplicateIn | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Clone ``project_id`` (and its environment) to a new draft owned by
+    the same user. The new project starts in ``DRAFT`` status with no
+    brief, no assumptions, and no simulations — those are intentionally
+    not copied so the duplicate can be used for clean A/B variants.
+    """
+    source = get_owned_project(db, current_user.id, project_id)
+    env = (
+        db.query(Environment)
+        .filter(Environment.project_id == source.id)
+        .first()
+    )
+
+    payload = payload or ProjectDuplicateIn()
+    built = duplicate_project_payload(
+        project={
+            "title": source.title,
+            "description": source.description,
+            "precis": source.precis,
+            "readings_json": source.readings_json,
+        },
+        environment=(
+            {
+                "mode": env.mode,
+                "consumer_volume": env.consumer_volume,
+                "growth_rate_per_month": env.growth_rate_per_month,
+                "average_order_value": env.average_order_value,
+                "price_sensitivity": env.price_sensitivity,
+                "market_maturity": env.market_maturity,
+                "scenario_type": env.scenario_type,
+                "manual_params_json": env.manual_params_json,
+                "trend_data_json": env.trend_data_json,
+            }
+            if env is not None
+            else None
+        ),
+        new_title=payload.new_title,
+    )
+
+    new_project = Project(
+        user_id=current_user.id,
+        title=built["project"]["title"],
+        description=built["project"]["description"],
+        precis=built["project"]["precis"],
+        readings_json=built["project"]["readings_json"],
+        status="DRAFT",
+    )
+    db.add(new_project)
+    db.flush()  # populate new_project.id without committing
+
+    if built["environment"] is not None:
+        new_env = Environment(
+            project_id=new_project.id,
+            mode=built["environment"]["mode"],
+            consumer_volume=built["environment"]["consumer_volume"],
+            growth_rate_per_month=built["environment"]["growth_rate_per_month"],
+            average_order_value=built["environment"]["average_order_value"],
+            price_sensitivity=built["environment"]["price_sensitivity"],
+            market_maturity=built["environment"]["market_maturity"],
+            scenario_type=built["environment"]["scenario_type"],
+            manual_params_json=built["environment"]["manual_params_json"],
+            trend_data_json=built["environment"]["trend_data_json"],
+        )
+        db.add(new_env)
+
+    db.commit()
+    db.refresh(new_project)
+
+    logger.info(
+        "[Project] Duplicated — source_id=%s new_id=%s user_id=%s",
+        source.id,
+        new_project.id,
+        current_user.id,
+    )
+    return ProjectOut.model_validate(new_project)
 
 
 @router.get(
