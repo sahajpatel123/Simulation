@@ -655,6 +655,7 @@ __all__ = [
     "count_above_threshold",
     "count_below_threshold",
     "total_assumption_count",
+    "all_assumption_texts",
 ]
 
 
@@ -1018,6 +1019,18 @@ def count_below_threshold(
 def total_assumption_count(scenarios: list[WhatIfOut]) -> int:
     """Return the total number of ``WhatIfAssumption`` objects across ``scenarios``."""
     return sum(len(scenario.assumptions_applied) for scenario in scenarios)
+
+
+def all_assumption_texts(scenarios: list[WhatIfOut]) -> list[str]:
+    """Return every assumption text across ``scenarios`` in input order.
+
+    Useful for log lines, audit trails, and test fixtures.
+    """
+    return [
+        assumption.text
+        for scenario in scenarios
+        for assumption in scenario.assumptions_applied
+    ]
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
