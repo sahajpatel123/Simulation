@@ -644,3 +644,16 @@ class TestShellSafety:
         out = _reports._safe_filename("a" * 38 + "!!")
         assert len(out) == 40
         assert out.endswith("__")
+
+    def test_all_disallowed_input_truncates_to_underscores(self) -> None:
+        """Pins that an input of entirely disallowed chars (e.g.
+        100 ``!`` chars) replaces every char with ``_`` and then
+        truncates to 40 chars.
+
+        These inputs all become 40 underscores — same length as
+        the cap. This pins the per-char 1-to-1 replacement
+        followed by slice-to-40 contract for the all-disallowed
+        edge case."""
+        assert _reports._safe_filename("!" * 100) == "_" * 40
+        assert _reports._safe_filename("@#$%^&*()" * 5) == "_" * 40
+        assert _reports._safe_filename("~" * 200) == "_" * 40
