@@ -781,3 +781,29 @@ class TestShellSafety:
         # Plain text round-trips.
         assert _reports._safe_filename("normal") == "normal"
         assert _reports._safe_filename("normal text") == "normal text"
+
+    def test_windows_reserved_names_preserved_as_is(self) -> None:
+        """Pins that Windows-reserved device names (``CON``, ``PRN``,
+        ``AUX``, ``NUL``, ``COM1``–``COM9``, ``LPT1``–``LPT9``)
+        round-trip unchanged by ``_safe_filename``.
+
+        These names are blocked at the OS level on Windows, but
+        ``_safe_filename`` is a content sanitiser, not an OS path
+        validator — the filename is passed to a ``StreamingResponse``
+        which the browser's download manager handles. If a user
+        names their project ``CON``, the downloaded file may collide
+        with the Windows CON device on save, but the API itself
+        doesn't refuse to serve it (the path doesn't have to be
+        unique on the user's filesystem).
+
+        Pin this so a future \"simplification\" that added an
+        explicit ``CON``/``PRN`` blocklist wouldn't silently change
+        the contract — that blocklist belongs in a separate
+        filesystem-path validator, not in this filename sanitiser.
+        """
+        for t in ("CON", "PRN", "AUX", "NUL", "COM1", "LPT1"):
+            assert _reports._safe_filename(t) == t
+        # Case-insensitive — the OS-level check is, but the function
+        # round-trips whatever case is provided.
+        assert _reports._safe_filename("con") == "con"
+        assert _reports._safe_filename("prn") == "prn"
