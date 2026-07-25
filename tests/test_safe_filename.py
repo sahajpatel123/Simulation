@@ -657,3 +657,25 @@ class TestShellSafety:
         assert _reports._safe_filename("!" * 100) == "_" * 40
         assert _reports._safe_filename("@#$%^&*()" * 5) == "_" * 40
         assert _reports._safe_filename("~" * 200) == "_" * 40
+
+    def test_all_control_chars_consistent(self) -> None:
+        """Pins that every ASCII control char (``\\x00``–``\\x1f``
+        except space) behaves consistently: each is replaced with
+        ``_`` (per-char isalnum check fails for control chars).
+
+        The function never falls through to the ``\"project\"``
+        fallback for any single control char because the replace
+        runs first and produces a single ``_`` which is non-empty
+        after strip.
+
+        Pins the contract that no control char accidentally slips
+        through to the filesystem — a malicious NUL byte in
+        particular would terminate the filename at the OS layer.
+        """
+        control_chars = [chr(i) for i in range(32) if i != ord(" ")]
+        for c in control_chars:
+            out = _reports._safe_filename(c)
+            assert out == "_", (
+                f"control char chr({ord(c)}) did not become '_'; "
+                f"got {out!r}"
+            )
