@@ -642,6 +642,7 @@ __all__ = [
     "count_by_category",
     "scenarios_average_delta_pct",
     "scenarios_with_recommendations",
+    "scenarios_with_direction",
 ]
 
 
@@ -882,6 +883,17 @@ def scenarios_with_all_categories(
 def scenarios_with_recommendations(scenarios: list[WhatIfOut]) -> list[WhatIfOut]:
     """Return only scenarios that have at least one recommendation attached."""
     return [scenario for scenario in scenarios if scenario.has_recommendations()]
+
+
+def scenarios_with_direction(
+    scenarios: list[WhatIfOut],
+    direction: str,
+) -> list[WhatIfOut]:
+    """Return only scenarios whose ``dominant_direction`` matches ``direction``."""
+    return [
+        scenario for scenario in scenarios
+        if str(scenario.meta.get("dominant_direction")) == direction
+    ]
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
