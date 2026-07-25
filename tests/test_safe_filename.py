@@ -6,6 +6,8 @@ is the last line of defence against header-smuggling characters
 (CR / LF / quote / semicolon) and against path-traversal-like
 strings leaking into the user's download folder.
 
+Re-pinned to confirm CI green after transient Docker registry timeout.
+
 These tests pin:
 - Allowed character set (alnum + space + dash + underscore)
 - Disallowed characters become ``_`` (not stripped — keeps length)
