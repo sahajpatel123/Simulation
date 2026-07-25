@@ -243,7 +243,7 @@ def test_duplicate_out_carries_simulations_count() -> None:
     from app.schemas.project import ProjectDuplicateOut
 
     payload = ProjectDuplicateOut(
-        project={"id": 99, "title": "x", "status": "DRAFT", "user_id": 7},
+        project={"id": 99, "title": "x", "description": "x", "status": "DRAFT", "user_id": 7},
         source_project_id=42,
         simulations_copied=3,
         environment_copied=True,
@@ -257,7 +257,7 @@ def test_duplicate_out_dry_run_is_visible() -> None:
     from app.schemas.project import ProjectDuplicateOut
 
     payload = ProjectDuplicateOut(
-        project={"id": 0, "title": "x", "status": "DRAFT", "user_id": 7},
+        project={"id": 0, "title": "x", "description": "x", "status": "DRAFT", "user_id": 7},
         source_project_id=42,
         simulations_copied=0,
         environment_copied=False,
