@@ -741,3 +741,23 @@ class TestShellSafety:
         assert _reports._safe_filename("аdmin") == "аdmin"
         assert _reports._safe_filename("google") == "google"
         assert _reports._safe_filename("paypal") == "paypal"
+
+    def test_leading_dot_replaced_in_filename(self) -> None:
+        """Pins that a leading ``.`` is replaced with ``_`` so the
+        downloaded filename doesn't appear as a hidden file on
+        POSIX systems.
+
+        ``\".env\"`` → ``\"_env\"``
+        ``\"..\"`` → ``\"__\"``
+        ``\".hidden\"`` → ``\"_hidden\"``
+        ``\".gitignore\"`` → ``\"_gitignore\"``
+
+        Note: ``..`` (two dots) is NOT a path-traversal vector in a
+        filename string itself — it's only dangerous when used as a
+        filesystem path component. But replacing it anyway is
+        defense-in-depth and avoids visual confusion in the
+        download picker."""
+        assert _reports._safe_filename(".env") == "_env"
+        assert _reports._safe_filename("..") == "__"
+        assert _reports._safe_filename(".hidden") == "_hidden"
+        assert _reports._safe_filename(".gitignore") == "_gitignore"
