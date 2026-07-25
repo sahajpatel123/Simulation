@@ -575,3 +575,41 @@ class TestShellSafety:
         assert _reports._safe_filename("a&gt;b") == "a_gt_b"
         assert _reports._safe_filename("a&quot;b") == "a_quot_b"
         assert _reports._safe_filename("a&#x27;b") == "a__x27_b"
+
+    def test_trailing_newlines_preserved(self) -> None:
+        """Trailing newlines are not stripped (they're not in
+        ``str.strip()``'s default whitespace set in Python — only
+        space, tab, newline, CR, FF, VT). Each becomes ``_``.
+
+        ``\"a\\n\"`` → ``\"a_\"``
+        ``\"a\\nb\\n\"`` → ``\"a_b_\"``
+        ``\"\\n\"`` → ``\"_\"``
+        ``\"\\n\\n\\n\"`` → ``\"___\"``
+        ``\"a\\n\\nb\"`` → ``\"a__b\"``
+
+        Pins the distinction between Python's ``str.strip()``
+        semantics (which DO strip LF) and the function's
+        per-character ``isalnum()`` replacement (which doesn't).
+
+        Wait — actually Python's ``str.strip()`` DOES strip ``\\n``.
+        Re-check.
+
+        Actually after testing: ``str.strip()`` with default args
+        strips ``\\n``. So ``\"\\n\"``.strip() == ``\"\"`` → fallback
+        fires → ``\"project\"``. But the actual output was ``\"_\"``
+        (one underscore). That means ``str.strip()`` didn't strip
+        the lone ``\\n``.
+
+        This contradicts the documented ``str.strip()`` behaviour.
+        Looking at the function: the strip happens AFTER replace, so
+        the ``\\n`` is replaced with ``_`` BEFORE strip runs.
+        That's why a lone ``\\n`` becomes ``_`` instead of
+        ``\"project\"`` — replace runs first, then strip, then
+        fallback check.
+
+        Pin this surprising-but-correct behaviour."""
+        assert _reports._safe_filename("a\n") == "a_"
+        assert _reports._safe_filename("a\nb\n") == "a_b_"
+        assert _reports._safe_filename("\n") == "_"
+        assert _reports._safe_filename("\n\n\n") == "___"
+        assert _reports._safe_filename("a\n\nb") == "a__b"
