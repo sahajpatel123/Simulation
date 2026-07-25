@@ -554,3 +554,24 @@ class TestShellSafety:
         out = _reports._safe_filename("!" + "a" * 40)
         assert len(out) == 40
         assert out.startswith("_")
+
+    def test_url_and_html_entities_replaced(self) -> None:
+        """Pins that URL-encoded (``%20``) and HTML-entity (``&amp;``,
+        ``&lt;``, ``&gt;``, ``&quot;``, ``&#x27;``) strings are
+        character-by-character replaced (not decoded).
+
+        ``&`` and ``;`` are both disallowed — so ``&amp;`` becomes
+        ``_amp_`` (4-char → 5-char), and ``&#x27;`` becomes
+        ``__x27_``. The function never decodes these strings.
+
+        Without this test, a future \"simplification\" that called
+        ``html.unescape()`` or ``urllib.parse.unquote()`` would
+        silently change the sanitization contract and let HTML /
+        URL payloads through that the caller already escaped for
+        safety reasons (e.g. an XSS-resistant frontend)."""
+        assert _reports._safe_filename("a%20b") == "a_20b"
+        assert _reports._safe_filename("a&amp;b") == "a_amp_b"
+        assert _reports._safe_filename("a&lt;b") == "a_lt_b"
+        assert _reports._safe_filename("a&gt;b") == "a_gt_b"
+        assert _reports._safe_filename("a&quot;b") == "a_quot_b"
+        assert _reports._safe_filename("a&#x27;b") == "a__x27_b"
