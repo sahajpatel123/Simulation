@@ -1007,3 +1007,18 @@ class TestShellSafety:
                 assert c not in out, (
                     f"char {c!r} in output for {t!r}: {out!r}"
                 )
+
+    def test_no_nul_in_output(self) -> None:
+        """Property test: the output never contains a NUL byte
+        (``\\x00``). Catches any future regression where the
+        function accidentally produced a NUL byte (which would
+        terminate the filename at the OS layer in C-level path
+        handlers)."""
+        for t in (
+            "a\x00b", "\x00", "test\x00\x00end",
+            "a" * 50 + "\x00", "\x00hello",
+        ):
+            out = _reports._safe_filename(t)
+            assert "\x00" not in out, (
+                f"NUL byte in output for {t!r}: {out!r}"
+            )
