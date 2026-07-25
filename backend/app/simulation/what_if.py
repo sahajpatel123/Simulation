@@ -649,6 +649,7 @@ __all__ = [
     "top_delta_scenarios",
     "bottom_delta_scenarios",
     "scenarios_with_assumptions",
+    "count_with_assumptions",
 ]
 
 
@@ -960,6 +961,15 @@ def bottom_delta_scenarios(scenarios: list[WhatIfOut], n: int) -> list[WhatIfOut
 def scenarios_with_assumptions(scenarios: list[WhatIfOut]) -> list[WhatIfOut]:
     """Return only scenarios that have at least one WhatIfAssumption applied."""
     return [scenario for scenario in scenarios if scenario.assumptions_applied]
+
+
+def count_with_assumptions(scenarios: list[WhatIfOut]) -> int:
+    """Return the number of scenarios that have at least one WhatIfAssumption applied.
+
+    Equivalent to ``len(scenarios_with_assumptions(scenarios))`` without
+    the intermediate list allocation.
+    """
+    return sum(1 for scenario in scenarios if scenario.assumptions_applied)
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
