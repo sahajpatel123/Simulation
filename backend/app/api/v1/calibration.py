@@ -19,6 +19,8 @@ from app.simulation.calibration import CalibrationEngine as PlatformCalibrationE
 from app.simulation.calibration_engine import CalibrationEngine as LayerCalibrationEngine
 
 logger = logging.getLogger(__name__)
+from app.schemas.outcome import FounderOutcomeSubmit
+
 router = APIRouter(prefix="/calibration", tags=["calibration"])
 
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
@@ -126,19 +128,14 @@ def apply_markov_adjustments(
     responses=_JSON_200,
 )
 def submit_outcome(
-    body: dict,
+    body: FounderOutcomeSubmit,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    sim_id = body.get("simulation_id")
-    if sim_id is None:
-        raise HTTPException(status_code=400, detail="simulation_id is required")
-    try:
-        actual_cr = float(body.get("actual_conversion_rate", 0))
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="actual_conversion_rate must be a number") from None
-    launched = bool(body.get("launched", True))
-    notes = str(body.get("notes", ""))[:500] if body.get("notes") is not None else ""
+    sim_id = body.simulation_id
+    actual_cr = body.actual_conversion_rate
+    launched = body.launched
+    notes = body.notes or ""
 
     sim: Simulation | None = (
         db.query(Simulation)
@@ -188,7 +185,7 @@ def submit_outcome(
             ),
             {
                 "pid": sim.project_id,
-                "days": int(body.get("days_since_launch", 30)),
+                "days": body.days_since_launch,
                 "acr": actual_cr,
                 "sq": signal_quality,
                 "uid": current_user.id,
@@ -211,7 +208,7 @@ def submit_outcome(
             {
                 "sid": int(sim_id),
                 "pid": sim.project_id,
-                "days": int(body.get("days_since_launch", 30)),
+                "days": body.days_since_launch,
                 "acr": actual_cr,
                 "uid": current_user.id,
                 "sq": signal_quality,

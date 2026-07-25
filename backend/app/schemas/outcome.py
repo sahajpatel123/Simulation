@@ -3,6 +3,30 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 
 
+class FounderOutcomeSubmit(BaseModel):
+    """Body for the lightweight founder-outcome POST.
+
+    Replaces the prior ``body: dict`` on
+    ``POST /calibration/outcome`` and ``POST /analytics/founder-outcome``
+    so Pydantic enforces types, ranges, and length caps. The full
+    structured outcome (with MRR / CAC / churn / DAU / NPS) is the
+    separate ``OutcomeCreate`` used by ``POST /projects/{id}/outcomes``.
+
+    ``actual_conversion_rate`` is constrained to ``[0.0, 1.0]`` so a
+    hostile client cannot inject NaN, infinity, or negative values
+    that would corrupt the calibration EMA. ``days_since_launch`` is
+    bounded to ``[1, 3650]`` (10 years) and ``notes`` to 500 chars.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    simulation_id: int = Field(..., ge=1)
+    actual_conversion_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+    launched: bool = True
+    days_since_launch: int = Field(default=30, ge=1, le=3650)
+    notes: str | None = Field(default=None, max_length=500)
+
+
 class OutcomeCreate(BaseModel):
     actual_conversion_rate: float = Field(..., ge=0.0, le=1.0)
     actual_mrr: float = Field(..., ge=0.0)

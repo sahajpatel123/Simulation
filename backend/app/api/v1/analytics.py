@@ -12,6 +12,7 @@ from app.core.deps import get_current_user
 from app.models.user import User
 from app.schemas.portfolio import UserPortfolioOut
 from app.schemas.calibration import CalibrationStatusOut
+from app.schemas.outcome import FounderOutcomeSubmit
 from app.simulation.portfolio_analytics import (
     build_conversion_distribution,
     build_failure_domain_counts,
@@ -137,13 +138,11 @@ def platform_analytics(
     responses=_JSON_200,
 )
 def submit_founder_outcome(
-    body: dict,
+    body: FounderOutcomeSubmit,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    sim_id = body.get("simulation_id")
-    if not sim_id:
-        raise HTTPException(status_code=400, detail="simulation_id required")
+    sim_id = body.simulation_id
 
     row = db.execute(
         text("""
@@ -152,24 +151,16 @@ def submit_founder_outcome(
         JOIN projects p ON p.id = s.project_id
         WHERE s.id = :sid AND p.user_id = :uid
     """),
-        {"sid": int(sim_id), "uid": current_user.id},
+        {"sid": sim_id, "uid": current_user.id},
     ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Simulation not found")
 
     project_id = int(row.project_id)
     sq = float(row.signal_quality or 0.0)
-    launched = bool(body.get("launched", False))
-    acr_raw = body.get("actual_conversion_rate")
-    acr: float | None
-    if acr_raw is None or acr_raw == "":
-        acr = 0.0 if not launched else 0.0
-    else:
-        try:
-            acr = float(acr_raw)
-        except (TypeError, ValueError):
-            acr = 0.0
-    notes = str(body.get("notes", ""))[:500]
+    launched = body.launched
+    acr = body.actual_conversion_rate
+    notes = body.notes or ""
 
     existing = db.execute(
         text("SELECT id FROM founder_outcomes WHERE simulation_id = :sid"),
