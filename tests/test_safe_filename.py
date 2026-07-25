@@ -531,3 +531,26 @@ class TestShellSafety:
         assert _reports._safe_filename("a🎉b") == "a_b"
         # Plain alnum round-trips.
         assert _reports._safe_filename("ab") == "ab"
+
+    def test_slice_boundary_at_40(self) -> None:
+        """Pins the exact slice boundary: input of exactly 40
+        alnum chars round-trips; input of 41 alnum chars is
+        truncated to 40. When a 41-char input has a disallowed
+        char, the replacement happens BEFORE the slice, so the
+        truncated result keeps the 40-char length but the
+        disallowed-char position determines what gets dropped.
+
+        Without this test, a future \"simplification\" that changed
+        the slice index (e.g. ``[:41]`` or ``[:39]``) would
+        silently change the filename length semantics."""
+        assert len(_reports._safe_filename("a" * 41)) == 40
+        assert len(_reports._safe_filename("a" * 40)) == 40
+        # Replace happens before slice: the 41st char (disallowed)
+        # gets dropped after being replaced.
+        out = _reports._safe_filename("a" * 40 + "!")
+        assert len(out) == 40
+        assert out.endswith("a")
+        # Disallowed at position 0: replace first, then slice 40.
+        out = _reports._safe_filename("!" + "a" * 40)
+        assert len(out) == 40
+        assert out.startswith("_")
