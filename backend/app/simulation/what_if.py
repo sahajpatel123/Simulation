@@ -644,6 +644,7 @@ __all__ = [
     "scenarios_with_recommendations",
     "scenarios_with_direction",
     "count_by_direction",
+    "scenarios_with_sensitivity",
 ]
 
 
@@ -907,6 +908,17 @@ def count_by_direction(scenarios: list[WhatIfOut], direction: str) -> int:
         1 for scenario in scenarios
         if str(scenario.meta.get("dominant_direction")) == direction
     )
+
+
+def scenarios_with_sensitivity(
+    scenarios: list[WhatIfOut],
+    label: str,
+) -> list[WhatIfOut]:
+    """Return only scenarios whose ``sensitivity_label`` matches ``label``."""
+    return [
+        scenario for scenario in scenarios
+        if str(scenario.meta.get("sensitivity_label")) == label
+    ]
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
