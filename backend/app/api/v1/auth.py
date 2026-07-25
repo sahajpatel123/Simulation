@@ -249,6 +249,11 @@ def update_me(
     "/change-password",
     response_model=MessageResponse,
     summary="Change password for the authenticated user",
+    # Password change is gated by requiring the current password, but
+    # the outer IP cap stops an attacker who has somehow obtained
+    # the current password (e.g. shoulder-surfing) from racing the
+    # rotation. 5/min/IP is generous for a manual password change.
+    dependencies=[Depends(rate_limit(limit=5, window_s=60))],
 )
 def change_password(
     payload: PasswordChange,
