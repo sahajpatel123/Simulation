@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.common import get_owned_project
 from app.core.deps import get_current_user, get_db
+from app.core.rate_limiter import rate_limit
 from app.models.decision import Decision
 from app.models.environment import Environment
 from app.models.project import Project
@@ -49,6 +50,9 @@ def _hydrate_result(decision: Decision) -> DecisionOut | None:
     response_model=DecisionStatusOut,
     status_code=status.HTTP_201_CREATED,
     summary="Enqueue a multi-scenario decision comparison",
+    # Celery-backed; cap path-spam so a single actor can't drain the
+    # worker queue. Same shape as the simulations POST rate limit.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
 def create_decision_comparison(
     project_id: int,
