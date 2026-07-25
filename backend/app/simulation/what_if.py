@@ -628,6 +628,7 @@ __all__ = [
     "format_delta_pct",
     "format_categories",
     "format_stage_impact",
+    "format_stage_impact_label",
     "scenarios_to_compact_lines",
     "direction_label",
     "scenarios_with_category",
@@ -800,6 +801,17 @@ def format_stage_impact(impact: "StageImpact") -> str:
     return (
         f"{impact.transition} "
         f"{impact.base_rate:.4f}→{impact.projected_rate:.4f} "
+        f"({impact.delta:+.4f})"
+    )
+
+
+def format_stage_impact_label(impact: "StageImpact") -> str:
+    """Return a compact "BASE → PROJECTED (Δ)" label for a StageImpact.
+
+    Example output: ``"0.6200 → 0.5500 (-0.0700)"``.
+    """
+    return (
+        f"{impact.base_rate:.4f} → {impact.projected_rate:.4f} "
         f"({impact.delta:+.4f})"
     )
 
