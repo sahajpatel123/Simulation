@@ -1209,6 +1209,9 @@ def get_premortem(
     "/{project_id}/stress-test",
     response_model=StressTestStatusOut,
     summary="Start or poll assumption stress test job",
+    # Celery-backed but still costs worker time and queue slots;
+    # cap path-spam at 10/min/IP.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 def start_stress_test(
     project_id: int,
@@ -1327,6 +1330,12 @@ def clear_stress_test(
     "/{project_id}/interventions",
     response_model=InterventionOut,
     summary="Generate ranked interventions (Claude)",
+    # LLM-backed; cap the path at 10/min/IP so a single actor can't
+    # drain LLM quota or rack up cost. The per-user monthly simulation
+    # quota is enforced elsewhere (tier_enforcement); this is the
+    # outer IP+path limit that protects against fast-firing requests
+    # before the work even reaches the LLM.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 def generate_interventions(
     project_id: int,
@@ -1547,6 +1556,9 @@ def get_interventions(
     "/{project_id}/competitive-analysis",
     response_model=CompetitiveAnalysisOut,
     summary="Run competitive analysis (Claude)",
+    # LLM-backed; same rationale as generate_interventions below — cap
+    # path-spam so a single actor can't drain LLM quota or rack up cost.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 def run_competitive_analysis(
     project_id: int,
