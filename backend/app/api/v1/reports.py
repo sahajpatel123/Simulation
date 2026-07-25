@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
+from app.core.rate_limiter import rate_limit
 from app.api.v1.common import get_owned_project
 from app.models.assumption import Assumption
 from app.models.decision import Decision
@@ -33,6 +34,10 @@ def _safe_filename(title: str) -> str:
     "/{project_id}/report",
     summary="Generate a PDF dossier report for a project",
     responses=_PDF_200,
+    # PDF generation is CPU-bound (ReportLab layout + cluster tables).
+    # Cap path-spam at 10/min/IP so a single actor can't drive a
+    # hot render loop against the worker.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 def generate_report(
     project_id: int,
