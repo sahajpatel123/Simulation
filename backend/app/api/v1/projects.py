@@ -55,6 +55,7 @@ from app.schemas.project import (
     BriefSave,
     ProjectCreate,
     ProjectDuplicateIn,
+    ProjectDuplicateOut,
     ProjectListResponse,
     ProjectOut,
     ProjectPatch,
@@ -402,7 +403,7 @@ def unarchive_project(
 
 @router.post(
     "/{project_id}/duplicate",
-    response_model=ProjectOut,
+    response_model=ProjectDuplicateOut,
     status_code=201,
     summary="Clone a project (and its environment) to a new draft",
     # DB write — cap path-spam at 20/min/IP. Tier enforcement still
@@ -418,8 +419,12 @@ def duplicate_project(
     """
     Clone ``project_id`` (and its environment) to a new draft owned by
     the same user. The new project starts in ``DRAFT`` status with no
-    brief, no assumptions, and no simulations — those are intentionally
-    not copied so the duplicate can be used for clean A/B variants.
+    brief, no assumptions. By default, simulation history is **not**
+    copied — set ``include_simulations=true`` to snapshot COMPLETED
+    simulations into the duplicate (useful for branching off a known
+    baseline).
+
+    Set ``dry_run=true`` to preview the duplicate without writing.
     """
     source = get_owned_project(db, current_user.id, project_id)
     env = (
@@ -454,6 +459,25 @@ def duplicate_project(
         new_title=payload.new_title,
     )
 
+    # Dry run — return the planned payload without persisting.
+    if payload.dry_run:
+        preview = Project(
+            id=0,  # placeholder; client should treat as "would be created"
+            user_id=current_user.id,
+            title=built["project"]["title"],
+            description=built["project"]["description"],
+            precis=built["project"]["precis"],
+            readings_json=built["project"]["readings_json"],
+            status="DRAFT",
+        )
+        return ProjectDuplicateOut(
+            project=ProjectOut.model_validate(preview),
+            source_project_id=source.id,
+            simulations_copied=0,
+            environment_copied=built["environment"] is not None,
+            dry_run=True,
+        )
+
     new_project = Project(
         user_id=current_user.id,
         title=built["project"]["title"],
@@ -480,16 +504,50 @@ def duplicate_project(
         )
         db.add(new_env)
 
+    # Optional: snapshot COMPLETED simulations from the source.
+    simulations_copied = 0
+    if payload.include_simulations:
+        completed = (
+            db.query(Simulation)
+            .filter(
+                Simulation.project_id == source.id,
+                Simulation.status == "COMPLETED",
+            )
+            .order_by(Simulation.created_at.asc())
+            .all()
+        )
+        for sim in completed:
+            db.add(
+                Simulation(
+                    project_id=new_project.id,
+                    environment_id=None,  # don't retarget to the new env
+                    status="COMPLETED",
+                    consumer_volume=sim.consumer_volume,
+                    results_json=sim.results_json,
+                    confidence_score=sim.confidence_score,
+                    signal_quality=sim.signal_quality,
+                    claim_confidence_distribution=sim.claim_confidence_distribution,
+                )
+            )
+            simulations_copied += 1
+
     db.commit()
     db.refresh(new_project)
 
     logger.info(
-        "[Project] Duplicated — source_id=%s new_id=%s user_id=%s",
+        "[Project] Duplicated — source_id=%s new_id=%s user_id=%s sims=%s",
         source.id,
         new_project.id,
         current_user.id,
+        simulations_copied,
     )
-    return ProjectOut.model_validate(new_project)
+    return ProjectDuplicateOut(
+        project=ProjectOut.model_validate(new_project),
+        source_project_id=source.id,
+        simulations_copied=simulations_copied,
+        environment_copied=built["environment"] is not None,
+        dry_run=False,
+    )
 
 
 @router.get(

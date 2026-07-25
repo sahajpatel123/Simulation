@@ -187,4 +187,82 @@ def test_duplicate_route_registered() -> None:
     assert "POST" in methods_by_path["/projects/{project_id}/duplicate"]
 
 
+# ---------------------------------------------------------------------------
+# Polish: include_simulations / dry_run flags
+# ---------------------------------------------------------------------------
+
+
+def test_duplicate_in_defaults_are_safe() -> None:
+    """Default behavior should be a clean duplicate (no sims, no dry run)."""
+    from app.schemas.project import ProjectDuplicateIn
+
+    p = ProjectDuplicateIn()
+    assert p.include_simulations is False
+    assert p.dry_run is False
+    assert p.new_title is None
+
+
+def test_duplicate_in_accepts_polish_flags() -> None:
+    from app.schemas.project import ProjectDuplicateIn
+
+    p = ProjectDuplicateIn(
+        new_title="Variant B",
+        include_simulations=True,
+        dry_run=True,
+    )
+    assert p.new_title == "Variant B"
+    assert p.include_simulations is True
+    assert p.dry_run is True
+
+
+def test_duplicate_out_round_trip() -> None:
+    from app.schemas.project import ProjectDuplicateOut
+
+    payload = ProjectDuplicateOut(
+        project={
+            "id": 99,
+            "title": "My Idea (copy)",
+            "status": "DRAFT",
+            "user_id": 7,
+        },
+        source_project_id=42,
+        simulations_copied=0,
+        environment_copied=True,
+        dry_run=False,
+    )
+    dumped = payload.model_dump()
+    assert dumped["source_project_id"] == 42
+    assert dumped["simulations_copied"] == 0
+    assert dumped["environment_copied"] is True
+    assert dumped["dry_run"] is False
+
+
+def test_duplicate_out_carries_simulations_count() -> None:
+    """When include_simulations=true, the counter reports the snapshot count."""
+    from app.schemas.project import ProjectDuplicateOut
+
+    payload = ProjectDuplicateOut(
+        project={"id": 99, "title": "x", "status": "DRAFT", "user_id": 7},
+        source_project_id=42,
+        simulations_copied=3,
+        environment_copied=True,
+        dry_run=False,
+    )
+    assert payload.simulations_copied == 3
+
+
+def test_duplicate_out_dry_run_is_visible() -> None:
+    """dry_run must be a top-level field so the dashboard can render a preview banner."""
+    from app.schemas.project import ProjectDuplicateOut
+
+    payload = ProjectDuplicateOut(
+        project={"id": 0, "title": "x", "status": "DRAFT", "user_id": 7},
+        source_project_id=42,
+        simulations_copied=0,
+        environment_copied=False,
+        dry_run=True,
+    )
+    assert payload.dry_run is True
+
+
 import pytest  # noqa: E402  — placed here so helper tests above don't import it prematurely

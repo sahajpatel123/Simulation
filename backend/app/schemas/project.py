@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ProjectPatch(BaseModel):
@@ -22,6 +22,48 @@ class ProjectDuplicateIn(BaseModel):
             '"<original> (copy)" / "(copy N)" naming.'
         ),
     )
+    include_simulations: bool = Field(
+        default=False,
+        description=(
+            "When true, snapshots of the source project's completed "
+            "simulations are copied into the duplicate. Default false — "
+            "duplicates are intentionally clean for A/B variants."
+        ),
+    )
+    dry_run: bool = Field(
+        default=False,
+        description=(
+            "When true, return the planned payload without writing to "
+            "the DB. Useful for previewing the duplicate in the dashboard."
+        ),
+    )
+
+
+class ProjectDuplicateOut(BaseModel):
+    """Response from ``POST /projects/{id}/duplicate``."""
+
+    model_config = ConfigDict(  # type: ignore[assignment]
+        json_schema_extra={
+            "example": {
+                "project": {
+                    "id": 99,
+                    "title": "My Idea (copy)",
+                    "status": "DRAFT",
+                    "user_id": 7,
+                },
+                "source_project_id": 42,
+                "simulations_copied": 0,
+                "environment_copied": True,
+                "dry_run": False,
+            }
+        }
+    )
+
+    project: ProjectOut
+    source_project_id: int
+    simulations_copied: int = 0
+    environment_copied: bool = False
+    dry_run: bool = False
 
 
 class ProjectCreate(BaseModel):
@@ -86,6 +128,11 @@ class ProjectOut(BaseModel):
     brief_completed_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+
+# ProjectDuplicateOut references ProjectOut (defined above). Resolve the
+# forward reference so Pydantic can build the nested model.
+ProjectDuplicateOut.model_rebuild()
 
 
 class ProjectListResponse(BaseModel):
