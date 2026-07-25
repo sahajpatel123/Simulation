@@ -405,3 +405,15 @@ class TestShellSafety:
         # Latin-1 accented chars (alnum) round-trip.
         assert _reports._safe_filename("café") == "café"
         assert _reports._safe_filename("naïve") == "naïve"
+
+    def test_mixed_whitespace_padding_round_trip(self) -> None:
+        """ASCII-space padding around an alnum core strips away
+        cleanly. ``\"  hello  \"`` → ``\"hello\"``.
+
+        Note: ``\\t`` and ``\\n`` are NOT considered whitespace by
+        ``str.strip()`` — they are replaced with ``_`` (per the
+        disallowed-char rule). This test pins that subtle
+        distinction."""
+        assert _reports._safe_filename("  hello  ") == "hello"
+        assert _reports._safe_filename("\thello\t") == "_hello_"
+        assert _reports._safe_filename("\nhello\n") == "_hello_"
