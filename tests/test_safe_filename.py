@@ -501,3 +501,18 @@ class TestShellSafety:
         # Default-name shapes round-trip without truncation.
         assert _reports._safe_filename("untitled") == "untitled"
         assert _reports._safe_filename("Untitled Project") == "Untitled Project"
+
+    def test_shell_special_chars_replaced(self) -> None:
+        """Pins that shell-special chars (``\\\\``, ``*``, ``?``,
+        ``|``, ``&``, ``<``, ``>``) are replaced with ``_``. These
+        are the chars that trigger globbing, redirection, or
+        expansion in most shells — letting them through to a
+        downloaded filename could let a malicious title trigger
+        unexpected shell behavior in any downstream tool that
+        passes the filename through a shell."""
+        assert _reports._safe_filename("test\\path") == "test_path"
+        assert _reports._safe_filename("a*b") == "a_b"
+        assert _reports._safe_filename("a?b") == "a_b"
+        assert _reports._safe_filename("a|b") == "a_b"
+        assert _reports._safe_filename("a&b") == "a_b"
+        assert _reports._safe_filename("a<b>c") == "a_b_c"
