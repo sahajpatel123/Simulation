@@ -212,6 +212,9 @@ def me(current_user: User = Depends(get_current_user)):
     "/me",
     response_model=UserOut,
     summary="Update the authenticated user profile",
+    # Profile update writes to the users row — cap path-spam at
+    # 20/min/IP so a runaway script can't churn through writes.
+    dependencies=[Depends(rate_limit(limit=20, window_s=60))],
 )
 def update_me(
     payload: UserUpdate,
@@ -275,6 +278,10 @@ def change_password(
     "/me",
     response_model=MessageResponse,
     summary="Delete the authenticated account (requires password)",
+    # Destructive — wipes the user row + cascades every project,
+    # simulation, outcome, and refresh token. Cap path-spam at
+    # 5/min/IP so a runaway script can't drain the auth table.
+    dependencies=[Depends(rate_limit(limit=5, window_s=60))],
 )
 def delete_me(
     payload: AccountDelete,
