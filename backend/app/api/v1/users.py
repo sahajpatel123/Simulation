@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
+from app.core.rate_limiter import rate_limit
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.auth import MessageResponse
@@ -20,6 +21,10 @@ _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}
     "/me/clear-archive",
     response_model=MessageResponse,
     summary="Delete all projects owned by the current user",
+    # Destructive — wipes every project (and its cascade) the user
+    # owns. Cap path-spam at 5/min/IP so a runaway script or accidental
+    # double-click can't blast through the user's entire archive.
+    dependencies=[Depends(rate_limit(limit=5, window_s=60))],
 )
 def clear_archive(
     db: Session = Depends(get_db),
