@@ -298,6 +298,13 @@ class WhatIfSummary(BaseModel):
         """Return True if ``label`` is a key in ``direction_breakdown`` with count > 0."""
         return int(self.direction_breakdown.get(label, 0)) > 0
 
+    def unique_directions(self) -> list[str]:
+        """Return the sorted list of direction labels with a non-zero count."""
+        return sorted(
+            label for label, count in self.direction_breakdown.items()
+            if int(count) > 0
+        )
+
 
 class WhatIfDiff(BaseModel):
     """Pairwise comparison of two ``WhatIfOut`` scenarios."""
