@@ -296,3 +296,9 @@ class TestShellSafety:
         replaced with ``_``. The alnum core survives."""
         for t in ("hello.", "hello!", "hello?", "hello,", "hello;", "hello:"):
             assert _reports._safe_filename(t) == "hello_", f"failed for {t!r}"
+
+    def test_alnum_alnum_preserved(self) -> None:
+        """Two alnum tokens back-to-back preserve."""
+        assert _reports._safe_filename("AB") == "AB"
+        assert _reports._safe_filename("123") == "123"
+        assert _reports._safe_filename("A1B2") == "A1B2"
