@@ -963,3 +963,28 @@ class TestShellSafety:
                 f"{t!r} did not round-trip exactly: "
                 f"{_reports._safe_filename(t)!r}"
             )
+
+    def test_unicode_output_is_valid(self) -> None:
+        """Property test: the output is always a valid Unicode
+        string (no lone surrogates, no malformed sequences). Catches
+        any future regression where the function accidentally
+        produces invalid UTF-16 (e.g. by splitting a surrogate
+        pair across the slice boundary).
+
+        Note: the output is NOT necessarily ASCII — the function
+        intentionally preserves Unicode alnum (``\"café\"``,
+        ``\"naïve\"`` round-trip). The output is just valid
+        Unicode."""
+        for t in (
+            "hello", "café", "naïve", "日本語",
+            "a" * 50, "🚀" * 5,
+        ):
+            out = _reports._safe_filename(t)
+            # Round-tripping via UTF-8 should always succeed.
+            out.encode("utf-8").decode("utf-8")
+            # No lone surrogates.
+            for ch in out:
+                code = ord(ch)
+                assert not (0xD800 <= code <= 0xDFFF), (
+                    f"lone surrogate in output for {t!r}: {out!r}"
+                )
