@@ -1326,6 +1326,9 @@ def get_stress_test(
     "/{project_id}/stress-test",
     summary="Clear stored stress test JSON",
     responses=_JSON_200,
+    # DB write (sets stress_test_json to NULL) — cap path-spam at
+    # 20/min/IP. Single-user operation, but defense-in-depth.
+    dependencies=[Depends(rate_limit(limit=20, window_s=60))],
 )
 def clear_stress_test(
     project_id: int,
