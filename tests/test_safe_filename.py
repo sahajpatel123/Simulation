@@ -394,3 +394,14 @@ class TestShellSafety:
         assert _reports._safe_filename("a" * 39 + "  ") == "a" * 39
         assert _reports._safe_filename("a" * 39 + "\n") == "a" * 39 + "_"
         assert _reports._safe_filename("a" * 39 + "\t") == "a" * 39 + "_"
+
+    def test_unicode_whitespace_variants_replaced(self) -> None:
+        """Pins the contract that non-ASCII whitespace-like chars
+        (NBSP ``\\xa0``, zero-width space ``\\u200b``) are replaced
+        with ``_`` — they look like whitespace visually but
+        ``str.strip()`` doesn't catch them."""
+        assert _reports._safe_filename("hello\xa0world") == "hello_world"
+        assert _reports._safe_filename("test​case") == "test_case"
+        # Latin-1 accented chars (alnum) round-trip.
+        assert _reports._safe_filename("café") == "café"
+        assert _reports._safe_filename("naïve") == "naïve"
