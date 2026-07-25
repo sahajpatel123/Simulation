@@ -350,3 +350,18 @@ class TestShellSafety:
         assert _reports._safe_filename(" ! ") == "_"
         assert _reports._safe_filename("a!b c") == "a_b c"
         assert _reports._safe_filename("a b c") == "a b c"
+
+    def test_single_char_type_strings_round_trip(self) -> None:
+        """Strings of a single allowed char type (all-uppercase,
+        all-lowercase, all-digits, all-underscores, or a mixed
+        combination) round-trip unchanged. This pins that the
+        function does not collapse or transform runs of the same
+        character class."""
+        assert _reports._safe_filename("A" * 20) == "A" * 20
+        assert _reports._safe_filename("a" * 20) == "a" * 20
+        assert _reports._safe_filename("1" * 20) == "1" * 20
+        assert _reports._safe_filename("_" * 20) == "_" * 20
+        assert (
+            _reports._safe_filename("AAAAA_____11111")
+            == "AAAAA_____11111"
+        )
