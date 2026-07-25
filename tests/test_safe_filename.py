@@ -761,3 +761,23 @@ class TestShellSafety:
         assert _reports._safe_filename("..") == "__"
         assert _reports._safe_filename(".hidden") == "_hidden"
         assert _reports._safe_filename(".gitignore") == "_gitignore"
+
+    def test_bidi_control_chars_replaced(self) -> None:
+        """Pins that bidi control chars (RLO ``\\u202e``, RLM
+        ``\\u200f``, etc.) are replaced with ``_``.
+
+        These are invisible formatting chars that can be used in
+        filename-spoofing attacks (a file named
+        ``\"virus\\u202eexe.txt\"`` displays as ``virus_txt.exe`` in
+        some file managers but is actually ``virus…exe.txt`` on
+        disk). Replacing them at the API boundary is
+        defense-in-depth — the frontend should also strip bidi
+        controls before display, but the API doesn't trust the
+        renderer."""
+        # RLO (right-to-left override) at position 4.
+        assert _reports._safe_filename("test‮exe") == "test_exe"
+        # RLM (right-to-left mark).
+        assert _reports._safe_filename("test‏exe") == "test_exe"
+        # Plain text round-trips.
+        assert _reports._safe_filename("normal") == "normal"
+        assert _reports._safe_filename("normal text") == "normal text"
