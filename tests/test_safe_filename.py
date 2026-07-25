@@ -893,3 +893,24 @@ class TestShellSafety:
         assert _reports._safe_filename(" a ") == "a"
         assert _reports._safe_filename(" a  b ") == "a  b"
         assert _reports._safe_filename("  hello  world  ") == "hello  world"
+
+    def test_random_input_length_invariant(self) -> None:
+        """Property test: for any random input, the output length is
+        ≤ 40 (the slice cap). Catches any future regression that
+        accidentally drops the slice cap or allows the output to
+        grow unbounded."""
+        import random
+
+        random.seed(42)
+        for _ in range(50):
+            t = "".join(
+                random.choice(["a", "b", " ", "!", "_", "1", "\n"])
+                for _ in range(100)
+            )
+            out = _reports._safe_filename(t)
+            assert len(out) <= 40, (
+                f"output length {len(out)} > 40 for {t!r}: {out!r}"
+            )
+            assert isinstance(out, str), (
+                f"non-string output for {t!r}: {type(out)}"
+            )
