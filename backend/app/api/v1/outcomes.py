@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
+from app.core.rate_limiter import rate_limit
 from app.api.v1.common import get_owned_project
 from app.models.outcome import Outcome
 from app.models.project import Project
@@ -325,6 +326,10 @@ def submit_outcome_feedback(
     response_model=OutcomeRecord,
     status_code=status.HTTP_201_CREATED,
     summary="Record a structured launch outcome against the latest simulation",
+    # DB write — cap path-spam at 30/min/IP for the same reason as
+    # the simulations POST limit. Outcome records are written
+    # manually by the founder post-launch.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
 def record_outcome(
     project_id: int,
@@ -481,6 +486,9 @@ def get_single_outcome(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a recorded outcome",
     responses={204: {"description": "Outcome deleted"}},
+    # Destructive — cap path-spam at 10/min/IP so a runaway script
+    # can't churn through deletes.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 def delete_outcome(
     project_id: int,
