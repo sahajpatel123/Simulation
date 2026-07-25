@@ -33,6 +33,7 @@ from app.schemas.agent_routing import (
     AgentRoutingDecisionOut,
     AgentRoutingRegistryOut,
     AgentTierEnum,
+    TIER_RELATIVE_COST,
     TierCounts,
 )
 from app.schemas.cohort_retention import CohortRetentionOut
@@ -1027,6 +1028,9 @@ _agent_router = AgentHierarchyRouter()
     response_model=AgentRoutingDecisionOut,
     summary="Routing decision for a single consumer cluster",
     responses=_JSON_200,
+    # Read-only, deterministic, but cheap to spam — cap at 60/min/IP so a
+    # single actor can't probe the cluster registry at high volume.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
 )
 def get_agent_routing_for_cluster(
     cluster_id: str,
@@ -1042,9 +1046,16 @@ def get_agent_routing_for_cluster(
 
     Exposing the decision helps users reason about simulation cost and
     accuracy without needing to read the routing rules directly.
+    ``relative_cost`` is a qualitative multiplier (MICRO=0.05, WORKER=1.0,
+    SUPERVISOR=3.5) used to estimate per-agent runtime / token spend.
     """
     if not cluster_id or len(cluster_id) > 64:
         raise HTTPException(status_code=400, detail="Invalid cluster_id")
+    if cluster_id not in _clusters_map:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown cluster_id '{cluster_id}'. Use GET /simulations/agent-routing/registry to list valid ids.",
+        )
     decision = _agent_router.route(cluster_id)
     return AgentRoutingDecisionOut(
         cluster_id=decision.cluster_id,
@@ -1052,6 +1063,7 @@ def get_agent_routing_for_cluster(
         reason=decision.reason,
         confidence=decision.confidence,
         needs_browser=_agent_router.needs_browser(decision),
+        relative_cost=TIER_RELATIVE_COST[decision.tier.value],
     )
 
 
@@ -1060,14 +1072,18 @@ def get_agent_routing_for_cluster(
     response_model=AgentRoutingRegistryOut,
     summary="Tier breakdown across all 52 consumer clusters",
     responses=_JSON_200,
+    # Same cap as the per-cluster route — both share the path prefix.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
 def get_agent_routing_registry(
     current_user: User = Depends(get_current_user),
 ) -> AgentRoutingRegistryOut:
     """
     Walks every cluster in the live registry and reports:
-      * ``tier_counts`` — counts per tier (MICRO / WORKER / SUPERVISOR)
-      * ``clusters``    — per-cluster routing decisions
+      * ``tier_counts``    — counts per tier (MICRO / WORKER / SUPERVISOR)
+      * ``cost_summary``   — per-tier counts plus ``total_equivalent_cost``
+                             (sum of count × relative_cost per tier)
+      * ``clusters``       — per-cluster routing decisions
     """
     decisions = _agent_router.route_batch([c.cluster_id for c in _clusters_map.values()])
     summary = _agent_router.tier_summary(decisions)
@@ -1084,6 +1100,7 @@ def get_agent_routing_registry(
             reason=d.reason,
             confidence=d.confidence,
             needs_browser=_agent_router.needs_browser(d),
+            relative_cost=TIER_RELATIVE_COST[d.tier.value],
         )
         for d in decisions
     ]
@@ -1091,8 +1108,21 @@ def get_agent_routing_registry(
     tier_rank = {"SUPERVISOR": 0, "MICRO": 1, "WORKER": 2}
     clusters_out.sort(key=lambda c: (tier_rank.get(c.tier.value, 99), c.cluster_id))
 
+    cost_summary: dict[str, float | int] = {
+        "MICRO": tier_counts.MICRO,
+        "WORKER": tier_counts.WORKER,
+        "SUPERVISOR": tier_counts.SUPERVISOR,
+        "total_equivalent_cost": round(
+            tier_counts.MICRO * TIER_RELATIVE_COST["MICRO"]
+            + tier_counts.WORKER * TIER_RELATIVE_COST["WORKER"]
+            + tier_counts.SUPERVISOR * TIER_RELATIVE_COST["SUPERVISOR"],
+            2,
+        ),
+    }
+
     return AgentRoutingRegistryOut(
         generated_at=datetime.now(timezone.utc).isoformat(),
         tier_counts=tier_counts,
+        cost_summary=cost_summary,
         clusters=clusters_out,
     )
