@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.core.rate_limiter import rate_limit
 from app.core.tier_enforcement import TIER_LIMITS
 from app.models.user import User
 from app.schemas.billing import CreateSubscriptionRequest
@@ -313,6 +314,9 @@ async def get_subscription_status(
     "/cancel-subscription",
     summary="Cancel subscription at end of billing period",
     responses=_JSON_200,
+    # DB write (Razorpay API call + state update) — cap path-spam at
+    # 10/min/IP so a runaway script can't churn through cancellations.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 async def cancel_subscription(
     db: Session = Depends(get_db),
