@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
@@ -26,6 +26,8 @@ from app.models.user import User
 from app.schemas.share import (
     SharedSimulationOut,
     ShareTokenCreateIn,
+    ShareTokenListItem,
+    ShareTokenListOut,
     ShareTokenOut,
 )
 from app.simulation.share_token import (
@@ -35,6 +37,11 @@ from app.simulation.share_token import (
     hash_token,
     is_expired,
 )
+
+# Token length sanity check. ``secrets.token_urlsafe(32)`` produces 43 chars;
+# allow some headroom for future format changes but reject obvious garbage.
+_MIN_TOKEN_LEN = 16
+_MAX_TOKEN_LEN = 128
 
 logger = logging.getLogger(__name__)
 
@@ -187,10 +194,14 @@ def revoke_share_tokens(
 def read_shared_simulation(
     token: str,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
 ) -> SharedSimulationOut:
-    if not token or len(token) > 128:
-        raise HTTPException(status_code=400, detail="Invalid token")
+    if not token or len(token) < _MIN_TOKEN_LEN or len(token) > _MAX_TOKEN_LEN:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid token length (expected {_MIN_TOKEN_LEN}-{_MAX_TOKEN_LEN} chars)",
+        )
 
     token_hash = hash_token(token)
     now = datetime.now(timezone.utc)
@@ -212,6 +223,13 @@ def read_shared_simulation(
         raise HTTPException(status_code=404, detail="Simulation not found")
 
     project = db.query(Project).filter(Project.id == sim.project_id).first()
+
+    # Set cache headers — public response is immutable until expiry, so
+    # ``max-age`` mirrors the remaining lifetime. ``private`` is implied
+    # by the absence of ``public``; ``no-cache`` is dropped to allow
+    # intermediaries to serve the same payload to repeat visitors.
+    remaining_seconds = max(0, int((row.expires_at - now).total_seconds()))
+    response.headers["Cache-Control"] = f"private, max-age={remaining_seconds}"
 
     # Best-effort access tracking — never fail the request if the UPDATE
     # errors (the share is the user-facing promise; bookkeeping is secondary).
@@ -235,6 +253,77 @@ def read_shared_simulation(
         expires_at=row.expires_at,
     )
     return SharedSimulationOut(**payload)
+
+
+# ---------------------------------------------------------------------------
+# Owner: list active + revoked tokens for a simulation
+# ---------------------------------------------------------------------------
+
+
+@_protected.get(
+    "/{simulation_id}/share",
+    response_model=ShareTokenListOut,
+    summary="List share tokens for a simulation (owner only)",
+    responses=_JSON_200,
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def list_share_tokens(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ShareTokenListOut:
+    """Owner view of every token minted for a simulation — never exposes
+    the plaintext token, only metadata (id, expiry, access count)."""
+    sim = (
+        db.query(Simulation)
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(Simulation.id == simulation_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not sim:
+        raise HTTPException(status_code=404, detail="Simulation not found")
+
+    rows = (
+        db.query(ShareToken)
+        .filter(ShareToken.simulation_id == sim.id)
+        .order_by(ShareToken.created_at.desc())
+        .all()
+    )
+
+    now = datetime.now(timezone.utc)
+    items: list[ShareTokenListItem] = []
+    active_count = revoked_count = expired_count = 0
+    for row in rows:
+        revoked = row.revoked_at is not None
+        expired = (not revoked) and is_expired(row.expires_at, now=now)
+        is_active = (not revoked) and (not expired)
+        if revoked:
+            revoked_count += 1
+        elif expired:
+            expired_count += 1
+        else:
+            active_count += 1
+        items.append(
+            ShareTokenListItem(
+                id=row.id,
+                simulation_id=row.simulation_id,
+                scope=row.scope,
+                is_active=is_active,
+                created_at=row.created_at,
+                expires_at=row.expires_at,
+                revoked_at=row.revoked_at,
+                last_accessed_at=row.last_accessed_at,
+                access_count=row.access_count,
+            )
+        )
+
+    return ShareTokenListOut(
+        simulation_id=sim.id,
+        active_count=active_count,
+        revoked_count=revoked_count,
+        expired_count=expired_count,
+        tokens=items,
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -331,3 +331,124 @@ def test_shared_simulation_out_rejects_user_data() -> None:
     assert "project_title" in fields
     assert "funnel" in fields
     assert "domain_findings" in fields
+
+
+# ---------------------------------------------------------------------------
+# Polish iteration: list endpoint + token validation + schema additions
+# ---------------------------------------------------------------------------
+
+
+def test_share_token_list_item_round_trip() -> None:
+    from app.schemas.share import ShareTokenListItem
+
+    item = ShareTokenListItem(
+        id=1,
+        simulation_id=42,
+        scope="read_only",
+        is_active=True,
+        created_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+        expires_at=datetime(2026, 7, 31, tzinfo=timezone.utc),
+        revoked_at=None,
+        last_accessed_at=None,
+        access_count=0,
+    )
+    dumped = item.model_dump()
+    assert dumped["is_active"] is True
+    assert dumped["access_count"] == 0
+    assert dumped["plaintext_token" if "plaintext_token" in dumped else "id"] == 1
+
+
+def test_share_token_list_out_counters_sum() -> None:
+    from app.schemas.share import ShareTokenListItem, ShareTokenListOut
+
+    items = [
+        ShareTokenListItem(
+            id=1,
+            simulation_id=42,
+            is_active=True,
+            created_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(timezone.utc),
+        ),
+        ShareTokenListItem(
+            id=2,
+            simulation_id=42,
+            is_active=False,
+            created_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(timezone.utc),
+            revoked_at=datetime.now(timezone.utc),
+        ),
+    ]
+    out = ShareTokenListOut(
+        simulation_id=42,
+        active_count=1,
+        revoked_count=1,
+        expired_count=0,
+        tokens=items,
+    )
+    assert len(out.tokens) == 2
+    # Counters cover every token in the list exactly once.
+    assert out.active_count + out.revoked_count + out.expired_count == len(items)
+
+
+def test_share_token_list_out_does_not_leak_plaintext() -> None:
+    """The list response must never carry the plaintext token."""
+    from app.schemas.share import ShareTokenListOut
+
+    fields = set(ShareTokenListOut.model_fields.keys())
+    assert "token" not in fields
+    assert "plaintext_token" not in fields
+    assert "token_hash" not in fields
+    # Only summary / counters + the nested item list — the per-item
+    # ``id`` lives inside ``tokens`` and is verified separately.
+    assert "tokens" in fields
+    assert "active_count" in fields
+    assert "simulation_id" in fields
+    assert "revoked_count" in fields
+    assert "expired_count" in fields
+
+
+def test_routes_include_list_endpoint() -> None:
+    """POST / GET / DELETE / GET-list — all four should be present."""
+    import sys
+    import types
+
+    razorpay_stub = types.ModuleType("razorpay")
+    razorpay_stub.Client = object  # type: ignore[attr-defined]
+    sys.modules.setdefault("razorpay", razorpay_stub)
+
+    from app.api.v1 import share as share_mod
+
+    paths = set()
+    methods_by_path: dict[str, set[str]] = {}
+    for sub in share_mod.router.routes:
+        inner = getattr(sub, "original_router", None)
+        inner_routes = getattr(inner, "routes", None) if inner is not None else None
+        if inner_routes is None:
+            continue
+        for r in inner_routes:
+            paths.add(r.path)
+            methods_by_path.setdefault(r.path, set()).update(r.methods or set())
+    assert "/simulations/{simulation_id}/share" in paths
+    assert "/share/{token}" in paths
+    # The new GET-list shares the same path as POST + DELETE.
+    assert "POST" in methods_by_path["/simulations/{simulation_id}/share"]
+    assert "DELETE" in methods_by_path["/simulations/{simulation_id}/share"]
+    assert "GET" in methods_by_path["/simulations/{simulation_id}/share"]
+    assert "GET" in methods_by_path["/share/{token}"]
+
+
+def test_compute_expiry_returns_aware_datetime() -> None:
+    """All expiry / shared_at timestamps must be tz-aware after polish."""
+    from app.simulation.share_token import compute_expiry
+
+    exp = compute_expiry()
+    assert exp.tzinfo is not None
+    assert exp.tzinfo.utcoffset(exp) == timedelta(0)
+
+
+def test_generated_token_meets_min_length() -> None:
+    """``secrets.token_urlsafe(32)`` is 43 chars — well above the 16-char floor."""
+    from app.simulation.share_token import generate_token
+
+    for _ in range(20):
+        assert len(generate_token()) >= 16

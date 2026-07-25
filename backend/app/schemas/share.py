@@ -3,9 +3,10 @@ Pydantic schemas for the public share-token endpoints.
 
 These power the read-only public link flow:
 
-  * ``POST /api/v1/simulations/{id}/share``  — owner mints a token
-  * ``GET  /api/v1/share/{token}``           — anyone reads the result
-  * ``DELETE /api/v1/simulations/{id}/share`` — owner revokes
+  * ``POST   /api/v1/simulations/{id}/share``  — owner mints a token
+  * ``GET    /api/v1/share/{token}``           — anyone reads the result
+  * ``GET    /api/v1/simulations/{id}/share``  — owner lists their tokens
+  * ``DELETE /api/v1/simulations/{id}/share``  — owner revokes all
 
 The token is opaque (URL-safe random) and only its SHA-256 hash is
 persisted, so the public endpoint cannot be used to enumerate links
@@ -56,6 +57,73 @@ class ShareTokenOut(BaseModel):
     share_url: str = Field(
         ..., description="Absolute path the caller can share publicly."
     )
+
+
+class ShareTokenListItem(BaseModel):
+    """Owner-facing summary of a single share token (no plaintext)."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id": 17,
+                "simulation_id": 42,
+                "scope": "read_only",
+                "is_active": True,
+                "created_at": "2026-07-26T00:00:00Z",
+                "expires_at": "2026-08-25T00:00:00Z",
+                "revoked_at": None,
+                "last_accessed_at": "2026-07-27T15:42:11Z",
+                "access_count": 12,
+            }
+        }
+    )
+
+    id: int
+    simulation_id: int
+    scope: str = "read_only"
+    is_active: bool = Field(
+        ...,
+        description="True when not revoked and not expired.",
+    )
+    created_at: datetime
+    expires_at: datetime
+    revoked_at: datetime | None = None
+    last_accessed_at: datetime | None = None
+    access_count: int = 0
+
+
+class ShareTokenListOut(BaseModel):
+    """List of tokens for a single simulation, owner-facing."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "simulation_id": 42,
+                "active_count": 1,
+                "revoked_count": 0,
+                "expired_count": 0,
+                "tokens": [
+                    {
+                        "id": 17,
+                        "simulation_id": 42,
+                        "scope": "read_only",
+                        "is_active": True,
+                        "created_at": "2026-07-26T00:00:00Z",
+                        "expires_at": "2026-08-25T00:00:00Z",
+                        "revoked_at": None,
+                        "last_accessed_at": None,
+                        "access_count": 0,
+                    }
+                ],
+            }
+        }
+    )
+
+    simulation_id: int
+    active_count: int
+    revoked_count: int
+    expired_count: int
+    tokens: list[ShareTokenListItem] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -112,5 +180,7 @@ class SharedSimulationOut(BaseModel):
 __all__ = [
     "ShareTokenCreateIn",
     "ShareTokenOut",
+    "ShareTokenListItem",
+    "ShareTokenListOut",
     "SharedSimulationOut",
 ]
