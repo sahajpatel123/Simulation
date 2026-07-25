@@ -652,6 +652,7 @@ __all__ = [
     "count_with_assumptions",
     "scenarios_above_threshold",
     "scenarios_below_threshold",
+    "count_above_threshold",
 ]
 
 
@@ -994,6 +995,14 @@ def scenarios_below_threshold(
         scenario for scenario in scenarios
         if scenario.conversion_delta <= -abs(threshold)
     ]
+
+
+def count_above_threshold(
+    scenarios: list[WhatIfOut],
+    threshold: float = 0.01,
+) -> int:
+    """Return the number of scenarios with ``conversion_delta`` >= ``threshold``."""
+    return sum(1 for scenario in scenarios if scenario.conversion_delta >= threshold)
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
