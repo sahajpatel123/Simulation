@@ -330,3 +330,11 @@ class TestShellSafety:
         assert _reports._safe_filename("a!_") == "a__"
         assert _reports._safe_filename("_a!") == "_a_"
         assert _reports._safe_filename("!a_") == "_a_"
+
+    def test_underscore_space_combos_preserved(self) -> None:
+        """Combinations of underscores and spaces (both allowed
+        chars) round-trip unchanged."""
+        assert _reports._safe_filename("_ _") == "_ _"
+        assert _reports._safe_filename("_ _ _") == "_ _ _"
+        assert _reports._safe_filename("_   _") == "_   _"
+        assert _reports._safe_filename("__ __") == "__ __"
