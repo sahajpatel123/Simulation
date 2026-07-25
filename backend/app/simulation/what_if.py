@@ -666,6 +666,7 @@ __all__ = [
     "count_with_negative_pct",
     "total_recommendation_count",
     "all_recommendation_titles",
+    "scenarios_with_matched_category_count",
 ]
 
 
@@ -1109,6 +1110,14 @@ def all_recommendation_titles(scenarios: list[WhatIfOut]) -> list[str]:
         for scenario in scenarios
         for rec in scenario.recommendations
     ]
+
+
+def scenarios_with_matched_category_count(
+    scenarios: list[WhatIfOut],
+    categories: list[str],
+) -> list[WhatIfOut]:
+    """Return scenarios whose meta matches **all** of the given categories."""
+    return [scenario for scenario in scenarios if scenario.has_all_categories(categories)]
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
