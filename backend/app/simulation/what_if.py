@@ -646,6 +646,7 @@ __all__ = [
     "count_by_direction",
     "scenarios_with_sensitivity",
     "count_by_sensitivity",
+    "top_delta_scenarios",
 ]
 
 
@@ -932,6 +933,16 @@ def count_by_sensitivity(scenarios: list[WhatIfOut], label: str) -> int:
         1 for scenario in scenarios
         if str(scenario.meta.get("sensitivity_label")) == label
     )
+
+
+def top_delta_scenarios(scenarios: list[WhatIfOut], n: int) -> list[WhatIfOut]:
+    """Return up to ``n`` scenarios with the highest ``conversion_delta``.
+
+    Stable for ties. Empty input or ``n <= 0`` returns an empty list.
+    """
+    if n <= 0 or not scenarios:
+        return []
+    return sorted(scenarios, key=lambda s: s.conversion_delta, reverse=True)[:n]
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
