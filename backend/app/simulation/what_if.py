@@ -662,6 +662,7 @@ __all__ = [
     "scenario_project_ids",
     "scenarios_with_positive_pct",
     "scenarios_with_negative_pct",
+    "count_with_positive_pct",
 ]
 
 
@@ -1081,6 +1082,11 @@ def scenarios_with_positive_pct(scenarios: list[WhatIfOut]) -> list[WhatIfOut]:
 def scenarios_with_negative_pct(scenarios: list[WhatIfOut]) -> list[WhatIfOut]:
     """Return scenarios whose ``conversion_delta_pct`` is strictly negative."""
     return [scenario for scenario in scenarios if scenario.conversion_delta_pct < 0.0]
+
+
+def count_with_positive_pct(scenarios: list[WhatIfOut]) -> int:
+    """Return the number of scenarios with strictly positive ``conversion_delta_pct``."""
+    return sum(1 for scenario in scenarios if scenario.has_positive_delta_pct())
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
