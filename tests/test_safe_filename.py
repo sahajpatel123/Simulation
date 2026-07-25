@@ -427,3 +427,19 @@ class TestShellSafety:
         assert _reports._safe_filename("A_a") == "A_a"
         assert _reports._safe_filename("a!A") == "a_A"
         assert _reports._safe_filename("aA1") == "aA1"
+
+    def test_dash_preserved_in_combinations(self) -> None:
+        """``-`` is in the allowed char set, so it round-trips in
+        every position: leading, trailing, consecutive, and
+        surrounded by spaces. Spaces are preserved too.
+
+        Pin these so a future \"simplification\" that filtered out
+        leading or trailing dashes (mistaking them for command-line
+        flags) wouldn't silently break the user's intent."""
+        assert _reports._safe_filename("a-b") == "a-b"
+        assert _reports._safe_filename("a-") == "a-"
+        assert _reports._safe_filename("-a") == "-a"
+        assert _reports._safe_filename("a--b") == "a--b"
+        assert _reports._safe_filename("a -b") == "a -b"
+        assert _reports._safe_filename("a- b") == "a- b"
+        assert _reports._safe_filename("a  -  b") == "a  -  b"
