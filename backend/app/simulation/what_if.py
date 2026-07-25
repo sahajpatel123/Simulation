@@ -671,6 +671,7 @@ __all__ = [
     "count_with_matched_categories",
     "scenarios_with_recommendations_count",
     "count_with_recommendations",
+    "recommendations_ratio",
 ]
 
 
@@ -1160,6 +1161,16 @@ def count_with_recommendations(scenarios: list[WhatIfOut]) -> int:
     without the intermediate list allocation.
     """
     return scenarios_with_recommendations_count(scenarios)
+
+
+def recommendations_ratio(scenarios: list[WhatIfOut]) -> float:
+    """Return the fraction of scenarios with at least one recommendation (0.0–1.0).
+
+    Returns 0.0 for an empty input.
+    """
+    if not scenarios:
+        return 0.0
+    return count_with_recommendations(scenarios) / len(scenarios)
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
