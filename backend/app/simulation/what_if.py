@@ -651,6 +651,7 @@ __all__ = [
     "scenarios_with_assumptions",
     "count_with_assumptions",
     "scenarios_above_threshold",
+    "scenarios_below_threshold",
 ]
 
 
@@ -981,6 +982,17 @@ def scenarios_above_threshold(
     return [
         scenario for scenario in scenarios
         if scenario.conversion_delta >= threshold
+    ]
+
+
+def scenarios_below_threshold(
+    scenarios: list[WhatIfOut],
+    threshold: float = 0.01,
+) -> list[WhatIfOut]:
+    """Return scenarios with ``conversion_delta`` <= ``-threshold`` (regressions)."""
+    return [
+        scenario for scenario in scenarios
+        if scenario.conversion_delta <= -abs(threshold)
     ]
 
 
