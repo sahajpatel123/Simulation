@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_admin
+from app.core.rate_limiter import rate_limit
 from app.models.project import Project
 from app.models.simulation import Simulation
 from app.models.user import User
@@ -91,6 +92,10 @@ def get_platform_calibration(
     "/apply-adjustments",
     summary="Apply Markov prior adjustments from latest outcomes",
     responses=_JSON_200,
+    # Admin-only but the underlying engine iterates over every
+    # simulation row — cap path-spam at 5/min/IP so a runaway admin
+    # token doesn't drive a hot loop.
+    dependencies=[Depends(rate_limit(limit=5, window_s=60))],
 )
 def apply_markov_adjustments(
     db: Session = Depends(get_db),
