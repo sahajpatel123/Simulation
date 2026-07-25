@@ -52,8 +52,18 @@ app = FastAPI(
     title="TheCee API",
     description="Pre-launch behavioral simulation platform.",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    # OpenAPI surface is gated by environment: in production the auto-
+    # generated docs (/docs, /redoc, /openapi.json) leak the full route
+    # map and request/response schemas, which helps attackers enumerate
+    # endpoints and craft payloads. Disable them outside development so
+    # the deployment surface matches what we intend to expose.
+    docs_url="/docs" if settings.ENVIRONMENT.lower() != "production" else None,
+    redoc_url="/redoc" if settings.ENVIRONMENT.lower() != "production" else None,
+    openapi_url=(
+        "/openapi.json"
+        if settings.ENVIRONMENT.lower() != "production"
+        else None
+    ),
     lifespan=lifespan,
 )
 
