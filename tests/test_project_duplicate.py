@@ -222,6 +222,7 @@ def test_duplicate_out_round_trip() -> None:
         project={
             "id": 99,
             "title": "My Idea (copy)",
+            "description": "Test project",
             "status": "DRAFT",
             "user_id": 7,
         },
