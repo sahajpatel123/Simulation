@@ -906,6 +906,49 @@ def run_migrations():
             conn.rollback()
             print(f"⚠️ step 88 refresh_tokens skip: {e}")
 
+        # Share tokens — read-only public links to a completed simulation.
+        # Token is stored as a SHA-256 hash so a leaked DB row can't be
+        # used to mint live links. Revoked rows are kept (not deleted) so
+        # an audit trail of who shared what and when is preserved.
+        try:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS share_tokens (
+                        id            SERIAL PRIMARY KEY,
+                        simulation_id INTEGER NOT NULL
+                            REFERENCES simulations(id) ON DELETE CASCADE,
+                        user_id       INTEGER NOT NULL
+                            REFERENCES users(id) ON DELETE CASCADE,
+                        token_hash    VARCHAR(64) NOT NULL UNIQUE,
+                        scope         VARCHAR(50) NOT NULL DEFAULT 'read_only',
+                        expires_at    TIMESTAMP WITH TIME ZONE NOT NULL,
+                        created_at    TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        revoked_at    TIMESTAMP WITH TIME ZONE,
+                        last_accessed_at TIMESTAMP WITH TIME ZONE,
+                        access_count  INTEGER NOT NULL DEFAULT 0
+                    );
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_share_tokens_simulation_id "
+                    "ON share_tokens (simulation_id);"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_share_tokens_user_id "
+                    "ON share_tokens (user_id);"
+                )
+            )
+            conn.commit()
+            print("✅ share_tokens table created")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ share_tokens skip: {e}")
+
     # Seed cluster_parameters with 416 placeholder rows (52 clusters × 8 traits)
     _seed_cluster_parameters()
 

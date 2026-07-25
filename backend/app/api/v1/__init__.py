@@ -7,6 +7,7 @@ from app.api.v1.decisions import router as decisions_router
 from app.api.v1.outcomes import router as outcomes_router
 from app.api.v1.projects import router as projects_router
 from app.api.v1.reports import router as reports_router
+from app.api.v1.share import router as share_router
 from app.api.v1.simulations import router as simulations_router
 from app.api.v1.users import router as users_router
 from app.api.v1.hardware import router as hardware_router
@@ -22,6 +23,7 @@ api_router.include_router(projects_router)
 api_router.include_router(decisions_router)
 api_router.include_router(outcomes_router)
 api_router.include_router(reports_router)
+api_router.include_router(share_router)
 api_router.include_router(simulations_router)
 api_router.include_router(users_router)
 api_router.include_router(ui_generation_router)
