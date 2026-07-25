@@ -914,3 +914,22 @@ class TestShellSafety:
             assert isinstance(out, str), (
                 f"non-string output for {t!r}: {type(out)}"
             )
+
+    def test_return_type_invariant(self) -> None:
+        """Property test: ``_safe_filename`` always returns a string,
+        never None / bytes / something else. Catches any future
+        regression that accidentally returns ``None`` or a non-string
+        type (which would crash the downstream
+        ``StreamingResponse`` header construction)."""
+        import random
+
+        random.seed(42)
+        for _ in range(50):
+            t = "".join(
+                random.choice(["a", "!", "@", "#", " ", "\n", "_"])
+                for _ in range(20)
+            )
+            out = _reports._safe_filename(t)
+            assert isinstance(out, str), (
+                f"non-string output for {t!r}: {type(out)}"
+            )
