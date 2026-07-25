@@ -76,8 +76,15 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allowed_origins(),
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    # The Cee API only uses GET and POST — restricting methods prevents
+    # an attacker page in the allowlist from driving PUT/PATCH/DELETE
+    # against the backend via preflight. ``allow_headers`` is similarly
+    # locked to the small set the API actually inspects (Authorization
+    # for Bearer tokens, Content-Type for JSON bodies, X-Forwarded-For
+    # so the rate limiter can honour the reverse-proxy client IP,
+    # Origin so the CORS handshake itself can negotiate).
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type", "X-Forwarded-For", "Origin"],
     expose_headers=["Content-Disposition", "Content-Length", "X-Response-Time"],
 )
 
