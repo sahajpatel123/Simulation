@@ -988,3 +988,22 @@ class TestShellSafety:
                 assert not (0xD800 <= code <= 0xDFFF), (
                     f"lone surrogate in output for {t!r}: {out!r}"
                 )
+
+    def test_glob_chars_never_appear_in_output(self) -> None:
+        """Property test: after sanitization, no shell-glob chars
+        (``/``, ``*``, ``?``, ``|``, ``<``, ``>``) ever appear in
+        the output. Catches any future regression that accidentally
+        let a glob char through.
+
+        Each glob char is replaced with ``_`` per the
+        disallowed-chars rule."""
+        glob_chars = "/*?|<>"
+        for t in (
+            "hello/world", "foo*bar", "a|b", "x?y", "p!q",
+            "r<s", "u>v", "/etc/passwd", "*.txt", "rm -rf /",
+        ):
+            out = _reports._safe_filename(t)
+            for c in glob_chars:
+                assert c not in out, (
+                    f"char {c!r} in output for {t!r}: {out!r}"
+                )
