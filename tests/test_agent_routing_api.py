@@ -4,8 +4,8 @@ Tests for the agent-routing schema surface and endpoint wiring.
 The pure ``AgentHierarchyRouter`` already has comprehensive coverage in
 ``test_agent_hierarchy.py``. These tests pin down:
   * ``AgentTierEnum`` and ``TierCounts`` defaults
-  * Pydantic validation of ``confidence`` in [0, 1] and ``relative_cost >= 0``
-  * ``AgentRoutingRegistryOut`` tier rollup math + cost_summary
+  * Pydantic validation of ``confidence`` in [0, 1]
+  * ``AgentRoutingRegistryOut`` tier rollup math
   * Endpoint registration in the FastAPI app router table
 """
 from __future__ import annotations
@@ -23,15 +23,6 @@ def test_agent_tier_enum_has_three_members() -> None:
 
     members = {m.value for m in AgentTierEnum}
     assert members == {"MICRO", "WORKER", "SUPERVISOR"}
-
-
-def test_tier_relative_costs_are_strictly_ordered() -> None:
-    """MICRO < WORKER < SUPERVISOR — every user-visible promise hinges on it."""
-    from app.schemas.agent_routing import TIER_RELATIVE_COST
-
-    assert TIER_RELATIVE_COST["MICRO"] < TIER_RELATIVE_COST["WORKER"]
-    assert TIER_RELATIVE_COST["WORKER"] < TIER_RELATIVE_COST["SUPERVISOR"]
-    assert TIER_RELATIVE_COST["MICRO"] > 0
 
 
 def test_tier_counts_default_is_zero() -> None:
@@ -57,7 +48,6 @@ def test_routing_decision_rejects_out_of_range_confidence() -> None:
         "tier": AgentTierEnum.WORKER,
         "reason": "default",
         "needs_browser": True,
-        "relative_cost": 1.0,
     }
     AgentRoutingDecisionOut(**base, confidence=0.0)
     AgentRoutingDecisionOut(**base, confidence=1.0)
@@ -65,25 +55,6 @@ def test_routing_decision_rejects_out_of_range_confidence() -> None:
         AgentRoutingDecisionOut(**base, confidence=1.5)
     with pytest.raises(ValidationError):
         AgentRoutingDecisionOut(**base, confidence=-0.1)
-
-
-def test_routing_decision_rejects_negative_cost() -> None:
-    from pydantic import ValidationError
-
-    from app.schemas.agent_routing import (
-        AgentRoutingDecisionOut,
-        AgentTierEnum,
-    )
-
-    with pytest.raises(ValidationError):
-        AgentRoutingDecisionOut(
-            cluster_id="x",
-            tier=AgentTierEnum.WORKER,
-            reason="default",
-            confidence=0.5,
-            needs_browser=True,
-            relative_cost=-1.0,
-        )
 
 
 def test_registry_out_round_trip() -> None:
@@ -97,12 +68,6 @@ def test_registry_out_round_trip() -> None:
     payload = AgentRoutingRegistryOut(
         generated_at="2026-01-01T00:00:00Z",
         tier_counts=TierCounts(MICRO=2, WORKER=3, SUPERVISOR=1, total=6),
-        cost_summary={
-            "MICRO": 2,
-            "WORKER": 3,
-            "SUPERVISOR": 1,
-            "total_equivalent_cost": 6.6,
-        },
         clusters=[
             AgentRoutingDecisionOut(
                 cluster_id="c1",
@@ -110,13 +75,11 @@ def test_registry_out_round_trip() -> None:
                 reason="low literacy",
                 confidence=0.8,
                 needs_browser=False,
-                relative_cost=0.05,
             )
         ],
     )
     dumped = payload.model_dump()
     assert dumped["tier_counts"]["total"] == 6
-    assert dumped["cost_summary"]["total_equivalent_cost"] == 6.6
     assert dumped["clusters"][0]["cluster_id"] == "c1"
 
 
@@ -174,16 +137,3 @@ def test_cluster_route_decision_matches_pure_router() -> None:
     assert direct.tier == AgentTier.SUPERVISOR
     assert direct.confidence == 0.95
     assert router.needs_browser(direct) is True
-
-
-def test_cost_summary_math_round_trips() -> None:
-    """Registry ``total_equivalent_cost`` = sum(count × relative_cost)."""
-    from app.schemas.agent_routing import TIER_RELATIVE_COST
-
-    # If 7 MICRO, 35 WORKER, 10 SUPERVISOR → cost = 0.35 + 35 + 35 = 70.35
-    counts = {"MICRO": 7, "WORKER": 35, "SUPERVISOR": 10}
-    expected = round(
-        sum(counts[t] * TIER_RELATIVE_COST[t] for t in counts),
-        2,
-    )
-    assert expected == 70.35
