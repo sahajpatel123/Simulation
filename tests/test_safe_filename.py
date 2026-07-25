@@ -1158,3 +1158,25 @@ class TestShellSafety:
                 f"output length {len(out)} > 40 for input of "
                 f"length {len(t)}: {out!r}"
             )
+
+    def test_mixed_allowed_disallowed(self) -> None:
+        """Pins that mixed strings of allowed and disallowed chars
+        are handled correctly: each disallowed char becomes a
+        single ``_``, each allowed char is preserved.
+
+        - ``\"a!b\"`` → ``\"a_b\"`` (one disallowed → one ``_``)
+        - ``\"a!_b\"`` → ``\"a__b\"`` (disallowed → ``_``,
+          preserved ``_`` becomes ``_``)
+        - ``\"a_!_b\"`` → ``\"a___b\"`` (preserved ``_`` +
+          disallowed → ``_`` + preserved ``_`` = 3 underscores)
+        - ``\"_a_!_b_\"`` → ``\"_a___b_\"``
+        - ``\"!a!b!\"`` → ``\"_a_b_\"``
+
+        Pin so a future \"simplification\" that incorrectly handled
+        the interaction between allowed and disallowed chars
+        wouldn't silently change the contract."""
+        assert _reports._safe_filename("a!b") == "a_b"
+        assert _reports._safe_filename("a!_b") == "a__b"
+        assert _reports._safe_filename("a_!_b") == "a___b"
+        assert _reports._safe_filename("_a_!_b_") == "_a___b_"
+        assert _reports._safe_filename("!a!b!") == "_a_b_"
