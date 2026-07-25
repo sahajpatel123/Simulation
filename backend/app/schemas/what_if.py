@@ -281,6 +281,12 @@ class WhatIfSummary(BaseModel):
             return None
         return self.top_categories[0].category
 
+    def top_category_count(self) -> int:
+        """Return the count of the highest-count category, or 0 when empty."""
+        if not self.top_categories:
+            return 0
+        return int(self.top_categories[0].count)
+
     def direction_breakdown_total(self) -> int:
         """Return the sum of all ``direction_breakdown`` counts.
 
