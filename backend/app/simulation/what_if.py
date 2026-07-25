@@ -657,6 +657,7 @@ __all__ = [
     "count_below_threshold",
     "total_assumption_count",
     "all_assumption_texts",
+    "sorted_scenarios_by_delta",
 ]
 
 
@@ -1043,6 +1044,19 @@ def all_assumption_texts(scenarios: list[WhatIfOut]) -> list[str]:
         for scenario in scenarios
         for assumption in scenario.assumptions_applied
     ]
+
+
+def sorted_scenarios_by_delta(
+    scenarios: list[WhatIfOut],
+    *,
+    reverse: bool = True,
+) -> list[WhatIfOut]:
+    """Return scenarios sorted by ``conversion_delta``.
+
+    Stable for ties. ``reverse=True`` (default) gives descending order
+    (improvements first); pass ``reverse=False`` for ascending (regressions first).
+    """
+    return sorted(scenarios, key=lambda s: s.conversion_delta, reverse=reverse)
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
