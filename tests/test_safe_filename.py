@@ -933,3 +933,15 @@ class TestShellSafety:
             assert isinstance(out, str), (
                 f"non-string output for {t!r}: {type(out)}"
             )
+
+    def test_no_none_return_value(self) -> None:
+        """Property test: ``_safe_filename`` never returns ``None``
+        for any input, including ``\"\"``. Catches any future regression
+        where an empty-strip + fallback path accidentally returns
+        ``None`` instead of the fallback string ``\"project\"``."""
+        for t in ("", " ", "   ", "\t", "\n", "a", "!", "_"):
+            out = _reports._safe_filename(t)
+            assert out is not None, (
+                f"None returned for {t!r}"
+            )
+            assert isinstance(out, str)
