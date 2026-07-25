@@ -207,3 +207,15 @@ class TestShellSafety:
         ``"project"`` fallback."""
         assert _reports._safe_filename("_") == "_"
         assert _reports._safe_filename("___") == "___"
+
+    def test_exact_fallback_string_passes_through(self) -> None:
+        """A title that IS exactly ``"project"`` after sanitization
+        is left alone — it doesn't trigger the fallback (the
+        fallback only fires when the stripped result is empty)."""
+        assert _reports._safe_filename("project") == "project"
+        assert _reports._safe_filename("  project  ") == "project"
+
+    def test_dashed_project_name_passes_through(self) -> None:
+        """``p-r-o-j-e-c-t`` (allowed chars) stays as-is, not the
+        fallback."""
+        assert _reports._safe_filename("p-r-o-j-e-c-t") == "p-r-o-j-e-c-t"
