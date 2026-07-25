@@ -290,3 +290,9 @@ class TestShellSafety:
         """``"   hello"`` strips leading whitespace but the trailing
         alnum is unchanged."""
         assert _reports._safe_filename("   hello") == "hello"
+
+    def test_trailing_punctuation_replaced(self) -> None:
+        """Common trailing punctuation marks (. ! ? , ; :) are all
+        replaced with ``_``. The alnum core survives."""
+        for t in ("hello.", "hello!", "hello?", "hello,", "hello;", "hello:"):
+            assert _reports._safe_filename(t) == "hello_", f"failed for {t!r}"
