@@ -11,6 +11,16 @@ SENSITIVE_PATTERNS: list[tuple[str, str]] = [
     (r"(token[\"']?\s*[:=]\s*)[\"']?[\w.-]+", r"\1[REDACTED]"),
     (r"rzp_(test|live)_[\w]+", r"rzp_[REDACTED]"),
     (r"Bearer [\w.-]+", r"Bearer [REDACTED]"),
+    # Email addresses are PII under GDPR/CCPA and must not land in
+    # centralized log sinks. Match the local-part @ domain.tld shape
+    # conservatively — accept letters/digits/._%+- in local, at least one
+    # dot in domain. Order matters: this pattern is generic enough that
+    # it sits *after* the api-key/secret/password/token patterns so we
+    # don't redact the credential portion of e.g. a key=token pair.
+    (
+        r"\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b",
+        "[REDACTED_EMAIL]",
+    ),
 ]
 
 
