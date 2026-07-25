@@ -1141,3 +1141,20 @@ class TestShellSafety:
         assert _reports._safe_filename("a---b") == "a---b"
         assert _reports._safe_filename("a-b-c") == "a-b-c"
         assert _reports._safe_filename("----") == "----"
+
+    def test_output_length_bounded_40(self) -> None:
+        """Property test: the output length is always ≤ 40 chars.
+        Even for very long inputs (50, 100, 200 chars), the output
+        is bounded by the slice cap.
+
+        This is a sanity check on top of the existing length-invariance
+        test, specifically for very long inputs that could expose
+        edge cases in the slice logic."""
+        for t in (
+            "a" * 50, "_" * 100, "!@#" * 20, "hello" * 10,
+        ):
+            out = _reports._safe_filename(t)
+            assert len(out) <= 40, (
+                f"output length {len(out)} > 40 for input of "
+                f"length {len(t)}: {out!r}"
+            )
