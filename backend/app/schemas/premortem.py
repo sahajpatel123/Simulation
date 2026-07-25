@@ -38,5 +38,5 @@ class PremortemOut(BaseModel):
 
 
 class PremortemRequest(BaseModel):
-    description_override: str | None = None
+    description_override: str | None = Field(default=None, max_length=5000)
 

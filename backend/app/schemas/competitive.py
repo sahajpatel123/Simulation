@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class Competitor(BaseModel):
@@ -66,5 +66,5 @@ class CompetitiveAnalysisOut(BaseModel):
 
 
 class CompetitiveAnalysisRequest(BaseModel):
-    description_override: str | None = None
-    target_market: str | None = None
+    description_override: str | None = Field(default=None, max_length=5000)
+    target_market: str | None = Field(default=None, max_length=500)

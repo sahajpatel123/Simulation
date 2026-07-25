@@ -38,5 +38,5 @@ class InterventionOut(BaseModel):
 
 
 class InterventionRequest(BaseModel):
-    description_override: str | None = None
+    description_override: str | None = Field(default=None, max_length=5000)
     max_interventions: int = Field(default=10, ge=3, le=20)

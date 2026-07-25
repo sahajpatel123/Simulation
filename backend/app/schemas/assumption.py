@@ -1,8 +1,8 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AssumptionExtractRequest(BaseModel):
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=5000)
 
 
 class AssumptionOut(BaseModel):
