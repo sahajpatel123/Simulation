@@ -660,6 +660,7 @@ __all__ = [
     "sorted_scenarios_by_delta",
     "scenario_ids",
     "scenario_project_ids",
+    "scenarios_with_positive_pct",
 ]
 
 
@@ -1069,6 +1070,11 @@ def scenario_ids(scenarios: list[WhatIfOut]) -> list[int]:
 def scenario_project_ids(scenarios: list[WhatIfOut]) -> list[int]:
     """Return the list of ``project_id`` values in input order."""
     return [scenario.project_id for scenario in scenarios]
+
+
+def scenarios_with_positive_pct(scenarios: list[WhatIfOut]) -> list[WhatIfOut]:
+    """Return scenarios whose ``conversion_delta_pct`` is strictly positive."""
+    return [scenario for scenario in scenarios if scenario.has_positive_delta_pct()]
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
