@@ -123,3 +123,25 @@ class TestFallback:
         is fully empty. Punctuation-only inputs become underscored
         names that are still safe to drop into Content-Disposition."""
         assert _reports._safe_filename("...") == "___"
+
+
+class TestUnicode:
+    def test_emoji_replaced(self) -> None:
+        """Emoji are not alnum, so each becomes ``_``."""
+        out = _reports._safe_filename("Hello 🚀 World")
+        assert "🚀" not in out
+        assert "🚀" not in out
+        assert "_" in out
+
+    def test_accented_latin_preserved(self) -> None:
+        """``isalnum()`` accepts unicode letters — accented Latin is fine."""
+        assert _reports._safe_filename("café") == "café"
+
+    def test_greek_preserved(self) -> None:
+        assert _reports._safe_filename("α-beta-γ") == "α-beta-γ"
+
+    def test_cjk_preserved(self) -> None:
+        assert _reports._safe_filename("日本語") == "日本語"
+
+    def test_strips_surrounding_whitespace(self) -> None:
+        assert _reports._safe_filename("   hello   ") == "hello"
