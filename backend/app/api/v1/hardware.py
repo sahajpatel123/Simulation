@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.core.rate_limiter import rate_limit
 from app.hardware.competitive_analysis import HardwareCompetitiveAnalyser
 from app.hardware.manufacturing_cost import ManufacturingCostAnalyser
 from app.reports.hardware_report import HardwareReportGenerator
@@ -101,6 +102,8 @@ def _spec_preview(spec: dict[str, Any]) -> str:
     "/projects/{project_id}/hardware/generate-spec",
     response_model=HardwareGenerateSpecResponse,
     status_code=status.HTTP_201_CREATED,
+    # LLM-backed — cap path-spam at 10/min/IP.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
     summary="Generate a hardware semantic spec and 3D model JSON (Claude)",
 )
 def generate_hardware_spec(
@@ -191,6 +194,8 @@ def generate_hardware_spec(
     "/projects/{project_id}/hardware/refine-spec",
     response_model=HardwareRefineSpecResponse,
     summary="Refine an existing hardware spec with a new instruction",
+    # LLM-backed — cap path-spam at 10/min/IP.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 def refine_hardware_spec(
     project_id: int,
@@ -350,6 +355,8 @@ def get_hardware_product(
     "/projects/{project_id}/hardware/{hw_id}/engineering-plate",
     response_model=HardwareEngineeringPlateOut,
     summary="AI labels for engineering title block (project, category, components, mass, scale)",
+    # LLM-backed — cap path-spam at 10/min/IP.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 def post_engineering_plate_labels(
     project_id: int,
@@ -399,6 +406,8 @@ def post_engineering_plate_labels(
     status_code=status.HTTP_202_ACCEPTED,
     summary="Queue physics / structural hardware tests (Celery)",
     responses=_JSON_202,
+    # Celery-backed — cap path-spam at 10/min/IP.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 def trigger_hardware_tests(
     project_id: int,
@@ -551,6 +560,8 @@ def get_test_results(
     "/projects/{project_id}/hardware/{hw_id}/test-configs",
     summary="Create test configurations for a hardware product",
     responses=_JSON_200,
+    # DB write — cap path-spam at 20/min/IP.
+    dependencies=[Depends(rate_limit(limit=20, window_s=60))],
 )
 def create_test_configs(
     project_id: int,
@@ -717,6 +728,8 @@ def get_test_configs(
     "/projects/{project_id}/hardware/{hw_id}/cost-analysis",
     summary="Run BOM and manufacturing cost estimate",
     responses=_JSON_200,
+    # Pure analytics — cap path-spam at 20/min/IP.
+    dependencies=[Depends(rate_limit(limit=20, window_s=60))],
 )
 def run_cost_analysis(
     project_id: int,
@@ -852,6 +865,8 @@ def get_cost_analysis(
     status_code=status.HTTP_202_ACCEPTED,
     summary="Queue 52-cluster consumer simulation for hardware (optional UI loop)",
     responses=_JSON_202,
+    # Celery-backed — cap path-spam at 10/min/IP.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 def trigger_consumer_simulation(
     project_id: int,
@@ -989,6 +1004,8 @@ def get_consumer_simulation_results(
     "/projects/{project_id}/hardware/{hw_id}/competitive-analysis",
     summary="Hardware competitive analysis from spec, cost, and sim clusters",
     responses=_JSON_200,
+    # LLM-backed — cap path-spam at 10/min/IP.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 def run_competitive_analysis(
     project_id: int,
