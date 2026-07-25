@@ -647,6 +647,7 @@ __all__ = [
     "scenarios_with_sensitivity",
     "count_by_sensitivity",
     "top_delta_scenarios",
+    "bottom_delta_scenarios",
 ]
 
 
@@ -943,6 +944,16 @@ def top_delta_scenarios(scenarios: list[WhatIfOut], n: int) -> list[WhatIfOut]:
     if n <= 0 or not scenarios:
         return []
     return sorted(scenarios, key=lambda s: s.conversion_delta, reverse=True)[:n]
+
+
+def bottom_delta_scenarios(scenarios: list[WhatIfOut], n: int) -> list[WhatIfOut]:
+    """Return up to ``n`` scenarios with the lowest ``conversion_delta``.
+
+    Stable for ties. Empty input or ``n <= 0`` returns an empty list.
+    """
+    if n <= 0 or not scenarios:
+        return []
+    return sorted(scenarios, key=lambda s: s.conversion_delta)[:n]
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
