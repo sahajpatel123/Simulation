@@ -878,3 +878,18 @@ class TestShellSafety:
         assert _reports._safe_filename("Abc123") == "Abc123"
         assert _reports._safe_filename("aBcDeF") == "aBcDeF"
         assert _reports._safe_filename("Project 2024") == "Project 2024"
+
+    def test_internal_whitespace_preserved(self) -> None:
+        """Pins that ``str.strip()`` only strips leading/trailing
+        whitespace, not internal whitespace.
+
+        ``\" a \"`` → ``\"a\"`` (single leading/trailing space)
+        ``\" a  b \"`` → ``\"a  b\"`` (two internal spaces preserved)
+        ``\"  hello  world  \"`` → ``\"hello  world\"`` (leading/trailing
+        trimmed, two internal spaces preserved)
+
+        A future \"simplification\" that called ``str.replace(' ', '')``
+        would silently shorten these titles."""
+        assert _reports._safe_filename(" a ") == "a"
+        assert _reports._safe_filename(" a  b ") == "a  b"
+        assert _reports._safe_filename("  hello  world  ") == "hello  world"
