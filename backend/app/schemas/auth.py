@@ -6,7 +6,7 @@ from app.core.security import validate_password_strength
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
-    full_name: str | None = None
+    full_name: str | None = Field(default=None, max_length=255)
 
     @field_validator("password")
     @classmethod
@@ -45,7 +45,7 @@ class UserUpdate(BaseModel):
     All fields optional — only the ones provided are written.
     """
 
-    full_name: str | None = None
+    full_name: str | None = Field(default=None, max_length=255)
     email: EmailStr | None = None
     handle: str | None = Field(default=None, max_length=64)
 
