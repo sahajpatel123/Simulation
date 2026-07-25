@@ -673,6 +673,7 @@ __all__ = [
     "count_with_recommendations",
     "recommendations_ratio",
     "assumptions_ratio",
+    "with_assumptions_ratio",
 ]
 
 
@@ -1182,6 +1183,11 @@ def assumptions_ratio(scenarios: list[WhatIfOut]) -> float:
     if not scenarios:
         return 0.0
     return sum(1 for scenario in scenarios if scenario.assumptions_applied) / len(scenarios)
+
+
+def with_assumptions_ratio(scenarios: list[WhatIfOut]) -> float:
+    """Alias for ``assumptions_ratio`` kept for naming consistency with filter helpers."""
+    return assumptions_ratio(scenarios)
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
