@@ -487,6 +487,9 @@ document.addEventListener('click',function(e){
     "/projects/{project_id}/generate-ui",
     response_model=GeneratedUIResponse,
     summary="Generate a Tailwind HTML UI prototype for a project",
+    # LLM-backed; cap path-spam at 10/min/IP for the same reason as
+    # the other LLM routes in this codebase.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 async def generate_ui(
     project_id: int,
@@ -562,6 +565,8 @@ async def generate_ui(
     "/projects/{project_id}/generate-ui/refine",
     response_model=GeneratedUIResponse,
     summary="Refine an existing generated UI with a new instruction",
+    # LLM-backed; cap path-spam at 10/min/IP.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 async def refine_ui(
     project_id: int,
@@ -797,6 +802,9 @@ async def diff_ui_versions(
     response_model=UIRollbackResponse,
     summary="Rollback to a previous UI version (creates new version copy)",
     responses=_JSON_200,
+    # DB write (creates a new UI version copy) — cap path-spam at
+    # 20/min/IP to mirror the existing /serve rate limit.
+    dependencies=[Depends(rate_limit(limit=20, window_s=60))],
 )
 async def rollback_ui(
     project_id: int,
@@ -895,6 +903,9 @@ async def serve_generated_ui(
     "/projects/{project_id}/generated-uis/{ui_id}/simulate",
     summary="Start a browser-based UI simulation run",
     responses=_JSON_200,
+    # Celery-backed Playwright run — cap path-spam at 10/min/IP so a
+    # single actor can't drain the worker queue.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 async def start_ui_simulation(
     project_id: int,
