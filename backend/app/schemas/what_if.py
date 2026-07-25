@@ -346,6 +346,18 @@ class WhatIfDiff(BaseModel):
         """Return True if ``delta_difference`` is zero within float tolerance."""
         return abs(self.delta_difference) < 1e-9
 
+    def direction_arrow(self) -> str:
+        """Return a single-character direction arrow based on ``delta_difference``.
+
+        Same 1e-9 tolerance as ``direction_label`` and
+        ``WhatIfOut.direction_arrow``.
+        """
+        if self.delta_difference > 1e-9:
+            return "↑"
+        if self.delta_difference < -1e-9:
+            return "↓"
+        return "→"
+
 
 __all__ = [
     "WhatIfAssumption",
