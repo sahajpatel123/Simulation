@@ -639,6 +639,7 @@ __all__ = [
     "scenarios_with_all_categories",
     "count_scenarios",
     "scenarios_average_delta",
+    "count_by_category",
 ]
 
 
@@ -897,6 +898,15 @@ def scenarios_average_delta(scenarios: list[WhatIfOut]) -> float:
         sum(scenario.conversion_delta for scenario in scenarios) / len(scenarios),
         6,
     )
+
+
+def count_by_category(scenarios: list[WhatIfOut], category: str) -> int:
+    """Return the number of scenarios whose meta contains ``category``.
+
+    Equivalent to ``len(scenarios_with_category(scenarios, category))`` but
+    avoids the intermediate list allocation.
+    """
+    return sum(1 for scenario in scenarios if scenario.has_category(category))
 
 
 def direction_label(delta: float) -> str:
