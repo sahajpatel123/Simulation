@@ -643,6 +643,7 @@ __all__ = [
     "scenarios_average_delta_pct",
     "scenarios_with_recommendations",
     "scenarios_with_direction",
+    "count_by_direction",
 ]
 
 
@@ -894,6 +895,18 @@ def scenarios_with_direction(
         scenario for scenario in scenarios
         if str(scenario.meta.get("dominant_direction")) == direction
     ]
+
+
+def count_by_direction(scenarios: list[WhatIfOut], direction: str) -> int:
+    """Return the number of scenarios whose ``dominant_direction`` matches.
+
+    Equivalent to ``len(scenarios_with_direction(scenarios, direction))``
+    without the intermediate list allocation.
+    """
+    return sum(
+        1 for scenario in scenarios
+        if str(scenario.meta.get("dominant_direction")) == direction
+    )
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
