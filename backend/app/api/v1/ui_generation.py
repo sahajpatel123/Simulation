@@ -880,6 +880,11 @@ async def serve_generated_ui(
         "Content-Security-Policy": "; ".join(csp_parts),
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "no-referrer",
+        # Generated UIs are project-specific prototypes — keep them out of
+        # search indexes even though they're token-gated. Search engines
+        # don't authenticate, so token-gating alone is not enough to
+        # prevent index leakage if a token URL ever leaks.
+        "X-Robots-Tag": "noindex, nofollow",
         # Cache generated UIs aggressively — content is immutable per version.
         "Cache-Control": "private, max-age=3600, immutable",
     }
