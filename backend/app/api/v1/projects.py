@@ -1894,6 +1894,9 @@ def get_project(
     "/{project_id}/re-simulate",
     summary="Queue a re-simulation and return delta vs previous run",
     responses=_JSON_200,
+    # Celery-backed — cap path-spam at 30/min/IP for the same reason
+    # as the simulations POST limit.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
 def re_simulate(
     project_id: int,
@@ -2280,6 +2283,10 @@ def get_competitive_software_analysis(
     "/{project_id}/regenerate-intelligence",
     response_model=ProjectOut,
     summary="Regenerate Précis and Readings for a project",
+    # LLM-backed (calls generate_both → Claude) — cap path-spam at
+    # 10/min/IP for the same reason as the other LLM routes in
+    # this module.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 def regenerate_intelligence(
     project_id: int,
