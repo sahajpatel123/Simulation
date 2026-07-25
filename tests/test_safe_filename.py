@@ -219,3 +219,19 @@ class TestShellSafety:
         """``p-r-o-j-e-c-t`` (allowed chars) stays as-is, not the
         fallback."""
         assert _reports._safe_filename("p-r-o-j-e-c-t") == "p-r-o-j-e-c-t"
+
+    def test_length_boundary_39_passes_unchanged(self) -> None:
+        assert _reports._safe_filename("a" * 39) == "a" * 39
+
+    def test_length_boundary_40_preserved(self) -> None:
+        """Exactly 40 chars preserved (boundary)."""
+        assert _reports._safe_filename("a" * 40) == "a" * 40
+
+    def test_length_40_underscores_preserved(self) -> None:
+        """40 underscores are all allowed, so the result is 40
+        underscores — not the ``"project"`` fallback."""
+        assert _reports._safe_filename("_" * 40) == "_" * 40
+
+    def test_length_40_spaces_triggers_fallback(self) -> None:
+        """40 spaces all strip away, so the fallback fires."""
+        assert _reports._safe_filename(" " * 40) == "project"
