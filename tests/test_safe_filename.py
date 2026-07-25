@@ -485,3 +485,19 @@ class TestShellSafety:
         assert _reports._safe_filename("v0.0.1-alpha") == "v0_0_1-alpha"
         assert _reports._safe_filename("draft (WIP)") == "draft _WIP_"
         assert _reports._safe_filename("Q4 2024") == "Q4 2024"
+
+    def test_parens_and_brackets_replaced(self) -> None:
+        """Pins that ``(``, ``)``, ``[``, ``]`` are replaced with
+        ``_``. These appear in common founder titles (``\"draft (1)\"``,
+        ``\"final [v2]\"``, ``\"My Project (2024)\"``).
+
+        Without this test, a future \"simplification\" that
+        accidentally let ``[``/``]`` through to the filesystem
+        could trigger shell globbing or cause issues with certain
+        download tools."""
+        assert _reports._safe_filename("draft (1)") == "draft _1_"
+        assert _reports._safe_filename("final [v2]") == "final _v2_"
+        assert _reports._safe_filename("My Project (2024)") == "My Project _2024_"
+        # Default-name shapes round-trip without truncation.
+        assert _reports._safe_filename("untitled") == "untitled"
+        assert _reports._safe_filename("Untitled Project") == "Untitled Project"
