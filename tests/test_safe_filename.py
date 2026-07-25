@@ -1180,3 +1180,24 @@ class TestShellSafety:
         assert _reports._safe_filename("a_!_b") == "a___b"
         assert _reports._safe_filename("_a_!_b_") == "_a___b_"
         assert _reports._safe_filename("!a!b!") == "_a_b_"
+
+    def test_all_letters_and_digits_preserved(self) -> None:
+        """Property test: every ASCII letter (a-z, A-Z) and every
+        digit (0-9) round-trips through ``_safe_filename``
+        unchanged.
+
+        This pins the alnum contract — any future change to the
+        allowed-char set (e.g. adding a regex like ``^[A-Za-z]+$``
+        that drops digits) would silently break this contract."""
+        for c in "abcdefghijklmnopqrstuvwxyz":
+            assert _reports._safe_filename(c) == c, (
+                f"lowercase {c!r} not preserved"
+            )
+        for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+            assert _reports._safe_filename(c) == c, (
+                f"uppercase {c!r} not preserved"
+            )
+        for c in "0123456789":
+            assert _reports._safe_filename(c) == c, (
+                f"digit {c!r} not preserved"
+            )
