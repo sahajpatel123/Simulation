@@ -338,3 +338,15 @@ class TestShellSafety:
         assert _reports._safe_filename("_ _ _") == "_ _ _"
         assert _reports._safe_filename("_   _") == "_   _"
         assert _reports._safe_filename("__ __") == "__ __"
+
+    def test_whitespace_and_disallowed_chars_mixed(self) -> None:
+        """Whitespace is allowed (preserved); disallowed chars are
+        replaced. The per-char replacement is independent of the
+        surrounding char class. (Trailing ``strip()`` only fires
+        when the entire result is empty — see ``test_*_only``.)"""
+        assert _reports._safe_filename("a ! b") == "a _ b"
+        # ``" ! "`` strips the surrounding whitespace, leaving ``"!"``
+        # → ``"_"``.
+        assert _reports._safe_filename(" ! ") == "_"
+        assert _reports._safe_filename("a!b c") == "a_b c"
+        assert _reports._safe_filename("a b c") == "a b c"
