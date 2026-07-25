@@ -375,3 +375,12 @@ class TestShellSafety:
         out = _reports._safe_filename("hello\x00world")
         assert "\x00" not in out
         assert out == "hello_world"
+
+    def test_multiple_consecutive_newlines(self) -> None:
+        """Multiple consecutive CRLF or LF separators each become
+        a single ``_``. The function preserves the 1-char-in → 1-char-
+        out replacement contract."""
+        assert _reports._safe_filename("\r\n\r\n") == "____"
+        assert _reports._safe_filename("\r\r\r") == "___"
+        assert _reports._safe_filename("a\r\nb\rc") == "a__b_c"
+        assert _reports._safe_filename("\n\n\n") == "___"
