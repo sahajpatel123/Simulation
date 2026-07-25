@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_admin
+from app.core.rate_limiter import rate_limit
 from app.models.user import User
 from app.schemas.portfolio import UserPortfolioOut
 from app.schemas.calibration import CalibrationStatusOut
@@ -131,6 +132,9 @@ def platform_analytics(
     "/founder-outcome",
     summary="Record founder outcome for a simulation",
     responses=_JSON_200,
+    # DB write — cap path-spam at 30/min/IP for the same reason as
+    # the simulations POST limit.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
 def submit_founder_outcome(
     body: FounderOutcomeSubmit,
