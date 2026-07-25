@@ -645,6 +645,7 @@ __all__ = [
     "scenarios_with_direction",
     "count_by_direction",
     "scenarios_with_sensitivity",
+    "count_by_sensitivity",
 ]
 
 
@@ -919,6 +920,18 @@ def scenarios_with_sensitivity(
         scenario for scenario in scenarios
         if str(scenario.meta.get("sensitivity_label")) == label
     ]
+
+
+def count_by_sensitivity(scenarios: list[WhatIfOut], label: str) -> int:
+    """Return the number of scenarios whose ``sensitivity_label`` matches.
+
+    Equivalent to ``len(scenarios_with_sensitivity(scenarios, label))``
+    without the intermediate list allocation.
+    """
+    return sum(
+        1 for scenario in scenarios
+        if str(scenario.meta.get("sensitivity_label")) == label
+    )
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
