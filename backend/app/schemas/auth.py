@@ -47,7 +47,15 @@ class UserUpdate(BaseModel):
 
     full_name: str | None = Field(default=None, max_length=255)
     email: EmailStr | None = None
-    handle: str | None = Field(default=None, max_length=64)
+    # Handle is exposed in JSON and rendered in the frontend profile
+    # surface. Restrict to a safe character set (alnum, underscore,
+    # hyphen) so a stored XSS payload can't be smuggled through this
+    # field — defence in depth in case the renderer doesn't escape it.
+    handle: str | None = Field(
+        default=None,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9_-]+$",
+    )
 
     reduced_motion: bool | None = None
     email_notices: bool | None = None
