@@ -34,6 +34,10 @@ from app.schemas.hardware import (
     HardwareRenderHintsOut,
     HardwareCreateTestConfigsRequest,
 )
+from app.schemas.billing import (
+    HardwareCostAnalysisRequest,
+    HardwareTriggerConsumerSimRequest,
+)
 
 router = APIRouter(tags=["hardware"])
 
@@ -717,9 +721,9 @@ def get_test_configs(
 def run_cost_analysis(
     project_id: int,
     hw_id: int,
+    body: HardwareCostAnalysisRequest = Body(default_factory=HardwareCostAnalysisRequest),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    body: dict[str, Any] = Body(default_factory=dict),
 ):
     """
     Body: ``target_price_inr`` (optional), ``moq`` (optional, default 500).
@@ -758,8 +762,8 @@ def run_cost_analysis(
     spec = dict(spec)
     spec["category"] = (hw.category or "consumer_hardware").strip().lower() or "consumer_hardware"
 
-    target_price = float(body.get("target_price_inr", hw.target_price_inr or 1999))
-    moq = int(body.get("moq", 500))
+    target_price = float(body.target_price_inr or hw.target_price_inr or 1999)
+    moq = int(body.moq)
 
     estimate = _cost_analyser.estimate(spec, target_price, moq)
     result = estimate.to_dict()
@@ -852,9 +856,9 @@ def get_cost_analysis(
 def trigger_consumer_simulation(
     project_id: int,
     hw_id: int,
+    body: HardwareTriggerConsumerSimRequest = Body(default_factory=HardwareTriggerConsumerSimRequest),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    body: dict[str, Any] = Body(default_factory=dict),
 ):
     _get_owned_project(db, project_id, current_user.id)
     hw = db.execute(

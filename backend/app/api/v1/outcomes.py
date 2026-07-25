@@ -14,6 +14,7 @@ from app.models.simulation import Simulation
 from app.models.user import User
 from app.schemas.outcome import (
     OutcomeCreate,
+    OutcomeFeedbackRequest,
     OutcomeHistoryOut,
     OutcomeRecord,
     VarianceReport,
@@ -142,7 +143,7 @@ def _predicted_from_results(results: dict) -> float:
 )
 def submit_outcome_feedback(
     project_id: int,
-    body: dict,
+    body: OutcomeFeedbackRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -154,14 +155,8 @@ def submit_outcome_feedback(
     from app.simulation.calibration_engine import CalibrationEngine
     from app.tasks.calibration_tasks import run_systematic_bias_update
 
-    simulation_id = body.get("simulation_id")
-    actual_cr = body.get("actual_conversion_rate")
-
-    if simulation_id is None or actual_cr is None:
-        raise HTTPException(
-            status_code=400,
-            detail="simulation_id and actual_conversion_rate are required",
-        )
+    simulation_id = body.simulation_id
+    actual_cr = body.actual_conversion_rate
 
     project = get_owned_project(db, current_user.id, project_id)
 
@@ -173,7 +168,6 @@ def submit_outcome_feedback(
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
 
-    actual_cr = float(actual_cr)
     results = sim.results_json or {}
     predicted = _predicted_from_results(results)
 
@@ -200,8 +194,8 @@ def submit_outcome_feedback(
 
     # ── Compute learning_weight ──
     conf_weights = {"EXACT": 1.0, "ESTIMATED": 0.6, "ROUGH": 0.3}
-    data_confidence = str(body.get("data_confidence", "ESTIMATED")).upper()
-    product_changed = bool(body.get("product_changed_since_sim", False))
+    data_confidence = body.data_confidence
+    product_changed = body.product_changed_since_sim
     conf_w = conf_weights.get(data_confidence, 0.3)
     sq = float(sim.signal_quality or 0.0)
 
@@ -229,15 +223,15 @@ def submit_outcome_feedback(
         {
             "sid": simulation_id,
             "pid": project_id,
-            "days": int(body.get("days_since_launch", 90)),
+            "days": body.days_since_launch,
             "acr": actual_cr,
-            "br": body.get("actual_drop_at_browse_pct"),
-            "cr_val": body.get("actual_drop_at_consider_pct"),
-            "dr": body.get("actual_drop_at_decide_pct"),
-            "pfr": body.get("primary_failure_reason"),
+            "br": body.actual_drop_at_browse_pct,
+            "cr_val": body.actual_drop_at_consider_pct,
+            "dr": body.actual_drop_at_decide_pct,
+            "pfr": body.primary_failure_reason,
             "pc": product_changed,
-            "pricing": bool(body.get("pricing_changed", False)),
-            "tm": bool(body.get("target_market_changed", False)),
+            "pricing": body.pricing_changed,
+            "tm": body.target_market_changed,
             "dc": data_confidence,
             "sq": sq,
             "lw": learning_weight,

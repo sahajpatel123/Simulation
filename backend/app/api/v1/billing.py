@@ -15,6 +15,7 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.tier_enforcement import TIER_LIMITS
 from app.models.user import User
+from app.schemas.billing import CreateSubscriptionRequest
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -47,7 +48,7 @@ def _plan_to_tier_map() -> dict[str, str]:
     responses=_JSON_200,
 )
 async def create_subscription(
-    body: dict,
+    body: CreateSubscriptionRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -56,9 +57,7 @@ async def create_subscription(
     Creates a Razorpay subscription and returns
     subscription_id + razorpay_key for frontend checkout.
     """
-    plan_key = (body.get("plan") or "pro").lower()
-    if plan_key not in ("pro", "enterprise"):
-        raise HTTPException(400, detail='plan must be "pro" or "enterprise"')
+    plan_key = body.plan
     if plan_key == "pro":
         plan_id = settings.RAZORPAY_PRO_PLAN_ID
     else:

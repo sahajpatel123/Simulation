@@ -27,6 +27,30 @@ class FounderOutcomeSubmit(BaseModel):
     notes: str | None = Field(default=None, max_length=500)
 
 
+class OutcomeFeedbackRequest(BaseModel):
+    """Body for POST /projects/{id}/outcome-feedback (full calibration flow).
+
+    Replaces the prior ``body: dict`` with manual validation. Every
+    numeric is range-checked, every text field is length-capped, and
+    unknown keys are rejected via ``extra="forbid"``.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    simulation_id: int = Field(..., ge=1)
+    actual_conversion_rate: float = Field(..., ge=0.0, le=1.0)
+    days_since_launch: int = Field(default=90, ge=1, le=3650)
+    data_confidence: Literal["EXACT", "ESTIMATED", "ROUGH"] = "ESTIMATED"
+    product_changed_since_sim: bool = False
+    pricing_changed: bool = False
+    target_market_changed: bool = False
+    actual_drop_at_browse_pct: float | None = Field(default=None, ge=0.0, le=1.0)
+    actual_drop_at_consider_pct: float | None = Field(default=None, ge=0.0, le=1.0)
+    actual_drop_at_decide_pct: float | None = Field(default=None, ge=0.0, le=1.0)
+    primary_failure_reason: str | None = Field(default=None, max_length=500)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
 class OutcomeCreate(BaseModel):
     actual_conversion_rate: float = Field(..., ge=0.0, le=1.0)
     actual_mrr: float = Field(..., ge=0.0)
