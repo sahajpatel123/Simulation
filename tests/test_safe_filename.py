@@ -863,3 +863,18 @@ class TestShellSafety:
                 pass  # excluded above
             else:
                 assert out == "a_", f"chr({i}) did not become '_'; got {out!r}"
+
+    def test_mixed_case_with_digits(self) -> None:
+        """Pins that mixed-case alphanumeric tokens round-trip
+        unchanged, including the common ``ProjectName123``
+        convention.
+
+        ``\"ABC123\"`` → ``\"ABC123\"``
+        ``\"Abc123\"`` → ``\"Abc123\"``
+        ``\"aBcDeF\"`` → ``\"aBcDeF\"``
+        ``\"Project 2024\"`` → ``\"Project 2024\"`` (digits +
+        space preserved)"""
+        assert _reports._safe_filename("ABC123") == "ABC123"
+        assert _reports._safe_filename("Abc123") == "Abc123"
+        assert _reports._safe_filename("aBcDeF") == "aBcDeF"
+        assert _reports._safe_filename("Project 2024") == "Project 2024"
