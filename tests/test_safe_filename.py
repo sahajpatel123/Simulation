@@ -839,3 +839,27 @@ class TestShellSafety:
         — it doesn't matter how long the input is."""
         for t in ("a" * 1000, "A" * 1000, "_" * 1000):
             assert len(_reports._safe_filename(t)) == 40
+
+    def test_alnum_followed_by_every_byte(self) -> None:
+        """Pins the contract for ``\"a\"`` followed by every possible
+        second byte (0x00–0xff except space and 'a'): alnum digits
+        and letters round-trip, allowed specials (``-``, ``_``,
+        space) round-trip, everything else becomes ``_``.
+
+        Without this test, a future \"simplification\" that
+        changed the allowed-char check (e.g. adding a regex test)
+        would silently change the contract for some byte values.
+        """
+        for i in range(128):
+            if i in (ord("a"), ord(" ")):
+                continue
+            t = "a" + chr(i)
+            out = _reports._safe_filename(t)
+            if i == ord("-"):
+                assert out == "a-"
+            elif chr(i).isalnum():
+                assert out == t, f"alnum chr({i}) did not round-trip; got {out!r}"
+            elif i in (ord(" "),):
+                pass  # excluded above
+            else:
+                assert out == "a_", f"chr({i}) did not become '_'; got {out!r}"
