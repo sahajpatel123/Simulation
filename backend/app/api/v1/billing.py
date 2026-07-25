@@ -47,6 +47,9 @@ def _plan_to_tier_map() -> dict[str, str]:
     "/create-subscription",
     summary="Create Razorpay subscription checkout payload",
     responses=_JSON_200,
+    # Razorpay API call + DB writes — cap path-spam at 10/min/IP
+    # so a single actor can't drain the Razorpay API quota.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 async def create_subscription(
     body: CreateSubscriptionRequest,
