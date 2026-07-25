@@ -302,3 +302,22 @@ class TestShellSafety:
         assert _reports._safe_filename("AB") == "AB"
         assert _reports._safe_filename("123") == "123"
         assert _reports._safe_filename("A1B2") == "A1B2"
+
+    def test_single_char_whitespace_falls_back(self) -> None:
+        """A single space strips to empty → fallback ``"project"``."""
+        assert _reports._safe_filename(" ") == "project"
+
+    def test_single_underscore_preserved(self) -> None:
+        """A single ``_`` is allowed and not empty after strip —
+        passes through unchanged."""
+        assert _reports._safe_filename("_") == "_"
+
+    def test_single_dash_preserved(self) -> None:
+        """A single ``-`` is allowed and not empty after strip —
+        passes through unchanged."""
+        assert _reports._safe_filename("-") == "-"
+
+    def test_single_disallowed_char_replaced(self) -> None:
+        """A single disallowed char (e.g. ``!``) becomes ``_`` —
+        passes through (not the ``"project"`` fallback)."""
+        assert _reports._safe_filename("!") == "_"
