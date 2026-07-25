@@ -384,3 +384,13 @@ class TestShellSafety:
         assert _reports._safe_filename("\r\r\r") == "___"
         assert _reports._safe_filename("a\r\nb\rc") == "a__b_c"
         assert _reports._safe_filename("\n\n\n") == "___"
+
+    def test_length_and_strip_boundary(self) -> None:
+        """Pins the interaction between the length cap and
+        ``strip()``: stripping happens BEFORE the slice, so a
+        39-char string with trailing whitespace becomes the
+        39-char string (not 40-char). A trailing newline becomes
+        a ``_`` so the result is 40 chars."""
+        assert _reports._safe_filename("a" * 39 + "  ") == "a" * 39
+        assert _reports._safe_filename("a" * 39 + "\n") == "a" * 39 + "_"
+        assert _reports._safe_filename("a" * 39 + "\t") == "a" * 39 + "_"
