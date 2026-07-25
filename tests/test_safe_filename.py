@@ -1098,3 +1098,28 @@ class TestShellSafety:
                     f"char {c!r} (U+{ord(c):04X}) in output "
                     f"for {t!r}: {out!r}"
                 )
+
+    def test_output_chars_are_input_derived(self) -> None:
+        """Property test: every char in the output (other than the
+        fallback ``\"project\"``) is either present in the input OR
+        is one of the allowed-special replacement chars
+        (``_`` or ``' '``).
+
+        This pins the invariant that the function never introduces
+        a char that wasn't in the input (after replace). Catches any
+        future regression that accidentally added new chars to the
+        replacement strategy."""
+        allowed_specials = {"_", " "}
+        for t in (
+            "hello", "café", "a b c", "!@#", "🚀", "日本語",
+        ):
+            out = _reports._safe_filename(t)
+            if out == "project":
+                continue
+            for c in out:
+                is_in_input = c in t
+                is_special = c in allowed_specials
+                assert is_in_input or is_special, (
+                    f"char {c!r} not in input {t!r} and not a "
+                    f"special: {out!r}"
+                )
