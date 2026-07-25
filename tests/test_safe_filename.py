@@ -945,3 +945,21 @@ class TestShellSafety:
                 f"None returned for {t!r}"
             )
             assert isinstance(out, str)
+
+    def test_alnum_core_round_trips_exactly(self) -> None:
+        """Property test: any input that consists ONLY of allowed
+        chars (alnum + space + dash + underscore) round-trips
+        exactly — ``_safe_filename(x) == x``.
+
+        This pins the function's identity for safe inputs. Any input
+        that doesn't change should not be modified. A future
+        \"simplification\" that added unexpected normalization (e.g.
+        unicode folding, NFC) would silently break this contract."""
+        for t in (
+            "a", "ab", "abc", "a1b2", "A B C", "1 2 3", "a_b",
+            "a-b", "hello world", "Test 123",
+        ):
+            assert t == _reports._safe_filename(t), (
+                f"{t!r} did not round-trip exactly: "
+                f"{_reports._safe_filename(t)!r}"
+            )
