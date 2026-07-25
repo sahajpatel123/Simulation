@@ -1022,3 +1022,23 @@ class TestShellSafety:
             assert "\x00" not in out, (
                 f"NUL byte in output for {t!r}: {out!r}"
             )
+
+    def test_determinism_across_invocations(self) -> None:
+        """Property test: calling ``_safe_filename`` repeatedly on
+        the same input always returns the same output.
+
+        This pins the function's determinism — a future
+        \"simplification\" that introduced randomness (e.g. for
+        filename collision avoidance) would silently change the
+        contract and could break callers that cache the sanitized
+        filename."""
+        for t in (
+            "hello", "test title!", "a b c", "normal", "", "!@#$%",
+        ):
+            out1 = _reports._safe_filename(t)
+            out2 = _reports._safe_filename(t)
+            out3 = _reports._safe_filename(t)
+            assert out1 == out2 == out3, (
+                f"not deterministic for {t!r}: "
+                f"{out1!r} != {out2!r} != {out3!r}"
+            )
