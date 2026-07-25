@@ -630,3 +630,17 @@ class TestShellSafety:
         assert _reports._safe_filename("a") == "a"
         assert _reports._safe_filename("A") == "A"
         assert _reports._safe_filename("1") == "1"
+
+    def test_replace_then_slice_preserves_length(self) -> None:
+        """Pins that replace happens BEFORE slice, so a 40-char
+        input with a trailing disallowed char is replaced first
+        (becoming 40 chars with a trailing ``_``), then the slice
+        keeps it at 40. The 41st char is only created when the
+        input itself is ≥41 chars (and then it gets dropped by
+        the slice)."""
+        out = _reports._safe_filename("a" * 39 + "!")
+        assert len(out) == 40
+        assert out.endswith("_")
+        out = _reports._safe_filename("a" * 38 + "!!")
+        assert len(out) == 40
+        assert out.endswith("__")
