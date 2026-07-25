@@ -59,7 +59,7 @@ class ProjectDuplicateOut(BaseModel):
         }
     )
 
-    project: ProjectOut
+    project: "ProjectOut"  # type: ignore[assignment]
     source_project_id: int
     simulations_copied: int = 0
     environment_copied: bool = False
