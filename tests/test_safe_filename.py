@@ -248,3 +248,21 @@ class TestShellSafety:
         """Each disallowed char becomes exactly one ``_`` — no
         shortening (modulo the trailing strip)."""
         assert len(_reports._safe_filename("a" * 10 + "!" * 10)) == 20
+
+    def test_underscore_passes_through_with_alnum(self) -> None:
+        """``_a_`` round-trips — underscores are allowed and the
+        trailing ``_`` doesn't trigger strip()."""
+        assert _reports._safe_filename("_a_") == "_a_"
+
+    def test_double_underscore_passes_through(self) -> None:
+        """Multiple underscores in a row are all preserved."""
+        assert _reports._safe_filename("__test__") == "__test__"
+
+    def test_underscore_between_alnum_passes_through(self) -> None:
+        """Snake-case title ``a_b_c`` round-trips unchanged."""
+        assert _reports._safe_filename("a_b_c") == "a_b_c"
+
+    def test_underscore_only_becomes_solid_underscore(self) -> None:
+        """``_!_`` (underscores with a non-allowed char between)
+        becomes ``___`` — every char is allowed (3 underscores)."""
+        assert _reports._safe_filename("_!_") == "___"
