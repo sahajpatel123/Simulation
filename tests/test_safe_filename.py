@@ -700,3 +700,18 @@ class TestShellSafety:
         assert _reports._safe_filename(chr(0xa0)) == "_"
         # ``\\xFF`` is ``\"ÿ\"`` which IS alnum.
         assert _reports._safe_filename(chr(0xff)) == chr(0xff)
+
+    def test_idempotency(self) -> None:
+        """Pins the contract that ``_safe_filename`` is idempotent —
+        applying it twice yields the same result as applying it once.
+
+        This is useful for callers that may invoke the function
+        defensively (e.g. pre-process user-provided filenames twice)
+        and rely on the second call being a no-op."""
+        for t in ("hello world!", "normal title", "   spaced   title   ",
+                  "!@#$%^&*()"):
+            once = _reports._safe_filename(t)
+            twice = _reports._safe_filename(once)
+            assert once == twice, (
+                f"idempotency violated for {t!r}: {once!r} != {twice!r}"
+            )
