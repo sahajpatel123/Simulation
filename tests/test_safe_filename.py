@@ -1,0 +1,125 @@
+"""Regression tests for the _safe_filename helper used in Content-Disposition.
+
+``_safe_filename`` produces the filename embedded in the
+``Content-Disposition`` header for PDF report downloads. The function
+is the last line of defence against header-smuggling characters
+(CR / LF / quote / semicolon) and against path-traversal-like
+strings leaking into the user's download folder.
+
+These tests pin:
+- Allowed character set (alnum + space + dash + underscore)
+- Disallowed characters become ``_`` (not stripped — keeps length)
+- Empty / whitespace-only input falls back to ``"project"``
+- Length is capped at 40 chars
+- No control characters, quotes, or semicolons can reach the header
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import sys
+from pathlib import Path
+
+# Bypass the package __init__ chain (razorpay etc.) by loading the
+# reports module directly via spec.
+_REPORTS_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "backend"
+    / "app"
+    / "api"
+    / "v1"
+    / "reports.py"
+)
+
+
+def _load_reports_module():
+    # Stub razorpay so the package __init__ chain doesn't fail locally.
+    if "razorpay" not in sys.modules:
+        stub = type(sys)("razorpay")
+        stub.Client = type("Client", (), {})
+        sys.modules["razorpay"] = stub
+
+    spec = importlib.util.spec_from_file_location(
+        "reports_under_test", _REPORTS_PATH
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_reports = _load_reports_module()
+
+
+class TestAllowedChars:
+    def test_passthrough_ascii_alnum(self) -> None:
+        assert _reports._safe_filename("MyProject123") == "MyProject123"
+
+    def test_passthrough_dash_underscore(self) -> None:
+        assert _reports._safe_filename("My-Project_v2") == "My-Project_v2"
+
+    def test_passthrough_spaces(self) -> None:
+        assert _reports._safe_filename("My Project Name") == "My Project Name"
+
+    def test_max_length_40(self) -> None:
+        out = _reports._safe_filename("x" * 100)
+        assert len(out) == 40
+
+
+class TestDisallowedCharsReplaced:
+    def test_slash_replaced(self) -> None:
+        """Path-traversal-ish ``/`` must not reach the header."""
+        assert "/" not in _reports._safe_filename("../etc/passwd")
+
+    def test_backslash_replaced(self) -> None:
+        assert "\\" not in _reports._safe_filename("a\\b")
+
+    def test_dotdot_replaced(self) -> None:
+        out = _reports._safe_filename("..")
+        assert out == "__"  # two dots → two underscores
+
+    def test_quote_replaced(self) -> None:
+        out = _reports._safe_filename('a"b')
+        assert '"' not in out
+
+    def test_semicolon_replaced(self) -> None:
+        out = _reports._safe_filename("a;b")
+        assert ";" not in out
+
+    def test_angle_bracket_replaced(self) -> None:
+        """< and > must never reach Content-Disposition — they would
+        confuse parsers and could enable header injection."""
+        out = _reports._safe_filename("<script>")
+        assert "<" not in out
+        assert ">" not in out
+
+
+class TestControlChars:
+    def test_crlf_replaced(self) -> None:
+        """CR / LF would split the HTTP header — must be filtered."""
+        out = _reports._safe_filename("a\r\nb")
+        assert "\r" not in out
+        assert "\n" not in out
+
+    def test_null_byte_replaced(self) -> None:
+        out = _reports._safe_filename("a\x00b")
+        assert "\x00" not in out
+
+    def test_tab_replaced(self) -> None:
+        out = _reports._safe_filename("a\tb")
+        assert "\t" not in out
+
+
+class TestFallback:
+    def test_empty_falls_back_to_project(self) -> None:
+        assert _reports._safe_filename("") == "project"
+
+    def test_whitespace_only_falls_back(self) -> None:
+        assert _reports._safe_filename("    ") == "project"
+
+    def test_punctuation_only_does_not_fall_back(self) -> None:
+        """``...`` becomes ``___`` (3 underscores), which is a valid
+        filename — the fallback only triggers when the stripped result
+        is fully empty. Punctuation-only inputs become underscored
+        names that are still safe to drop into Content-Disposition."""
+        assert _reports._safe_filename("...") == "___"
