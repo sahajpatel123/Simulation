@@ -367,3 +367,11 @@ class TestShellSafety:
             _reports._safe_filename("AAAAA_____11111")
             == "AAAAA_____11111"
         )
+
+    def test_nul_byte_replaced(self) -> None:
+        """A NUL byte (``\\x00``) is replaced with ``_`` so the
+        filename string never contains a NUL — C-level path handlers
+        terminate on NUL."""
+        out = _reports._safe_filename("hello\x00world")
+        assert "\x00" not in out
+        assert out == "hello_world"
