@@ -9,9 +9,11 @@ class ScenarioParameters(BaseModel):
     market_maturity: float | None = Field(default=None, ge=0.0, le=1.0)
     growth_rate_per_month: float | None = Field(default=None, ge=-50.0, le=200.0)
     consumer_volume: int | None = Field(default=None, ge=100)
-    positioning: str | None = None
-    go_to_market: str | None = None
-    notes: str | None = None
+    # Free-text fields that flow into the LLM prompt. Cap them so a
+    # single request cannot inject megabytes into the worker.
+    positioning: str | None = Field(default=None, max_length=500)
+    go_to_market: str | None = Field(default=None, max_length=500)
+    notes: str | None = Field(default=None, max_length=1000)
 
 
 class ScenarioIn(BaseModel):
