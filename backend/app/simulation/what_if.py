@@ -670,6 +670,7 @@ __all__ = [
     "scenarios_with_any_category_count",
     "count_with_matched_categories",
     "scenarios_with_recommendations_count",
+    "count_with_recommendations",
 ]
 
 
@@ -1150,6 +1151,15 @@ def count_with_matched_categories(
 def scenarios_with_recommendations_count(scenarios: list[WhatIfOut]) -> int:
     """Return the number of scenarios that have at least one WhatIfRecommendation."""
     return sum(1 for scenario in scenarios if scenario.has_recommendations())
+
+
+def count_with_recommendations(scenarios: list[WhatIfOut]) -> int:
+    """Alias for ``scenarios_with_recommendations_count`` for naming consistency.
+
+    Equivalent to ``len(scenarios_with_recommendations(scenarios))``
+    without the intermediate list allocation.
+    """
+    return scenarios_with_recommendations_count(scenarios)
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
