@@ -715,3 +715,29 @@ class TestShellSafety:
             assert once == twice, (
                 f"idempotency violated for {t!r}: {once!r} != {twice!r}"
             )
+
+    def test_homograph_unicode_round_trips(self) -> None:
+        """Pins that Cyrillic / accented Latin chars (which look
+        visually similar to ASCII letters in homograph attacks)
+        round-trip unchanged.
+
+        ``\"рауl\"`` (Cyrillic а + Latin p + y + Latin l) →
+        ``\"рауl\"``
+        ``\"аlice\"`` (Cyrillic а + Latin l i c e) → ``\"аlice\"``
+        ``\"аdmin\"`` (Cyrillic а + Latin d m i n) → ``\"аdmin\"``
+        ``\"google\"`` → ``\"google\"``
+        ``\"paypal\"`` → ``\"paypal\"``
+
+        This pins the contract that the function preserves Unicode
+        alnum (it doesn't normalize to ASCII). A future
+        \"simplification\" that called ``unicodedata.normalize(\"NFKD\", ...)``
+        would silently break the homograph defense (and also
+        legitimately non-English founders' titles). The function
+        correctly leaves Unicode alone and relies on downstream
+        rendering to handle visual safety.
+        """
+        assert _reports._safe_filename("рауl") == "рауl"
+        assert _reports._safe_filename("аlice") == "аlice"
+        assert _reports._safe_filename("аdmin") == "аdmin"
+        assert _reports._safe_filename("google") == "google"
+        assert _reports._safe_filename("paypal") == "paypal"
