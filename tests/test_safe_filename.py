@@ -443,3 +443,25 @@ class TestShellSafety:
         assert _reports._safe_filename("a -b") == "a -b"
         assert _reports._safe_filename("a- b") == "a- b"
         assert _reports._safe_filename("a  -  b") == "a  -  b"
+
+    def test_version_string_round_trip(self) -> None:
+        """Version-like strings (digits + alnum + dashes) round-trip.
+        The dot is the only char that gets replaced with ``_``.
+
+        ``\"1.0\"`` → ``\"1_0\"``
+        ``\"v1.0\"`` → ``\"v1_0\"``
+        ``\"v2\"`` → ``\"v2\"``
+        ``\"2024Q3\"`` → ``\"2024Q3\"``
+        ``\"2024-12-25\"`` → ``\"2024-12-25\"``
+
+        Pins that the dot is replaced (it's not alnum, not space,
+        not dash/underscore) — a common version separator that
+        would otherwise break OS-level path handling on some shells.
+        ``\":\"`` and ``\"/\"`` are already covered by the
+        disallowed-chars tests above."""
+        assert _reports._safe_filename("123") == "123"
+        assert _reports._safe_filename("1.0") == "1_0"
+        assert _reports._safe_filename("v1.0") == "v1_0"
+        assert _reports._safe_filename("v2") == "v2"
+        assert _reports._safe_filename("2024Q3") == "2024Q3"
+        assert _reports._safe_filename("2024-12-25") == "2024-12-25"
