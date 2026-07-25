@@ -641,6 +641,7 @@ __all__ = [
     "scenarios_average_delta",
     "count_by_category",
     "scenarios_average_delta_pct",
+    "scenarios_with_recommendations",
 ]
 
 
@@ -876,6 +877,11 @@ def scenarios_with_all_categories(
         scenario for scenario in scenarios
         if scenario.has_all_categories(categories)
     ]
+
+
+def scenarios_with_recommendations(scenarios: list[WhatIfOut]) -> list[WhatIfOut]:
+    """Return only scenarios that have at least one recommendation attached."""
+    return [scenario for scenario in scenarios if scenario.has_recommendations()]
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
