@@ -679,3 +679,24 @@ class TestShellSafety:
                 f"control char chr({ord(c)}) did not become '_'; "
                 f"got {out!r}"
             )
+
+    def test_high_bit_bytes_pin_isalnum(self) -> None:
+        """Pins that ``isalnum()`` correctly distinguishes Latin-1
+        alnum (e.g. ``ÿ`` = chr(255), ``chr(0x80)``) from
+        non-alnum high-bit bytes:
+
+        - ``chr(0x80)`` is not alnum → ``\"_\"``
+        - ``chr(0x90)`` is not alnum → ``\"_\"``
+        - ``chr(0xa0)`` is not alnum → ``\"_\"``
+        - ``chr(0xff)`` (``\"ÿ\"``) IS alnum → round-trips
+
+        Pin so a future \"simplification\" that changes the alnum
+        threshold (e.g. dropping the ``\".isalnum()\"`` for a regex
+        like ``r\"^[A-Za-z0-9]+$\"`` which excludes non-ASCII alnum)
+        would silently change the contract for non-English founders.
+        """
+        assert _reports._safe_filename(chr(0x80)) == "_"
+        assert _reports._safe_filename(chr(0x90)) == "_"
+        assert _reports._safe_filename(chr(0xa0)) == "_"
+        # ``\\xFF`` is ``\"ÿ\"`` which IS alnum.
+        assert _reports._safe_filename(chr(0xff)) == chr(0xff)
