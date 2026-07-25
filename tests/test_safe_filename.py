@@ -465,3 +465,23 @@ class TestShellSafety:
         assert _reports._safe_filename("v2") == "v2"
         assert _reports._safe_filename("2024Q3") == "2024Q3"
         assert _reports._safe_filename("2024-12-25") == "2024-12-25"
+
+    def test_special_token_round_trip(self) -> None:
+        """Common title tokens — TODO markers, semver-ish, draft
+        flags — round-trip with the predictable replacement rules:
+
+        - ``\"TODO:\"`` → ``\"TODO_\"`` (colon replaced)
+        - ``\"FIXME[bug]\"`` → ``\"FIXME_bug_\"`` (brackets replaced)
+        - ``\"v0.0.1-alpha\"`` → ``\"v0_0_1-alpha\"`` (dots replaced,
+          dash preserved)
+        - ``\"draft (WIP)\"`` → ``\"draft _WIP_\"`` (parens replaced)
+        - ``\"Q4 2024\"`` → ``\"Q4 2024\"`` (alnum + space round-trip)
+
+        Pins the contract for these realistic founder-title shapes
+        so a future simplification that drops a replacement rule
+        silently changes the downloaded filename."""
+        assert _reports._safe_filename("TODO:") == "TODO_"
+        assert _reports._safe_filename("FIXME[bug]") == "FIXME_bug_"
+        assert _reports._safe_filename("v0.0.1-alpha") == "v0_0_1-alpha"
+        assert _reports._safe_filename("draft (WIP)") == "draft _WIP_"
+        assert _reports._safe_filename("Q4 2024") == "Q4 2024"
