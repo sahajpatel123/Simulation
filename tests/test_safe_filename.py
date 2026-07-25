@@ -516,3 +516,18 @@ class TestShellSafety:
         assert _reports._safe_filename("a|b") == "a_b"
         assert _reports._safe_filename("a&b") == "a_b"
         assert _reports._safe_filename("a<b>c") == "a_b_c"
+
+    def test_emoji_replaced(self) -> None:
+        """Pins the contract that emoji are replaced with ``_``.
+
+        Modern browsers and OS filesystems handle Unicode filenames
+        natively, but emoji are visually large and may render
+        poorly in downloaded-file pickers. The function deliberately
+        keeps the surrounding alnum core and replaces the emoji
+        with ``_`` for consistency."""
+        assert _reports._safe_filename("🎉") == "_"
+        assert _reports._safe_filename("🚀 launch") == "_ launch"
+        assert _reports._safe_filename("launch 🚀") == "launch _"
+        assert _reports._safe_filename("a🎉b") == "a_b"
+        # Plain alnum round-trips.
+        assert _reports._safe_filename("ab") == "ab"
