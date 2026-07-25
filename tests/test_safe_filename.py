@@ -235,3 +235,16 @@ class TestShellSafety:
     def test_length_40_spaces_triggers_fallback(self) -> None:
         """40 spaces all strip away, so the fallback fires."""
         assert _reports._safe_filename(" " * 40) == "project"
+
+    def test_mixed_allowed_and_disallowed_chars(self) -> None:
+        """A title with both alnum and special chars: alnum survives,
+        disallowed chars become ``_``. The replacement happens per-char
+        and length is preserved (modulo strip)."""
+        out = _reports._safe_filename("My Project! 2024?")
+        # Letters, digits, space preserved; ! and ? → _
+        assert out == "My Project_ 2024_"
+
+    def test_replacement_preserves_length(self) -> None:
+        """Each disallowed char becomes exactly one ``_`` — no
+        shortening (modulo the trailing strip)."""
+        assert len(_reports._safe_filename("a" * 10 + "!" * 10)) == 20
