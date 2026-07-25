@@ -832,3 +832,10 @@ class TestShellSafety:
         assert _reports._safe_filename(chr(34)) == "_"
         assert _reports._safe_filename("a" + chr(34) + "b") == "a_b"
         assert _reports._safe_filename(chr(34) + "a") == "_a"
+
+    def test_very_long_input_truncates_to_40(self) -> None:
+        """Pins that very long inputs (1000 chars of allowed type)
+        truncate to exactly 40 chars. The slice cap is unconditional
+        — it doesn't matter how long the input is."""
+        for t in ("a" * 1000, "A" * 1000, "_" * 1000):
+            assert len(_reports._safe_filename(t)) == 40
