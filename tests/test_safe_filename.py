@@ -275,3 +275,18 @@ class TestShellSafety:
     def test_snake_case_passes_through(self) -> None:
         """Common snake_case title like ``MyProject_V2`` passes through."""
         assert _reports._safe_filename("MyProject_V2") == "MyProject_V2"
+
+    def test_trailing_whitespace_and_alnum_preserves_alnum(self) -> None:
+        """``"  hello  "`` strips to ``"hello"`` — the surrounding
+        whitespace is consumed but the alnum core survives."""
+        assert _reports._safe_filename("  hello  ") == "hello"
+
+    def test_trailing_whitespace_only_after_alnum_preserves(self) -> None:
+        """``"hello   "`` strips trailing whitespace but the leading
+        alnum is unchanged."""
+        assert _reports._safe_filename("hello   ") == "hello"
+
+    def test_leading_alnum_only_after_whitespace_preserves(self) -> None:
+        """``"   hello"`` strips leading whitespace but the trailing
+        alnum is unchanged."""
+        assert _reports._safe_filename("   hello") == "hello"
