@@ -262,6 +262,11 @@ def get_signal_quality(
     response_model=SimulationComparisonOut,
     summary="Compare 2–5 simulations side-by-side (A/B winner, cluster & domain deltas)",
     responses=_JSON_200,
+    # Pure analytics — no LLM, no Celery — but the comparison itself
+    # does per-cluster / per-domain rollups over the stored
+    # ``results_json``. Cap the path at 30/min/IP so a single actor
+    # can't pin a worker on heavy analytics workloads.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
 def compare_simulations(
     payload: SimulationCompareRequest,
@@ -556,6 +561,10 @@ def get_simulation_stress_scenarios(
     response_model=WhatIfOut,
     summary="Project conversion impact of new or modified assumptions",
     responses=_JSON_200,
+    # Heavy Markov recomputation over the existing results + user
+    # assumptions. Cap path-spam at 30/min/IP for the same reason as
+    # the simulations POST limit.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
 def post_what_if(
     payload: WhatIfRequest,
