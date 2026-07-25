@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_admin
 from app.models.user import User
 from app.schemas.portfolio import UserPortfolioOut
 from app.schemas.calibration import CalibrationStatusOut
@@ -36,13 +36,8 @@ _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}
 
 
 def _require_admin(current_user: User) -> None:
-    if getattr(current_user, "is_admin", False):
-        return
-    if settings.ADMIN_EMAILS:
-        allowed = {e.strip().lower() for e in settings.ADMIN_EMAILS.split(",") if e.strip()}
-        if current_user.email and current_user.email.lower() in allowed:
-            return
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+    """Deprecated alias — see :func:`app.core.deps.require_admin`."""
+    require_admin(current_user)
 
 
 @router.get(
