@@ -672,6 +672,7 @@ __all__ = [
     "scenarios_with_recommendations_count",
     "count_with_recommendations",
     "recommendations_ratio",
+    "assumptions_ratio",
 ]
 
 
@@ -1171,6 +1172,16 @@ def recommendations_ratio(scenarios: list[WhatIfOut]) -> float:
     if not scenarios:
         return 0.0
     return count_with_recommendations(scenarios) / len(scenarios)
+
+
+def assumptions_ratio(scenarios: list[WhatIfOut]) -> float:
+    """Return the fraction of scenarios with at least one assumption (0.0–1.0).
+
+    Returns 0.0 for an empty input.
+    """
+    if not scenarios:
+        return 0.0
+    return sum(1 for scenario in scenarios if scenario.assumptions_applied) / len(scenarios)
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
