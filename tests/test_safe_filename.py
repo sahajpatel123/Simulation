@@ -1123,3 +1123,21 @@ class TestShellSafety:
                     f"char {c!r} not in input {t!r} and not a "
                     f"special: {out!r}"
                 )
+
+    def test_consecutive_dashes_preserved(self) -> None:
+        """Pins that consecutive dashes are preserved (not collapsed
+        to a single dash).
+
+        ``\"a-b\"`` → ``\"a-b\"``
+        ``\"a--b\"`` → ``\"a--b\"``
+        ``\"a---b\"`` → ``\"a---b\"``
+        ``\"a-b-c\"`` → ``\"a-b-c\"``
+        ``\"----\"`` → ``\"----\"``
+
+        Pin so a future \"simplification\" that collapsed repeated
+        dashes wouldn't silently change the output."""
+        assert _reports._safe_filename("a-b") == "a-b"
+        assert _reports._safe_filename("a--b") == "a--b"
+        assert _reports._safe_filename("a---b") == "a---b"
+        assert _reports._safe_filename("a-b-c") == "a-b-c"
+        assert _reports._safe_filename("----") == "----"
