@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -7,16 +7,22 @@ from pydantic import BaseModel, Field
 class ProjectPatch(BaseModel):
     """Partial update for a dossier (title rename, description edits)."""
 
-    title: str | None = None
-    description: str | None = None
+    title: str | None = Field(default=None, max_length=500)
+    description: str | None = Field(default=None, max_length=5000)
 
 
 class ProjectCreate(BaseModel):
-    title: str = "Untitled"
-    description: str
+    title: str = Field(default="Untitled", max_length=500)
+    description: str = Field(..., max_length=5000)
     intake_mode: Literal["IDEA", "MID_BUILD", "PRE_LAUNCH"] = "IDEA"
     landing_page_url: str | None = Field(default=None, max_length=2048)
-    mvp_feature_list: list[str] = Field(default_factory=list, max_length=50)
+    # Cap both the list length AND each string item. ``Field(max_length=50)``
+    # only constrains the list — without per-item caps a user could submit
+    # 50 strings of 10MB each, which would then be concatenated into the
+    # LLM prompt via "Shipped features: ..." in intake_processor.
+    mvp_feature_list: list[Annotated[str, Field(max_length=200)]] = Field(
+        default_factory=list, max_length=50
+    )
     existing_product_description: str | None = Field(default=None, max_length=5000)
     dossier_axis: Literal["software", "hardware"] = "software"
 
