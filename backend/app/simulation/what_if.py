@@ -664,6 +664,7 @@ __all__ = [
     "scenarios_with_negative_pct",
     "count_with_positive_pct",
     "count_with_negative_pct",
+    "total_recommendation_count",
 ]
 
 
@@ -1093,6 +1094,11 @@ def count_with_positive_pct(scenarios: list[WhatIfOut]) -> int:
 def count_with_negative_pct(scenarios: list[WhatIfOut]) -> int:
     """Return the number of scenarios with strictly negative ``conversion_delta_pct``."""
     return sum(1 for scenario in scenarios if scenario.conversion_delta_pct < 0.0)
+
+
+def total_recommendation_count(scenarios: list[WhatIfOut]) -> int:
+    """Return the total number of ``WhatIfRecommendation`` objects across scenarios."""
+    return sum(len(scenario.recommendations) for scenario in scenarios)
 
 
 def count_scenarios(scenarios: list[WhatIfOut]) -> int:
