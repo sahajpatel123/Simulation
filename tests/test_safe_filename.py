@@ -266,3 +266,12 @@ class TestShellSafety:
         """``_!_`` (underscores with a non-allowed char between)
         becomes ``___`` — every char is allowed (3 underscores)."""
         assert _reports._safe_filename("_!_") == "___"
+
+    def test_mixed_case_preserved(self) -> None:
+        """Mixed case is preserved — the function doesn't lowercase."""
+        assert _reports._safe_filename("Hello World") == "Hello World"
+        assert _reports._safe_filename("hELLO wORLD") == "hELLO wORLD"
+
+    def test_snake_case_passes_through(self) -> None:
+        """Common snake_case title like ``MyProject_V2`` passes through."""
+        assert _reports._safe_filename("MyProject_V2") == "MyProject_V2"
