@@ -1778,6 +1778,11 @@ def get_competitive_analysis(
     response_model=EnvironmentOut,
     status_code=200,
     summary="Create or update market environment parameters for a project",
+    # DB write (creates or upserts the project's environment row).
+    # Cap path-spam at 20/min/IP so a runaway script can't churn
+    # through writes — environments are updated manually as the
+    # founder iterates on the simulation inputs.
+    dependencies=[Depends(rate_limit(limit=20, window_s=60))],
 )
 def create_or_update_environment(
     project_id: int,
