@@ -613,3 +613,20 @@ class TestShellSafety:
         assert _reports._safe_filename("\n") == "_"
         assert _reports._safe_filename("\n\n\n") == "___"
         assert _reports._safe_filename("a\n\nb") == "a__b"
+
+    def test_empty_and_single_allowed_chars(self) -> None:
+        """Pins the degenerate cases: empty string and single
+        allowed chars.
+
+        Empty / whitespace-only inputs trigger the fallback
+        ``\"project\"``. Single allowed chars (``_``, ``-``, alnum)
+        round-trip unchanged."""
+        assert _reports._safe_filename("") == "project"
+        assert _reports._safe_filename(" ") == "project"
+        assert _reports._safe_filename("  ") == "project"
+        assert _reports._safe_filename("_") == "_"
+        assert _reports._safe_filename("__") == "__"
+        assert _reports._safe_filename("-") == "-"
+        assert _reports._safe_filename("a") == "a"
+        assert _reports._safe_filename("A") == "A"
+        assert _reports._safe_filename("1") == "1"
