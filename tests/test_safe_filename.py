@@ -109,6 +109,22 @@ class TestControlChars:
         out = _reports._safe_filename("a\tb")
         assert "\t" not in out
 
+    def test_crlf_alone_replaced(self) -> None:
+        """A title that's just CRLF collapses to ``__`` (two
+        underscores), not the ``"project"`` fallback — the stripped
+        result is non-empty."""
+        assert _reports._safe_filename("\r\n") == "__"
+
+    def test_vertical_tab_replaced(self) -> None:
+        """VT (U+000B) is a control char — replaced with ``_``."""
+        out = _reports._safe_filename("\v")
+        assert "\v" not in out
+
+    def test_form_feed_replaced(self) -> None:
+        """FF (U+000C) is a control char — replaced with ``_``."""
+        out = _reports._safe_filename("\f")
+        assert "\f" not in out
+
 
 class TestFallback:
     def test_empty_falls_back_to_project(self) -> None:
