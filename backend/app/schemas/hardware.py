@@ -88,3 +88,30 @@ class HardwareEngineeringPlateOut(BaseModel):
     components: str
     est_mass: str
     scale: str
+
+
+class HardwareTestConfigInput(BaseModel):
+    """One row in ``create_test_configs`` -> ``configs`` list.
+
+    Replaces the prior ``body: dict[str, Any]`` so the API rejects
+    out-of-range severity, oversized parameter blobs, and missing
+    ``test_type`` at the validation layer instead of crashing inside
+    the builder with a generic 500.
+    """
+
+    test_type: str = Field(..., min_length=1, max_length=100)
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    severity_weight: float = Field(default=0.5, ge=0.0, le=1.0)
+
+
+class HardwareCreateTestConfigsRequest(BaseModel):
+    """Body for POST /hardware/{hw_id}/test-configs.
+
+    Either ``use_defaults`` is true to populate from the product's
+    category, or ``configs`` is a non-empty list of explicit rows.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    use_defaults: bool = False
+    configs: list[HardwareTestConfigInput] = Field(default_factory=list, max_length=50)

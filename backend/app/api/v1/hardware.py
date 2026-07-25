@@ -32,6 +32,7 @@ from app.schemas.hardware import (
     HardwareRefineSpecRequest,
     HardwareRefineSpecResponse,
     HardwareRenderHintsOut,
+    HardwareCreateTestConfigsRequest,
 )
 
 router = APIRouter(tags=["hardware"])
@@ -550,7 +551,7 @@ def get_test_results(
 def create_test_configs(
     project_id: int,
     hw_id: int,
-    body: Annotated[dict[str, Any], Body(...)],
+    body: HardwareCreateTestConfigsRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -574,22 +575,17 @@ def create_test_configs(
             detail="Hardware product not found",
         )
 
-    if body.get("use_defaults"):
+    if body.use_defaults:
         ptype = (product.product_type or "consumer_hardware").strip().lower()
         configs = _test_config_builder.defaults_for_category(ptype)
-    elif isinstance(body.get("configs"), list):
+    elif body.configs:
         configs = []
-        for c in body["configs"]:
-            if not isinstance(c, dict) or "test_type" not in c:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Each config must be an object with test_type",
-                )
+        for c in body.configs:
             try:
                 cfg = _test_config_builder.custom_config(
-                    test_type=str(c["test_type"]),
-                    params=dict(c.get("parameters") or {}),
-                    severity_weight=float(c.get("severity_weight", 0.5)),
+                    test_type=c.test_type,
+                    params=dict(c.parameters),
+                    severity_weight=float(c.severity_weight),
                 )
             except (ValueError, TypeError) as e:
                 raise HTTPException(
