@@ -305,6 +305,10 @@ class WhatIfSummary(BaseModel):
             if int(count) > 0
         )
 
+    def unique_categories(self) -> list[str]:
+        """Return the sorted list of unique category names across top_categories."""
+        return sorted({entry.category for entry in self.top_categories})
+
 
 class WhatIfDiff(BaseModel):
     """Pairwise comparison of two ``WhatIfOut`` scenarios."""
