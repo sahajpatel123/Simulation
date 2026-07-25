@@ -321,3 +321,12 @@ class TestShellSafety:
         """A single disallowed char (e.g. ``!``) becomes ``_`` —
         passes through (not the ``"project"`` fallback)."""
         assert _reports._safe_filename("!") == "_"
+
+    def test_alnum_underscore_disallowed_per_char(self) -> None:
+        """Each disallowed char in a mixed string is replaced
+        individually with ``_``. The replacement preserves the
+        surrounding allowed chars."""
+        assert _reports._safe_filename("a_!") == "a__"
+        assert _reports._safe_filename("a!_") == "a__"
+        assert _reports._safe_filename("_a!") == "_a_"
+        assert _reports._safe_filename("!a_") == "_a_"
