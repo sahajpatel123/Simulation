@@ -1073,3 +1073,28 @@ class TestShellSafety:
                 assert not out.endswith(" "), (
                     f"output ends with space for {t!r}: {out!r}"
                 )
+
+    def test_output_uses_only_allowed_chars(self) -> None:
+        """Property test: every char in the output (other than the
+        fallback ``\"project\"``) is either ``str.isalnum()`` or one
+        of the allowed specials (``' '``, ``'-'``, ``'_'``).
+
+        This pins the contract that the output is a subset of the
+        input's character set after the sanitization rules. Catches
+        any future regression that accidentally introduced chars
+        outside the allowed set (e.g. via a regex or a different
+        replacement strategy)."""
+        for t in (
+            "hello", "café", "naïve", "a b c", "!@#", "🚀",
+            "日本語", "中文", "a/b", "hello world!",
+        ):
+            out = _reports._safe_filename(t)
+            if out == "project":
+                continue
+            for c in out:
+                is_alnum = c.isalnum()
+                is_allowed_special = c in (" ", "-", "_")
+                assert is_alnum or is_allowed_special, (
+                    f"char {c!r} (U+{ord(c):04X}) in output "
+                    f"for {t!r}: {out!r}"
+                )
