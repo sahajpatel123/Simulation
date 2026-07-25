@@ -240,6 +240,9 @@ def save_brief(
 @router.post(
     "/{project_id}/brief/assist",
     summary="Get editorial assistance for a brief field",
+    # LLM-backed editorial assist — cap path-spam at 10/min/IP for
+    # the same reason as the other LLM routes in this module.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 def assist_brief(
     project_id: int,
@@ -852,6 +855,9 @@ def extract_assumptions(
     "/{project_id}/generate-prototype",
     response_model=PrototypeOut,
     summary="Generate a landing-page HTML prototype (Claude)",
+    # LLM-backed prototype generation is expensive — cap path-spam at
+    # 10/min/IP so a single actor can't drain LLM quota.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 def generate_prototype(
     project_id: int,
@@ -1004,6 +1010,8 @@ def get_prototype(
     "/{project_id}/premortem",
     response_model=PremortemOut,
     summary="Run premortem failure mode analysis (Claude)",
+    # LLM-backed; cap path-spam at 10/min/IP.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 def run_premortem(
     project_id: int,
@@ -2146,6 +2154,9 @@ def get_simulation_trend(
     "/{project_id}/competitive-software-analysis",
     summary="Run SaaS / software competitive benchmark analysis",
     responses=_JSON_200,
+    # LLM-backed benchmark — cap path-spam at 10/min/IP for the same
+    # reason as the other LLM routes in this module.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 def run_competitive_software_analysis(
     project_id: int,
