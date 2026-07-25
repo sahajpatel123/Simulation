@@ -818,3 +818,17 @@ class TestShellSafety:
                 f"single {t!r} did not become '_'; "
                 f"got {_reports._safe_filename(t)!r}"
             )
+
+    def test_double_quote_replaced(self) -> None:
+        """Pins that the double quote (``\"``) is replaced with
+        ``_``. A ``\"`` in the filename would break the
+        ``Content-Disposition: attachment; filename=\"...\"``
+        header parser — the closing quote terminates the filename
+        early and the trailing content becomes a new header.
+
+        ``\"\"`` → ``\"_\"``
+        ``\"a\\\"b\"`` → ``\"a_b\"``
+        ``\"\\\"a\"`` → ``\"_a\"``"""
+        assert _reports._safe_filename(chr(34)) == "_"
+        assert _reports._safe_filename("a" + chr(34) + "b") == "a_b"
+        assert _reports._safe_filename(chr(34) + "a") == "_a"
