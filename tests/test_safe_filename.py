@@ -417,3 +417,13 @@ class TestShellSafety:
         assert _reports._safe_filename("  hello  ") == "hello"
         assert _reports._safe_filename("\thello\t") == "_hello_"
         assert _reports._safe_filename("\nhello\n") == "_hello_"
+
+    def test_case_sensitive_round_trip(self) -> None:
+        """``isalnum()`` is case-sensitive: uppercase and lowercase
+        letters both pass through unchanged. Pins that the function
+        doesn't lowercase or uppercase the result."""
+        assert _reports._safe_filename("a") == "a"
+        assert _reports._safe_filename("A") == "A"
+        assert _reports._safe_filename("A_a") == "A_a"
+        assert _reports._safe_filename("a!A") == "a_A"
+        assert _reports._safe_filename("aA1") == "aA1"
