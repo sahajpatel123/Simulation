@@ -126,6 +126,7 @@ class ProjectOut(BaseModel):
     brief_features_json: str | None = None
     brief_hook: str | None = None
     brief_completed_at: datetime | None = None
+    tags: list[str] = []
 
     model_config = {"from_attributes": True}
 
@@ -138,3 +139,28 @@ ProjectDuplicateOut.model_rebuild()
 class ProjectListResponse(BaseModel):
     projects: list[ProjectOut]
     total: int
+
+
+class ProjectTagsPatch(BaseModel):
+    """Body for ``PUT /projects/{id}/tags``.
+
+    Replaces the project's tag set with the supplied list. Empty
+    body (``{"tags": []}``) is the canonical "clear all" payload — a
+    separate DELETE-everything route would be redundant.
+    """
+
+    tags: list[str] = Field(
+        default_factory=list,
+        max_length=20,
+        description=(
+            "Canonical tag list. Each tag is lowercase, deduped, "
+            "max 32 chars, and may contain only [a-z0-9_-]."
+        ),
+    )
+
+
+class ProjectTagsOut(BaseModel):
+    """Response from ``PUT /projects/{id}/tags`` and ``DELETE /projects/{id}/tags/{tag}``."""
+
+    id: int
+    tags: list[str]

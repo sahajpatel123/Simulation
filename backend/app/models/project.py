@@ -47,6 +47,10 @@ class Project(Base, TimestampMixin):
     brief_features_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     brief_hook: Mapped[str | None] = mapped_column(Text, nullable=True)
     brief_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # User-supplied project labels (lowercase, deduped, capped). Always a
+    # list — the DB default is ``[]`` and the helper module enforces the
+    # character + length contract on every write path.
+    tags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="'[]'::jsonb")
 
     user: Mapped["User"] = relationship("User", back_populates="projects")
     assumptions: Mapped[list["Assumption"]] = relationship(

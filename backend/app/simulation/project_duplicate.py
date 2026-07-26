@@ -76,6 +76,14 @@ def duplicate_project_payload(
         "readings_json": project.get("readings_json"),
         "status": "DRAFT",
         "brief_completed_at": None,
+        # Carry tags across — they're organisational metadata, not
+        # run-state. Bad input that somehow snuck into the column is
+        # silently filtered to strings; the column itself is JSONB
+        # so we don't want to crash on a stray int/null either.
+        "tags": [
+            t for t in (project.get("tags") or [])
+            if isinstance(t, str) and t
+        ],
     }
     new_environment = None
     if environment is not None:

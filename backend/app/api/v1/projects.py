@@ -59,6 +59,8 @@ from app.schemas.project import (
     ProjectListResponse,
     ProjectOut,
     ProjectPatch,
+    ProjectTagsOut,
+    ProjectTagsPatch,
 )
 from app.schemas.prototype import FunnelEdge, FunnelGraph, FunnelNode, PrototypeOut
 from app.schemas.stress_test import (
@@ -92,6 +94,7 @@ from app.simulation.competitive_software import CompetitiveSoftwareAnalyser
 from app.simulation.conductor import Conductor
 from app.simulation.product_type import ProductType
 from app.simulation.project_duplicate import duplicate_project_payload
+from app.simulation.project_tags import normalise_tags
 from app.simulation.scored_assumption import score_assumptions, signal_quality_tier
 from app.tasks.simulation_tasks import run_full_simulation
 from app.tasks.stress_test_tasks import run_assumption_stress_test
@@ -292,19 +295,134 @@ def assist_brief(
     summary="List the current user’s projects",
 )
 def list_projects(
+    tag: str | None = Query(
+        default=None,
+        max_length=32,
+        description=(
+            "Filter to projects whose tag list contains this exact "
+            "canonical tag (case-insensitive on input, but the "
+            "stored tag is lowercase ASCII)."
+        ),
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    projects = (
-        db.query(Project)
-        .filter(Project.user_id == current_user.id)
-        .order_by(Project.created_at.desc())
-        .all()
-    )
+    q = db.query(Project).filter(Project.user_id == current_user.id)
+    if tag is not None:
+        # Normalise the filter against the same contract we use for
+        # writes so a query like ``?tag=Q3%20Launch`` behaves the
+        # same as one matching the stored ``"q3-launch"``.
+        try:
+            canonical = normalise_tags([tag])
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            )
+        if not canonical:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Tag filter cannot be empty",
+            )
+        # JSONB containment: tag is in the project's tags array.
+        q = q.filter(Project.tags.op("@>")([canonical[0]]))
+    projects = q.order_by(Project.created_at.desc()).all()
     return ProjectListResponse(
         projects=[ProjectOut.model_validate(p) for p in projects],
         total=len(projects),
     )
+
+
+# ---------------------------------------------------------------------------
+# Tags — set, clear, filter
+# ---------------------------------------------------------------------------
+
+
+@router.put(
+    "/{project_id}/tags",
+    response_model=ProjectTagsOut,
+    summary="Replace the project's tag set (empty list clears all)",
+    # DB write — 20/min/IP so the friendly UI works but a probe loop
+    # can't blast tag mutations across every project it owns.
+    dependencies=[Depends(rate_limit(limit=20, window_s=60))],
+)
+def put_project_tags(
+    project_id: int,
+    payload: ProjectTagsPatch,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProjectTagsOut:
+    project = get_owned_project(db, current_user.id, project_id)
+    try:
+        new_tags = normalise_tags(payload.tags)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    project.tags = new_tags
+    db.add(project)
+    db.commit()
+    db.refresh(project)
+    return ProjectTagsOut(id=project.id, tags=list(project.tags or []))
+
+
+@router.delete(
+    "/{project_id}/tags/{tag}",
+    response_model=ProjectTagsOut,
+    summary="Remove a single tag from a project (no-op if absent)",
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def delete_project_tag(
+    project_id: int,
+    tag: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProjectTagsOut:
+    project = get_owned_project(db, current_user.id, project_id)
+    try:
+        canonical_list = normalise_tags([tag])
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    target = canonical_list[0]
+    current_tags = list(project.tags or [])
+    if target in current_tags:
+        current_tags = [t for t in current_tags if t != target]
+        project.tags = current_tags
+        db.add(project)
+        db.commit()
+        db.refresh(project)
+    return ProjectTagsOut(id=project.id, tags=list(project.tags or []))
+
+
+@router.get(
+    "/tags",
+    response_model=list[str],
+    summary="List every distinct tag in use across the current user’s projects",
+)
+def list_user_tags(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[str]:
+    """Return the union of all tags across the user's projects as a
+    canonical, sorted list. Powers the tag-filter dropdown in the UI
+    without having to ship the full project list with every request."""
+    rows = (
+        db.query(Project.tags)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    )
+    seen: set[str] = set()
+    for (tags,) in rows:
+        if not tags:
+            continue
+        for t in tags:
+            if isinstance(t, str) and t:
+                seen.add(t)
+    return sorted(seen)
 
 
 @router.patch(
@@ -469,6 +587,7 @@ def duplicate_project(
             precis=built["project"]["precis"],
             readings_json=built["project"]["readings_json"],
             status="DRAFT",
+            tags=built["project"].get("tags") or [],
         )
         return ProjectDuplicateOut(
             project=ProjectOut.model_validate(preview),
@@ -485,6 +604,7 @@ def duplicate_project(
         precis=built["project"]["precis"],
         readings_json=built["project"]["readings_json"],
         status="DRAFT",
+        tags=built["project"].get("tags") or [],
     )
     db.add(new_project)
     db.flush()  # populate new_project.id without committing

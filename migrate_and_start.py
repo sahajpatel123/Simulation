@@ -68,6 +68,7 @@ def run_migrations():
             ("projects", "brief_features_json", "TEXT"),
             ("projects", "brief_hook", "TEXT"),
             ("projects", "brief_completed_at", "TIMESTAMP WITH TIME ZONE"),
+            ("projects", "tags", "JSONB DEFAULT '[]'::jsonb NOT NULL"),
             ("simulations", "results_json", "TEXT"),
             ("simulations", "confidence_score", "FLOAT"),
             ("simulations", "task_id", "VARCHAR(255)"),
