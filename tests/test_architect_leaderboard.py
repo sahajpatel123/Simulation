@@ -437,6 +437,10 @@ def test_architect_leaderboard_out_default_shape() -> None:
     out = ArchitectLeaderboardOut()
     assert out.leaderboard == []
     assert out.priority_counts == {}
+    assert out.top_recommendation == (
+        "Continue — architect is calibrated"
+    )
+    assert out.score_distribution == {}
     assert out.total_architects == 0
     assert out.top_n == 0
 
@@ -463,6 +467,174 @@ def test_architect_leaderboard_out_round_trips_helper_payload() -> None:
     assert out.total_architects == 1
     assert out.leaderboard[0]["architect_name"] == "pricing"
     assert out.leaderboard[0]["priority_label"] == "HIGH"
+
+
+# ---------------------------------------------------------------------------
+# top_recommendation
+# ---------------------------------------------------------------------------
+
+
+def test_leaderboard_top_recommendation_default_when_empty() -> None:
+    from app.simulation.architect_leaderboard import (
+        build_architect_leaderboard,
+    )
+
+    out = build_architect_leaderboard([])
+    assert out["top_recommendation"] == (
+        "Continue — architect is calibrated"
+    )
+
+
+def test_leaderboard_top_recommendation_picks_most_common() -> None:
+    from app.simulation.architect_leaderboard import (
+        build_architect_leaderboard,
+    )
+
+    out = build_architect_leaderboard([
+        {
+            "architect_name": "a",
+            "finding_count": 10,
+            "calibration_variance": 0.10,
+            "recommendation": "TIGHTEN",
+        },
+        {
+            "architect_name": "b",
+            "finding_count": 8,
+            "calibration_variance": 0.08,
+            "recommendation": "TIGHTEN",
+        },
+        {
+            "architect_name": "c",
+            "finding_count": 5,
+            "calibration_variance": 0.05,
+            "recommendation": "LOOSEN",
+        },
+    ])
+    assert out["top_recommendation"] == "TIGHTEN"
+
+
+def test_leaderboard_top_recommendation_tiebreak_alphabetical() -> None:
+    """Tied counts → alphabetical label wins for deterministic
+    output."""
+    from app.simulation.architect_leaderboard import (
+        build_architect_leaderboard,
+    )
+
+    out = build_architect_leaderboard([
+        {
+            "architect_name": "a",
+            "finding_count": 5,
+            "calibration_variance": 0.10,
+            "recommendation": "LOOSEN",
+        },
+        {
+            "architect_name": "b",
+            "finding_count": 5,
+            "calibration_variance": 0.10,
+            "recommendation": "TIGHTEN",
+        },
+    ])
+    # LOOSEN < TIGHTEN alphabetically → LOOSEN wins.
+    assert out["top_recommendation"] == "LOOSEN"
+
+
+# ---------------------------------------------------------------------------
+# score_distribution
+# ---------------------------------------------------------------------------
+
+
+def test_leaderboard_score_distribution_default_when_empty() -> None:
+    """Empty leaderboard → all four bands present with zero
+    counts (the dashboard always sees the canonical key
+    shape)."""
+    from app.simulation.architect_leaderboard import (
+        build_architect_leaderboard,
+    )
+
+    out = build_architect_leaderboard([])
+    assert out["score_distribution"] == {
+        "score_zero": 0,
+        "score_low": 0,
+        "score_moderate": 0,
+        "score_high": 0,
+    }
+
+
+def test_leaderboard_score_distribution_bands() -> None:
+    """Each row lands in one of four score bands."""
+    from app.simulation.architect_leaderboard import (
+        build_architect_leaderboard,
+    )
+
+    out = build_architect_leaderboard([
+        # score_zero: calibration_variance=None → score 0.0
+        {"architect_name": "zero", "finding_count": 5,
+         "calibration_variance": None},
+        # score_low: 0.001 × 5 = 0.005 → 0 < score < 0.01
+        {"architect_name": "low", "finding_count": 5,
+         "calibration_variance": 0.001},
+        # score_moderate: 0.005 × 5 = 0.025 → 0.01 ≤ score < 0.05
+        {"architect_name": "moderate", "finding_count": 5,
+         "calibration_variance": 0.005},
+        # score_high: 0.10 × 5 = 0.5 → score ≥ 0.05
+        {"architect_name": "high", "finding_count": 5,
+         "calibration_variance": 0.10},
+    ])
+    sd = out["score_distribution"]
+    assert sd == {
+        "score_zero": 1,
+        "score_low": 1,
+        "score_moderate": 1,
+        "score_high": 1,
+    }
+
+
+def test_leaderboard_score_distribution_boundary_values() -> None:
+    """score == 0.01 → score_moderate (inclusive lower bound).
+    score == 0.05 → score_high (inclusive lower bound)."""
+    from app.simulation.architect_leaderboard import (
+        build_architect_leaderboard,
+    )
+
+    # Two rows with score == 0.01 and 0.05 exactly.
+    # finding_count=1, calibration=0.01 → score 0.01 →
+    # score_moderate. finding_count=1, calibration=0.05 →
+    # score 0.05 → score_high.
+    out = build_architect_leaderboard([
+        {"architect_name": "boundary_low",
+         "finding_count": 1, "calibration_variance": 0.01},
+        {"architect_name": "boundary_high",
+         "finding_count": 1, "calibration_variance": 0.05},
+    ])
+    sd = out["score_distribution"]
+    assert sd["score_moderate"] == 1
+    assert sd["score_high"] == 1
+    assert sd["score_zero"] == 0
+    assert sd["score_low"] == 0
+
+
+def test_leaderboard_score_distribution_caps_at_top_n() -> None:
+    """Distribution reflects only the rows in the returned
+    leaderboard (top_n), not the full by_architect list."""
+    from app.simulation.architect_leaderboard import (
+        build_architect_leaderboard,
+    )
+
+    # 3 rows, top_n=2 — only the top 2 (highest scores)
+    # land in the distribution.
+    entries = [
+        {"architect_name": f"a{i}", "finding_count": 1,
+         "calibration_variance": 0.10}  # score 0.10 → high
+        for i in range(3)
+    ]
+    out = build_architect_leaderboard(entries, top_n=2)
+    assert len(out["leaderboard"]) == 2
+    assert out["score_distribution"] == {
+        "score_zero": 0,
+        "score_low": 0,
+        "score_moderate": 0,
+        "score_high": 2,
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -611,10 +611,23 @@ class ArchitectLeaderboardOut(BaseModel):
     * ``total_architects`` — how many architects were
       considered (including uncalibrated ones with score 0).
     * ``top_n`` — the cap actually applied.
+    * ``top_recommendation`` — the most common recommendation
+      label across the top-N entries (tiebreaker: alphabetical
+      for deterministic output). Falls back to the default
+      'Continue — architect is calibrated' when the
+      leaderboard is empty.
+    * ``score_distribution`` — count of leaderboard rows in
+      each score band (``score_zero`` / ``score_low`` /
+      ``score_moderate`` / ``score_high``). Useful for the
+      dashboard's histogram tile.
     """
 
     leaderboard: list[dict] = []
     priority_counts: dict = {}
+    top_recommendation: str = (
+        "Continue — architect is calibrated"
+    )
+    score_distribution: dict = {}
     total_architects: int = 0
     top_n: int = 0
 

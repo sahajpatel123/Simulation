@@ -170,9 +170,49 @@ def build_architect_leaderboard(
     )
     leaderboard = rows[:cap]
 
+    # Most common recommendation label across the top-N
+    # entries — the dashboard's one-word action hint.
+    rec_counts: dict[str, int] = {}
+    for row in leaderboard:
+        rec = row["recommendation"]
+        rec_counts[rec] = rec_counts.get(rec, 0) + 1
+    if rec_counts:
+        # Tiebreaker: alphabetical so the label is deterministic
+        # when multiple recommendations share the max count.
+        top_recommendation = max(
+            rec_counts.keys(),
+            key=lambda k: (rec_counts[k], ""),
+        )
+    else:
+        top_recommendation = (
+            "Continue — architect is calibrated"
+        )
+
+    # Score distribution — count of leaderboard rows in each
+    # score band. Useful for the dashboard's "where does the
+    # leaderboard cluster?" histogram.
+    score_distribution = {
+        "score_zero": 0,         # score == 0.0
+        "score_low": 0,          # 0 < score < 0.01
+        "score_moderate": 0,     # 0.01 ≤ score < 0.05
+        "score_high": 0,         # score ≥ 0.05
+    }
+    for row in leaderboard:
+        score = row["score"]
+        if score <= 0.0:
+            score_distribution["score_zero"] += 1
+        elif score < 0.01:
+            score_distribution["score_low"] += 1
+        elif score < 0.05:
+            score_distribution["score_moderate"] += 1
+        else:
+            score_distribution["score_high"] += 1
+
     return {
         "leaderboard": leaderboard,
         "priority_counts": priority_counts,
+        "top_recommendation": top_recommendation,
+        "score_distribution": score_distribution,
         "total_architects": len(rows),
         "top_n": cap,
     }
