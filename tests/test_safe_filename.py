@@ -1503,3 +1503,26 @@ class TestShellSafety:
             assert out == expected, (
                 f"{t!r} -> {out!r}, expected {expected!r}"
             )
+
+    def test_reserved_windows_filename_chars_replaced(self) -> None:
+        """Pins that all Windows-reserved filename chars
+        ( ``<``, ``>``, ``:``, ``"``, ``/``, ``\\``, ``|``,
+        ``?``, ``*``) are replaced with ``_``.
+
+        - ``\"<\"`` → ``\"_\"``
+        - ``\">\"`` → ``\"_\"``
+        - ``\":\"`` → ``\"_\"``
+        - ``\"\\\"\"`` → ``\"_\"``
+        - ``\"/\"`` → ``\"_\"``
+        - ``\"\\\\\"`` → ``\"_\"``
+        - ``\"|\"`` → ``\"_\"``
+        - ``\"?\"`` → ``\"_\"``
+        - ``\"*\"`` → ``\"_\"``
+
+        Pin so a future \"simplification\" that added
+        Windows-specific handling (e.g. preserving ``?`` as
+        a \"safe\" char) wouldn't silently allow reserved
+        chars in the output filename."""
+        for t in ("<", ">", ":", "\"", "/", "\\", "|", "?", "*"):
+            out = _reports._safe_filename(t)
+            assert out == "_", f"{t!r} -> {out!r}"
