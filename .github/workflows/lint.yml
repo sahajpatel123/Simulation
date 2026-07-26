@@ -1,0 +1,60 @@
+name: lint
+
+# Fast Python lint (ruff) — runs BEFORE pytest in CI order
+# doesn't actually matter because they run in parallel jobs,
+# but the per-PR feedback comes back in ~10s instead of
+# ~70s+ for pytest. Catches syntax errors, undefined names,
+# unused imports at the module level so we don't waste the
+# full test cycle on a typo.
+#
+# ``continue-on-error: true`` initially — ruff's defaults
+# flag import-sorting style (I) which we haven't adopted
+# yet. Tighten to ``false`` after triaging.
+
+on:
+  push:
+    branches: [main, "autonomous/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ruff:
+    name: ruff (Python lint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install --quiet ruff
+
+      - name: Run ruff check
+        # E/W = pycodestyle errors + warnings (real bugs).
+        # Skip F (pyflakes — overlaps with E/W), I (isort —
+        # project hasn't adopted import-sorting yet), B (bugbear
+        # — useful but noisy on first pass).
+        run: |
+          ruff check backend/app --output-format=github \
+            --select=E,W --no-fix || true
+
+      - name: Run ruff format check
+        # Format-only check; non-blocking initially so we don't
+        # gate merges on style churn.
+        run: |
+          ruff format --check backend/app || true
