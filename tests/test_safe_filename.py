@@ -1590,3 +1590,30 @@ class TestShellSafety:
         assert _reports._safe_filename("a!") == "a_"
         assert _reports._safe_filename("!abc!") == "_abc_"
         assert _reports._safe_filename("!@#") == "___"
+
+    def test_trailing_disallowed_and_whitespace(self) -> None:
+        """Pins that trailing combinations of disallowed chars
+        and whitespace are handled correctly.
+
+        - ``\"a b c \"`` → ``\"a b c\"`` (trailing space stripped)
+        - ``\" a b c\"`` → ``\"a b c\"`` (leading space stripped)
+        - ``\"a! \"`` → ``\"a_\"`` (trailing space + ``!``
+          becomes ``_``)
+        - ``\" a!\"`` → ``\"a_\"`` (leading space stripped,
+          ``!`` becomes ``_``)
+        - ``\"a  \"`` → ``\"a\"`` (trailing spaces stripped)
+        - ``\"  a  \"`` → ``\"a\"`` (leading + trailing spaces
+          stripped)
+        - ``\"!@#  \"`` → ``\"___\"`` (all-disallowed + trailing
+          spaces stripped)
+
+        Pin so a future \"simplification\" that reordered
+        strip() and replace() would silently change the
+        output for these inputs."""
+        assert _reports._safe_filename("a b c ") == "a b c"
+        assert _reports._safe_filename(" a b c") == "a b c"
+        assert _reports._safe_filename("a! ") == "a_"
+        assert _reports._safe_filename(" a!") == "a_"
+        assert _reports._safe_filename("a  ") == "a"
+        assert _reports._safe_filename("  a  ") == "a"
+        assert _reports._safe_filename("!@#  ") == "___"
