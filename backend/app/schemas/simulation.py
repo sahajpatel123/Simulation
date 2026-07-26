@@ -35,6 +35,20 @@ class SimulationStatusOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class SimulationBatchStatusOut(BaseModel):
+    """Response from ``GET /simulations/batch``.
+
+    ``items`` is the ordered list of simulations the caller owns
+    that matched the requested ids. ``not_found`` lists the ids
+    that were either non-existent or owned by a different user —
+    we never 404 the whole batch just because one id is bad.
+    """
+
+    items: list[SimulationStatusOut]
+    not_found: list[int]
+    requested: int
+
+
 class SimulationResultOut(BaseModel):
     id: int
     project_id: int

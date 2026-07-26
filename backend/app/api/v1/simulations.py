@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,7 @@ from app.models.cluster_run_summary import ClusterRunSummary
 from app.schemas.cluster_opportunity import ClusterOpportunityMatrixOut
 from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
 from app.schemas.simulation import (
+    SimulationBatchStatusOut,
     SimulationCreate,
     SimulationOut,
     SimulationResultOut,
@@ -52,6 +53,7 @@ from app.simulation.scored_assumption import (
 )
 from app.simulation.scenario_stress import ScenarioStressAnalyzer
 from app.simulation.sensitivity_analysis import build_sensitivity_analysis
+from app.simulation.sim_batch import parse_id_list
 from app.simulation.what_if import build_what_if_scenario
 from app.tasks.simulation_tasks import run_full_simulation
 from app.worker import celery_app
@@ -360,6 +362,67 @@ def get_simulation_status(
 ):
     sim = _get_owned_simulation(simulation_id, current_user.id, db)
     return SimulationStatusOut.model_validate(sim)
+
+
+@router.get(
+    "/batch",
+    response_model=SimulationBatchStatusOut,
+    summary="Status of N simulations in one request — for dashboards / progress widgets",
+    # DB read of N rows — cap path-spam at 30/min/IP, same as the
+    # per-simulation status route.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_simulation_batch_status(
+    ids: list[str] | None = Query(
+        default=None,
+        description=(
+            "One or more simulation ids. Repeat the param "
+            "(``?ids=1&ids=2``) or pass comma-separated values "
+            "(``?ids=1,2,3``). Capped at 100 ids per request."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SimulationBatchStatusOut:
+    """Return status for every owned simulation in ``ids``.
+
+    Missing ids (not found OR owned by a different user) are
+    reported in ``not_found`` rather than failing the whole batch —
+    a UI dashboard polling N simulations shouldn't 404 just because
+    one of them was deleted server-side.
+    """
+    try:
+        canonical_ids = parse_id_list(ids)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    if not canonical_ids:
+        # Empty input — return an empty result rather than 400, so
+        # the UI can probe with an empty list during initial render.
+        return SimulationBatchStatusOut(items=[], not_found=[], requested=0)
+
+    # Single JOIN that filters out simulations the user doesn't own.
+    # We use ``IN`` with the canonical id list and rely on the
+    # ``Project.user_id`` join to scope to the caller.
+    rows = (
+        db.query(Simulation)
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(
+            Simulation.id.in_(canonical_ids),
+            Project.user_id == current_user.id,
+        )
+        .all()
+    )
+    found_ids = {r.id for r in rows}
+    not_found = [sid for sid in canonical_ids if sid not in found_ids]
+
+    return SimulationBatchStatusOut(
+        items=[SimulationStatusOut.model_validate(r) for r in rows],
+        not_found=not_found,
+        requested=len(canonical_ids),
+    )
 
 
 @router.get(
