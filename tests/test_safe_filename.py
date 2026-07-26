@@ -1465,3 +1465,21 @@ class TestShellSafety:
             assert len(out) == len(t.strip()) or len(out) == len(t), (
                 f"length mismatch for {t!r}: in={len(t)}, out={len(out)}"
             )
+
+    def test_bidi_isolates_replaced(self) -> None:
+        """Pins that bidi isolates (LRI, RLI, FSI, PDI) are
+        replaced with ``_``. These are invisible formatting
+        chars that can be used in filename-spoofing attacks.
+
+        - ``\"a\\u2066b\"`` → ``\"a_b\"``
+        - ``\"a\\u2067b\"`` → ``\"a_b\"``
+        - ``\"a\\u2068b\"`` → ``\"a_b\"``
+        - ``\"a\\u2069b\"`` → ``\"a_b\"``
+
+        Pin so a future \"simplification\" that ignored
+        bidi isolates doesn't silently allow direction-isolating
+        chars in the output filename."""
+        assert _reports._safe_filename("a‎b") == "a_b"
+        assert _reports._safe_filename("a‏b") == "a_b"
+        assert _reports._safe_filename("a⁦b") == "a_b"
+        assert _reports._safe_filename("a⁩b") == "a_b"
