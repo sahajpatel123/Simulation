@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -94,7 +95,10 @@ from app.simulation.outcomes_digest import (
     aggregate_outcomes,
     normalise_outlier_threshold,
 )
-from app.simulation.portfolio_summary import build_portfolio_summary
+from app.simulation.portfolio_summary import (
+    build_portfolio_summary,
+    portfolio_to_csv,
+)
 from app.simulation.portfolio_trend import compute_portfolio_trend
 from app.simulation.what_if import build_what_if_scenario
 from app.tasks.simulation_tasks import run_full_simulation
@@ -1062,6 +1066,136 @@ def get_portfolio_summary(
         architect_accuracy_payload=bridge_payload,
     )
     return PortfolioSummaryOut(**summary)
+
+
+@router.get(
+    "/portfolio-export.csv",
+    summary=(
+        "Spreadsheet export of the portfolio summary — same "
+        "data as /portfolio-summary, formatted as multi-section "
+        "CSV"
+    ),
+    response_class=StreamingResponse,
+    # Composite of the four sibling aggregates → same cap.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_portfolio_export_csv(
+    ids: list[str] | None = Query(
+        default=None,
+        description=(
+            "One or more simulation ids. Same parser as "
+            "``/portfolio-summary``. Optional; without ids, the "
+            "export contains only the empty-summary placeholder."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Spreadsheet export of the portfolio summary."""
+    try:
+        canonical_ids = parse_id_list(ids)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    if not canonical_ids:
+        # Same path as portfolio-summary's empty-input branch —
+        # the CSV still has all section headers so users see a
+        # well-formed empty export, not a 500.
+        summary = build_portfolio_summary(simulation_count=0)
+    else:
+        cluster_names = {
+            cluster.cluster_id: cluster.name
+            for cluster in _registry.all_clusters()
+        }
+
+        rows = (
+            db.query(
+                Simulation.id,
+                Simulation.results_json,
+                Outcome.predicted_conversion_rate,
+                Outcome.actual_conversion_rate,
+                Outcome.created_at,
+            )
+            .outerjoin(
+                Outcome, Outcome.simulation_id == Simulation.id,
+            )
+            .join(Project, Simulation.project_id == Project.id)
+            .filter(
+                Simulation.id.in_(canonical_ids),
+                Project.user_id == current_user.id,
+            )
+            .order_by(Outcome.created_at.desc())
+            .all()
+        )
+
+        by_id: dict[int, object] = {}
+        for r in rows:
+            if r.id in by_id:
+                continue
+            by_id[r.id] = r
+        ordered_results: list[dict] = []
+        outcome_pairs: list[
+            tuple[dict | None, tuple[float | None, float | None]]
+        ] = []
+        for sid in canonical_ids:
+            match = by_id.get(sid)
+            if match is None:
+                continue
+            ordered_results.append(match.results_json)
+            outcome_pairs.append(
+                (
+                    match.results_json,
+                    (
+                        match.predicted_conversion_rate,
+                        match.actual_conversion_rate,
+                    ),
+                )
+            )
+
+        findings_payload = aggregate_findings(
+            ordered_results,
+            min_severity=normalise_severity(None),
+            top_n=normalise_top_n(None),
+            architect=None,
+        )
+        outcomes_payload = aggregate_outcomes(
+            [(p[1][0], p[1][1]) for p in outcome_pairs],
+            outlier_threshold=normalise_outlier_threshold(None),
+            sim_ids=list(by_id.keys()),
+        )
+        clusters_payload = aggregate_clusters(
+            ordered_results,
+            cluster_names=cluster_names,
+            top_n=normalise_clusters_top_n(None),
+        )
+        bridge_payload = bridge_architect_accuracy(
+            outcome_pairs,
+            min_severity=normalise_bridge_severity(None),
+            top_n=normalise_bridge_top_n(None),
+        )
+        summary = build_portfolio_summary(
+            simulation_count=len(ordered_results),
+            findings_payload=findings_payload,
+            outcomes_payload=outcomes_payload,
+            clusters_payload=clusters_payload,
+            architect_accuracy_payload=bridge_payload,
+        )
+
+    csv_text = portfolio_to_csv(summary)
+    # ``csv_text`` is already UTF-8 text; encode for the
+    # streaming response.
+    return StreamingResponse(
+        iter([csv_text.encode("utf-8")]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="thecee-portfolio.csv"'
+            ),
+            "Content-Length": str(len(csv_text.encode("utf-8"))),
+        },
+    )
 
 
 def _batch_overall_mean(

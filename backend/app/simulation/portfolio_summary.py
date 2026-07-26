@@ -90,6 +90,158 @@ VALID_NEXT_ACTIONS: frozenset[str] = frozenset({
 MAX_RECOMMENDATIONS: int = 8
 
 
+def _csv_escape(value: object) -> str:
+    """Escape a value for a single CSV cell.
+
+    Wraps in quotes when the value contains a comma / quote /
+    newline. Quotes inside the value are doubled (the standard
+    CSV convention). ``None`` / non-strings are coerced via
+    ``str()``.
+    """
+    if value is None:
+        return ""
+    text = value if isinstance(value, str) else str(value)
+    if any(ch in text for ch in (",", "\"", "\n", "\r")):
+        return '"' + text.replace('"', '""') + '"'
+    return text
+
+
+def _csv_row(cells: list[object]) -> str:
+    """Join a list of values into a single CSV row."""
+    return ",".join(_csv_escape(c) for c in cells)
+
+
+def portfolio_to_csv(portfolio_payload: dict) -> str:
+    """Render a portfolio summary payload as a multi-section CSV.
+
+    The output is structured for spreadsheet import — sections
+    are separated by a blank line so users can split on the
+    section header row.
+
+    Sections (in order):
+
+      1. **Summary** — single row of portfolio-level scalars
+         (simulation_count, correlated_bias_count,
+         data_quality_score, overall_health, plus the first
+         recommendation + next_action for at-a-glance review).
+      2. **Findings** — header + one row per top
+         critical architect.
+      3. **Outcomes** — header + a single MAE / MAPE / RMSE
+         / outlier_count / worst_offender row.
+      4. **Clusters** — header + one row per top laggard.
+      5. **Architect accuracy** — header + one row per
+         tighten / loosen / trusted / insufficient_data count.
+      6. **Recommendations** — header + one row per
+         recommendation string.
+
+    Empty / missing sub-aggregates produce an empty section
+    (header only) so the dashboard can show "no data" cleanly.
+    """
+    lines: list[str] = []
+
+    # Section 1: summary
+    lines.append("# Summary")
+    lines.append(_csv_row([
+        "simulation_count",
+        "correlated_bias_count",
+        "data_quality_score",
+        "overall_health",
+        "next_action",
+    ]))
+    recs = list(portfolio_payload.get("key_recommendations") or [])
+    lines.append(_csv_row([
+        portfolio_payload.get("simulation_count", 0),
+        portfolio_payload.get("correlated_bias_count", 0),
+        portfolio_payload.get("data_quality_score", 0.0),
+        portfolio_payload.get("overall_health", "INSUFFICIENT_DATA"),
+        portfolio_payload.get(
+            "next_action", "Record more outcomes to unlock calibration analysis"
+        ),
+    ]))
+    lines.append("")
+
+    findings = portfolio_payload.get("findings_summary") or {}
+    outcomes = portfolio_payload.get("outcomes_summary") or {}
+    clusters = portfolio_payload.get("clusters_summary") or {}
+    arch = (
+        portfolio_payload.get("architect_accuracy_summary") or {}
+    )
+
+    # Section 2: findings (one row per top critical architect).
+    lines.append("# Findings — top critical architects")
+    lines.append(_csv_row(["architect_name"]))
+    top_archs = list(findings.get("top_critical_architects") or [])
+    if top_archs:
+        for name in top_archs:
+            lines.append(_csv_row([name]))
+    else:
+        lines.append(_csv_row(["(none)"]))
+    lines.append("")
+
+    # Section 3: outcomes (single-row summary).
+    lines.append("# Outcomes — conversion accuracy")
+    lines.append(_csv_row([
+        "mae",
+        "mape",
+        "rmse",
+        "mae_count",
+        "outlier_count",
+        "confidence_label",
+        "worst_offender_sim_id",
+    ]))
+    lines.append(_csv_row([
+        outcomes.get("mae", 0.0),
+        outcomes.get("mape", 0.0),
+        outcomes.get("rmse", 0.0),
+        outcomes.get("mae_count", 0),
+        outcomes.get("outlier_count", 0),
+        outcomes.get("confidence_label", "INSUFFICIENT_DATA"),
+        outcomes.get("worst_offender_sim_id", ""),
+    ]))
+    lines.append("")
+
+    # Section 4: clusters (one row per top laggard).
+    lines.append("# Clusters — top laggards")
+    lines.append(_csv_row(["cluster_id"]))
+    laggards = list(clusters.get("top_laggards") or [])
+    if laggards:
+        for name in laggards:
+            lines.append(_csv_row([name]))
+    else:
+        lines.append(_csv_row(["(none)"]))
+    lines.append("")
+
+    # Section 5: architect accuracy (one row per action count).
+    lines.append("# Architect accuracy — action counts")
+    lines.append(_csv_row([
+        "tighten_count",
+        "loosen_count",
+        "trusted_count",
+        "insufficient_data_count",
+        "outcome_attached_sim_count",
+    ]))
+    lines.append(_csv_row([
+        arch.get("tighten_count", 0),
+        arch.get("loosen_count", 0),
+        arch.get("trusted_count", 0),
+        arch.get("insufficient_data_count", 0),
+        arch.get("outcome_attached_sim_count", 0),
+    ]))
+    lines.append("")
+
+    # Section 6: recommendations.
+    lines.append("# Recommendations")
+    lines.append(_csv_row(["recommendation"]))
+    if recs:
+        for rec in recs:
+            lines.append(_csv_row([rec]))
+    else:
+        lines.append(_csv_row(["(none)"]))
+    lines.append("")
+
+    return "\n".join(lines)
+
+
 def _set_intersection_size(a: list[str], b: list[str]) -> int:
     """Return the size of the case-insensitive intersection of two
     name lists. ``Pricing`` and ``pricing`` match; ``pricing`` and
@@ -466,4 +618,5 @@ __all__ = [
     "VALID_NEXT_ACTIONS",
     "MAX_RECOMMENDATIONS",
     "build_portfolio_summary",
+    "portfolio_to_csv",
 ]

@@ -35,6 +35,7 @@ def test_public_allowlist_matches_callers() -> None:
         "VALID_NEXT_ACTIONS",
         "MAX_RECOMMENDATIONS",
         "build_portfolio_summary",
+        "portfolio_to_csv",
     }
 
 
@@ -796,7 +797,266 @@ def test_summary_recommendations_ordered_by_priority() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Schema
+# portfolio_to_csv
+# ---------------------------------------------------------------------------
+
+
+def test_summary_to_csv_includes_all_section_headers() -> None:
+    from app.simulation.portfolio_summary import (
+        build_portfolio_summary,
+        portfolio_to_csv,
+    )
+
+    summary = build_portfolio_summary(
+        simulation_count=3,
+        findings_payload={
+            "top_critical_architects": ["pricing", "trust"],
+            "simulations_with_findings": 2,
+            "severity_breakdown": {"CRITICAL": 2},
+        },
+        outcomes_payload={
+            "mae": 0.05,
+            "mape": 0.10,
+            "rmse": 0.07,
+            "mae_count": 3,
+            "outlier_count": 1,
+            "confidence_label": "NEEDS_ATTENTION",
+            "worst_offender_sim_id": 42,
+        },
+        clusters_payload={"top_laggards": ["metro_pro"]},
+        architect_accuracy_payload={
+            "tighten_count": 1,
+            "loosen_count": 0,
+            "trusted_count": 1,
+            "insufficient_data_count": 0,
+            "outcome_attached_sim_count": 3,
+        },
+    )
+    csv_text = portfolio_to_csv(summary)
+    # Every section is present.
+    assert "# Summary" in csv_text
+    assert "# Findings — top critical architects" in csv_text
+    assert "# Outcomes — conversion accuracy" in csv_text
+    assert "# Clusters — top laggards" in csv_text
+    assert "# Architect accuracy — action counts" in csv_text
+    assert "# Recommendations" in csv_text
+
+
+def test_summary_to_csv_emits_summary_row() -> None:
+    """The summary section's header + values row are emitted
+    with the canonical column order."""
+    from app.simulation.portfolio_summary import (
+        build_portfolio_summary,
+        portfolio_to_csv,
+    )
+
+    summary = build_portfolio_summary(
+        simulation_count=12,
+        findings_payload={
+            "top_critical_architects": ["pricing"],
+            "simulations_with_findings": 10,
+        },
+        outcomes_payload={"confidence_label": "WELL_CALIBRATED"},
+        clusters_payload={"needs_attention_count": 0},
+        architect_accuracy_payload={
+            "most_biased_architects": ["pricing"],
+            "outcome_attached_sim_count": 10,
+        },
+    )
+    csv_text = portfolio_to_csv(summary)
+    rows = [
+        r for r in csv_text.split("\n")
+        if r and not r.startswith("#")
+    ]
+    # The summary section has the header + the values row.
+    assert rows[0] == (
+        "simulation_count,correlated_bias_count,data_quality_score,"
+        "overall_health,next_action"
+    )
+    # First column is the simulation_count we passed.
+    first_row = rows[1].split(",")
+    assert first_row[0] == "12"
+    # overall_health comes from the confidence_label here
+    # (WELL_CALIBRATED + 0 attention + 1 correlated bias → HEALTHY).
+    assert first_row[3] in ("HEALTHY", "NEEDS_ATTENTION")
+
+
+def test_summary_to_csv_emits_outcomes_row() -> None:
+    from app.simulation.portfolio_summary import (
+        build_portfolio_summary,
+        portfolio_to_csv,
+    )
+
+    summary = build_portfolio_summary(
+        simulation_count=5,
+        outcomes_payload={
+            "mae": 0.05,
+            "mape": 0.20,
+            "rmse": 0.07,
+            "mae_count": 5,
+            "outlier_count": 1,
+            "confidence_label": "NEEDS_ATTENTION",
+            "worst_offender_sim_id": 99,
+        },
+    )
+    csv_text = portfolio_to_csv(summary)
+    assert "0.05,0.2,0.07,5,1,NEEDS_ATTENTION,99" in csv_text
+
+
+def test_summary_to_csv_emits_architect_action_counts() -> None:
+    from app.simulation.portfolio_summary import (
+        build_portfolio_summary,
+        portfolio_to_csv,
+    )
+
+    summary = build_portfolio_summary(
+        simulation_count=5,
+        architect_accuracy_payload={
+            "tighten_count": 2,
+            "loosen_count": 1,
+            "trusted_count": 1,
+            "insufficient_data_count": 0,
+            "outcome_attached_sim_count": 5,
+        },
+    )
+    csv_text = portfolio_to_csv(summary)
+    assert "2,1,1,0,5" in csv_text
+
+
+def test_summary_to_csv_empty_lists_become_none_placeholder() -> None:
+    """A clean batch with no critical architects / laggards /
+    recommendations → '(none)' placeholder so the export is
+    well-formed."""
+    from app.simulation.portfolio_summary import (
+        build_portfolio_summary,
+        portfolio_to_csv,
+    )
+
+    summary = build_portfolio_summary(
+        simulation_count=2,
+        findings_payload={
+            "top_critical_architects": [],
+            "simulations_with_findings": 2,
+            "severity_breakdown": {},
+        },
+        clusters_payload={"top_laggards": []},
+    )
+    csv_text = portfolio_to_csv(summary)
+    assert csv_text.count("(none)") == 2  # findings + clusters
+
+
+def test_summary_to_csv_emits_recommendations_one_per_row() -> None:
+    from app.simulation.portfolio_summary import (
+        build_portfolio_summary,
+        portfolio_to_csv,
+    )
+
+    summary = build_portfolio_summary(
+        simulation_count=5,
+        architect_accuracy_payload={
+            "tighten_count": 2,
+            "loosen_count": 1,
+            "outcome_attached_sim_count": 5,
+        },
+    )
+    csv_text = portfolio_to_csv(summary)
+    # Recommendations section: header + 3 lines (Tighten / Loosen /
+    # correlated_bias).
+    rec_section_start = csv_text.index("# Recommendations")
+    rec_section = csv_text[rec_section_start:].strip().split("\n")
+    # Header + (none) or N rows. Should have at least 3 rows
+    # (Tighten, Loosen, correlated_bias).
+    assert len(rec_section) >= 4
+    assert rec_section[0] == "# Recommendations"
+    assert rec_section[1] == "recommendation"
+
+
+def test_summary_to_csv_escapes_commas_and_quotes() -> None:
+    """Recommendation strings with commas / quotes must be
+    properly CSV-escaped so spreadsheet import doesn't break."""
+    from app.simulation.portfolio_summary import portfolio_to_csv
+
+    csv_text = portfolio_to_csv({
+        "simulation_count": 5,
+        "correlated_bias_count": 1,
+        "data_quality_score": 0.5,
+        "overall_health": "NEEDS_ATTENTION",
+        "next_action": "Investigate flagged, architects",
+        "findings_summary": {
+            "top_critical_architects": ["pricing"],
+            "simulations_with_findings": 5,
+            "severity_breakdown": {"CRITICAL": 2},
+        },
+        "outcomes_summary": {
+            "mae": 0.05,
+            "mape": 0.20,
+            "rmse": 0.07,
+            "mae_count": 5,
+            "outlier_count": 1,
+            "confidence_label": "NEEDS_ATTENTION",
+            "worst_offender_sim_id": None,
+        },
+        "clusters_summary": {"top_laggards": []},
+        "architect_accuracy_summary": {
+            "tighten_count": 0,
+            "loosen_count": 0,
+            "trusted_count": 1,
+            "insufficient_data_count": 0,
+            "outcome_attached_sim_count": 5,
+        },
+        "key_recommendations": [
+            'Tighten, "pricing"',
+            "Calibration confidence is NEEDS_ATTENTION",
+        ],
+    })
+    # Recommendation with comma + quotes gets wrapped in quotes
+    # with internal quotes doubled.
+    assert '"Tighten, ""pricing"""' in csv_text
+    # The next_action row escaped its comma.
+    assert '"Investigate flagged, architects"' in csv_text
+
+
+def test_summary_to_csv_empty_payload_returns_well_formed_output() -> None:
+    """Empty input still produces a well-formed CSV (all
+    section headers present, no 500)."""
+    from app.simulation.portfolio_summary import portfolio_to_csv
+
+    csv_text = portfolio_to_csv({})
+    assert "# Summary" in csv_text
+    assert "# Recommendations" in csv_text
+    assert csv_text.count("(none)") >= 1
+
+
+def test_summary_to_csv_sections_separated_by_blank_lines() -> None:
+    """Blank lines between sections let users split on the
+    section header row in spreadsheets."""
+    from app.simulation.portfolio_summary import (
+        build_portfolio_summary,
+        portfolio_to_csv,
+    )
+
+    summary = build_portfolio_summary(
+        simulation_count=3,
+        findings_payload={
+            "top_critical_architects": ["pricing"],
+            "simulations_with_findings": 3,
+        },
+    )
+    csv_text = portfolio_to_csv(summary)
+    # Every section header is preceded by a blank line.
+    for marker in (
+        "# Findings",
+        "# Outcomes",
+        "# Clusters",
+        "# Architect accuracy",
+        "# Recommendations",
+    ):
+        # ``\n\n# ...`` pattern: blank line + section.
+        assert f"\n\n{marker}" in csv_text
+
+
+# ---------------------------------------------------------------------------
+# Route registration
 # ---------------------------------------------------------------------------
 
 
@@ -908,4 +1168,62 @@ def test_portfolio_summary_route_query_params() -> None:
             return
     raise AssertionError(
         "GET /simulations/portfolio-summary route not found"
+    )
+
+
+def test_portfolio_export_csv_route_registered() -> None:
+    """GET /simulations/portfolio-export.csv must appear in
+    the router."""
+    pytest.importorskip(
+        "scipy", reason="Route registration requires scipy"
+    )
+    import sys
+    import types
+
+    if "razorpay" not in sys.modules:
+        stub = types.ModuleType("razorpay")
+        stub.Client = object  # type: ignore[attr-defined]
+        sys.modules["razorpay"] = stub
+
+    from app.api.v1 import simulations as sim_mod
+
+    paths = {r.path for r in sim_mod.router.routes}
+    assert "/simulations/portfolio-export.csv" in paths
+
+    methods_by_path: dict[str, set[str]] = {}
+    for r in sim_mod.router.routes:
+        methods_by_path.setdefault(r.path, set()).update(
+            r.methods or set()
+        )
+    assert (
+        "GET" in methods_by_path["/simulations/portfolio-export.csv"]
+    )
+
+
+def test_portfolio_export_csv_route_query_params() -> None:
+    """Pin the query-param surface so the UI contract is
+    documented."""
+    pytest.importorskip(
+        "scipy", reason="Route registration requires scipy"
+    )
+    import sys
+    import types
+
+    if "razorpay" not in sys.modules:
+        stub = types.ModuleType("razorpay")
+        stub.Client = object  # type: ignore[attr-defined]
+        sys.modules["razorpay"] = stub
+
+    from app.api.v1 import simulations as sim_mod
+
+    for r in sim_mod.router.routes:
+        if (
+            r.path == "/simulations/portfolio-export.csv"
+            and "GET" in (r.methods or set())
+        ):
+            query_param_names = {p.name for p in r.dependant.query_params}
+            assert "ids" in query_param_names
+            return
+    raise AssertionError(
+        "GET /simulations/portfolio-export.csv route not found"
     )
