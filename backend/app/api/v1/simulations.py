@@ -28,6 +28,7 @@ from app.schemas.simulation import (
     ClusterDiffOut,
     ClusterDrillDownOut,
     ClusterOverlapMatrixOut,
+    ClusterTrendOut,
     ClustersAggregateOut,
     FindingsAggregateOut,
     OutcomesDigestOut,
@@ -67,6 +68,10 @@ from app.simulation.cluster_diff import build_cluster_diff
 from app.simulation.cluster_overlap_matrix import (
     MAX_CLUSTERS as _MAX_MATRIX_CLUSTERS,
     build_cluster_overlap_matrix,
+)
+from app.simulation.cluster_trend import (
+    build_cluster_trend,
+    normalise_bin as normalise_trend_bin,
 )
 from app.simulation.conductor import _ARCHITECTS as _architect_registry
 from app.simulation.comparison import build_simulation_comparison
@@ -1822,6 +1827,112 @@ def get_cluster_overlap_matrix(
             detail=str(exc),
         )
     return ClusterOverlapMatrixOut(**payload)
+
+
+@router.get(
+    "/cluster-trend",
+    response_model=ClusterTrendOut,
+    summary=(
+        "Per-cluster conversion trend over time — monthly / "
+        "weekly / daily bins"
+    ),
+    # DB read of N sim rows for one cluster — same cap as the
+    # other drill-down endpoints.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_cluster_trend(
+    cluster_id: str = Query(
+        ...,
+        min_length=1,
+        max_length=64,
+        description=(
+            "Cluster id (snake-case). Must match a registered "
+            "cluster; otherwise the route returns 404."
+        ),
+    ),
+    since: str | None = Query(
+        default=None,
+        max_length=64,
+        description=(
+            "ISO 8601 timestamp (timezone-aware). Optional "
+            "lower bound on Simulation.created_at."
+        ),
+    ),
+    until: str | None = Query(
+        default=None,
+        max_length=64,
+        description=(
+            "ISO 8601 timestamp (timezone-aware). Optional "
+            "exclusive upper bound on Simulation.created_at."
+        ),
+    ),
+    bin: str | None = Query(
+        default=None,
+        max_length=8,
+        description=(
+            "Bin granularity. ``month`` (default) / ``week`` "
+            "/ ``day``. Anything else raises 400."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ClusterTrendOut:
+    """Per-cluster conversion-rate trend over time.
+
+    Pulls the owned simulations for the current user (filtered
+    by ``since`` / ``until``), groups them by creation
+    date in ``month`` / ``week`` / ``day`` bins, and reports
+    the mean conversion rate of ``cluster_id`` per bin plus an
+    overall direction label.
+    """
+    definition = next(
+        (
+            c for c in _registry.all_clusters()
+            if c.cluster_id == cluster_id
+        ),
+        None,
+    )
+    if definition is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown cluster_id {cluster_id!r}",
+        )
+
+    try:
+        since_dt = parse_since(since)
+        until_dt = parse_since(until)
+        effective_bin = normalise_trend_bin(bin)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    filters = [
+        Project.user_id == current_user.id,
+        Simulation.status == "COMPLETED",
+    ]
+    if since_dt is not None:
+        filters.append(Simulation.created_at >= since_dt)
+    if until_dt is not None:
+        filters.append(Simulation.created_at < until_dt)
+    rows = (
+        db.query(
+            Simulation.created_at,
+            Simulation.results_json,
+        )
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(*filters)
+        .order_by(Simulation.created_at.asc())
+        .all()
+    )
+
+    payload = build_cluster_trend(
+        cluster_id,
+        [(r.created_at, r.results_json) for r in rows],
+        bin_size=effective_bin,
+    )
+    return ClusterTrendOut(**payload)
 
 
 @router.get(

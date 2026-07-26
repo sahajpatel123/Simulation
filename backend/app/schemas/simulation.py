@@ -553,6 +553,38 @@ class ClusterOverlapMatrixOut(BaseModel):
     strong_pair_count: int = 0
 
 
+class ClusterTrendOut(BaseModel):
+    """Response from ``GET /simulations/cluster-trend``.
+
+    Per-cluster conversion-rate trend over time, binned by
+    month / week / day. Powers the dashboard's "is this
+    cluster getting better or worse?" line chart.
+
+    * ``cluster_id`` — echoed.
+    * ``bin_size`` — echoed (month / week / day).
+    * ``bins`` — list of per-bin dicts sorted chronologically.
+      Each row: ``bin`` (key), ``bin_start`` (ISO 8601 UTC),
+      ``mean_conversion``, ``observation_count``,
+      ``sim_count``.
+    * ``overall_direction`` — UP / DOWN / STABLE / UNKNOWN
+      bucketed from the first vs last bin mean. STABLE when
+      |delta| is within 1pp so tiny jitter doesn't read as
+      'the model is drifting'.
+    * ``first_bin_mean`` / ``last_bin_mean`` — for the
+      dashboard's headline ("X% → Y%").
+    * ``mean_delta`` — last_bin_mean − first_bin_mean, or
+      None when fewer than 2 bins have data.
+    """
+
+    cluster_id: str = ""
+    bin_size: str = "month"
+    bins: list[dict] = []
+    overall_direction: str = "UNKNOWN"
+    first_bin_mean: float | None = None
+    last_bin_mean: float | None = None
+    mean_delta: float | None = None
+
+
 class SimulationResultOut(BaseModel):
     id: int
     project_id: int
