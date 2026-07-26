@@ -243,6 +243,55 @@ class OutcomesDigestOut(BaseModel):
     confidence_label: str = "INSUFFICIENT_DATA"
 
 
+class PortfolioSummaryOut(BaseModel):
+    """Response from ``GET /simulations/portfolio-summary``.
+
+    One-call fusion of the four cross-simulation aggregates
+    (findings, outcomes, clusters, architect-accuracy) into a
+    single dashboard payload. Designed for the portfolio-view
+    home screen so the founder sees "12 sims · 0.07 MAE · 2
+    architects flagged TIGHTEN · NEEDS_ATTENTION" without
+    issuing four separate requests.
+
+    * ``simulation_count`` — echoed from the request.
+    * ``findings_summary`` — reduced view of
+      :class:`FindingsAggregateOut`: total / filtered /
+      severity_breakdown / shared_domain_count /
+      top_critical_architects / simulations_with_findings.
+    * ``outcomes_summary`` — reduced view of
+      :class:`OutcomesDigestOut`: mae / mape / rmse / mae_count /
+      outlier_count / direction_breakdown / confidence_label /
+      worst_offender_sim_id.
+    * ``clusters_summary`` — reduced view of
+      :class:`ClustersAggregateOut`: clusters_seen /
+      under_observed_count / needs_attention_count /
+      top_laggards.
+    * ``architect_accuracy_summary`` — reduced view of
+      :class:`ArchitectAccuracyBridgeOut`:
+      outcome_attached_sim_count / tighten_count / loosen_count /
+      trusted_count / insufficient_data_count /
+      most_biased_architects.
+    * ``correlated_bias_count`` — number of architect names that
+      appear in BOTH ``findings_summary.top_critical_architects``
+      AND ``architect_accuracy_summary.most_biased_architects``.
+      Higher = more real bias signal.
+    * ``data_quality_score`` — fraction of sims with both findings
+      AND an outcome. Closer to 1.0 = better ground truth
+      coverage.
+    * ``overall_health`` — one of ``HEALTHY`` /
+      ``NEEDS_ATTENTION`` / ``CRITICAL`` / ``INSUFFICIENT_DATA``.
+    """
+
+    simulation_count: int = 0
+    findings_summary: dict = {}
+    outcomes_summary: dict = {}
+    clusters_summary: dict = {}
+    architect_accuracy_summary: dict = {}
+    correlated_bias_count: int = 0
+    data_quality_score: float = 0.0
+    overall_health: str = "INSUFFICIENT_DATA"
+
+
 class SimulationResultOut(BaseModel):
     id: int
     project_id: int

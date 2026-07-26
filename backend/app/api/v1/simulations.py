@@ -25,6 +25,7 @@ from app.schemas.simulation import (
     ClustersAggregateOut,
     FindingsAggregateOut,
     OutcomesDigestOut,
+    PortfolioSummaryOut,
     SimulationBatchStatusOut,
     SimulationCreate,
     SimulationOut,
@@ -82,6 +83,7 @@ from app.simulation.outcomes_digest import (
     aggregate_outcomes,
     normalise_outlier_threshold,
 )
+from app.simulation.portfolio_summary import build_portfolio_summary
 from app.simulation.what_if import build_what_if_scenario
 from app.tasks.simulation_tasks import run_full_simulation
 from app.worker import celery_app
@@ -914,6 +916,140 @@ def aggregate_architect_accuracy(
         top_n=effective_top_n,
     )
     return ArchitectAccuracyBridgeOut(**bridge)
+
+
+@router.get(
+    "/portfolio-summary",
+    response_model=PortfolioSummaryOut,
+    summary=(
+        "One-call dashboard payload fusing findings, outcomes, "
+        "clusters, and architect accuracy"
+    ),
+    # Composite of the four sibling aggregates → same cap.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_portfolio_summary(
+    ids: list[str] | None = Query(
+        default=None,
+        description=(
+            "One or more simulation ids. Same parser as "
+            "``/simulations/batch`` — repeat the param or "
+            "pass comma-separated values. Capped at 100 ids."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioSummaryOut:
+    """Single-call portfolio view for the dashboard.
+
+    Composes findings, outcomes, clusters, and architect-accuracy
+    aggregates in one round-trip so the portfolio-view home screen
+    doesn't have to issue four separate requests. The cross-
+    aggregate ``correlated_bias_count`` and ``overall_health`` are
+    computed here from the fused payloads.
+    """
+    try:
+        canonical_ids = parse_id_list(ids)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    if not canonical_ids:
+        return PortfolioSummaryOut()
+
+    # Single DB round-trip: scope to current user via Simulation →
+    # Project ownership and grab (results_json, latest outcome) for
+    # each requested sim id. The LEFT JOIN keeps sims without any
+    # outcome row in the result set.
+    rows = (
+        db.query(
+            Simulation.id,
+            Simulation.results_json,
+            Outcome.predicted_conversion_rate,
+            Outcome.actual_conversion_rate,
+            Outcome.created_at,
+        )
+        .outerjoin(
+            Outcome, Outcome.simulation_id == Simulation.id,
+        )
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(
+            Simulation.id.in_(canonical_ids),
+            Project.user_id == current_user.id,
+        )
+        .order_by(Outcome.created_at.desc())
+        .all()
+    )
+
+    # Preserve user's requested order; keep latest outcome per sim.
+    by_id: dict[int, object] = {}
+    for r in rows:
+        if r.id in by_id:
+            continue
+        by_id[r.id] = r
+    ordered_results: list[dict] = []
+    outcome_pairs: list[
+        tuple[dict | None, tuple[float | None, float | None]]
+    ] = []
+    for sid in canonical_ids:
+        match = by_id.get(sid)
+        if match is None:
+            continue
+        ordered_results.append(match.results_json)
+        outcome_pairs.append(
+            (
+                match.results_json,
+                (
+                    match.predicted_conversion_rate,
+                    match.actual_conversion_rate,
+                ),
+            )
+        )
+
+    # Cluster name lookup for the clusters aggregate.
+    cluster_names = {
+        cluster.cluster_id: cluster.name
+        for cluster in _registry.all_clusters()
+    }
+
+    # Run the four sub-aggregates. Each helper is pure-Python so
+    # the total CPU cost is bounded by the 100-sim batch cap.
+    findings_payload = aggregate_findings(
+        ordered_results,
+        min_severity=normalise_severity(None),
+        top_n=normalise_top_n(None),
+        architect=None,
+    )
+    outcomes_payload = aggregate_outcomes(
+        [
+            # outcomes_digest wants the ``(predicted, actual)`` pair
+            # in canonical order — re-project from outcome_pairs.
+            (pair[1][0], pair[1][1])
+            for pair in outcome_pairs
+        ],
+        outlier_threshold=normalise_outlier_threshold(None),
+        sim_ids=canonical_ids[: len(outcome_pairs)],
+    )
+    clusters_payload = aggregate_clusters(
+        ordered_results,
+        cluster_names=cluster_names,
+        top_n=normalise_clusters_top_n(None),
+    )
+    bridge_payload = bridge_architect_accuracy(
+        outcome_pairs,
+        min_severity=normalise_bridge_severity(None),
+        top_n=normalise_bridge_top_n(None),
+    )
+
+    summary = build_portfolio_summary(
+        simulation_count=len(ordered_results),
+        findings_payload=findings_payload,
+        outcomes_payload=outcomes_payload,
+        clusters_payload=clusters_payload,
+        architect_accuracy_payload=bridge_payload,
+    )
+    return PortfolioSummaryOut(**summary)
 
 
 @router.get(
