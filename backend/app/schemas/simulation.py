@@ -108,13 +108,31 @@ class ArchitectAccuracyBridgeOut(BaseModel):
       denominator of the calibration averages).
     * ``by_architect`` — per-architect rollup sorted by
       ``|calibration_variance| DESC, finding_count DESC, name ASC``
-      so the most-biased architect surfaces first. Each row carries
-      ``calibrated_sim_count``, ``calibration_variance``,
-      ``calibration_direction`` (``OVER_PREDICTS`` /
-      ``UNDER_PREDICTS`` / ``BALANCED`` / ``INSUFFICIENT_DATA``),
-      and a ``needs_review`` boolean.
+      so the most-biased architect surfaces first. Each row
+      carries:
+
+      * ``calibrated_sim_count`` — sims with findings AND an
+        outcome.
+      * ``finding_only_sim_count`` — sims with findings but NO
+        outcome (ground truth not yet attached).
+      * ``ground_truth_coverage`` —
+        ``calibrated_sim_count / (calibrated + finding_only)``;
+        zero when the architect had no findings on any sim.
+      * ``calibration_variance`` — mean (predicted − actual)
+        across the calibrated sims.
+      * ``calibration_direction`` — ``OVER_PREDICTS`` /
+        ``UNDER_PREDICTS`` / ``BALANCED`` / ``INSUFFICIENT_DATA``.
+      * ``recommendation`` — derived action label:
+        ``TIGHTEN`` (over-prediction), ``LOOSEN`` (under-prediction),
+        ``TRUSTED`` (balanced), ``INSUFFICIENT_DATA``.
+      * ``needs_review`` — boolean: ``True`` when the direction
+        is ``OVER_PREDICTS`` or ``UNDER_PREDICTS``.
+
     * ``most_biased_architects`` — first ``top_n`` architect names
       by ``|calibration_variance|`` DESC.
+    * ``tighten_count`` / ``loosen_count`` / ``trusted_count`` /
+      ``insufficient_data_count`` — top-level counts so the
+      dashboard has four summary tiles (one per action).
     * ``min_severity`` — echoed back (whitespace-stripped and
       uppercased).
     """
@@ -123,6 +141,10 @@ class ArchitectAccuracyBridgeOut(BaseModel):
     most_biased_architects: list[str] = []
     simulation_count: int = 0
     outcome_attached_sim_count: int = 0
+    tighten_count: int = 0
+    loosen_count: int = 0
+    trusted_count: int = 0
+    insufficient_data_count: int = 0
     min_severity: str = "INFO"
 
 

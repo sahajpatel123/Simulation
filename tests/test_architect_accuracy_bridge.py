@@ -79,6 +79,10 @@ def test_bridge_empty_input_returns_zero_summary() -> None:
     assert out["most_biased_architects"] == []
     assert out["simulation_count"] == 0
     assert out["outcome_attached_sim_count"] == 0
+    assert out["tighten_count"] == 0
+    assert out["loosen_count"] == 0
+    assert out["trusted_count"] == 0
+    assert out["insufficient_data_count"] == 0
     assert out["min_severity"] == "INFO"
 
 
@@ -405,6 +409,267 @@ def test_bridge_default_top_n_is_five() -> None:
 
 
 # ---------------------------------------------------------------------------
+# coverage + recommendation
+# ---------------------------------------------------------------------------
+
+
+def test_bridge_finding_only_sim_count_when_outcome_missing() -> None:
+    """When a sim has findings but no usable outcome, the
+    architect's ``finding_only_sim_count`` goes up by 1 and the
+    calibrated count does not."""
+    from app.simulation.architect_accuracy_bridge import (
+        bridge_architect_accuracy,
+    )
+
+    out = bridge_architect_accuracy([
+        # Findings + outcome → calibrated.
+        _sim(
+            _finding("pricing", "CRITICAL"),
+            outcome=(0.20, 0.10),
+        ),
+        # Findings + no outcome → finding-only.
+        _sim(_finding("pricing", "CRITICAL")),
+    ])
+    pricing = next(
+        r for r in out["by_architect"] if r["architect_name"] == "pricing"
+    )
+    assert pricing["calibrated_sim_count"] == 1
+    assert pricing["finding_only_sim_count"] == 1
+
+
+def test_bridge_ground_truth_coverage_fraction() -> None:
+    """``ground_truth_coverage`` = calibrated / (calibrated +
+    finding_only). 1 calibrated + 3 finding-only → 0.25."""
+    from app.simulation.architect_accuracy_bridge import (
+        bridge_architect_accuracy,
+    )
+
+    out = bridge_architect_accuracy([
+        _sim(
+            _finding("pricing", "CRITICAL"),
+            outcome=(0.20, 0.10),
+        ),
+        _sim(_finding("pricing", "CRITICAL")),
+        _sim(_finding("pricing", "CRITICAL")),
+        _sim(_finding("pricing", "CRITICAL")),
+    ])
+    pricing = next(
+        r for r in out["by_architect"] if r["architect_name"] == "pricing"
+    )
+    assert pricing["calibrated_sim_count"] == 1
+    assert pricing["finding_only_sim_count"] == 3
+    assert pricing["ground_truth_coverage"] == pytest.approx(0.25)
+
+
+def test_bridge_ground_truth_coverage_full_when_all_calibrated() -> None:
+    from app.simulation.architect_accuracy_bridge import (
+        bridge_architect_accuracy,
+    )
+
+    out = bridge_architect_accuracy([
+        _sim(
+            _finding("pricing", "CRITICAL"),
+            outcome=(0.20, 0.10),
+        ),
+        _sim(
+            _finding("pricing", "CRITICAL"),
+            outcome=(0.30, 0.10),
+        ),
+    ])
+    pricing = next(
+        r for r in out["by_architect"] if r["architect_name"] == "pricing"
+    )
+    assert pricing["finding_only_sim_count"] == 0
+    assert pricing["ground_truth_coverage"] == pytest.approx(1.0)
+
+
+def test_bridge_recommendation_tighten_for_over_predicter() -> None:
+    from app.simulation.architect_accuracy_bridge import (
+        LABEL_TIGHTEN,
+        bridge_architect_accuracy,
+    )
+
+    out = bridge_architect_accuracy([
+        _sim(
+            _finding("pricing", "CRITICAL"),
+            outcome=(0.30, 0.10),  # over by 0.20
+        ),
+        _sim(
+            _finding("pricing", "CRITICAL"),
+            outcome=(0.25, 0.10),  # over by 0.15
+        ),
+    ])
+    pricing = next(
+        r for r in out["by_architect"] if r["architect_name"] == "pricing"
+    )
+    assert pricing["calibration_direction"] == "OVER_PREDICTS"
+    assert pricing["recommendation"] == LABEL_TIGHTEN
+
+
+def test_bridge_recommendation_loosen_for_under_predicter() -> None:
+    from app.simulation.architect_accuracy_bridge import (
+        LABEL_LOOSEN,
+        bridge_architect_accuracy,
+    )
+
+    out = bridge_architect_accuracy([
+        _sim(
+            _finding("trust", "CRITICAL"),
+            outcome=(0.00, 0.10),  # under by 0.10
+        ),
+        _sim(
+            _finding("trust", "CRITICAL"),
+            outcome=(0.05, 0.10),  # under by 0.05
+        ),
+    ])
+    trust = next(
+        r for r in out["by_architect"] if r["architect_name"] == "trust"
+    )
+    assert trust["calibration_direction"] == "UNDER_PREDICTS"
+    assert trust["recommendation"] == LABEL_LOOSEN
+
+
+def test_bridge_recommendation_trusted_for_balanced() -> None:
+    from app.simulation.architect_accuracy_bridge import (
+        LABEL_TRUSTED,
+        bridge_architect_accuracy,
+    )
+
+    # variance = 0.0 → BALANCED → TRUSTED.
+    out = bridge_architect_accuracy([
+        _sim(
+            _finding("pricing", "CRITICAL"),
+            outcome=(0.10, 0.10),
+        ),
+        _sim(
+            _finding("pricing", "CRITICAL"),
+            outcome=(0.10, 0.10),
+        ),
+    ])
+    pricing = next(
+        r for r in out["by_architect"] if r["architect_name"] == "pricing"
+    )
+    assert pricing["calibration_direction"] == "BALANCED"
+    assert pricing["recommendation"] == LABEL_TRUSTED
+
+
+def test_bridge_recommendation_insufficient_data_when_no_outcomes() -> None:
+    from app.simulation.architect_accuracy_bridge import (
+        bridge_architect_accuracy,
+    )
+
+    # Findings but every sim is missing the outcome side →
+    # finding_only count rises, no calibration data, recommendation
+    # is INSUFFICIENT_DATA.
+    out = bridge_architect_accuracy([
+        _sim(_finding("pricing", "CRITICAL")),
+        _sim(_finding("pricing", "CRITICAL")),
+    ])
+    pricing = next(
+        r for r in out["by_architect"] if r["architect_name"] == "pricing"
+    )
+    assert pricing["calibrated_sim_count"] == 0
+    assert pricing["calibration_direction"] == "INSUFFICIENT_DATA"
+    assert pricing["recommendation"] == "INSUFFICIENT_DATA"
+
+
+def test_bridge_recommendation_allowlist_pinned() -> None:
+    """Lock the recommendation enum so a rename breaks here
+    rather than silently at the dashboard."""
+    from app.simulation.architect_accuracy_bridge import (
+        VALID_RECOMMENDATIONS,
+    )
+
+    assert set(VALID_RECOMMENDATIONS) == {
+        "TIGHTEN",
+        "LOOSEN",
+        "TRUSTED",
+        "INSUFFICIENT_DATA",
+    }
+
+
+def test_bridge_top_level_action_counts() -> None:
+    """tighten / loosen / trusted / insufficient_data_count
+    summarise the per-architect rollup so the dashboard can show
+    four summary tiles."""
+    from app.simulation.architect_accuracy_bridge import (
+        bridge_architect_accuracy,
+    )
+
+    out = bridge_architect_accuracy([
+        # pricing over-predicts → TIGHTEN.
+        _sim(
+            _finding("pricing", "CRITICAL"),
+            outcome=(0.30, 0.10),
+        ),
+        # trust under-predicts → LOOSEN.
+        _sim(
+            _finding("trust", "CRITICAL"),
+            outcome=(0.00, 0.10),
+        ),
+        # onboarding balanced → TRUSTED.
+        _sim(
+            _finding("onboarding", "INFO"),
+            outcome=(0.10, 0.10),
+        ),
+        # retention flagged but no outcomes → INSUFFICIENT_DATA.
+        _sim(_finding("retention", "CRITICAL")),
+    ])
+    assert out["tighten_count"] == 1
+    assert out["loosen_count"] == 1
+    assert out["trusted_count"] == 1
+    assert out["insufficient_data_count"] == 1
+
+
+def test_bridge_top_level_counts_zero_for_empty_input() -> None:
+    from app.simulation.architect_accuracy_bridge import (
+        bridge_architect_accuracy,
+    )
+
+    out = bridge_architect_accuracy([])
+    assert out["tighten_count"] == 0
+    assert out["loosen_count"] == 0
+    assert out["trusted_count"] == 0
+    assert out["insufficient_data_count"] == 0
+
+
+def test_bridge_recommendation_and_direction_consistent() -> None:
+    """Defensive — direction and recommendation must agree (no
+    OVER_PREDICTS row labelled TRUSTED, etc.)."""
+    from app.simulation.architect_accuracy_bridge import (
+        bridge_architect_accuracy,
+    )
+
+    out = bridge_architect_accuracy([
+        _sim(
+            _finding("pricing", "CRITICAL"),
+            outcome=(0.30, 0.10),  # over
+        ),
+        _sim(
+            _finding("trust", "CRITICAL"),
+            outcome=(0.00, 0.10),  # under
+        ),
+        _sim(
+            _finding("onboarding", "INFO"),
+            outcome=(0.10, 0.10),  # balanced
+        ),
+        _sim(_finding("retention", "CRITICAL")),  # no outcome
+    ])
+    expected = {
+        "OVER_PREDICTS": "TIGHTEN",
+        "UNDER_PREDICTS": "LOOSEN",
+        "BALANCED": "TRUSTED",
+        "INSUFFICIENT_DATA": "INSUFFICIENT_DATA",
+    }
+    by_arch = {r["architect_name"]: r for r in out["by_architect"]}
+    for arch, row in by_arch.items():
+        assert row["recommendation"] == expected[row["calibration_direction"]], (
+            f"{arch}: {row['calibration_direction']} → "
+            f"{row['recommendation']}, expected {expected[row['calibration_direction']]}"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Public surface
 # ---------------------------------------------------------------------------
 
@@ -421,10 +686,14 @@ def test_public_allowlist_matches_callers() -> None:
         "DEFAULT_MIN_SEVERITY",
         "VALID_SEVERITIES",
         "VALID_CALIBRATION_DIRECTIONS",
+        "VALID_RECOMMENDATIONS",
         "LABEL_OVER_PREDICTS",
         "LABEL_UNDER_PREDICTS",
         "LABEL_BALANCED",
         "LABEL_INSUFFICIENT_DATA",
+        "LABEL_TIGHTEN",
+        "LABEL_LOOSEN",
+        "LABEL_TRUSTED",
         "CALIBRATION_BIAS_THRESHOLD",
         "severity_meets_min",
         "normalise_severity",
@@ -446,6 +715,10 @@ def test_bridge_out_default_shape() -> None:
     assert out.most_biased_architects == []
     assert out.simulation_count == 0
     assert out.outcome_attached_sim_count == 0
+    assert out.tighten_count == 0
+    assert out.loosen_count == 0
+    assert out.trusted_count == 0
+    assert out.insufficient_data_count == 0
     assert out.min_severity == "INFO"
 
 

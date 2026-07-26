@@ -67,6 +67,19 @@ VALID_CALIBRATION_DIRECTIONS: frozenset[str] = frozenset({
     LABEL_INSUFFICIENT_DATA,
 })
 
+# Recommendation allowlist — the action the dashboard should take.
+# Distinct from ``calibration_direction`` (the data) so the UI can
+# surface both ("over-predicted" + "TIGHTEN").
+LABEL_TIGHTEN: str = "TIGHTEN"
+LABEL_LOOSEN: str = "LOOSEN"
+LABEL_TRUSTED: str = "TRUSTED"
+VALID_RECOMMENDATIONS: frozenset[str] = frozenset({
+    LABEL_TIGHTEN,
+    LABEL_LOOSEN,
+    LABEL_TRUSTED,
+    LABEL_INSUFFICIENT_DATA,
+})
+
 # A 2pp absolute variance is the same threshold used by the
 # outcomes digest's confidence_label. Above 2pp = biased.
 CALIBRATION_BIAS_THRESHOLD: float = 0.02
@@ -176,6 +189,26 @@ def _calibration_direction(
     return LABEL_BALANCED
 
 
+def _recommendation(direction: str) -> str:
+    """Map a calibration direction to a one-word action label.
+
+    * ``OVER_PREDICTS`` → ``TIGHTEN`` — the model is over-promising,
+      tighten predicted conversion values.
+    * ``UNDER_PREDICTS`` → ``LOOSEN`` — the model is under-promising,
+      loosen predicted conversion values (and surface the upside).
+    * ``BALANCED`` → ``TRUSTED`` — calibration is good; no action.
+    * ``INSUFFICIENT_DATA`` → ``INSUFFICIENT_DATA`` — collect more
+      ground-truth outcomes before deciding.
+    """
+    if direction == LABEL_OVER_PREDICTS:
+        return LABEL_TIGHTEN
+    if direction == LABEL_UNDER_PREDICTS:
+        return LABEL_LOOSEN
+    if direction == LABEL_BALANCED:
+        return LABEL_TRUSTED
+    return LABEL_INSUFFICIENT_DATA
+
+
 def bridge_architect_accuracy(
     pairs: list[
         tuple[dict | None, tuple[float | None, float | None]]
@@ -222,6 +255,10 @@ def bridge_architect_accuracy(
             "most_biased_architects": [],
             "simulation_count": 0,
             "outcome_attached_sim_count": 0,
+            "tighten_count": 0,
+            "loosen_count": 0,
+            "trusted_count": 0,
+            "insufficient_data_count": 0,
             "min_severity": min_sev,
         }
 
@@ -232,6 +269,10 @@ def bridge_architect_accuracy(
     calibrated_architects: set[str] = set()
     # Per-architect list of variances on those calibrated sims.
     architect_variances: dict[str, list[float]] = defaultdict(list)
+    # Per-architect count of sims where they had findings but NO
+    # usable outcome — drives ``finding_only_sim_count`` and the
+    # ``ground_truth_coverage`` ratio.
+    finding_only_counts: dict[str, int] = defaultdict(int)
     # Top-level outcome_attached_sim_count (unique sims).
     outcome_attached_sims: set[int] = set()
 
@@ -275,6 +316,11 @@ def bridge_architect_accuracy(
         pred_f = _safe_float(pred)
         act_f = _safe_float(act)
         if pred_f is None or act_f is None:
+            # Findings without ground truth — count toward
+            # ``finding_only_sim_count`` so the dashboard can show
+            # "X sims have findings but no outcome yet".
+            for arch in sim_architects:
+                finding_only_counts[arch] += 1
             continue
         if not sim_architects:
             continue
@@ -289,6 +335,8 @@ def bridge_architect_accuracy(
     for arch, slot in per_architect.items():
         variances = architect_variances.get(arch, [])
         calibrated_count = len(variances)
+        finding_only_count = finding_only_counts.get(arch, 0)
+        total_observed = calibrated_count + finding_only_count
         mean_variance = (
             sum(variances) / calibrated_count
             if calibrated_count
@@ -297,6 +345,15 @@ def bridge_architect_accuracy(
         direction = _calibration_direction(
             mean_variance, calibrated_count
         )
+        # Ground-truth coverage is the share of the architect's
+        # findings-driven sims that have an attached outcome. The
+        # dashboard uses this to warn "calibration is based on a
+        # small slice — collect more outcomes first".
+        ground_truth_coverage = (
+            calibrated_count / total_observed
+            if total_observed > 0
+            else 0.0
+        )
         needs_review = direction in (
             LABEL_OVER_PREDICTS,
             LABEL_UNDER_PREDICTS,
@@ -304,8 +361,11 @@ def bridge_architect_accuracy(
         rows.append({
             **slot,
             "calibrated_sim_count": calibrated_count,
+            "finding_only_sim_count": finding_only_count,
+            "ground_truth_coverage": round(ground_truth_coverage, 6),
             "calibration_variance": round(mean_variance, 6),
             "calibration_direction": direction,
+            "recommendation": _recommendation(direction),
             "needs_review": needs_review,
         })
 
@@ -330,6 +390,22 @@ def bridge_architect_accuracy(
         "most_biased_architects": most_biased,
         "simulation_count": total,
         "outcome_attached_sim_count": len(outcome_attached_sims),
+        "tighten_count": sum(
+            1 for r in by_architect
+            if r["recommendation"] == LABEL_TIGHTEN
+        ),
+        "loosen_count": sum(
+            1 for r in by_architect
+            if r["recommendation"] == LABEL_LOOSEN
+        ),
+        "trusted_count": sum(
+            1 for r in by_architect
+            if r["recommendation"] == LABEL_TRUSTED
+        ),
+        "insufficient_data_count": sum(
+            1 for r in by_architect
+            if r["recommendation"] == LABEL_INSUFFICIENT_DATA
+        ),
         "min_severity": min_sev,
     }
 
@@ -340,10 +416,14 @@ __all__ = [
     "DEFAULT_MIN_SEVERITY",
     "VALID_SEVERITIES",
     "VALID_CALIBRATION_DIRECTIONS",
+    "VALID_RECOMMENDATIONS",
     "LABEL_OVER_PREDICTS",
     "LABEL_UNDER_PREDICTS",
     "LABEL_BALANCED",
     "LABEL_INSUFFICIENT_DATA",
+    "LABEL_TIGHTEN",
+    "LABEL_LOOSEN",
+    "LABEL_TRUSTED",
     "CALIBRATION_BIAS_THRESHOLD",
     "severity_meets_min",
     "normalise_severity",
