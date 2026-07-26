@@ -272,6 +272,293 @@ def test_aggregate_valid_severities_shape() -> None:
 
 
 # ---------------------------------------------------------------------------
+# by_cluster rollup
+# ---------------------------------------------------------------------------
+
+
+def _finding_full(
+    architect: str,
+    cluster_id: str,
+    cluster_name: str,
+    severity: str,
+    impact: float = 0.0,
+    finding: str = "no finding",
+    metric: str = "metric",
+    action: str = "fix it",
+) -> dict:
+    return {
+        "architect_name": architect,
+        "cluster_id": cluster_id,
+        "cluster_name": cluster_name,
+        "severity": severity,
+        "conversion_impact": impact,
+        "finding": finding,
+        "metric_affected": metric,
+        "recommended_action": action,
+    }
+
+
+def test_aggregate_by_cluster_groups_per_cluster() -> None:
+    from app.simulation.findings_aggregate import aggregate_findings
+
+    out = aggregate_findings(
+        _sims(
+            [
+                _finding_full(
+                    "pricing", "metro_pro", "Metro Pro", "CRITICAL"
+                ),
+                _finding_full(
+                    "pricing", "metro_pro", "Metro Pro", "WARNING"
+                ),
+                _finding_full(
+                    "trust", "students", "Students", "INFO"
+                ),
+            ],
+        )
+    )
+    by_cluster = {r["cluster_id"]: r for r in out["by_cluster"]}
+    assert by_cluster["metro_pro"]["finding_count"] == 2
+    assert by_cluster["metro_pro"]["critical_count"] == 1
+    assert by_cluster["metro_pro"]["warning_count"] == 1
+    assert by_cluster["students"]["finding_count"] == 1
+    assert by_cluster["students"]["info_count"] == 1
+
+
+def test_aggregate_by_cluster_sorted_by_count_then_critical() -> None:
+    from app.simulation.findings_aggregate import aggregate_findings
+
+    out = aggregate_findings(
+        _sims(
+            [
+                _finding_full("a", "c1", "C1", "CRITICAL"),
+                _finding_full("a", "c1", "C1", "WARNING"),
+            ],
+            [_finding_full("a", "c2", "C2", "CRITICAL")],
+        )
+    )
+    cluster_ids = [r["cluster_id"] for r in out["by_cluster"]]
+    assert cluster_ids == ["c1", "c2"]
+
+
+# ---------------------------------------------------------------------------
+# top_findings
+# ---------------------------------------------------------------------------
+
+
+def test_aggregate_top_findings_sorted_by_impact_desc() -> None:
+    from app.simulation.findings_aggregate import aggregate_findings
+
+    out = aggregate_findings(
+        _sims(
+            [
+                _finding_full("a", "c1", "C1", "CRITICAL", impact=0.05),
+                _finding_full("a", "c1", "C1", "CRITICAL", impact=0.30),
+                _finding_full("a", "c1", "C1", "WARNING", impact=0.50),
+            ],
+        )
+    )
+    impacts = [f["conversion_impact"] for f in out["top_findings"]]
+    assert impacts == sorted(impacts, reverse=True)
+    assert impacts[0] == pytest.approx(0.50)
+
+
+def test_aggregate_top_findings_caps_at_top_n() -> None:
+    from app.simulation.findings_aggregate import aggregate_findings
+
+    sims = _sims(
+        [
+            _finding_full("a", "c1", "C1", "CRITICAL", impact=0.01),
+            _finding_full("a", "c2", "C2", "CRITICAL", impact=0.02),
+            _finding_full("a", "c3", "C3", "CRITICAL", impact=0.03),
+            _finding_full("a", "c4", "C4", "CRITICAL", impact=0.04),
+        ],
+    )
+    out = aggregate_findings(sims, top_n=2)
+    assert len(out["top_findings"]) == 2
+    # Top 2 are the highest-impact findings.
+    assert out["top_findings"][0]["conversion_impact"] == pytest.approx(0.04)
+    assert out["top_findings"][1]["conversion_impact"] == pytest.approx(0.03)
+
+
+def test_aggregate_top_findings_pass_through_raw_shape() -> None:
+    """The UI may want to render the full finding row, so the dict
+    must carry the identifying fields (architect, cluster, severity)."""
+    from app.simulation.findings_aggregate import aggregate_findings
+
+    out = aggregate_findings(
+        _sims(
+            [
+                _finding_full(
+                    "pricing",
+                    "metro_pro",
+                    "Metro Pro",
+                    "CRITICAL",
+                    impact=0.10,
+                    finding="AOV too high",
+                    metric="aov",
+                    action="lower price",
+                ),
+            ],
+        )
+    )
+    top = out["top_findings"][0]
+    assert top["architect_name"] == "pricing"
+    assert top["cluster_id"] == "metro_pro"
+    assert top["cluster_name"] == "Metro Pro"
+    assert top["severity"] == "CRITICAL"
+    assert top["finding"] == "AOV too high"
+    assert top["metric_affected"] == "aov"
+    assert top["recommended_action"] == "lower price"
+
+
+def test_aggregate_top_findings_handles_null_impact() -> None:
+    """Defensive — a missing / None conversion_impact mustn't crash
+    the sort."""
+    from app.simulation.findings_aggregate import aggregate_findings
+
+    out = aggregate_findings(
+        [{"domain_findings": [
+            {"architect_name": "pricing", "cluster_id": "c1",
+             "cluster_name": "C1", "severity": "CRITICAL",
+             "conversion_impact": None},
+        ]}],
+    )
+    assert out["top_findings"][0]["conversion_impact"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# architect filter
+# ---------------------------------------------------------------------------
+
+
+def test_normalise_architect_filter_returns_lowercased() -> None:
+    from app.simulation.findings_aggregate import normalise_architect_filter
+
+    assert normalise_architect_filter("  Pricing  ") == "pricing"
+    assert normalise_architect_filter("PRICING") == "pricing"
+    assert normalise_architect_filter(None) is None
+    assert normalise_architect_filter("") is None
+    assert normalise_architect_filter("   ") is None
+
+
+def test_normalise_architect_filter_caps_length() -> None:
+    from app.simulation.findings_aggregate import (
+        MAX_ARCHITECT_NAME_LEN,
+        normalise_architect_filter,
+    )
+
+    with pytest.raises(ValueError):
+        normalise_architect_filter("a" * (MAX_ARCHITECT_NAME_LEN + 1))
+
+
+def test_aggregate_architect_filter_narrows_rollups() -> None:
+    from app.simulation.findings_aggregate import aggregate_findings
+
+    out = aggregate_findings(
+        _sims(
+            [
+                _finding_full("pricing", "c1", "C1", "CRITICAL", impact=0.10),
+                _finding_full("pricing", "c1", "C1", "WARNING", impact=0.05),
+                _finding_full("trust", "c2", "C2", "CRITICAL", impact=0.50),
+            ],
+        ),
+        architect="pricing",
+    )
+    # Severity breakdown reflects ALL findings (unfiltered).
+    assert out["severity_breakdown"] == {"CRITICAL": 2, "WARNING": 1}
+    # filtered_findings + per-architect rollup only contain pricing.
+    assert out["filtered_findings"] == 2
+    by_arch_names = {r["architect_name"] for r in out["by_architect"]}
+    assert by_arch_names == {"pricing"}
+    # Top findings only carry pricing rows.
+    top_archs = {f["architect_name"] for f in out["top_findings"]}
+    assert top_archs == {"pricing"}
+
+
+def test_aggregate_architect_filter_is_case_insensitive() -> None:
+    from app.simulation.findings_aggregate import aggregate_findings
+
+    out = aggregate_findings(
+        _sims(
+            [_finding_full("Pricing", "c1", "C1", "CRITICAL")],
+        ),
+        architect="PRICING",
+    )
+    assert out["filtered_findings"] == 1
+    assert out["by_architect"][0]["architect_name"] == "Pricing"
+
+
+def test_aggregate_architect_filter_echoed_back() -> None:
+    from app.simulation.findings_aggregate import aggregate_findings
+
+    out = aggregate_findings(
+        _sims([_finding_full("pricing", "c1", "C1", "CRITICAL")]),
+        architect="pricing",
+    )
+    # Echoed back exactly as the caller passed it (after strip), not
+    # the casefolded internal form.
+    assert out["architect_filter"] == "pricing"
+
+
+def test_aggregate_architect_filter_no_match_returns_zero_rollups() -> None:
+    from app.simulation.findings_aggregate import aggregate_findings
+
+    out = aggregate_findings(
+        _sims(
+            [_finding_full("pricing", "c1", "C1", "CRITICAL")],
+        ),
+        architect="unknown",
+    )
+    # Severity breakdown still counts everything.
+    assert out["severity_breakdown"] == {"CRITICAL": 1}
+    # But no architect matches the filter, so the rollups are empty.
+    assert out["by_architect"] == []
+    assert out["by_cluster"] == []
+    assert out["top_findings"] == []
+    assert out["filtered_findings"] == 0
+
+
+# ---------------------------------------------------------------------------
+# normalise_top_n
+# ---------------------------------------------------------------------------
+
+
+def test_normalise_top_n_default_and_bounds() -> None:
+    from app.simulation.findings_aggregate import (
+        DEFAULT_TOP_N,
+        MAX_TOP_N,
+        normalise_top_n,
+    )
+
+    assert normalise_top_n(None) == DEFAULT_TOP_N
+    assert normalise_top_n(0) == 1
+    assert normalise_top_n(-5) == 1
+    assert normalise_top_n(MAX_TOP_N + 1) == MAX_TOP_N
+    assert normalise_top_n(25) == 25
+
+
+# ---------------------------------------------------------------------------
+# Schema — new fields
+# ---------------------------------------------------------------------------
+
+
+def test_findings_aggregate_out_with_cluster_and_top_findings() -> None:
+    from app.schemas.simulation import FindingsAggregateOut
+
+    out = FindingsAggregateOut(
+        total_findings=10,
+        filtered_findings=4,
+        by_cluster=[{"cluster_id": "metro_pro", "finding_count": 4}],
+        top_findings=[{"architect_name": "pricing", "conversion_impact": 0.10}],
+        architect_filter="pricing",
+    )
+    assert len(out.by_cluster) == 1
+    assert out.by_cluster[0]["cluster_id"] == "metro_pro"
+    assert out.top_findings[0]["conversion_impact"] == 0.10
+    assert out.architect_filter == "pricing"
+
+
+# ---------------------------------------------------------------------------
 # Schema
 # ---------------------------------------------------------------------------
 
@@ -284,10 +571,13 @@ def test_findings_aggregate_out_default_shape() -> None:
     assert out.filtered_findings == 0
     assert out.severity_breakdown == {}
     assert out.by_architect == []
+    assert out.by_cluster == []
     assert out.top_architects == []
+    assert out.top_findings == []
     assert out.simulation_count == 0
     assert out.simulations_with_findings == 0
     assert out.shared_domain_count == 0
+    assert out.architect_filter is None
 
 
 def test_findings_aggregate_out_with_data() -> None:

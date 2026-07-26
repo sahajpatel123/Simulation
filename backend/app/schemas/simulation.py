@@ -69,19 +69,27 @@ class FindingsAggregateOut(BaseModel):
       across *all* findings, ignoring the filter.
     * ``by_architect`` — per-architect rollup, sorted by
       ``finding_count DESC, critical_count DESC, name ASC``.
+    * ``by_cluster`` — per-cluster rollup (which user segments are
+      most affected), sorted by ``finding_count DESC, critical DESC,
+      cluster_id ASC``.
     * ``top_architects`` — first ``top_n`` architect names (sorted).
-    * ``shared_domain_count`` — number of architect names that
-      topped the failure list in >= half of the supplied sims.
+    * ``top_findings`` — first ``top_n`` findings by conversion_impact
+      DESC (tiebreaker: severity DESC, then architect + cluster).
+    * ``architect_filter`` — echoed back (whitespace-stripped, but
+      *not* casefolded — the UI can show the caller's original input).
     """
 
     total_findings: int = 0
     filtered_findings: int = 0
     severity_breakdown: dict[str, int] = {}
     by_architect: list[dict] = []
+    by_cluster: list[dict] = []
     top_architects: list[str] = []
+    top_findings: list[dict] = []
     simulation_count: int = 0
     simulations_with_findings: int = 0
     shared_domain_count: int = 0
+    architect_filter: str | None = None
 
 
 class SimulationResultOut(BaseModel):

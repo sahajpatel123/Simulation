@@ -61,7 +61,9 @@ from app.simulation.sim_batch import (
 )
 from app.simulation.findings_aggregate import (
     aggregate_findings,
+    normalise_architect_filter,
     normalise_severity,
+    normalise_top_n,
 )
 from app.simulation.what_if import build_what_if_scenario
 from app.tasks.simulation_tasks import run_full_simulation
@@ -526,8 +528,18 @@ def aggregate_simulation_findings(
         default=None,
         ge=1,
         description=(
-            "How many top architects to surface in "
-            "``top_architects``. Default: 5."
+            "How many top architects / top findings to surface "
+            "(cap 100). Default: 5."
+        ),
+    ),
+    architect: str | None = Query(
+        default=None,
+        max_length=64,
+        description=(
+            "Optional case-insensitive architect name to "
+            "narrow the rollup. Global severity_breakdown still "
+            "reflects all findings; only by_architect / by_cluster "
+            "/ top_findings are filtered."
         ),
     ),
     db: Session = Depends(get_db),
@@ -538,19 +550,22 @@ def aggregate_simulation_findings(
     Powers the "portfolio view" dashboard: "across my 12 simulations,
     which architect keeps flagging critical issues?" The
     ``shared_domain_count`` field highlights the systemic failures
-    that appear in >= half of the supplied sims.
+    that appear in >= half of the supplied sims. The ``by_cluster``
+    and ``top_findings`` fields surface the *which user segment* and
+    *show me the worst thing* views respectively.
     """
     try:
         canonical_ids = parse_id_list(ids)
         min_sev = normalise_severity(min_severity)
+        arch_filter = normalise_architect_filter(architect)
+        effective_top_n = normalise_top_n(top_n)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         )
-    effective_top_n = top_n if top_n is not None else 5
     if not canonical_ids:
-        return FindingsAggregateOut()
+        return FindingsAggregateOut(architect_filter=architect)
 
     # Single JOIN: scope to the current user + grab the persisted
     # results_json blobs. We only fetch completed sims — aggregating
@@ -576,6 +591,7 @@ def aggregate_simulation_findings(
         ordered_results,
         min_severity=min_sev,
         top_n=effective_top_n,
+        architect=arch_filter,
     )
     return FindingsAggregateOut(**aggregate)
 
