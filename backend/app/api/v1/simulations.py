@@ -37,6 +37,7 @@ from app.schemas.simulation import (
     OutcomesDigestOut,
     PortfolioSummaryOut,
     PortfolioTrendOut,
+    ProjectPortfolioRollupOut,
     SimulationBatchStatusOut,
     SimulationCreate,
     SimulationOut,
@@ -88,6 +89,9 @@ from app.simulation.findings_trend import (
     build_findings_trend,
     normalise_bin as normalise_findings_bin,
     normalise_severity as normalise_findings_severity,
+)
+from app.simulation.project_rollup import (
+    build_project_portfolio_rollup,
 )
 from app.simulation.conductor import _ARCHITECTS as _architect_registry
 from app.simulation.comparison import build_simulation_comparison
@@ -2288,6 +2292,100 @@ def get_findings_trend(
         bin_size=effective_bin,
     )
     return FindingsTrendOut(**payload)
+
+
+@router.get(
+    "/project-portfolio-rollup",
+    response_model=ProjectPortfolioRollupOut,
+    summary=(
+        "Per-project rollup so the dashboard's 'all my "
+        "projects' view shows which project has the most "
+        "sims, the most recent activity, and the worst "
+        "calibration"
+    ),
+    # DB read of N sim rows + N outcome rows — same cap as
+    # the other aggregate endpoints.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_project_portfolio_rollup(
+    ids: list[str] | None = Query(
+        default=None,
+        description=(
+            "One or more simulation ids. Same parser as "
+            "``/simulations/batch``. Optional; without ids "
+            "the rollup is empty."
+        ),
+    ),
+    confidence_threshold: float | None = Query(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "|predicted − actual| above this is counted as a "
+            "miscalibrated sim. Default 0.02 (2pp). Clamped "
+            "to [0.0, 1.0]."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProjectPortfolioRollupOut:
+    """Per-project rollup across the user's batch."""
+    try:
+        canonical_ids = parse_id_list(ids)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    if not canonical_ids:
+        return ProjectPortfolioRollupOut()
+
+    threshold = (
+        confidence_threshold
+        if confidence_threshold is not None
+        else 0.02
+    )
+
+    rows = (
+        db.query(
+            Project.id,
+            Project.title,
+            Simulation.id,
+            Simulation.created_at,
+            Outcome.predicted_conversion_rate,
+            Outcome.actual_conversion_rate,
+        )
+        .select_from(Simulation)
+        .join(Project, Simulation.project_id == Project.id)
+        .outerjoin(
+            Outcome, Outcome.simulation_id == Simulation.id,
+        )
+        .filter(
+            Simulation.id.in_(canonical_ids),
+            Simulation.status == "COMPLETED",
+            Project.user_id == current_user.id,
+        )
+        .order_by(Simulation.id.asc(), Outcome.created_at.desc())
+        .all()
+    )
+
+    # Dedupe to the latest outcome per sim.
+    seen: set[int] = set()
+    rollup_rows: list[tuple] = []
+    for r in rows:
+        if r[2] in seen:
+            continue
+        seen.add(r[2])
+        rollup_rows.append(
+            (r[0], r[1], r[2], r[3], r[4], r[5])
+        )
+
+    payload = build_project_portfolio_rollup(
+        rollup_rows,
+        confidence_threshold=threshold,
+    )
+    payload["confidence_threshold"] = threshold
+    return ProjectPortfolioRollupOut(**payload)
 
 
 @router.get(

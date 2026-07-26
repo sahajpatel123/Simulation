@@ -728,6 +728,32 @@ class FindingsTrendOut(BaseModel):
     total_info_count: int = 0
 
 
+class ProjectPortfolioRollupOut(BaseModel):
+    """Response from ``GET /simulations/project-portfolio-rollup``.
+
+    Per-project rollup so the dashboard's 'all my projects'
+    view can show which project has the most sims, the most
+    recent activity, and the worst calibration.
+
+    * ``projects`` — list of per-project rollup rows sorted by
+      ``simulation_count`` DESC then ``project_id`` ASC. Each
+      row: ``project_id``, ``project_title``,
+      ``simulation_count``, ``latest_sim_id``,
+      ``latest_sim_created_at`` (ISO 8601 UTC), mean
+      predicted / actual conversion across the project's
+      sims, ``miscalibrated_sim_count`` (sims where
+      |predicted − actual| exceeds the confidence threshold).
+    * ``total_projects`` — unique project count.
+    * ``total_simulations`` — sum of ``simulation_count``.
+    * ``confidence_threshold`` — echoed.
+    """
+
+    projects: list[dict] = []
+    total_projects: int = 0
+    total_simulations: int = 0
+    confidence_threshold: float = 0.02
+
+
 class SimulationResultOut(BaseModel):
     id: int
     project_id: int
