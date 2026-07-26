@@ -26,6 +26,7 @@ from app.schemas.simulation import (
     FindingsAggregateOut,
     OutcomesDigestOut,
     PortfolioSummaryOut,
+    PortfolioTrendOut,
     SimulationBatchStatusOut,
     SimulationCreate,
     SimulationOut,
@@ -84,6 +85,7 @@ from app.simulation.outcomes_digest import (
     normalise_outlier_threshold,
 )
 from app.simulation.portfolio_summary import build_portfolio_summary
+from app.simulation.portfolio_trend import compute_portfolio_trend
 from app.simulation.what_if import build_what_if_scenario
 from app.tasks.simulation_tasks import run_full_simulation
 from app.worker import celery_app
@@ -1050,6 +1052,175 @@ def get_portfolio_summary(
         architect_accuracy_payload=bridge_payload,
     )
     return PortfolioSummaryOut(**summary)
+
+
+def _build_window_portfolio(
+    db: Session,
+    current_user: User,
+    *,
+    since: datetime | None,
+    until: datetime | None,
+    cluster_names: dict[str, str],
+) -> dict:
+    """Build the full portfolio-summary payload for one time
+    window. Internal helper used by the trend route so both
+    windows run the same DB query + sub-aggregate pipeline."""
+    from app.simulation.sim_batch import parse_since
+
+    # Single DB round-trip per window: LEFT JOIN outcomes to
+    # simulations, scoped to the current user. The optional
+    # ``since`` / ``until`` filter narrows by Simulation.created_at.
+    filters = [
+        Project.user_id == current_user.id,
+    ]
+    if since is not None:
+        filters.append(Simulation.created_at >= since)
+    if until is not None:
+        filters.append(Simulation.created_at < until)
+    rows = (
+        db.query(
+            Simulation.id,
+            Simulation.results_json,
+            Outcome.predicted_conversion_rate,
+            Outcome.actual_conversion_rate,
+            Outcome.created_at,
+        )
+        .outerjoin(
+            Outcome, Outcome.simulation_id == Simulation.id,
+        )
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(*filters)
+        .order_by(Outcome.created_at.desc())
+        .all()
+    )
+
+    # Keep latest outcome per sim; build the two lists the
+    # sub-aggregates need.
+    by_id: dict[int, object] = {}
+    for r in rows:
+        if r.id in by_id:
+            continue
+        by_id[r.id] = r
+    ordered_results: list[dict] = []
+    outcome_pairs: list[
+        tuple[dict | None, tuple[float | None, float | None]]
+    ] = []
+    for sid, match in by_id.items():
+        ordered_results.append(match.results_json)
+        outcome_pairs.append(
+            (
+                match.results_json,
+                (
+                    match.predicted_conversion_rate,
+                    match.actual_conversion_rate,
+                ),
+            )
+        )
+
+    # Run the four sub-aggregates (same path as portfolio-summary).
+    findings_payload = aggregate_findings(
+        ordered_results,
+        min_severity=normalise_severity(None),
+        top_n=normalise_top_n(None),
+        architect=None,
+    )
+    outcomes_payload = aggregate_outcomes(
+        [(p[1][0], p[1][1]) for p in outcome_pairs],
+        outlier_threshold=normalise_outlier_threshold(None),
+        sim_ids=list(by_id.keys()),
+    )
+    clusters_payload = aggregate_clusters(
+        ordered_results,
+        cluster_names=cluster_names,
+        top_n=normalise_clusters_top_n(None),
+    )
+    bridge_payload = bridge_architect_accuracy(
+        outcome_pairs,
+        min_severity=normalise_bridge_severity(None),
+        top_n=normalise_bridge_top_n(None),
+    )
+    return build_portfolio_summary(
+        simulation_count=len(ordered_results),
+        findings_payload=findings_payload,
+        outcomes_payload=outcomes_payload,
+        clusters_payload=clusters_payload,
+        architect_accuracy_payload=bridge_payload,
+    )
+
+
+@router.get(
+    "/portfolio-trend",
+    response_model=PortfolioTrendOut,
+    summary=(
+        "Diff two portfolio summaries across time windows so the "
+        "dashboard can render trend tiles"
+    ),
+    # Composite of TWO portfolio summaries → same cap.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_portfolio_trend(
+    since: str | None = Query(
+        default=None,
+        max_length=64,
+        description=(
+            "ISO 8601 timestamp (timezone-aware). Earlier window "
+            "starts here. Optional."
+        ),
+    ),
+    until: str | None = Query(
+        default=None,
+        max_length=64,
+        description=(
+            "ISO 8601 timestamp (timezone-aware). Later window "
+            "ends here (exclusive upper bound). Defaults to now."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioTrendOut:
+    """Compare portfolio across two time windows.
+
+    The earlier window runs from ``since`` up to ``until``. The
+    later window runs from ``until`` up to "now" (UTC). Both
+    windows' portfolios are computed independently, then the
+    trend helper diffs them into per-metric deltas + an overall
+    health-transition label so the dashboard can render "MAE
+    dropped from 0.12 → 0.05 over the last 30 days · NEEDS_
+    ATTENTION → HEALTHY".
+    """
+    try:
+        since_dt = parse_since(since)
+        until_dt = parse_since(until)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    now = datetime.now(tz=timezone.utc)
+    later_until = until_dt or now
+
+    cluster_names = {
+        cluster.cluster_id: cluster.name
+        for cluster in _registry.all_clusters()
+    }
+
+    earlier_payload = _build_window_portfolio(
+        db,
+        current_user,
+        since=since_dt,
+        until=later_until,
+        cluster_names=cluster_names,
+    )
+    later_payload = _build_window_portfolio(
+        db,
+        current_user,
+        since=later_until,
+        until=None,
+        cluster_names=cluster_names,
+    )
+    trend = compute_portfolio_trend(earlier_payload, later_payload)
+    return PortfolioTrendOut(**trend)
 
 
 @router.get(

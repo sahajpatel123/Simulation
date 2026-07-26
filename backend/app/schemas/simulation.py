@@ -304,6 +304,48 @@ class PortfolioSummaryOut(BaseModel):
     )
 
 
+class PortfolioTrendOut(BaseModel):
+    """Response from ``GET /simulations/portfolio-trend``.
+
+    Diff of two portfolio summaries — earlier vs later time
+    windows — so the dashboard can render "MAE dropped from
+    0.12 → 0.05 over the last 30 days · NEEDS_ATTENTION →
+    HEALTHY". Each window is computed independently by the
+    portfolio-summary helper; the trend fuses the two.
+
+    * ``earlier_simulation_count`` / ``later_simulation_count`` /
+      ``simulation_count_delta`` — how the batch grew (or
+      shrunk) across the two windows.
+    * ``earlier_health`` / ``later_health`` — the overall_health
+      labels from each window, echoed back.
+    * ``health_transition`` — one of ``IMPROVED`` / ``DEGRADED``
+      / ``STABLE`` / ``NEW`` / ``RESOLVED`` / ``MIXED``. ``NEW``
+      means the earlier window had INSUFFICIENT_DATA and the
+      later window has actionable data (calibration unlocked).
+      ``RESOLVED`` is the inverse.
+    * ``deltas`` — list of per-metric rows. Each carries
+      ``metric``, ``earlier``, ``later``, ``delta``, and
+      ``direction`` (one of ``IMPROVING`` / ``DEGRADING`` /
+      ``STABLE`` / ``NEW`` / ``RESOLVED``).
+    * ``improving_count`` / ``degrading_count`` / ``stable_count``
+      — summary counts so the dashboard can render "X up /
+      Y down / Z stable" without iterating.
+    * ``summary`` — one-line headline string.
+    """
+
+    earlier_simulation_count: int = 0
+    later_simulation_count: int = 0
+    simulation_count_delta: int = 0
+    earlier_health: str = "INSUFFICIENT_DATA"
+    later_health: str = "INSUFFICIENT_DATA"
+    health_transition: str = "STABLE"
+    deltas: list[dict] = []
+    improving_count: int = 0
+    degrading_count: int = 0
+    stable_count: int = 0
+    summary: str = ""
+
+
 class SimulationResultOut(BaseModel):
     id: int
     project_id: int
