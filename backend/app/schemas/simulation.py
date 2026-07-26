@@ -833,6 +833,12 @@ class CalibrationHealthOut(BaseModel):
       INVESTIGATE_BIAS / etc.).
     * ``trend_buckets`` — list of per-window rows
       (7d / 30d / 90d) with mean_abs_variance.
+    * ``health_trajectory`` — IMPROVING / STABLE /
+      DEGRADING / INSUFFICIENT_DATA bucketed from comparing
+      7d vs 30d mean |variance| (1pp band).
+    * ``consecutive_well_calibrated_days`` — count of back-
+      to-back days where the rolling 7d mean |variance|
+      was well-calibrated. Capped at 90 days.
     * ``summary`` — one-line headline.
     """
 
@@ -842,6 +848,8 @@ class CalibrationHealthOut(BaseModel):
     top_miscalibrated_architect: dict | None = None
     architect_accuracy_counts: dict = {}
     trend_buckets: list[dict] = []
+    health_trajectory: str = "INSUFFICIENT_DATA"
+    consecutive_well_calibrated_days: int = 0
     summary: str = ""
 
 

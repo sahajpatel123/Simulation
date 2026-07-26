@@ -54,6 +54,34 @@ TREND_WINDOWS: tuple[tuple[str, int], ...] = (
 # Cap on per-window rows so the trend doesn't blow up.
 MAX_TREND_WINDOWS: int = 4
 
+# Trajectory labels — derived from comparing the 7d mean
+# |variance| against the 30d mean |variance|. The 7d window
+# is the more recent snapshot; if it's lower than the 30d,
+# the system is improving. Same 1pp threshold as the cluster
+# / architect trends so the dashboard's wording stays
+# consistent.
+LABEL_IMPROVING: str = "IMPROVING"
+LABEL_STABLE: str = "STABLE"
+LABEL_DEGRADING: str = "DEGRADING"
+LABEL_INSUFFICIENT_DATA: str = "INSUFFICIENT_DATA"
+VALID_TRAJECTORY_LABELS: frozenset[str] = frozenset({
+    LABEL_IMPROVING,
+    LABEL_STABLE,
+    LABEL_DEGRADING,
+    LABEL_INSUFFICIENT_DATA,
+})
+
+# Streak thresholds.
+HEALTHY_STREAK_MAX_MAE: float = 0.02
+# A day is "well-calibrated" when the rolling 7d mean
+# |variance| ≤ HEALTHY_STREAK_MAX_MAE.
+STREAK_DAY_WINDOW: int = 7
+# How many of the most recent days to walk back when
+# counting the streak. Capped so a stale system doesn't
+# report a 365-day "streak" when the founder hasn't
+# recorded sims in months.
+MAX_STREAK_DAYS: int = 90
+
 
 def _safe_float(raw: object) -> float | None:
     """Coerce to a finite float in [0.0, 1.0] or return None."""
@@ -110,6 +138,72 @@ def _overall_health(mean_abs_variance: float | None) -> str:
     if mean_abs_variance < NEEDS_ATTENTION_MAX_MAE:
         return LABEL_NEEDS_ATTENTION
     return LABEL_POORLY_CALIBRATED
+
+
+def _trajectory_label(
+    mean_7d: float | None,
+    mean_30d: float | None,
+) -> str:
+    """Compare 7d vs 30d mean |variance|.
+
+    If 7d < 30d → IMPROVING (the recent window is tighter
+    than the longer one — system is getting better).
+    If 7d > 30d → DEGRADING. Within 1pp → STABLE. Either
+    side missing → INSUFFICIENT_DATA.
+    """
+    if mean_7d is None or mean_30d is None:
+        return LABEL_INSUFFICIENT_DATA
+    delta = mean_7d - mean_30d
+    if abs(delta) < 0.01:
+        return LABEL_STABLE
+    return LABEL_IMPROVING if delta < 0 else LABEL_DEGRADING
+
+
+def _consecutive_well_calibrated_days(
+    rows: list[tuple[datetime, float]],
+    now: datetime,
+) -> int:
+    """Count back from ``now`` the consecutive days where the
+    rolling ``STREAK_DAY_WINDOW``-day mean |variance| is
+    well-calibrated (≤ HEALTHY_STREAK_MAX_MAE).
+
+    Stops at the first day that doesn't qualify. Returns 0
+    when the most recent day isn't well-calibrated or when
+    there's no data.
+
+    Capped at :data:`MAX_STREAK_DAYS` so a stale system
+    doesn't report a multi-year "streak" when the founder
+    hasn't recorded sims in months.
+    """
+    if not rows:
+        return 0
+    # Group by date (UTC).
+    by_date: dict[str, list[float]] = {}
+    for dt, var in rows:
+        if dt is None:
+            continue
+        key = dt.strftime("%Y-%m-%d")
+        by_date.setdefault(key, []).append(var)
+    # Walk back from today.
+    streak = 0
+    for offset in range(MAX_STREAK_DAYS + 1):
+        target = (now - timedelta(days=offset)).strftime("%Y-%m-%d")
+        if target not in by_date:
+            break
+        # Rolling window: combine the target day with the
+        # previous STREAK_DAY_WINDOW-1 days.
+        window: list[float] = []
+        for inner in range(offset, offset + STREAK_DAY_WINDOW):
+            d_key = (now - timedelta(days=inner)).strftime("%Y-%m-%d")
+            window.extend(by_date.get(d_key, []))
+        if not window:
+            break
+        mean_window = sum(window) / len(window)
+        if mean_window <= HEALTHY_STREAK_MAX_MAE:
+            streak += 1
+        else:
+            break
+    return streak
 
 
 def _trend_buckets(
@@ -226,6 +320,8 @@ def build_calibration_health(
                 LABEL_TRUSTED: 0,
             },
             "trend_buckets": _trend_buckets([], effective_now),
+            "health_trajectory": LABEL_INSUFFICIENT_DATA,
+            "consecutive_well_calibrated_days": 0,
             "summary": "No data — calibration health unknown.",
         }
 
@@ -282,13 +378,25 @@ def build_calibration_health(
         f"{observation_count} sim(s))"
     )
 
+    # Trend + trajectory.
+    trend_buckets = _trend_buckets(trend_rows, effective_now)
+    by_window = {b["window"]: b["mean_abs_variance"] for b in trend_buckets}
+    trajectory = _trajectory_label(
+        by_window.get("7d"), by_window.get("30d"),
+    )
+    streak = _consecutive_well_calibrated_days(
+        trend_rows, effective_now,
+    )
+
     return {
         "overall_health": overall,
         "mean_abs_variance": round(mean_abs_variance, 6),
         "observation_count": observation_count,
         "top_miscalibrated_architect": top_payload,
         "architect_accuracy_counts": accuracy_counts,
-        "trend_buckets": _trend_buckets(trend_rows, effective_now),
+        "trend_buckets": trend_buckets,
+        "health_trajectory": trajectory,
+        "consecutive_well_calibrated_days": streak,
         "summary": summary,
     }
 
@@ -301,6 +409,13 @@ __all__ = [
     "VALID_HEALTH_LABELS",
     "WELL_CALIBRATED_MAX_MAE",
     "NEEDS_ATTENTION_MAX_MAE",
+    "LABEL_IMPROVING",
+    "LABEL_STABLE",
+    "LABEL_DEGRADING",
+    "VALID_TRAJECTORY_LABELS",
+    "HEALTHY_STREAK_MAX_MAE",
+    "STREAK_DAY_WINDOW",
+    "MAX_STREAK_DAYS",
     "TREND_WINDOWS",
     "build_calibration_health",
 ]

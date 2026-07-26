@@ -33,6 +33,13 @@ def test_public_allowlist_matches_callers() -> None:
         "VALID_HEALTH_LABELS",
         "WELL_CALIBRATED_MAX_MAE",
         "NEEDS_ATTENTION_MAX_MAE",
+        "LABEL_IMPROVING",
+        "LABEL_STABLE",
+        "LABEL_DEGRADING",
+        "VALID_TRAJECTORY_LABELS",
+        "HEALTHY_STREAK_MAX_MAE",
+        "STREAK_DAY_WINDOW",
+        "MAX_STREAK_DAYS",
         "TREND_WINDOWS",
         "build_calibration_health",
     }
@@ -335,6 +342,154 @@ def test_health_summary_no_data_message() -> None:
 
 
 # ---------------------------------------------------------------------------
+# health_trajectory + consecutive_well_calibrated_days
+# ---------------------------------------------------------------------------
+
+
+def test_health_trajectory_improving_when_7d_below_30d() -> None:
+    from app.simulation.calibration_health import (
+        LABEL_IMPROVING,
+        build_calibration_health,
+    )
+
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    out = build_calibration_health(
+        [
+            # 30d: |variance| 0.05 (mild bias)
+            (now - timedelta(days=20), 0.10, 0.05, []),
+            (now - timedelta(days=10), 0.10, 0.05, []),
+            # 7d (last 3 days): |variance| 0.01 (well-calibrated)
+            (now - timedelta(days=2), 0.10, 0.09, []),
+            (now - timedelta(days=1), 0.10, 0.09, []),
+        ],
+        now=now,
+    )
+    assert out["health_trajectory"] == LABEL_IMPROVING
+
+
+def test_health_trajectory_degrading_when_7d_above_30d() -> None:
+    from app.simulation.calibration_health import (
+        LABEL_DEGRADING,
+        build_calibration_health,
+    )
+
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    out = build_calibration_health(
+        [
+            # 30d: |variance| 0.01 (well-calibrated)
+            (now - timedelta(days=20), 0.10, 0.09, []),
+            (now - timedelta(days=10), 0.10, 0.09, []),
+            # 7d: |variance| 0.05 (drifted worse)
+            (now - timedelta(days=2), 0.10, 0.05, []),
+            (now - timedelta(days=1), 0.10, 0.05, []),
+        ],
+        now=now,
+    )
+    assert out["health_trajectory"] == LABEL_DEGRADING
+
+
+def test_health_trajectory_stable_within_1pp_band() -> None:
+    from app.simulation.calibration_health import (
+        LABEL_STABLE,
+        build_calibration_health,
+    )
+
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    out = build_calibration_health(
+        [
+            # 30d: |variance| 0.05
+            (now - timedelta(days=20), 0.10, 0.05, []),
+            # 7d: |variance| 0.05 (delta 0)
+            (now - timedelta(days=2), 0.10, 0.05, []),
+        ],
+        now=now,
+    )
+    assert out["health_trajectory"] == LABEL_STABLE
+
+
+def test_health_trajectory_insufficient_when_no_data() -> None:
+    from app.simulation.calibration_health import (
+        LABEL_INSUFFICIENT_DATA,
+        build_calibration_health,
+    )
+
+    out = build_calibration_health([])
+    assert out["health_trajectory"] == LABEL_INSUFFICIENT_DATA
+
+
+def test_health_consecutive_well_calibrated_days_counts_back() -> None:
+    """The streak counts back-to-back days where the rolling
+    7d mean |variance| was well-calibrated.
+
+    Miscalibrated day placed at -10 (outside the 7d window of
+    every recent day) so it doesn't bleed into the rolling
+    means of the most recent days.
+    """
+    from app.simulation.calibration_health import build_calibration_health
+
+    now = datetime(2026, 6, 10, tzinfo=timezone.utc)
+    out = build_calibration_health(
+        [
+            # 3 consecutive days of well-calibrated sims.
+            (now - timedelta(days=0), 0.10, 0.09, []),
+            (now - timedelta(days=1), 0.10, 0.09, []),
+            (now - timedelta(days=2), 0.10, 0.09, []),
+            # Miscalibrated day placed OUTSIDE the 7d rolling
+            # window of every recent day → streak stays at 3.
+            (now - timedelta(days=10), 0.10, 0.01, []),
+        ],
+        now=now,
+    )
+    assert out["consecutive_well_calibrated_days"] == 3
+
+
+def test_health_consecutive_streak_zero_when_no_data() -> None:
+    from app.simulation.calibration_health import build_calibration_health
+
+    out = build_calibration_health([])
+    assert out["consecutive_well_calibrated_days"] == 0
+
+
+def test_health_consecutive_streak_breaks_on_miscalibrated() -> None:
+    from app.simulation.calibration_health import build_calibration_health
+
+    now = datetime(2026, 6, 10, tzinfo=timezone.utc)
+    out = build_calibration_health(
+        [
+            # 2 days well-calibrated, then today miscalibrated.
+            (now - timedelta(days=0), 0.10, 0.01, []),  # today bad
+            (now - timedelta(days=1), 0.10, 0.09, []),
+            (now - timedelta(days=2), 0.10, 0.09, []),
+        ],
+        now=now,
+    )
+    assert out["consecutive_well_calibrated_days"] == 0
+
+
+def test_health_default_shape_includes_trajectory_fields() -> None:
+    """The default Pydantic payload carries trajectory fields
+    so the dashboard always sees the canonical shape."""
+    from app.schemas.simulation import CalibrationHealthOut
+
+    out = CalibrationHealthOut()
+    assert out.health_trajectory == "INSUFFICIENT_DATA"
+    assert out.consecutive_well_calibrated_days == 0
+
+
+def test_health_trajectory_allowlist_pinned() -> None:
+    from app.simulation.calibration_health import (
+        VALID_TRAJECTORY_LABELS,
+    )
+
+    assert set(VALID_TRAJECTORY_LABELS) == {
+        "IMPROVING",
+        "STABLE",
+        "DEGRADING",
+        "INSUFFICIENT_DATA",
+    }
+
+
+# ---------------------------------------------------------------------------
 # Schema
 # ---------------------------------------------------------------------------
 
@@ -349,6 +504,8 @@ def test_calibration_health_out_default_shape() -> None:
     assert out.top_miscalibrated_architect is None
     assert out.architect_accuracy_counts == {}
     assert out.trend_buckets == []
+    assert out.health_trajectory == "INSUFFICIENT_DATA"
+    assert out.consecutive_well_calibrated_days == 0
     assert out.summary == ""
 
 
