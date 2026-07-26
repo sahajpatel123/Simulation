@@ -263,6 +263,13 @@ def build_findings_trend(
             "last_bin_critical": 0,
             "mean_delta_critical": None,
             "peak_critical_bin": None,
+            "critical_finding_distribution": {
+                "zero": 0, "low": 0, "moderate": 0, "high": 0,
+            },
+            "total_finding_count": 0,
+            "total_critical_count": 0,
+            "total_warning_count": 0,
+            "total_info_count": 0,
         }
 
     # Direction from first vs last bin's CRITICAL count.
@@ -294,6 +301,28 @@ def build_findings_trend(
                 "critical_count": peak_row["critical_count"],
             }
 
+    # Critical finding distribution — bucket each bin's
+    # critical_count into zero / low (1-2) / moderate (3-5) /
+    # high (6+) so the dashboard can render "5 bins had no
+    # criticals · 2 bins had 1-2 · 1 bin had 6+" without
+    # iterating.
+    critical_distribution = {"zero": 0, "low": 0, "moderate": 0, "high": 0}
+    for r in rows_out:
+        c = r["critical_count"]
+        if c == 0:
+            critical_distribution["zero"] += 1
+        elif c <= 2:
+            critical_distribution["low"] += 1
+        elif c <= 5:
+            critical_distribution["moderate"] += 1
+        else:
+            critical_distribution["high"] += 1
+
+    total_critical = sum(r["critical_count"] for r in rows_out)
+    total_warning = sum(r["warning_count"] for r in rows_out)
+    total_info = sum(r["info_count"] for r in rows_out)
+    total_finding = total_critical + total_warning + total_info
+
     return {
         "bin_size": effective_bin,
         "min_severity": effective_severity,
@@ -303,6 +332,11 @@ def build_findings_trend(
         "last_bin_critical": last_critical,
         "mean_delta_critical": mean_delta,
         "peak_critical_bin": peak_payload,
+        "critical_finding_distribution": critical_distribution,
+        "total_finding_count": total_finding,
+        "total_critical_count": total_critical,
+        "total_warning_count": total_warning,
+        "total_info_count": total_info,
     }
 
 

@@ -431,6 +431,133 @@ def test_trend_skips_invalid_iso_strings() -> None:
 
 
 # ---------------------------------------------------------------------------
+# critical_finding_distribution + totals
+# ---------------------------------------------------------------------------
+
+
+def test_trend_critical_distribution_default_when_empty() -> None:
+    from app.simulation.findings_trend import build_findings_trend
+
+    out = build_findings_trend([])
+    assert out["critical_finding_distribution"] == {
+        "zero": 0, "low": 0, "moderate": 0, "high": 0,
+    }
+    assert out["total_finding_count"] == 0
+
+
+def test_trend_critical_distribution_bucketing() -> None:
+    """Each bin's critical_count is bucketed into
+    zero / low (1-2) / moderate (3-5) / high (6+)."""
+    from app.simulation.findings_trend import build_findings_trend
+
+    rows = [
+        # zero (0 criticals)
+        (
+            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            [_finding("WARNING")],
+        ),
+        # zero (no findings)
+        (
+            datetime(2026, 1, 2, tzinfo=timezone.utc),
+            [_finding("WARNING"), _finding("INFO")],
+        ),
+        # low (1 critical)
+        (
+            datetime(2026, 1, 3, tzinfo=timezone.utc),
+            [_finding("CRITICAL")],
+        ),
+        # low (2 criticals)
+        (
+            datetime(2026, 1, 4, tzinfo=timezone.utc),
+            [_finding("CRITICAL")] * 2,
+        ),
+        # moderate (3 criticals)
+        (
+            datetime(2026, 1, 5, tzinfo=timezone.utc),
+            [_finding("CRITICAL")] * 3,
+        ),
+        # high (6 criticals)
+        (
+            datetime(2026, 1, 6, tzinfo=timezone.utc),
+            [_finding("CRITICAL")] * 6,
+        ),
+    ]
+    out = build_findings_trend(rows)
+    assert out["critical_finding_distribution"] == {
+        "zero": 2,
+        "low": 2,
+        "moderate": 1,
+        "high": 1,
+    }
+
+
+def test_trend_critical_distribution_boundary_at_2_and_5() -> None:
+    """Bucket boundaries: 2 → low (≤2), 3 → moderate (≤5),
+    5 → moderate (≤5), 6 → high."""
+    from app.simulation.findings_trend import build_findings_trend
+
+    rows = [
+        (
+            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            [_finding("CRITICAL")] * 2,
+        ),
+        (
+            datetime(2026, 1, 2, tzinfo=timezone.utc),
+            [_finding("CRITICAL")] * 3,
+        ),
+        (
+            datetime(2026, 1, 3, tzinfo=timezone.utc),
+            [_finding("CRITICAL")] * 5,
+        ),
+        (
+            datetime(2026, 1, 4, tzinfo=timezone.utc),
+            [_finding("CRITICAL")] * 6,
+        ),
+    ]
+    out = build_findings_trend(rows)
+    d = out["critical_finding_distribution"]
+    assert d["low"] == 1
+    assert d["moderate"] == 2  # 3 and 5 both moderate
+    assert d["high"] == 1
+
+
+def test_trend_totals_sum_across_bins() -> None:
+    """total_finding_count is the sum of every per-severity
+    count across every bin."""
+    from app.simulation.findings_trend import build_findings_trend
+
+    rows = [
+        (
+            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            [_finding("CRITICAL")] * 3
+            + [_finding("WARNING")] * 2
+            + [_finding("INFO")] * 1,
+        ),
+        (
+            datetime(2026, 1, 2, tzinfo=timezone.utc),
+            [_finding("CRITICAL")] * 1
+            + [_finding("WARNING")] * 1
+            + [_finding("INFO")] * 4,
+        ),
+    ]
+    out = build_findings_trend(rows)
+    assert out["total_critical_count"] == 4
+    assert out["total_warning_count"] == 3
+    assert out["total_info_count"] == 5
+    assert out["total_finding_count"] == 12
+
+
+def test_trend_totals_zero_when_no_data() -> None:
+    from app.simulation.findings_trend import build_findings_trend
+
+    out = build_findings_trend([])
+    assert out["total_finding_count"] == 0
+    assert out["total_critical_count"] == 0
+    assert out["total_warning_count"] == 0
+    assert out["total_info_count"] == 0
+
+
+# ---------------------------------------------------------------------------
 # Schema
 # ---------------------------------------------------------------------------
 
@@ -447,6 +574,11 @@ def test_findings_trend_out_default_shape() -> None:
     assert out.last_bin_critical == 0
     assert out.mean_delta_critical is None
     assert out.peak_critical_bin is None
+    assert out.critical_finding_distribution == {}
+    assert out.total_finding_count == 0
+    assert out.total_critical_count == 0
+    assert out.total_warning_count == 0
+    assert out.total_info_count == 0
 
 
 def test_findings_trend_out_round_trips_helper_payload() -> None:

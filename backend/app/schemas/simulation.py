@@ -703,6 +703,14 @@ class FindingsTrendOut(BaseModel):
     * ``peak_critical_bin`` — the bin with the highest
       CRITICAL count (tiebreaker: latest bin_start). None
       when no CRITICAL findings have been recorded.
+    * ``critical_finding_distribution`` — histogram of bins
+      bucketed by critical_count (zero / low 1-2 /
+      moderate 3-5 / high 6+). Lets the dashboard render
+      "N bins with 0 · M bins with 1-2 · ..." without
+      iterating.
+    * ``total_finding_count`` / ``total_critical_count`` /
+      ``total_warning_count`` / ``total_info_count`` —
+      per-severity totals across all bins.
     """
 
     bin_size: str = "day"
@@ -713,6 +721,11 @@ class FindingsTrendOut(BaseModel):
     last_bin_critical: int = 0
     mean_delta_critical: int | None = None
     peak_critical_bin: dict | None = None
+    critical_finding_distribution: dict = {}
+    total_finding_count: int = 0
+    total_critical_count: int = 0
+    total_warning_count: int = 0
+    total_info_count: int = 0
 
 
 class SimulationResultOut(BaseModel):
