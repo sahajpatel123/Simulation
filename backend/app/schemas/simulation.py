@@ -655,6 +655,16 @@ class ArchitectBiasTrendOut(BaseModel):
       than 2 bins have data.
     * ``current_bias_label`` — WELL_CALIBRATED / BIASED /
       UNKNOWN bucketed from the LAST bin's |variance|.
+    * ``bias_direction_distribution`` — histogram of bins
+      classified by signed mean_variance (OVER_PREDICTS /
+      UNDER_PREDICTS / BALANCED). The dashboard renders
+      "this architect has over-predicted in 3 of 5 bins"
+      without iterating.
+    * ``peak_bias_bin`` — the bin with the highest
+      mean_abs_variance (tiebreaker: latest bin_start).
+      Carries bin / bin_start / mean_abs_variance /
+      mean_signed_variance / direction. ``None`` when no
+      bins have data.
     """
 
     architect_name: str = ""
@@ -665,6 +675,8 @@ class ArchitectBiasTrendOut(BaseModel):
     last_bin_abs_variance: float | None = None
     mean_abs_delta: float | None = None
     current_bias_label: str = "UNKNOWN"
+    bias_direction_distribution: dict = {}
+    peak_bias_bin: dict | None = None
 
 
 class SimulationResultOut(BaseModel):

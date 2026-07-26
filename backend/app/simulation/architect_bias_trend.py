@@ -268,6 +268,51 @@ def build_architect_bias_trend(
     overall = _direction_from_variance(first_abs, last_abs)
     current_bias_label = _bias_label(last_abs)
 
+    # Per-bin bias direction distribution. Each bin is
+    # classified by its signed mean_variance:
+    #   signed > 0 → OVER_PREDICTS (model over-promised)
+    #   signed < 0 → UNDER_PREDICTS (model under-promised)
+    #   signed == 0 → BALANCED
+    # The dashboard uses this to render "this architect has
+    # over-predicted in 3 of 5 bins" without iterating.
+    direction_distribution = {
+        "over_predicts": 0,
+        "under_predicts": 0,
+        "balanced": 0,
+    }
+    for r in rows_out:
+        signed = r["mean_signed_variance"]
+        if signed > 0:
+            direction_distribution["over_predicts"] += 1
+        elif signed < 0:
+            direction_distribution["under_predicts"] += 1
+        else:
+            direction_distribution["balanced"] += 1
+
+    # Peak bias bin — the bin with the highest
+    # mean_abs_variance. Tiebreaker: latest bin_start (stable).
+    # ``None`` when no bins have data.
+    peak_payload: dict | None = None
+    if rows_out:
+        peak_row = max(
+            rows_out,
+            key=lambda r: (r["mean_abs_variance"], r["bin_start"]),
+        )
+        signed = peak_row["mean_signed_variance"]
+        if signed > 0:
+            peak_direction = "OVER_PREDICTS"
+        elif signed < 0:
+            peak_direction = "UNDER_PREDICTS"
+        else:
+            peak_direction = "BALANCED"
+        peak_payload = {
+            "bin": peak_row["bin"],
+            "bin_start": peak_row["bin_start"],
+            "mean_abs_variance": peak_row["mean_abs_variance"],
+            "mean_signed_variance": peak_row["mean_signed_variance"],
+            "direction": peak_direction,
+        }
+
     return {
         "architect_name": architect_name,
         "bin_size": effective_bin,
@@ -281,6 +326,8 @@ def build_architect_bias_trend(
         ),
         "mean_abs_delta": mean_delta,
         "current_bias_label": current_bias_label,
+        "bias_direction_distribution": direction_distribution,
+        "peak_bias_bin": peak_payload,
     }
 
 

@@ -445,6 +445,8 @@ def test_architect_bias_trend_out_default_shape() -> None:
     assert out.last_bin_abs_variance is None
     assert out.mean_abs_delta is None
     assert out.current_bias_label == "UNKNOWN"
+    assert out.bias_direction_distribution == {}
+    assert out.peak_bias_bin is None
 
 
 def test_architect_bias_trend_out_round_trips_helper_payload() -> None:
@@ -478,6 +480,189 @@ def test_architect_bias_trend_out_round_trips_helper_payload() -> None:
     assert out.overall_direction in (
         "IMPROVING", "DEGRADING", "STABLE", "UNKNOWN",
     )
+
+
+# ---------------------------------------------------------------------------
+# bias_direction_distribution
+# ---------------------------------------------------------------------------
+
+
+def test_trend_direction_distribution_default_when_empty() -> None:
+    """Empty input → three zero-count keys (canonical shape
+    preserved so the dashboard always sees the same
+    keys)."""
+    from app.simulation.architect_bias_trend import (
+        build_architect_bias_trend,
+    )
+
+    out = build_architect_bias_trend("PricingArchitect", [])
+    assert out["bias_direction_distribution"] == {
+        "over_predicts": 0,
+        "under_predicts": 0,
+        "balanced": 0,
+    }
+
+
+def test_trend_direction_distribution_classifies_by_signed() -> None:
+    """Each bin's mean_signed_variance → OVER_PREDICTS / UNDER
+    / BALANCED bucket."""
+    from app.simulation.architect_bias_trend import (
+        build_architect_bias_trend,
+    )
+
+    rows = [
+        # Jan: predicted > actual → +0.05 → over.
+        (
+            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            0.10,
+            0.05,
+            [{"architect_name": "PricingArchitect"}],
+        ),
+        # Feb: predicted < actual → -0.05 → under.
+        (
+            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            0.05,
+            0.10,
+            [{"architect_name": "PricingArchitect"}],
+        ),
+        # Mar: predicted == actual → 0 → balanced.
+        (
+            datetime(2026, 3, 15, tzinfo=timezone.utc),
+            0.10,
+            0.10,
+            [{"architect_name": "PricingArchitect"}],
+        ),
+    ]
+    out = build_architect_bias_trend("PricingArchitect", rows)
+    assert out["bias_direction_distribution"] == {
+        "over_predicts": 1,
+        "under_predicts": 1,
+        "balanced": 1,
+    }
+
+
+def test_trend_direction_distribution_skips_empty_buckets() -> None:
+    """A single OVER bin → distribution has only over_predicts=1."""
+    from app.simulation.architect_bias_trend import (
+        build_architect_bias_trend,
+    )
+
+    rows = [
+        (
+            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            0.20,
+            0.05,
+            [{"architect_name": "PricingArchitect"}],
+        ),
+    ]
+    out = build_architect_bias_trend("PricingArchitect", rows)
+    d = out["bias_direction_distribution"]
+    assert d == {
+        "over_predicts": 1,
+        "under_predicts": 0,
+        "balanced": 0,
+    }
+
+
+# ---------------------------------------------------------------------------
+# peak_bias_bin
+# ---------------------------------------------------------------------------
+
+
+def test_trend_peak_bias_bin_none_when_empty() -> None:
+    from app.simulation.architect_bias_trend import (
+        build_architect_bias_trend,
+    )
+
+    out = build_architect_bias_trend("PricingArchitect", [])
+    assert out["peak_bias_bin"] is None
+
+
+def test_trend_peak_bias_bin_picks_highest_mean_abs() -> None:
+    from app.simulation.architect_bias_trend import (
+        build_architect_bias_trend,
+    )
+
+    rows = [
+        (
+            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            0.10,
+            0.05,  # variance 0.05
+            [{"architect_name": "PricingArchitect"}],
+        ),
+        (
+            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            0.30,
+            0.10,  # variance 0.20 (highest)
+            [{"architect_name": "PricingArchitect"}],
+        ),
+        (
+            datetime(2026, 3, 15, tzinfo=timezone.utc),
+            0.20,
+            0.15,  # variance 0.05
+            [{"architect_name": "PricingArchitect"}],
+        ),
+    ]
+    out = build_architect_bias_trend("PricingArchitect", rows)
+    peak = out["peak_bias_bin"]
+    assert peak["bin"] == "2026-02"
+    assert peak["mean_abs_variance"] == pytest.approx(0.20)
+    assert peak["direction"] == "OVER_PREDICTS"
+
+
+def test_trend_peak_bias_bin_tiebreak_by_latest_bin() -> None:
+    """Tied |variance| → latest bin wins (stable, newest
+    surface)."""
+    from app.simulation.architect_bias_trend import (
+        build_architect_bias_trend,
+    )
+
+    rows = [
+        (
+            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            0.10,
+            0.05,
+            [{"architect_name": "PricingArchitect"}],
+        ),
+        (
+            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            0.15,
+            0.10,
+            [{"architect_name": "PricingArchitect"}],
+        ),
+    ]
+    out = build_architect_bias_trend("PricingArchitect", rows)
+    # Both have |variance|=0.05 → later bin (Feb) wins.
+    assert out["peak_bias_bin"]["bin"] == "2026-02"
+
+
+def test_trend_peak_bias_bin_direction_labels() -> None:
+    """direction field uses OVER_PREDICTS / UNDER_PREDICTS /
+    BALANCED based on signed variance."""
+    from app.simulation.architect_bias_trend import (
+        build_architect_bias_trend,
+    )
+
+    rows = [
+        (
+            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            0.05,
+            0.20,  # -0.15 (under)
+            [{"architect_name": "PricingArchitect"}],
+        ),
+        (
+            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            0.30,
+            0.10,  # +0.20 (over, peak)
+            [{"architect_name": "PricingArchitect"}],
+        ),
+    ]
+    out = build_architect_bias_trend("PricingArchitect", rows)
+    peak = out["peak_bias_bin"]
+    # Peak is the OVER bin (Feb).
+    assert peak["bin"] == "2026-02"
+    assert peak["direction"] == "OVER_PREDICTS"
+    assert peak["mean_signed_variance"] == pytest.approx(0.20)
 
 
 # ---------------------------------------------------------------------------
