@@ -35,6 +35,7 @@ from app.schemas.simulation import (
     FindingsAggregateOut,
     FindingsTrendOut,
     OutcomesDigestOut,
+    OutlierDetectionOut,
     PortfolioSummaryOut,
     PortfolioTrendOut,
     ProjectPortfolioRollupOut,
@@ -95,6 +96,10 @@ from app.simulation.project_rollup import (
     build_project_portfolio_rollup,
 )
 from app.simulation.sim_diff import build_sim_diff
+from app.simulation.outlier_detection import (
+    build_outlier_detection,
+    normalise_z_threshold,
+)
 from app.simulation.conductor import _ARCHITECTS as _architect_registry
 from app.simulation.comparison import build_simulation_comparison
 from app.simulation.cohort_retention import build_cohort_retention
@@ -2492,6 +2497,84 @@ def get_sim_diff(
         sim_b, by_id[sim_b],
     )
     return SimDiffOut(**payload)
+
+
+@router.get(
+    "/outlier-detection",
+    response_model=OutlierDetectionOut,
+    summary=(
+        "Flag sims whose |predicted − actual| is more than "
+        "z_threshold σ from the batch mean so the founder "
+        "can separate anomalies from systemic drift"
+    ),
+    # DB read of N sim + outcome rows — same cap as the
+    # other aggregate endpoints.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_outlier_detection(
+    ids: list[str] | None = Query(
+        default=None,
+        description=(
+            "One or more simulation ids. Same parser as "
+            "``/simulations/batch``. Optional; without ids the "
+            "endpoint returns an empty payload."
+        ),
+    ),
+    z_threshold: float | None = Query(
+        default=None,
+        ge=0.5,
+        le=10.0,
+        description=(
+            "|variance| z-score cutoff. Default 3σ (≈0.3% of "
+            "a normal distribution). Clamped to [0.5, 10.0]."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> OutlierDetectionOut:
+    """Per-sim outlier detection by |variance| z-score.
+
+    Joins simulations + outcomes scoped to the current user,
+    builds (sim_id, predicted, actual) tuples, and runs the
+    helper. Returns the outliers list + batch stats so the
+    dashboard can render "X of Y sims flagged" without
+    recomputing.
+    """
+    try:
+        canonical_ids = parse_id_list(ids)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    if not canonical_ids:
+        return OutlierDetectionOut()
+
+    threshold = normalise_z_threshold(z_threshold)
+
+    rows = (
+        db.query(
+            Simulation.id,
+            Outcome.predicted_conversion_rate,
+            Outcome.actual_conversion_rate,
+        )
+        .outerjoin(
+            Outcome, Outcome.simulation_id == Simulation.id,
+        )
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(
+            Simulation.id.in_(canonical_ids),
+            Simulation.status == "COMPLETED",
+            Project.user_id == current_user.id,
+        )
+        .all()
+    )
+
+    payload = build_outlier_detection(
+        [(r[0], r[1], r[2]) for r in rows],
+        z_threshold=threshold,
+    )
+    return OutlierDetectionOut(**payload)
 
 
 @router.get(

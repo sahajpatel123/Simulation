@@ -769,6 +769,38 @@ class SimDiffOut(BaseModel):
     union_architect_count: int = 0
 
 
+class OutlierDetectionOut(BaseModel):
+    """Response from ``GET /simulations/outlier-detection``.
+
+    Identifies sims whose |predicted − actual| is more than
+    ``z_threshold`` standard deviations from the batch mean
+    of |variance|. Lets the founder separate truly anomalous
+    sims from systemic calibration drift.
+
+    * ``outliers`` — list of dicts sorted by ``z_score`` DESC.
+      Each row: ``sim_id``, ``predicted``,
+      ``actual_conversion``, ``variance`` (predicted −
+      actual), ``abs_variance``, ``z_score``.
+    * ``observation_count`` — sims that contributed to the
+      batch mean / std.
+    * ``outlier_count`` — how many sims are flagged.
+    * ``batch_mean_abs_variance`` — mean of |variance|
+      across the batch.
+    * ``batch_std_abs_variance`` — sample std-dev of
+      |variance| across the batch.
+    * ``z_threshold`` — echoed.
+    * ``summary`` — one-line headline.
+    """
+
+    outliers: list[dict] = []
+    observation_count: int = 0
+    outlier_count: int = 0
+    batch_mean_abs_variance: float = 0.0
+    batch_std_abs_variance: float = 0.0
+    z_threshold: float = 3.0
+    summary: str = ""
+
+
 class ProjectPortfolioRollupOut(BaseModel):
     """Response from ``GET /simulations/project-portfolio-rollup``.
 
