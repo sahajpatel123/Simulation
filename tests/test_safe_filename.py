@@ -1371,3 +1371,20 @@ class TestShellSafety:
         assert _reports._safe_filename("a‎b") == "a_b"
         assert _reports._safe_filename("a‏b") == "a_b"
         assert _reports._safe_filename("a‎b‏c") == "a_b_c"
+
+    def test_form_feed_and_vertical_tab_replaced(self) -> None:
+        """Pins that form feed (``\\x0c``) and vertical tab
+        (``\\x0b``) are replaced with ``_``. These are ASCII
+        control chars that could trigger line splitting in
+        some downstream tools.
+
+        - ``\"a\\x0bb\"`` → ``\"a_b\"``
+        - ``\"a\\x0cb\"`` → ``\"a_b\"``
+        - ``\"a\\x0bb\\x0cc\"`` → ``\"a_b_c\"``
+
+        Pin so a future \"simplification\" that ignored
+        form feed or vertical tab doesn't silently allow
+        these line-break chars in the output filename."""
+        assert _reports._safe_filename("a\x0bb") == "a_b"
+        assert _reports._safe_filename("a\x0cb") == "a_b"
+        assert _reports._safe_filename("a\x0bb\x0cc") == "a_b_c"
