@@ -1055,6 +1055,67 @@ def test_summary_to_csv_sections_separated_by_blank_lines() -> None:
         assert f"\n\n{marker}" in csv_text
 
 
+def test_summary_to_csv_metadata_header_at_top() -> None:
+    """``metadata=`` kwarg renders ``# key: value`` lines at
+    the very top, before any section header."""
+    from app.simulation.portfolio_summary import (
+        build_portfolio_summary,
+        portfolio_to_csv,
+    )
+
+    summary = build_portfolio_summary(simulation_count=5)
+    csv_text = portfolio_to_csv(
+        summary,
+        metadata={
+            "generated_at": "2026-07-26T07:00:00+00:00",
+            "user_id": 42,
+            "format_version": "1",
+        },
+    )
+    # First three lines are metadata.
+    head = csv_text.split("\n")[:3]
+    assert head == [
+        "# generated_at: 2026-07-26T07:00:00+00:00",
+        "# user_id: 42",
+        "# format_version: 1",
+    ]
+    # Blank line + section header follows.
+    assert "# Summary" in csv_text
+    # Provenance comes before the section.
+    assert csv_text.index("generated_at") < csv_text.index("# Summary")
+
+
+def test_summary_to_csv_metadata_doesnt_break_section_separation() -> None:
+    """Metadata lines don't trigger the section-separator
+    blank line — sections still start with ``# <Name>``."""
+    from app.simulation.portfolio_summary import (
+        build_portfolio_summary,
+        portfolio_to_csv,
+    )
+
+    summary = build_portfolio_summary(simulation_count=2)
+    csv_text = portfolio_to_csv(
+        summary,
+        metadata={"k": "v"},
+    )
+    # Metadata line then blank line then section.
+    assert "# k: v\n\n# Summary" in csv_text
+
+
+def test_summary_to_csv_empty_metadata_omits_header_block() -> None:
+    """No metadata kwarg → no ``# key: value`` block at the
+    top, just the section headers."""
+    from app.simulation.portfolio_summary import (
+        build_portfolio_summary,
+        portfolio_to_csv,
+    )
+
+    summary = build_portfolio_summary(simulation_count=2)
+    csv_text = portfolio_to_csv(summary)
+    # First line must be a section header (no metadata block).
+    assert csv_text.split("\n")[0] == "# Summary"
+
+
 # ---------------------------------------------------------------------------
 # Route registration
 # ---------------------------------------------------------------------------
@@ -1223,6 +1284,7 @@ def test_portfolio_export_csv_route_query_params() -> None:
         ):
             query_param_names = {p.name for p in r.dependant.query_params}
             assert "ids" in query_param_names
+            assert "format" in query_param_names
             return
     raise AssertionError(
         "GET /simulations/portfolio-export.csv route not found"

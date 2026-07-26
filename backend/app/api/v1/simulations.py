@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 
@@ -1073,7 +1074,7 @@ def get_portfolio_summary(
     summary=(
         "Spreadsheet export of the portfolio summary — same "
         "data as /portfolio-summary, formatted as multi-section "
-        "CSV"
+        "CSV (or JSON when ?format=json)"
     ),
     response_class=StreamingResponse,
     # Composite of the four sibling aggregates → same cap.
@@ -1088,10 +1089,28 @@ def get_portfolio_export_csv(
             "export contains only the empty-summary placeholder."
         ),
     ),
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly multi-section document; "
+            "``json`` returns the raw portfolio summary as "
+            "JSON. Anything other than ``json`` falls back to "
+            "``csv``."
+        ),
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Spreadsheet export of the portfolio summary."""
+    """Spreadsheet export of the portfolio summary.
+
+    Default ``format=csv`` returns the multi-section CSV with
+    a metadata header at the top (generated_at, user_id,
+    simulation_count). ``format=json`` returns the raw summary
+    payload so machine-to-machine consumers don't have to
+    parse the CSV.
+    """
     try:
         canonical_ids = parse_id_list(ids)
     except ValueError as exc:
@@ -1099,17 +1118,18 @@ def get_portfolio_export_csv(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         )
+
+    cluster_names = {
+        cluster.cluster_id: cluster.name
+        for cluster in _registry.all_clusters()
+    }
+
     if not canonical_ids:
-        # Same path as portfolio-summary's empty-input branch —
-        # the CSV still has all section headers so users see a
-        # well-formed empty export, not a 500.
+        # Empty batch — same well-formed empty export, with
+        # provenance metadata so users see "this is your export"
+        # even when no sims were requested.
         summary = build_portfolio_summary(simulation_count=0)
     else:
-        cluster_names = {
-            cluster.cluster_id: cluster.name
-            for cluster in _registry.all_clusters()
-        }
-
         rows = (
             db.query(
                 Simulation.id,
@@ -1183,17 +1203,46 @@ def get_portfolio_export_csv(
             architect_accuracy_payload=bridge_payload,
         )
 
-    csv_text = portfolio_to_csv(summary)
-    # ``csv_text`` is already UTF-8 text; encode for the
-    # streaming response.
+    # Metadata header — provenance so the file is self-
+    # describing when reopened later.
+    metadata = {
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "user_id": current_user.id,
+        "simulation_count": summary.get("simulation_count", 0),
+        "format_version": "1",
+    }
+
+    fmt = format.strip().lower() if format else "csv"
+    if fmt == "json":
+        # JSON path — payload + metadata so machine consumers
+        # can still surface provenance without parsing CSV.
+        json_text = json.dumps(
+            {"metadata": metadata, "portfolio": summary},
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="thecee-portfolio.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = portfolio_to_csv(summary, metadata=metadata)
+    body = csv_text.encode("utf-8")
     return StreamingResponse(
-        iter([csv_text.encode("utf-8")]),
+        iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": (
                 'attachment; filename="thecee-portfolio.csv"'
             ),
-            "Content-Length": str(len(csv_text.encode("utf-8"))),
+            "Content-Length": str(len(body)),
         },
     )
 

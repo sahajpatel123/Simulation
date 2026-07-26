@@ -111,12 +111,26 @@ def _csv_row(cells: list[object]) -> str:
     return ",".join(_csv_escape(c) for c in cells)
 
 
-def portfolio_to_csv(portfolio_payload: dict) -> str:
+def portfolio_to_csv(
+    portfolio_payload: dict,
+    *,
+    metadata: dict | None = None,
+) -> str:
     """Render a portfolio summary payload as a multi-section CSV.
 
     The output is structured for spreadsheet import — sections
     are separated by a blank line so users can split on the
     section header row.
+
+    Args:
+        portfolio_payload: the dict returned by
+            :func:`build_portfolio_summary`.
+        metadata: optional dict of ``# key: value`` lines
+            rendered at the very top of the file (e.g.
+            ``{"generated_at": "2026-07-26T07:00:00Z",
+            "user_id": 42}``). Useful for provenance — the
+            spreadsheet can show when the file was generated
+            and by whom without polluting the section rows.
 
     Sections (in order):
 
@@ -138,6 +152,15 @@ def portfolio_to_csv(portfolio_payload: dict) -> str:
     (header only) so the dashboard can show "no data" cleanly.
     """
     lines: list[str] = []
+
+    # Metadata header — ``# key: value`` lines, one per entry.
+    # Rendered BEFORE the sections so spreadsheets can show
+    # provenance at the top. The leading ``#`` keeps the
+    # convention that all CSV comments start with ``#``.
+    if metadata:
+        for key, value in metadata.items():
+            lines.append(f"# {key}: {value}")
+        lines.append("")
 
     # Section 1: summary
     lines.append("# Summary")
