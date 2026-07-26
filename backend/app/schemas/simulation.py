@@ -737,12 +737,18 @@ class ProjectPortfolioRollupOut(BaseModel):
 
     * ``projects`` — list of per-project rollup rows sorted by
       ``simulation_count`` DESC then ``project_id`` ASC. Each
-      row: ``project_id``, ``project_title``,
+      row carries ``project_id``, ``project_title``,
       ``simulation_count``, ``latest_sim_id``,
       ``latest_sim_created_at`` (ISO 8601 UTC), mean
       predicted / actual conversion across the project's
       sims, ``miscalibrated_sim_count`` (sims where
-      |predicted − actual| exceeds the confidence threshold).
+      |predicted − actual| exceeds the confidence threshold),
+      ``critical_simulation_count`` (sims where
+      |predicted − actual| ≥ 5pp regardless of the threshold),
+      ``miscalibration_rate``
+      (miscalibrated_sim_count / simulation_count),
+      ``project_health_label`` (HEALTHY / WATCH /
+      MISALIBRATED / UNKNOWN bucketed from the rate).
     * ``total_projects`` — unique project count.
     * ``total_simulations`` — sum of ``simulation_count``.
     * ``confidence_threshold`` — echoed.

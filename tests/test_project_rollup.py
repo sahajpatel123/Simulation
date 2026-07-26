@@ -27,6 +27,25 @@ def test_public_allowlist_matches_callers() -> None:
 
     assert set(project_rollup.__all__) == {
         "build_project_portfolio_rollup",
+        "LABEL_HEALTHY",
+        "LABEL_WATCH",
+        "LABEL_MISALIBRATED",
+        "LABEL_UNKNOWN",
+        "VALID_HEALTH_LABELS",
+        "CRITICAL_SIMULATION_THRESHOLD",
+        "HEALTHY_THRESHOLD",
+        "WATCH_THRESHOLD",
+    }
+
+
+def test_health_label_allowlist_pinned() -> None:
+    from app.simulation.project_rollup import VALID_HEALTH_LABELS
+
+    assert set(VALID_HEALTH_LABELS) == {
+        "HEALTHY",
+        "WATCH",
+        "MISALIBRATED",
+        "UNKNOWN",
     }
 
 
@@ -281,6 +300,142 @@ def test_rollup_custom_confidence_threshold() -> None:
         confidence_threshold=0.10,
     )
     assert custom_out["projects"][0]["miscalibrated_sim_count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# miscalibration_rate + critical_simulation_count + project_health_label
+# ---------------------------------------------------------------------------
+
+
+def test_rollup_miscalibration_rate_fraction() -> None:
+    """miscalibrated_sim_count / simulation_count."""
+    from app.simulation.project_rollup import (
+        build_project_portfolio_rollup,
+    )
+
+    out = build_project_portfolio_rollup([
+        # 2 sims, 1 miscalibrated → 0.5
+        (1, "Alpha", 101, None, 0.10, 0.05),
+        (1, "Alpha", 102, None, 0.10, 0.05),
+        (1, "Alpha", 103, None, 0.05, 0.05),  # not miscalibrated
+        (1, "Alpha", 104, None, 0.05, 0.05),  # not miscalibrated
+    ])
+    assert out["projects"][0]["miscalibration_rate"] == pytest.approx(0.5)
+
+
+def test_rollup_miscalibration_rate_zero_when_no_data() -> None:
+    from app.simulation.project_rollup import (
+        build_project_portfolio_rollup,
+    )
+
+    # Sims without outcomes → observation_count stays 0 →
+    # miscalibration_rate stays 0.0 (division-by-zero guard).
+    out = build_project_portfolio_rollup([
+        (1, "Alpha", 101, None, None, None),
+        (1, "Alpha", 102, None, "abc", "def"),
+    ])
+    assert out["projects"][0]["miscalibration_rate"] == 0.0
+
+
+def test_rollup_critical_simulation_count_uses_fixed_5pp_threshold() -> None:
+    """critical_simulation_count counts sims with |gap| ≥ 5pp,
+    independent of the configurable confidence_threshold."""
+    from app.simulation.project_rollup import (
+        build_project_portfolio_rollup,
+    )
+
+    # 3 sims: 0.03 (not critical), 0.06 (critical), 0.10 (critical)
+    out = build_project_portfolio_rollup([
+        (1, "Alpha", 101, None, 0.10, 0.07),  # gap 0.03
+        (1, "Alpha", 102, None, 0.10, 0.04),  # gap 0.06
+        (1, "Alpha", 103, None, 0.20, 0.10),  # gap 0.10
+    ])
+    assert out["projects"][0]["critical_simulation_count"] == 2
+
+
+def test_rollup_critical_threshold_independent_of_confidence() -> None:
+    """A sim counted at 5pp critical is NOT dependent on the
+    configurable confidence_threshold (2pp default)."""
+    from app.simulation.project_rollup import (
+        build_project_portfolio_rollup,
+    )
+
+    out_default = build_project_portfolio_rollup([
+        (1, "Alpha", 101, None, 0.10, 0.04),  # gap 0.06
+    ])
+    out_loose = build_project_portfolio_rollup(
+        [(1, "Alpha", 101, None, 0.10, 0.04)],
+        confidence_threshold=0.20,
+    )
+    # Same critical count regardless of confidence_threshold.
+    assert out_default["projects"][0]["critical_simulation_count"] == 1
+    assert out_loose["projects"][0]["critical_simulation_count"] == 1
+
+
+def test_rollup_project_health_label_healthy_for_low_rate() -> None:
+    """miscalibration_rate < 0.10 → HEALTHY."""
+    from app.simulation.project_rollup import (
+        LABEL_HEALTHY,
+        build_project_portfolio_rollup,
+    )
+
+    out = build_project_portfolio_rollup([
+        (1, "Alpha", 101, None, 0.10, 0.10),  # not miscalibrated
+        (1, "Alpha", 102, None, 0.10, 0.10),
+        (1, "Alpha", 103, None, 0.10, 0.10),
+        (1, "Alpha", 104, None, 0.10, 0.10),
+    ])
+    assert out["projects"][0]["miscalibration_rate"] == 0.0
+    assert out["projects"][0]["project_health_label"] == LABEL_HEALTHY
+
+
+def test_rollup_project_health_label_watch_for_mid_rate() -> None:
+    """0.10 ≤ rate < 0.30 → WATCH."""
+    from app.simulation.project_rollup import (
+        LABEL_WATCH,
+        build_project_portfolio_rollup,
+    )
+
+    out = build_project_portfolio_rollup([
+        # 4 sims, 1 miscalibrated → 0.25 → WATCH
+        (1, "Alpha", 101, None, 0.10, 0.10),
+        (1, "Alpha", 102, None, 0.10, 0.10),
+        (1, "Alpha", 103, None, 0.10, 0.10),
+        (1, "Alpha", 104, None, 0.20, 0.10),  # miscalibrated
+    ])
+    assert out["projects"][0]["miscalibration_rate"] == 0.25
+    assert out["projects"][0]["project_health_label"] == LABEL_WATCH
+
+
+def test_rollup_project_health_label_miscalibrated_for_high_rate() -> None:
+    """rate ≥ 0.30 → MISALIBRATED."""
+    from app.simulation.project_rollup import (
+        LABEL_MISALIBRATED,
+        build_project_portfolio_rollup,
+    )
+
+    out = build_project_portfolio_rollup([
+        # 3 sims, 2 miscalibrated → 0.667 → MISALIBRATED
+        (1, "Alpha", 101, None, 0.10, 0.10),
+        (1, "Alpha", 102, None, 0.20, 0.10),  # miscalibrated
+        (1, "Alpha", 103, None, 0.30, 0.10),  # miscalibrated
+    ])
+    assert out["projects"][0]["miscalibration_rate"] == pytest.approx(2/3)
+    assert out["projects"][0]["project_health_label"] == LABEL_MISALIBRATED
+
+
+def test_rollup_project_health_label_unknown_for_no_data() -> None:
+    """Zero sims / no outcomes → UNKNOWN."""
+    from app.simulation.project_rollup import (
+        LABEL_UNKNOWN,
+        build_project_portfolio_rollup,
+    )
+
+    out = build_project_portfolio_rollup([
+        (1, "Alpha", 101, None, None, None),
+    ])
+    assert out["projects"][0]["simulation_count"] == 1
+    assert out["projects"][0]["project_health_label"] == LABEL_UNKNOWN
 
 
 # ---------------------------------------------------------------------------

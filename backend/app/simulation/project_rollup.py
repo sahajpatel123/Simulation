@@ -40,6 +40,50 @@ def _safe_float(raw: object) -> float | None:
     return value
 
 
+# Threshold at which a |predicted − actual| sim is counted as
+# 'critical_simulation' (independent of confidence_threshold
+# — always 5pp so the dashboard has a fixed reference).
+CRITICAL_SIMULATION_THRESHOLD: float = 0.05
+
+# Health-label thresholds on miscalibration_rate. Below 0.10
+# → HEALTHY. Below 0.30 → WATCH. Above → MISALIBRATED.
+HEALTHY_THRESHOLD: float = 0.10
+WATCH_THRESHOLD: float = 0.30
+
+# Health-label allowlist.
+LABEL_HEALTHY: str = "HEALTHY"
+LABEL_WATCH: str = "WATCH"
+LABEL_MISALIBRATED: str = "MISALIBRATED"
+LABEL_UNKNOWN: str = "UNKNOWN"
+VALID_HEALTH_LABELS: frozenset[str] = frozenset({
+    LABEL_HEALTHY,
+    LABEL_WATCH,
+    LABEL_MISALIBRATED,
+    LABEL_UNKNOWN,
+})
+
+
+def _build_health_label(
+    miscalibration_rate: float,
+    observation_count: int,
+) -> str:
+    """Bucket the miscalibration rate into a dashboard label.
+
+    Buckets:
+      * observation_count == 0 → UNKNOWN (no data).
+      * rate < HEALTHY_THRESHOLD → HEALTHY.
+      * HEALTHY_THRESHOLD ≤ rate < WATCH_THRESHOLD → WATCH.
+      * rate ≥ WATCH_THRESHOLD → MISALIBRATED.
+    """
+    if observation_count == 0:
+        return LABEL_UNKNOWN
+    if miscalibration_rate < HEALTHY_THRESHOLD:
+        return LABEL_HEALTHY
+    if miscalibration_rate < WATCH_THRESHOLD:
+        return LABEL_WATCH
+    return LABEL_MISALIBRATED
+
+
 def build_project_portfolio_rollup(
     rows: list[tuple],
     *,
@@ -92,6 +136,7 @@ def build_project_portfolio_rollup(
                 "_preds": [],
                 "_acts": [],
                 "miscalibrated_sim_count": 0,
+                "critical_simulation_count": 0,
             },
         )
         slot["simulation_count"] += 1
@@ -113,14 +158,25 @@ def build_project_portfolio_rollup(
             slot["_acts"].append(a)
             if abs(p - a) > confidence_threshold:
                 slot["miscalibrated_sim_count"] += 1
+            # 'Critical' sims use a fixed 5pp reference so the
+            # dashboard has a consistent cross-project view
+            # regardless of the miscalibration threshold.
+            if abs(p - a) >= CRITICAL_SIMULATION_THRESHOLD:
+                slot["critical_simulation_count"] += 1
 
     # Build the project rows.
     rows_out: list[dict] = []
     for pid, slot in per_project.items():
         preds = slot.pop("_preds")
         acts = slot.pop("_acts")
-        mean_pred = sum(preds) / len(preds) if preds else None
-        mean_act = sum(acts) / len(acts) if acts else None
+        observation_count = len(preds)
+        mean_pred = sum(preds) / observation_count if preds else None
+        mean_act = sum(acts) / observation_count if acts else None
+        miscalibration_rate = (
+            slot["miscalibrated_sim_count"] / slot["simulation_count"]
+            if slot["simulation_count"]
+            else 0.0
+        )
         ts = slot["latest_sim_created_at"]
         ts_str = (
             ts.isoformat()
@@ -140,6 +196,13 @@ def build_project_portfolio_rollup(
                 round(mean_act, 6) if mean_act is not None else None
             ),
             "miscalibrated_sim_count": slot["miscalibrated_sim_count"],
+            "critical_simulation_count": slot[
+                "critical_simulation_count"
+            ],
+            "miscalibration_rate": round(miscalibration_rate, 6),
+            "project_health_label": _build_health_label(
+                miscalibration_rate, observation_count
+            ),
         })
 
     # Sort by sim count DESC, then project_id ASC.
@@ -157,4 +220,12 @@ def build_project_portfolio_rollup(
 
 __all__ = [
     "build_project_portfolio_rollup",
+    "LABEL_HEALTHY",
+    "LABEL_WATCH",
+    "LABEL_MISALIBRATED",
+    "LABEL_UNKNOWN",
+    "VALID_HEALTH_LABELS",
+    "CRITICAL_SIMULATION_THRESHOLD",
+    "HEALTHY_THRESHOLD",
+    "WATCH_THRESHOLD",
 ]
