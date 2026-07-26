@@ -22,6 +22,7 @@ from app.schemas.cluster_opportunity import ClusterOpportunityMatrixOut
 from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
 from app.schemas.simulation import (
     ArchitectAccuracyBridgeOut,
+    ArchitectDrillDownOut,
     ClusterDrillDownOut,
     ClustersAggregateOut,
     FindingsAggregateOut,
@@ -55,6 +56,10 @@ from app.simulation.cluster_drill_down import (
     build_cluster_drill_down,
     normalise_outlier_threshold as normalise_drill_outlier,
 )
+from app.simulation.architect_drill_down import (
+    build_architect_drill_down,
+)
+from app.simulation.conductor import _ARCHITECTS as _architect_registry
 from app.simulation.comparison import build_simulation_comparison
 from app.simulation.cohort_retention import build_cohort_retention
 from app.simulation.funnel_diagnosis import build_funnel_diagnosis
@@ -1386,6 +1391,197 @@ def get_cluster_drill_down(
         batch_overall_mean=_batch_overall_mean(by_id.values()),
     )
     return ClusterDrillDownOut(**payload)
+
+
+@router.get(
+    "/architect-drill-down",
+    response_model=ArchitectDrillDownOut,
+    summary=(
+        "Drill into a single architect: profile + per-sim finding "
+        "history + bias / stability / recommendation"
+    ),
+    # DB read of N sim rows for one architect — same cap as the
+    # other drill-down endpoint.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_architect_drill_down(
+    architect_name: str = Query(
+        ...,
+        min_length=1,
+        max_length=64,
+        description=(
+            "Architect name (PascalCase). Must match a registered "
+            "architect; otherwise the route returns 404."
+        ),
+    ),
+    ids: list[str] | None = Query(
+        default=None,
+        description=(
+            "One or more simulation ids. Same parser as "
+            "``/simulations/batch``. Optional; without ids, the "
+            "drill-down returns the architect profile only."
+        ),
+    ),
+    outlier_finding_threshold: int | None = Query(
+        default=None,
+        ge=1,
+        description=(
+            "Per-sim finding-count threshold above which the "
+            "sim is flagged as an outlier. Default 5."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ArchitectDrillDownOut:
+    """Per-architect drill-down for the portfolio dashboard.
+
+    Complements the cross-sim architect-accuracy bridge: when a
+    biased architect surfaces (TIGHTEN / LOOSEN in the bridge),
+    the founder clicks through and gets the architect's full
+    profile + every sim in the batch where it flagged +
+    aggregate stats + bias / stability / recommendation.
+    """
+    # Validate the architect name against the registry — refuse
+    # early so the dashboard can show a clear "unknown
+    # architect" error rather than a silent empty payload.
+    architect_instance = _architect_registry.get(architect_name)
+    if architect_instance is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown architect_name {architect_name!r}",
+        )
+
+    try:
+        canonical_ids = parse_id_list(ids)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    threshold = (
+        outlier_finding_threshold
+        if outlier_finding_threshold is not None
+        else 5
+    )
+
+    per_sim_findings: list[
+        tuple[int | None, list[dict]]
+    ] = []
+    if canonical_ids:
+        rows = (
+            db.query(Simulation.id, Simulation.results_json)
+            .join(Project, Simulation.project_id == Project.id)
+            .filter(
+                Simulation.id.in_(canonical_ids),
+                Simulation.status == "COMPLETED",
+                Project.user_id == current_user.id,
+            )
+            .all()
+        )
+        by_id: dict[int, list[dict]] = {
+            r.id: (
+                (r.results_json or {}).get("domain_findings")
+                or []
+            )
+            for r in rows
+        }
+        # Preserve the user's requested order; missing sims
+        # get an empty findings list so the per-sim history still
+        # reflects the batch.
+        for sid in canonical_ids:
+            per_sim_findings.append(
+                (sid, by_id.get(sid, []))
+            )
+
+    # Compute batch_overall |calibration_variance| by running
+    # the bridge on this same batch — keeps the peer comparison
+    # consistent with the dashboard's other surfaces.
+    calibration_variance: float | None = None
+    calibration_direction: str = "INSUFFICIENT_DATA"
+    batch_overall_abs_variance: float | None = None
+    if canonical_ids:
+        # Pull outcomes for the same batch.
+        outcome_rows = (
+            db.query(
+                Simulation.id,
+                Outcome.predicted_conversion_rate,
+                Outcome.actual_conversion_rate,
+                Outcome.created_at,
+            )
+            .outerjoin(
+                Outcome, Outcome.simulation_id == Simulation.id,
+            )
+            .join(Project, Simulation.project_id == Project.id)
+            .filter(
+                Simulation.id.in_(canonical_ids),
+                Project.user_id == current_user.id,
+            )
+            .order_by(Outcome.created_at.desc())
+            .all()
+        )
+        # Build (results_json, (predicted, actual)) pairs in user
+        # order, keeping latest outcome per sim.
+        seen: set[int] = set()
+        outcome_pairs: list[
+            tuple[list[dict], tuple[float | None, float | None]]
+        ] = []
+        for sid in canonical_ids:
+            if sid in seen:
+                continue
+            seen.add(sid)
+            match = next(
+                (r for r in outcome_rows if r.id == sid), None
+            )
+            if match is None:
+                outcome_pairs.append(([], (None, None)))
+                continue
+            outcome_pairs.append(
+                (
+                    (by_id.get(sid) or []),
+                    (
+                        match.predicted_conversion_rate,
+                        match.actual_conversion_rate,
+                    ),
+                )
+            )
+
+        bridge = bridge_architect_accuracy(outcome_pairs)
+        for row in bridge.get("by_architect") or []:
+            if (
+                str(row.get("architect_name", "")).lower()
+                == architect_name.lower()
+            ):
+                calibration_variance = row.get(
+                    "calibration_variance"
+                )
+                calibration_direction = row.get(
+                    "calibration_direction",
+                    "INSUFFICIENT_DATA",
+                )
+                break
+        # Batch overall = mean of |variance| across all
+        # architects in this batch's bridge output.
+        variances_abs = [
+            abs(r["calibration_variance"])
+            for r in (bridge.get("by_architect") or [])
+            if r.get("calibration_variance") is not None
+        ]
+        if variances_abs:
+            batch_overall_abs_variance = (
+                sum(variances_abs) / len(variances_abs)
+            )
+
+    payload = build_architect_drill_down(
+        architect_name,
+        product_types=list(architect_instance.product_types),
+        per_sim_findings=per_sim_findings,
+        calibration_variance=calibration_variance,
+        calibration_direction=calibration_direction,
+        outlier_finding_threshold=threshold,
+        batch_overall_abs_variance=batch_overall_abs_variance,
+    )
+    return ArchitectDrillDownOut(**payload)
 
 
 @router.get(

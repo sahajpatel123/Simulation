@@ -407,6 +407,58 @@ class ClusterDrillDownOut(BaseModel):
     peer_comparison: dict = {}
 
 
+class ArchitectDrillDownOut(BaseModel):
+    """Response from ``GET /simulations/architect-drill-down``.
+
+    Per-architect drill-down that complements the cross-sim
+    architect-accuracy bridge: when an architect surfaces as
+    biased (OVER_PREDICTS / UNDER_PREDICTS), the founder wants
+    to drill in and see the architect's full profile + per-sim
+    finding history + aggregate stats + stability / coverage /
+    bias flags + peer comparison vs the batch's overall
+    architect accuracy.
+
+    * ``architect_profile`` — dict carrying the architect's
+      metadata: architect_name, product_types,
+      domain_description, applies_to_all_products.
+    * ``per_sim_history`` — list of per-sim rows
+      (``sim_id``, ``finding_count``, severity counts,
+      ``total_conversion_impact``, ``highest_severity``,
+      ``is_outlier``). Sorted by sim_id ASC (None last).
+      Includes rows where the architect had no findings so the
+      dashboard can render "X of Y saw this architect".
+    * ``aggregate`` — total finding / severity counts,
+      total_conversion_impact, sim_with_findings_count,
+      is_outlier_count.
+    * ``calibration_variance`` /
+      ``calibration_direction`` — echoed from the
+      architect-accuracy bridge.
+    * ``stability`` — HIGH_VARIANCE / MODERATE_VARIANCE /
+      LOW_VARIANCE bucketed from per-sim
+      total_conversion_impact CV.
+    * ``observation_ratio`` / ``under_observed`` /
+      ``needs_attention`` — coverage + bias flags.
+    * ``sim_count`` — how many sims in the batch.
+    * ``recommendation`` — one-line action label derived from
+      under-observed / bias / variance / outlier priority.
+    * ``peer_comparison`` — architect |calibration_variance|
+      vs batch mean |calibration_variance|.
+    """
+
+    architect_profile: dict = {}
+    per_sim_history: list[dict] = []
+    aggregate: dict = {}
+    calibration_variance: float | None = None
+    calibration_direction: str = "INSUFFICIENT_DATA"
+    stability: str = "INSUFFICIENT_DATA"
+    observation_ratio: float = 0.0
+    under_observed: bool = False
+    needs_attention: bool = False
+    sim_count: int = 0
+    recommendation: str = "Continue — architect is calibrated"
+    peer_comparison: dict = {}
+
+
 class SimulationResultOut(BaseModel):
     id: int
     project_id: int
