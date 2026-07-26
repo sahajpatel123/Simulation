@@ -1571,3 +1571,22 @@ class TestShellSafety:
         for t in inputs:
             out = _reports._safe_filename(t)
             assert out == t, f"{t!r} -> {out!r}"
+
+    def test_leading_or_trailing_disallowed_preserved(self) -> None:
+        """Pins that leading or trailing disallowed chars in a
+        string with a valid alnum core are replaced but the
+        alnum core is preserved.
+
+        - ``\"!a\"`` → ``\"_a\"`` (leading ``!`` becomes ``_``)
+        - ``\"a!\"`` → ``\"a_\"`` (trailing ``!`` becomes ``_``)
+        - ``\"!abc!\"`` → ``\"_abc_\"``
+        - ``\"!@#\"`` → ``\"___\"`` (all-disallowed becomes
+          all-underscores)
+
+        Pin so a future \"simplification\" that stripped
+        leading/trailing disallowed chars would silently
+        shorten the output for these inputs."""
+        assert _reports._safe_filename("!a") == "_a"
+        assert _reports._safe_filename("a!") == "a_"
+        assert _reports._safe_filename("!abc!") == "_abc_"
+        assert _reports._safe_filename("!@#") == "___"
