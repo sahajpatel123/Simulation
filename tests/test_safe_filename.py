@@ -1426,3 +1426,22 @@ class TestShellSafety:
         for t in inputs:
             out = _reports._safe_filename(t)
             assert out == t, f"{t!r} -> {out!r}"
+
+    def test_bidi_embedding_controls_replaced(self) -> None:
+        """Pins that bidi embedding controls (LRE, RLE, PDF,
+        LRO) are replaced with ``_``. These are invisible
+        formatting chars that can be used in
+        filename-spoofing attacks.
+
+        - ``\"a\\u202ab\"`` → ``\"a_b\"``
+        - ``\"a\\u202bb\"`` → ``\"a_b\"``
+        - ``\"a\\u202cb\"`` → ``\"a_b\"``
+        - ``\"a\\u202db\"`` → ``\"a_b\"``
+
+        Pin so a future \"simplification\" that ignored
+        bidi embedding controls doesn't silently allow
+        direction-reversing chars in the output filename."""
+        assert _reports._safe_filename("a‪b") == "a_b"
+        assert _reports._safe_filename("a‫b") == "a_b"
+        assert _reports._safe_filename("a‬b") == "a_b"
+        assert _reports._safe_filename("a‭b") == "a_b"
