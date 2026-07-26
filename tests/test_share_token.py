@@ -277,18 +277,30 @@ def test_share_routes_registered() -> None:
 
     from app.api.v1 import share as share_mod
 
-    # The module-level router is composed via ``include_router``; each
-    # entry wraps an ``original_router`` that owns the actual routes.
-    paths = set()
+    # FastAPI's router-internals (``_IncludedRouter`` /
+    # ``original_router`` / ``api_router``) shift between versions
+    # (verified broken on FastAPI 0.115.0 vs 0.139.x). Walk the
+    # routes recursively instead — any object exposing a
+    # ``.routes`` list contributes its leaves.
+    def _collect_routes(carrier) -> list:
+        leaves = []
+        for item in getattr(carrier, "routes", []):
+            inner = (
+                getattr(item, "original_router", None)
+                or getattr(item, "api_router", None)
+                or getattr(item, "router", None)
+            )
+            if inner is not None and inner is not item:
+                leaves.extend(_collect_routes(inner))
+            else:
+                leaves.append(item)
+        return leaves
+
+    routes = _collect_routes(share_mod.router)
+    paths = {r.path for r in routes}
     methods_by_path: dict[str, set[str]] = {}
-    for sub in share_mod.router.routes:
-        inner = getattr(sub, "original_router", None)
-        inner_routes = getattr(inner, "routes", None) if inner is not None else None
-        if inner_routes is None:
-            continue
-        for r in inner_routes:
-            paths.add(r.path)
-            methods_by_path.setdefault(r.path, set()).update(r.methods or set())
+    for r in routes:
+        methods_by_path.setdefault(r.path, set()).update(r.methods or set())
     assert "/simulations/{simulation_id}/share" in paths
     assert "/share/{token}" in paths
     # DELETE is on the same path as POST — verify both methods are present.
