@@ -324,12 +324,20 @@ class PortfolioTrendOut(BaseModel):
       later window has actionable data (calibration unlocked).
       ``RESOLVED`` is the inverse.
     * ``deltas`` — list of per-metric rows. Each carries
-      ``metric``, ``earlier``, ``later``, ``delta``, and
-      ``direction`` (one of ``IMPROVING`` / ``DEGRADING`` /
-      ``STABLE`` / ``NEW`` / ``RESOLVED``).
+      ``metric``, ``earlier``, ``later``, ``delta``, ``direction``,
+      and ``significant`` (boolean — True when |delta| exceeds
+      the per-metric absolute threshold).
     * ``improving_count`` / ``degrading_count`` / ``stable_count``
       — summary counts so the dashboard can render "X up /
       Y down / Z stable" without iterating.
+    * ``significant_change_count`` — how many metrics shifted
+      meaningfully (passing the per-metric absolute threshold).
+      A single tile for the dashboard's "N signals moved" badge.
+    * ``key_shifts`` — top ``KEY_SHIFTS_LIMIT`` (3) IMPROVING /
+      DEGRADING deltas by relative-change magnitude. Each row
+      carries ``metric``, ``direction``, ``delta``,
+      ``earlier``, ``later``, ``relative_change``. The
+      dashboard's headline widget renders this list.
     * ``summary`` — one-line headline string.
     """
 
@@ -343,6 +351,8 @@ class PortfolioTrendOut(BaseModel):
     improving_count: int = 0
     degrading_count: int = 0
     stable_count: int = 0
+    significant_change_count: int = 0
+    key_shifts: list[dict] = []
     summary: str = ""
 
 

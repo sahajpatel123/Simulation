@@ -59,6 +59,29 @@ VALID_TRENDS: frozenset[str] = frozenset({
 # outcomes digest (mae/mape to 4 decimal places).
 STABLE_RELATIVE_THRESHOLD: float = 0.05
 
+# Per-metric absolute-change thresholds for the ``significant``
+# flag. A change SMALLER than these thresholds is treated as
+# noise even when IMPROVING / DEGRADING — the dashboard can
+# filter on significant=True to surface only meaningful shifts.
+# Different metrics need different scales: MAE is in fractions
+# (0.005 = 0.5pp) while tighten_count is a unit count.
+SIGNIFICANT_THRESHOLDS: dict[str, float] = {
+    "mae": 0.005,
+    "mape": 0.05,
+    "data_quality_score": 0.10,
+    # Counts: any change ≥ 1 is meaningful.
+    "critical_findings": 1.0,
+    "correlated_bias_count": 1.0,
+    "tighten_count": 1.0,
+    "loosen_count": 1.0,
+    "needs_attention_clusters": 1.0,
+}
+
+# How many deltas to surface in ``key_shifts``. The dashboard's
+# headline widget renders this list directly, so the cap keeps
+# the tile readable.
+KEY_SHIFTS_LIMIT: int = 3
+
 
 def _safe_float(raw: object) -> float | None:
     """Coerce to a finite float or return ``None``. Mirrors the
@@ -171,13 +194,57 @@ def _deltas_row(
     delta = None
     if earlier is not None and later is not None:
         delta = round(later - earlier, 6)
+    # Significance is independent of direction — a 0.1pp MAE
+    # shift is "STABLE" by direction (within 5%) but still
+    # "not significant" by the absolute threshold. Conversely a
+    # 50pp MAE shift is both DEGRADING and significant.
+    significant = False
+    if delta is not None:
+        threshold = SIGNIFICANT_THRESHOLDS.get(key, 0.0)
+        significant = abs(delta) >= threshold
     return {
         "metric": key,
         "earlier": earlier,
         "later": later,
         "delta": delta,
         "direction": direction,
+        "significant": significant,
     }
+
+
+def _build_key_shifts(deltas: list[dict]) -> list[dict]:
+    """Surface the top-N most-meaningful deltas for the headline.
+
+    Only IMPROVING / DEGRADING rows compete (STABLE / NEW /
+    RESOLVED aren't a "shift"). Ranked by relative-change
+    magnitude against the larger of |earlier|, |later|, with a
+    1e-9 floor so a metric moving from 0 → 0.001 ranks ahead
+    of a metric moving from 1.0 → 1.0 (the latter is stable).
+    """
+    candidates: list[tuple[float, dict]] = []
+    for d in deltas:
+        if d["direction"] not in (DIR_IMPROVING, DIR_DEGRADING):
+            continue
+        e = d["earlier"]
+        l = d["later"]
+        if e is None or l is None:
+            continue
+        base = max(abs(e), abs(l), 1e-9)
+        magnitude = abs(l - e) / base
+        candidates.append((magnitude, d))
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    top = [
+        {
+            "metric": row["metric"],
+            "direction": row["direction"],
+            "delta": row["delta"],
+            "earlier": row["earlier"],
+            "later": row["later"],
+            "relative_change": round(magnitude, 6),
+        }
+        for magnitude, row in candidates[:KEY_SHIFTS_LIMIT]
+    ]
+    return top
 
 
 def compute_portfolio_trend(
@@ -321,6 +388,10 @@ def compute_portfolio_trend(
     stable_count = sum(
         1 for d in deltas if d["direction"] == DIR_STABLE
     )
+    significant_change_count = sum(
+        1 for d in deltas if d["significant"]
+    )
+    key_shifts = _build_key_shifts(deltas)
 
     e_count = int(earlier_payload.get("simulation_count") or 0)
     l_count = int(later_payload.get("simulation_count") or 0)
@@ -346,6 +417,8 @@ def compute_portfolio_trend(
         "improving_count": improving_count,
         "degrading_count": degrading_count,
         "stable_count": stable_count,
+        "significant_change_count": significant_change_count,
+        "key_shifts": key_shifts,
         "summary": summary,
     }
 
@@ -416,5 +489,7 @@ __all__ = [
     "TREND_MIXED",
     "VALID_TRENDS",
     "STABLE_RELATIVE_THRESHOLD",
+    "SIGNIFICANT_THRESHOLDS",
+    "KEY_SHIFTS_LIMIT",
     "compute_portfolio_trend",
 ]

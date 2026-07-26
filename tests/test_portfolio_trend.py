@@ -37,6 +37,8 @@ def test_public_allowlist_matches_callers() -> None:
         "TREND_MIXED",
         "VALID_TRENDS",
         "STABLE_RELATIVE_THRESHOLD",
+        "SIGNIFICANT_THRESHOLDS",
+        "KEY_SHIFTS_LIMIT",
         "compute_portfolio_trend",
     }
 
@@ -444,6 +446,8 @@ def test_portfolio_trend_out_default_shape() -> None:
     assert out.improving_count == 0
     assert out.degrading_count == 0
     assert out.stable_count == 0
+    assert out.significant_change_count == 0
+    assert out.key_shifts == []
     assert out.summary == ""
 
 
@@ -464,6 +468,176 @@ def test_portfolio_trend_out_round_trips_helper_payload() -> None:
     assert out.later_health == "HEALTHY"
     assert out.health_transition == "IMPROVED"
     assert out.summary != ""
+
+
+# ---------------------------------------------------------------------------
+# significance flag
+# ---------------------------------------------------------------------------
+
+
+def test_trend_significant_threshold_for_mae() -> None:
+    """MAE shift of ≥ 0.005 (5% of a percentage point) is
+    significant."""
+    from app.simulation.portfolio_trend import compute_portfolio_trend
+
+    # 0.10 → 0.11 → delta 0.01 → significant.
+    out = compute_portfolio_trend(
+        _earlier_summary(mae=0.10),
+        _earlier_summary(mae=0.11),
+    )
+    mae_row = next(d for d in out["deltas"] if d["metric"] == "mae")
+    assert mae_row["significant"] is True
+
+
+def test_trend_insignificant_threshold_for_mae() -> None:
+    """MAE shift smaller than the threshold → not significant,
+    even when direction says IMPROVING / DEGRADING."""
+    from app.simulation.portfolio_trend import compute_portfolio_trend
+
+    # 0.100 → 0.103 → delta 0.003 < threshold 0.005 → not significant.
+    out = compute_portfolio_trend(
+        _earlier_summary(mae=0.10),
+        _earlier_summary(mae=0.103),
+    )
+    mae_row = next(d for d in out["deltas"] if d["metric"] == "mae")
+    assert mae_row["significant"] is False
+
+
+def test_trend_significant_threshold_for_counts() -> None:
+    """Count metrics: any change ≥ 1 is significant."""
+    from app.simulation.portfolio_trend import compute_portfolio_trend
+
+    # tighten_count 0 → 1 → significant.
+    out = compute_portfolio_trend(
+        _earlier_summary(tighten_count=0),
+        _earlier_summary(tighten_count=1),
+    )
+    tighten_row = next(
+        d for d in out["deltas"] if d["metric"] == "tighten_count"
+    )
+    assert tighten_row["significant"] is True
+
+
+def test_trend_zero_delta_is_not_significant() -> None:
+    """Same value on both sides → delta 0 → not significant."""
+    from app.simulation.portfolio_trend import compute_portfolio_trend
+
+    out = compute_portfolio_trend(
+        _earlier_summary(mae=0.05),
+        _earlier_summary(mae=0.05),
+    )
+    mae_row = next(d for d in out["deltas"] if d["metric"] == "mae")
+    assert mae_row["delta"] == 0.0
+    assert mae_row["significant"] is False
+
+
+def test_trend_significant_change_count_top_level() -> None:
+    """Top-level count of how many metrics shifted meaningfully."""
+    from app.simulation.portfolio_trend import compute_portfolio_trend
+
+    # mae 0.10 → 0.12 (+0.02, significant)
+    # data_quality 0.30 → 0.80 (+0.50, significant)
+    # tighten_count 0 → 0 (no change)
+    out = compute_portfolio_trend(
+        _earlier_summary(
+            mae=0.10, data_quality_score=0.30, tighten_count=0,
+        ),
+        _earlier_summary(
+            mae=0.12, data_quality_score=0.80, tighten_count=0,
+        ),
+    )
+    assert out["significant_change_count"] >= 2
+
+
+# ---------------------------------------------------------------------------
+# key_shifts
+# ---------------------------------------------------------------------------
+
+
+def test_trend_key_shifts_picks_top_by_relative_change() -> None:
+    """Top shifts sorted by |delta| / max(|earlier|, |later|)."""
+    from app.simulation.portfolio_trend import compute_portfolio_trend
+
+    # mae 0.10 → 0.05 = 50% rel change (biggest).
+    # tighten 5 → 0 = 100% rel change (bigger).
+    # data_quality 0.80 → 0.83 = ~4% (STABLE, not in shifts).
+    out = compute_portfolio_trend(
+        _earlier_summary(
+            mae=0.10, tighten_count=5, data_quality_score=0.80,
+        ),
+        _earlier_summary(
+            mae=0.05, tighten_count=0, data_quality_score=0.83,
+        ),
+    )
+    keys = [k["metric"] for k in out["key_shifts"]]
+    # tighten_count should rank first (100% > 50%).
+    assert keys[0] == "tighten_count"
+    assert "mae" in keys
+    assert "data_quality_score" not in keys  # STABLE excluded
+
+
+def test_trend_key_shifts_excludes_stable_and_new() -> None:
+    """Only IMPROVING / DEGRADING rows surface — STABLE / NEW
+    / RESOLVED aren't a 'shift'."""
+    from app.simulation.portfolio_trend import compute_portfolio_trend
+
+    out = compute_portfolio_trend(
+        _earlier_summary(mae=0.05),
+        _earlier_summary(mae=0.05),  # identical → STABLE
+    )
+    assert out["key_shifts"] == []
+
+
+def test_trend_key_shifts_caps_at_three() -> None:
+    """Top-N cap keeps the dashboard headline readable."""
+    from app.simulation.portfolio_trend import (
+        KEY_SHIFTS_LIMIT,
+        compute_portfolio_trend,
+    )
+
+    # Trigger 5+ IMPROVING metrics.
+    out = compute_portfolio_trend(
+        _earlier_summary(
+            mae=0.20, mape=0.60, tighten_count=4, loosen_count=3,
+            correlated_bias_count=2, critical_findings=5,
+            needs_attention_count=4, data_quality_score=0.20,
+        ),
+        _earlier_summary(
+            mae=0.05, mape=0.10, tighten_count=0, loosen_count=0,
+            correlated_bias_count=0, critical_findings=0,
+            needs_attention_count=0, data_quality_score=0.80,
+        ),
+    )
+    assert len(out["key_shifts"]) <= KEY_SHIFTS_LIMIT
+    assert KEY_SHIFTS_LIMIT == 3
+
+
+def test_trend_key_shifts_carries_relative_change() -> None:
+    """Each key_shifts row carries a relative_change field so
+    the dashboard can render a percentage badge."""
+    from app.simulation.portfolio_trend import compute_portfolio_trend
+
+    out = compute_portfolio_trend(
+        _earlier_summary(mae=0.10),
+        _earlier_summary(mae=0.05),
+    )
+    shift = out["key_shifts"][0]
+    assert shift["metric"] == "mae"
+    assert shift["direction"] == "IMPROVING"
+    assert shift["delta"] == pytest.approx(-0.05)
+    assert shift["earlier"] == pytest.approx(0.10)
+    assert shift["later"] == pytest.approx(0.05)
+    # Relative change = 0.05 / 0.10 = 0.50.
+    assert shift["relative_change"] == pytest.approx(0.50)
+
+
+def test_trend_key_shifts_empty_for_identical_windows() -> None:
+    """No deltas → no shifts."""
+    from app.simulation.portfolio_trend import compute_portfolio_trend
+
+    payload = _earlier_summary(overall_health="HEALTHY")
+    out = compute_portfolio_trend(payload, payload)
+    assert out["key_shifts"] == []
 
 
 # ---------------------------------------------------------------------------
