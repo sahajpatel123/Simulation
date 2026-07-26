@@ -57,6 +57,33 @@ class SimulationBatchStatusOut(BaseModel):
     filtered_by_since: datetime | None = None
 
 
+class FindingsAggregateOut(BaseModel):
+    """Response from ``GET /simulations/aggregate/findings``.
+
+    Portfolio view of domain findings across N simulations:
+
+    * ``total_findings`` — every finding across every sim in the batch.
+    * ``filtered_findings`` — count of findings at or above the
+      ``min_severity`` filter.
+    * ``severity_breakdown`` — ``{CRITICAL/WARNING/INFO: count}``
+      across *all* findings, ignoring the filter.
+    * ``by_architect`` — per-architect rollup, sorted by
+      ``finding_count DESC, critical_count DESC, name ASC``.
+    * ``top_architects`` — first ``top_n`` architect names (sorted).
+    * ``shared_domain_count`` — number of architect names that
+      topped the failure list in >= half of the supplied sims.
+    """
+
+    total_findings: int = 0
+    filtered_findings: int = 0
+    severity_breakdown: dict[str, int] = {}
+    by_architect: list[dict] = []
+    top_architects: list[str] = []
+    simulation_count: int = 0
+    simulations_with_findings: int = 0
+    shared_domain_count: int = 0
+
+
 class SimulationResultOut(BaseModel):
     id: int
     project_id: int

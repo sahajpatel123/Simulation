@@ -20,6 +20,7 @@ from app.models.cluster_run_summary import ClusterRunSummary
 from app.schemas.cluster_opportunity import ClusterOpportunityMatrixOut
 from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
 from app.schemas.simulation import (
+    FindingsAggregateOut,
     SimulationBatchStatusOut,
     SimulationCreate,
     SimulationOut,
@@ -57,6 +58,10 @@ from app.simulation.sim_batch import (
     parse_id_list,
     parse_since,
     summarise_statuses,
+)
+from app.simulation.findings_aggregate import (
+    aggregate_findings,
+    normalise_severity,
 )
 from app.simulation.what_if import build_what_if_scenario
 from app.tasks.simulation_tasks import run_full_simulation
@@ -491,6 +496,88 @@ def get_simulation_batch_status(
         status_counts=status_counts,
         filtered_by_since=since_dt,
     )
+
+
+@router.get(
+    "/aggregate/findings",
+    response_model=FindingsAggregateOut,
+    summary="Aggregate domain findings across N simulations (portfolio view)",
+    # DB read of N result_json blobs — cap path-spam at 30/min/IP.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def aggregate_simulation_findings(
+    ids: list[str] | None = Query(
+        default=None,
+        description=(
+            "One or more simulation ids. Same parser as "
+            "``/simulations/batch`` — repeat the param or "
+            "pass comma-separated values. Capped at 100 ids."
+        ),
+    ),
+    min_severity: str | None = Query(
+        default=None,
+        max_length=16,
+        description=(
+            "Filter finding list to >= this severity. Allowed: "
+            "INFO, WARNING, CRITICAL. Default: INFO."
+        ),
+    ),
+    top_n: int | None = Query(
+        default=None,
+        ge=1,
+        description=(
+            "How many top architects to surface in "
+            "``top_architects``. Default: 5."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FindingsAggregateOut:
+    """Cross-simulation findings rollup.
+
+    Powers the "portfolio view" dashboard: "across my 12 simulations,
+    which architect keeps flagging critical issues?" The
+    ``shared_domain_count`` field highlights the systemic failures
+    that appear in >= half of the supplied sims.
+    """
+    try:
+        canonical_ids = parse_id_list(ids)
+        min_sev = normalise_severity(min_severity)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    effective_top_n = top_n if top_n is not None else 5
+    if not canonical_ids:
+        return FindingsAggregateOut()
+
+    # Single JOIN: scope to the current user + grab the persisted
+    # results_json blobs. We only fetch completed sims — aggregating
+    # findings from a FAILED/RUNNING sim would always return empty
+    # and just inflate the sims_with_findings denominator.
+    rows = (
+        db.query(Simulation.id, Simulation.results_json)
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(
+            Simulation.id.in_(canonical_ids),
+            Simulation.status == "COMPLETED",
+            Project.user_id == current_user.id,
+        )
+        .all()
+    )
+    # Preserve the user's requested order (parse_id_list dedupes
+    # preserving first-seen) so the UI can render "the order I
+    # asked for" even though the SQL order is undetermined.
+    by_id = {r.id: r.results_json for r in rows}
+    ordered_results = [by_id[sid] for sid in canonical_ids if sid in by_id]
+
+    aggregate = aggregate_findings(
+        ordered_results,
+        min_severity=min_sev,
+        top_n=effective_top_n,
+    )
+    return FindingsAggregateOut(**aggregate)
 
 
 @router.get(
