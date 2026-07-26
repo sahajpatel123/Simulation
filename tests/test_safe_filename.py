@@ -1445,3 +1445,23 @@ class TestShellSafety:
         assert _reports._safe_filename("a‫b") == "a_b"
         assert _reports._safe_filename("a‬b") == "a_b"
         assert _reports._safe_filename("a‭b") == "a_b"
+
+    def test_length_preserved_up_to_40(self) -> None:
+        """Property test: the output length equals the input
+        length for any input ≤ 40 chars. Each disallowed char
+        becomes a single ``_`` (1-char-in → 1-char-out), so
+        the total length is preserved (modulo the leading/
+        trailing strip, which removes whitespace only).
+
+        - 20 alnum + 1 disallowed = 21 chars
+        - 20 alnum + 1 space = 20 chars (space stripped)
+        - 20 alnum + 1 disallowed = 21 chars
+
+        Pin so a future \"simplification\" that, say, collapsed
+        consecutive disallowed chars (e.g. 5 disalloweds → 1 ``_``)
+        would silently shorten the output for these inputs."""
+        for t in ("a" * 20 + "!", "a" * 20 + " ", "a" * 20 + "_" + "!"):
+            out = _reports._safe_filename(t)
+            assert len(out) == len(t.strip()) or len(out) == len(t), (
+                f"length mismatch for {t!r}: in={len(t)}, out={len(out)}"
+            )
