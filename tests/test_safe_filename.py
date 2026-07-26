@@ -1281,3 +1281,22 @@ class TestShellSafety:
             assert "\n" not in out, (
                 f"LF in output for {t!r}: {out!r}"
             )
+
+    def test_long_digit_or_alnum_sequences_preserved(self) -> None:
+        """Pins that long sequences of digits or alnum (up to 40
+        chars) round-trip unchanged. The slice cap is 40, so 40 or
+        fewer pass through; 41+ would be truncated.
+
+        Test data:
+        - ``\"1\" * 5`` → ``\"11111\"``
+        - ``\"1\" * 20`` → ``\"11111111111111111111\"``
+        - ``\"9\" * 39`` → ``\"999...\"`` (39 chars)
+        - ``\"1234567890\"`` → ``\"1234567890\"``
+        - ``\"abc123def456\"`` → ``\"abc123def456\"``
+
+        Pin so a future \"simplification\" that added a length
+        cap to digits or alnum specifically would silently break
+        the contract for version-string-like titles."""
+        for t in ("1" * 5, "1" * 20, "9" * 39, "1234567890", "abc123def456"):
+            out = _reports._safe_filename(t)
+            assert out == t, f"{t!r} -> {out!r}"
