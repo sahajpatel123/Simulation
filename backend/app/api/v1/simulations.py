@@ -27,6 +27,7 @@ from app.schemas.simulation import (
     ArchitectDrillDownOut,
     ClusterDiffOut,
     ClusterDrillDownOut,
+    ClusterOverlapMatrixOut,
     ClustersAggregateOut,
     FindingsAggregateOut,
     OutcomesDigestOut,
@@ -63,6 +64,10 @@ from app.simulation.architect_drill_down import (
     build_architect_drill_down,
 )
 from app.simulation.cluster_diff import build_cluster_diff
+from app.simulation.cluster_overlap_matrix import (
+    MAX_CLUSTERS as _MAX_MATRIX_CLUSTERS,
+    build_cluster_overlap_matrix,
+)
 from app.simulation.conductor import _ARCHITECTS as _architect_registry
 from app.simulation.comparison import build_simulation_comparison
 from app.simulation.cohort_retention import build_cohort_retention
@@ -1732,6 +1737,91 @@ def get_cluster_diff(
         cluster_b_product_affinities=list(def_b.product_affinities),
     )
     return ClusterDiffOut(**payload)
+
+
+@router.get(
+    "/cluster-overlap-matrix",
+    response_model=ClusterOverlapMatrixOut,
+    summary=(
+        "N×N similarity matrix across a list of clusters so "
+        "the dashboard can render a consolidation heatmap"
+    ),
+    # DB read of N cluster definitions — same cap as the
+    # other aggregate endpoints.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_cluster_overlap_matrix(
+    cluster_ids: list[str] = Query(
+        ...,
+        min_length=1,
+        description=(
+            "Cluster ids to include in the matrix. Repeat the "
+            "param or pass comma-separated values. Order is "
+            "preserved in the response. Capped at 25 ids."
+        ),
+    ),
+):
+    """Pairwise similarity matrix across N clusters."""
+    # Normalise the ids: split comma-separated values, strip,
+    # dedupe (preserving first-seen order). parse_id_list
+    # handles the same shape but expects ints — we want
+    # strings here.
+    seen: set[str] = set()
+    canonical: list[str] = []
+    for raw in cluster_ids:
+        if raw is None:
+            continue
+        for piece in str(raw).split(","):
+            piece = piece.strip()
+            if piece and piece not in seen:
+                seen.add(piece)
+                canonical.append(piece)
+    if not canonical:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "cluster_ids must supply at least one non-empty "
+                "id"
+            ),
+        )
+    if len(canonical) > _MAX_MATRIX_CLUSTERS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"too many cluster_ids ({len(canonical)}); max "
+                f"is {_MAX_MATRIX_CLUSTERS}"
+            ),
+        )
+
+    # Pull each cluster definition from the registry. Unknown
+    # id → 400 so the dashboard can show a clear error.
+    entries: list[dict] = []
+    for cid in canonical:
+        definition = next(
+            (c for c in _registry.all_clusters() if c.cluster_id == cid),
+            None,
+        )
+        if definition is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unknown cluster_id {cid!r}",
+            )
+        entries.append({
+            "cluster_id": definition.cluster_id,
+            "cluster_name": definition.name,
+            "traits": dict(definition.base_traits),
+        })
+
+    try:
+        payload = build_cluster_overlap_matrix(entries)
+    except ValueError as exc:
+        # Defensive — the route layer is already validating
+        # the cap; this catches any future helper-level guard.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    return ClusterOverlapMatrixOut(**payload)
 
 
 @router.get(

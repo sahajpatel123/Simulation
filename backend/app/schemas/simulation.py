@@ -514,6 +514,35 @@ class ClusterDiffOut(BaseModel):
     product_overlap: list[str] = []
 
 
+class ClusterOverlapMatrixOut(BaseModel):
+    """Response from ``GET /simulations/cluster-overlap-matrix``.
+
+    N×N pairwise similarity matrix across a list of N
+    clusters. Powers the dashboard's 'which clusters are
+    similar enough to be consolidated?' heatmap.
+
+    * ``cluster_ids`` — ordered list of cluster ids (same
+      order as the matrix rows / columns).
+    * ``cluster_names`` — ordered list of human-readable
+      names (defaults to id when missing).
+    * ``matrix`` — N×N list of lists; symmetric with 1.0 on
+      the diagonal. Cells are the pairwise similarity score
+      in [0.0, 1.0].
+    * ``pair_summaries`` — flat list of dicts for every
+      non-self pair, sorted by score DESC. Each row carries
+      ``cluster_a``, ``cluster_b``, ``score``, ``label``
+      (WEAK / MODERATE / STRONG).
+    * ``strong_pair_count`` — how many pairs scored ≥
+      STRONG_THRESHOLD (consolidation candidates).
+    """
+
+    cluster_ids: list[str] = []
+    cluster_names: list[str] = []
+    matrix: list[list[float]] = []
+    pair_summaries: list[dict] = []
+    strong_pair_count: int = 0
+
+
 class SimulationResultOut(BaseModel):
     id: int
     project_id: int
