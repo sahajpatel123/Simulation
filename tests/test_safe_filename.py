@@ -1244,3 +1244,17 @@ class TestShellSafety:
             out = _reports._safe_filename(t)
             expected = "_" * len(t)
             assert out == expected, f"{t!r} -> {out!r}"
+
+    def test_long_underscore_sequences_preserved(self) -> None:
+        """Pins that long sequences of underscores (up to 40 chars)
+        round-trip unchanged. The slice cap is 40, so 40 or
+        fewer underscores pass through; 41+ would be truncated.
+
+        Pin so a future \"simplification\" that added a length
+        cap to underscores specifically (e.g. limiting them to
+        20) would silently break the contract for snake-case
+        titles with long component names."""
+        for n in (5, 10, 20, 38, 39, 40):
+            t = "_" * n
+            out = _reports._safe_filename(t)
+            assert out == t, f"len {n} → {out!r} (expected {t!r})"
