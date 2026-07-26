@@ -1,0 +1,119 @@
+name: security-scan
+
+# Defensive scan: Bandit (Python security) + pip-audit (deps).
+# Runs in parallel to backend-ci — its results surface as a job
+# summary but never block merges. When findings need to block,
+# flip ``continue-on-error`` to ``false`` after triaging.
+
+on:
+  push:
+    branches: [main, "autonomous/**"]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly Monday 06:17 UTC — surfaces newly-published CVEs.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-scan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bandit:
+    name: bandit (Python security)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install bandit
+        run: pip install --quiet bandit
+
+      - name: Run bandit (medium+ severity)
+        run: |
+          bandit -r backend/app \
+            --severity-level medium \
+            --confidence-level medium \
+            -f json -o bandit-report.json || true
+          bandit -r backend/app \
+            --severity-level medium \
+            --confidence-level medium \
+            -f txt || true
+
+      - name: Upload bandit JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Summarise findings
+        if: always()
+        run: |
+          if [ -f bandit-report.json ]; then
+            python -c "
+          import json, sys
+          try:
+              with open('bandit-report.json') as f:
+                  data = json.load(f)
+              results = data.get('results', [])
+              metrics = data.get('metrics', {}).get('_totals', {})
+              high = sum(1 for r in results if r.get('issue_severity') == 'HIGH')
+              med  = sum(1 for r in results if r.get('issue_severity') == 'MEDIUM')
+              low  = sum(1 for r in results if r.get('issue_severity') == 'LOW')
+              print(f'::notice title=Bandit:: HIGH={high} MEDIUM={med} LOW={low} LOC={metrics.get(\"loc\", \"?\")}')
+              for r in results[:10]:
+                  print(f'- {r[\"issue_severity\"]} {r[\"test_id\"]} {r[\"filename\"]}:{r[\"line_number\"]} — {r[\"issue_text\"][:120]}')
+          except Exception as e:
+              print(f'Bandit summary failed: {e}', file=sys.stderr)
+          "
+          fi
+
+  pip-audit:
+    name: pip-audit (dependency CVEs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install pip-audit
+        run: pip install --quiet pip-audit
+
+      - name: Audit requirements.txt
+        run: |
+          pip-audit -r requirements.txt \
+            --format json --output pip-audit-report.json || true
+          pip-audit -r requirements.txt || true
+
+      - name: Upload pip-audit JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit-report
+          path: pip-audit-report.json
+          retention-days: 14
+          if-no-files-found: ignore
