@@ -226,11 +226,11 @@ def _build_key_shifts(deltas: list[dict]) -> list[dict]:
         if d["direction"] not in (DIR_IMPROVING, DIR_DEGRADING):
             continue
         e = d["earlier"]
-        l = d["later"]
-        if e is None or l is None:
+        later_v = d["later"]
+        if e is None or later_v is None:
             continue
-        base = max(abs(e), abs(l), 1e-9)
-        magnitude = abs(l - e) / base
+        base = max(abs(e), abs(later_v), 1e-9)
+        magnitude = abs(later_v - e) / base
         candidates.append((magnitude, d))
     candidates.sort(key=lambda x: x[0], reverse=True)
     top = [
