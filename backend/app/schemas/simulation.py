@@ -92,6 +92,40 @@ class FindingsAggregateOut(BaseModel):
     architect_filter: str | None = None
 
 
+class ArchitectAccuracyBridgeOut(BaseModel):
+    """Response from ``GET /simulations/aggregate/architect-accuracy``.
+
+    Cross-references per-simulation findings with per-simulation
+    outcomes so the dashboard can answer "for the sims where the
+    Pricing architect flagged a CRITICAL finding, did the model
+    actually over- or under-predict conversion?" — i.e. the
+    architect's alerts are calibrated against the truth.
+
+    * ``simulation_count`` — total sims in the input (incl. ones
+      without outcomes).
+    * ``outcome_attached_sim_count`` — sims with at least one
+      finding AND a non-null predicted+actual outcome (the
+      denominator of the calibration averages).
+    * ``by_architect`` — per-architect rollup sorted by
+      ``|calibration_variance| DESC, finding_count DESC, name ASC``
+      so the most-biased architect surfaces first. Each row carries
+      ``calibrated_sim_count``, ``calibration_variance``,
+      ``calibration_direction`` (``OVER_PREDICTS`` /
+      ``UNDER_PREDICTS`` / ``BALANCED`` / ``INSUFFICIENT_DATA``),
+      and a ``needs_review`` boolean.
+    * ``most_biased_architects`` — first ``top_n`` architect names
+      by ``|calibration_variance|`` DESC.
+    * ``min_severity`` — echoed back (whitespace-stripped and
+      uppercased).
+    """
+
+    by_architect: list[dict] = []
+    most_biased_architects: list[str] = []
+    simulation_count: int = 0
+    outcome_attached_sim_count: int = 0
+    min_severity: str = "INFO"
+
+
 class ClustersAggregateOut(BaseModel):
     """Response from ``GET /simulations/aggregate/clusters``.
 

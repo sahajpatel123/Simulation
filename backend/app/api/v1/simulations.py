@@ -21,6 +21,7 @@ from app.models.cluster_run_summary import ClusterRunSummary
 from app.schemas.cluster_opportunity import ClusterOpportunityMatrixOut
 from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
 from app.schemas.simulation import (
+    ArchitectAccuracyBridgeOut,
     ClustersAggregateOut,
     FindingsAggregateOut,
     OutcomesDigestOut,
@@ -71,6 +72,11 @@ from app.simulation.findings_aggregate import (
 from app.simulation.clusters_aggregate import (
     aggregate_clusters,
     normalise_top_n as normalise_clusters_top_n,
+)
+from app.simulation.architect_accuracy_bridge import (
+    bridge_architect_accuracy,
+    normalise_severity as normalise_bridge_severity,
+    normalise_top_n as normalise_bridge_top_n,
 )
 from app.simulation.outcomes_digest import (
     aggregate_outcomes,
@@ -791,6 +797,123 @@ def aggregate_simulation_clusters(
         top_n=effective_top_n,
     )
     return ClustersAggregateOut(**aggregate)
+
+
+@router.get(
+    "/aggregate/architect-accuracy",
+    response_model=ArchitectAccuracyBridgeOut,
+    summary=(
+        "Cross-reference findings with outcomes to surface biased architects"
+    ),
+    # DB read of N (sim, outcome) pairs — same cap as the sibling
+    # aggregate endpoints.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def aggregate_architect_accuracy(
+    ids: list[str] | None = Query(
+        default=None,
+        description=(
+            "One or more simulation ids. Same parser as "
+            "``/simulations/batch`` — repeat the param or "
+            "pass comma-separated values. Capped at 100 ids."
+        ),
+    ),
+    min_severity: str | None = Query(
+        default=None,
+        max_length=16,
+        description=(
+            "Filter finding list to >= this severity. Allowed: "
+            "INFO, WARNING, CRITICAL. Default: INFO."
+        ),
+    ),
+    top_n: int | None = Query(
+        default=None,
+        ge=1,
+        description=(
+            "How many most-biased architects to surface "
+            "(cap 100). Default: 5."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ArchitectAccuracyBridgeOut:
+    """Cross-simulation architect calibration bridge.
+
+    Joins each owned simulation's ``domain_findings`` with its
+    latest ``Outcome`` row so we can compute, per architect: on
+    the sims where the architect flagged findings, did the model
+    actually over- or under-predict conversion? Architects whose
+    CRITICAL flags consistently correlate with bias are flagged
+    as ``needs_review`` so the dashboard can investigate.
+    """
+    try:
+        canonical_ids = parse_id_list(ids)
+        min_sev = normalise_bridge_severity(min_severity)
+        effective_top_n = normalise_bridge_top_n(top_n)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    if not canonical_ids:
+        return ArchitectAccuracyBridgeOut(min_severity=min_sev)
+
+    # Single JOIN: pull every outcome row for the requested sims
+    # (newest-first), scope to the current user via Simulation →
+    # Project ownership. We keep only the latest outcome per sim
+    # in Python — bounded by MAX_BATCH_SIZE * small constant.
+    rows = (
+        db.query(
+            Simulation.id,
+            Simulation.results_json,
+            Outcome.predicted_conversion_rate,
+            Outcome.actual_conversion_rate,
+            Outcome.created_at,
+        )
+        .outerjoin(
+            Outcome,
+            Outcome.simulation_id == Simulation.id,
+        )
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(
+            Simulation.id.in_(canonical_ids),
+            Project.user_id == current_user.id,
+        )
+        .order_by(Outcome.created_at.desc())
+        .all()
+    )
+
+    # Build ``(results_json, (predicted, actual))`` pairs in the
+    # user's requested order; only the first (newest) outcome per
+    # sim id is kept. Sims without any outcome get ``(None, None)``.
+    pairs: list[
+        tuple[dict | None, tuple[float | None, float | None]]
+    ] = []
+    seen_sim_ids: set[int] = set()
+    for sid in canonical_ids:
+        if sid in seen_sim_ids:
+            continue
+        seen_sim_ids.add(sid)
+        match = next((r for r in rows if r.id == sid), None)
+        if match is None:
+            pairs.append((None, (None, None)))
+            continue
+        pairs.append(
+            (
+                match.results_json,
+                (
+                    match.predicted_conversion_rate,
+                    match.actual_conversion_rate,
+                ),
+            )
+        )
+
+    bridge = bridge_architect_accuracy(
+        pairs,
+        min_severity=min_sev,
+        top_n=effective_top_n,
+    )
+    return ArchitectAccuracyBridgeOut(**bridge)
 
 
 @router.get(
