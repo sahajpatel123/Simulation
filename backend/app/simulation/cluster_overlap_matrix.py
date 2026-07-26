@@ -130,11 +130,14 @@ def build_cluster_overlap_matrix(
             "cluster_names": [],
             "matrix": [],
             "pair_summaries": [],
+            "consolidation_candidates": [],
+            "cluster_metadata": {},
             "strong_pair_count": 0,
         }
 
     cluster_ids: list[str] = []
     cluster_names: list[str] = []
+    cluster_metadata: dict[str, dict] = {}
     for entry in clusters:
         cid = str(entry.get("cluster_id", "")).strip()
         if not cid:
@@ -146,6 +149,18 @@ def build_cluster_overlap_matrix(
         cluster_names.append(
             str(entry.get("cluster_name") or cid)
         )
+        # Per-cluster metadata for the heatmap tooltip — name
+        # + the 8 required traits in canonical order so the
+        # dashboard can render a "hover to see traits" panel
+        # without re-querying.
+        traits = entry.get("traits") or {}
+        cluster_metadata[cid] = {
+            "cluster_name": cluster_names[-1],
+            "traits": {
+                t: traits.get(t)
+                for t in REQUIRED_TRAITS
+            },
+        }
 
     n = len(cluster_ids)
     # Pre-compute pairwise similarity so we only run
@@ -154,6 +169,7 @@ def build_cluster_overlap_matrix(
         [0.0 for _ in range(n)] for _ in range(n)
     ]
     pair_summaries: list[dict] = []
+    consolidation_candidates: list[dict] = []
     strong_pair_count = 0
     for i in range(n):
         matrix[i][i] = 1.0
@@ -166,22 +182,32 @@ def build_cluster_overlap_matrix(
             matrix[i][j] = score
             matrix[j][i] = score
             label = _relationship_label(score)
-            if label == LABEL_STRONG:
-                strong_pair_count += 1
-            pair_summaries.append({
+            row = {
                 "cluster_a": cluster_ids[i],
                 "cluster_b": cluster_ids[j],
                 "score": score,
                 "label": label,
-            })
+            }
+            pair_summaries.append(row)
+            if label == LABEL_STRONG:
+                strong_pair_count += 1
+                consolidation_candidates.append(row)
 
     pair_summaries.sort(key=lambda p: (-p["score"], p["cluster_a"]))
+    # consolidation_candidates already came in nested-loop
+    # order (i < j, descending i), but keep them sorted by
+    # score DESC for the dashboard's headline view.
+    consolidation_candidates.sort(
+        key=lambda p: (-p["score"], p["cluster_a"])
+    )
 
     return {
         "cluster_ids": cluster_ids,
         "cluster_names": cluster_names,
         "matrix": matrix,
         "pair_summaries": pair_summaries,
+        "consolidation_candidates": consolidation_candidates,
+        "cluster_metadata": cluster_metadata,
         "strong_pair_count": strong_pair_count,
     }
 

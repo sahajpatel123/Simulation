@@ -534,12 +534,22 @@ class ClusterOverlapMatrixOut(BaseModel):
       (WEAK / MODERATE / STRONG).
     * ``strong_pair_count`` — how many pairs scored ≥
       STRONG_THRESHOLD (consolidation candidates).
+    * ``consolidation_candidates`` — same shape as
+      ``pair_summaries`` but filtered to STRONG-only and
+      sorted by score DESC. The dashboard's "merge these"
+      headline list.
+    * ``cluster_metadata`` — ``{cluster_id: {cluster_name,
+      traits}}`` map for the heatmap's hover tooltip. The
+      ``traits`` dict is in canonical REQUIRED_TRAITS order
+      so the dashboard renders a stable tooltip panel.
     """
 
     cluster_ids: list[str] = []
     cluster_names: list[str] = []
     matrix: list[list[float]] = []
     pair_summaries: list[dict] = []
+    consolidation_candidates: list[dict] = []
+    cluster_metadata: dict = {}
     strong_pair_count: int = 0
 
 

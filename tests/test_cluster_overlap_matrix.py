@@ -62,6 +62,8 @@ def test_matrix_empty_returns_empty_payload() -> None:
     assert out["cluster_names"] == []
     assert out["matrix"] == []
     assert out["pair_summaries"] == []
+    assert out["consolidation_candidates"] == []
+    assert out["cluster_metadata"] == {}
     assert out["strong_pair_count"] == 0
 
 
@@ -380,6 +382,137 @@ def test_matrix_handles_partial_traits_gracefully() -> None:
 
 
 # ---------------------------------------------------------------------------
+# consolidation_candidates
+# ---------------------------------------------------------------------------
+
+
+def test_matrix_consolidation_candidates_only_strong_pairs() -> None:
+    """Consolidation list is filtered to STRONG-only."""
+    from app.simulation.cluster_overlap_matrix import (
+        build_cluster_overlap_matrix,
+    )
+
+    all_traits = [
+        "income_level", "digital_literacy", "motivation",
+        "trust", "price_sensitivity", "risk_aversion",
+        "patience_score", "social_orientation",
+    ]
+    out = build_cluster_overlap_matrix([
+        {"cluster_id": "a", "traits": {t: 0.50 for t in all_traits}},
+        {"cluster_id": "b", "traits": {t: 0.50 for t in all_traits}},
+        {"cluster_id": "c", "traits": {t: 0.10 for t in all_traits}},
+    ])
+    # Only (a,b) is STRONG; (a,c) and (b,c) are below threshold.
+    assert len(out["consolidation_candidates"]) == 1
+    candidate = out["consolidation_candidates"][0]
+    assert candidate["label"] == "STRONG"
+    assert candidate["cluster_a"] == "a"
+    assert candidate["cluster_b"] == "b"
+
+
+def test_matrix_consolidation_candidates_sorted_by_score_desc() -> None:
+    from app.simulation.cluster_overlap_matrix import (
+        build_cluster_overlap_matrix,
+    )
+
+    all_traits = [
+        "income_level", "digital_literacy", "motivation",
+        "trust", "price_sensitivity", "risk_aversion",
+        "patience_score", "social_orientation",
+    ]
+    # 3 clusters: a,b,c. a-b score 0.95 (close to 1), a-c
+    # score 1.0 (identical). Sorted: (a,c) first.
+    out = build_cluster_overlap_matrix([
+        {"cluster_id": "a", "traits": {t: 0.50 for t in all_traits}},
+        {"cluster_id": "b", "traits": {t: 0.55 for t in all_traits}},
+        {"cluster_id": "c", "traits": {t: 0.50 for t in all_traits}},
+    ])
+    pairs = [
+        (c["cluster_a"], c["cluster_b"])
+        for c in out["consolidation_candidates"]
+    ]
+    # (a,c) identical → score 1.0 → first.
+    # (a,b) similar → score 0.9375 → second.
+    assert pairs[0] == ("a", "c")
+    assert pairs[1] == ("a", "b")
+    assert pairs == sorted(pairs, key=lambda p: -1)
+
+
+def test_matrix_consolidation_candidates_empty_for_no_strong() -> None:
+    from app.simulation.cluster_overlap_matrix import (
+        build_cluster_overlap_matrix,
+    )
+
+    all_traits = [
+        "income_level", "digital_literacy", "motivation",
+        "trust", "price_sensitivity", "risk_aversion",
+        "patience_score", "social_orientation",
+    ]
+    # All maximally different → no STRONG pairs.
+    out = build_cluster_overlap_matrix([
+        {"cluster_id": "a", "traits": {t: 1.0 for t in all_traits}},
+        {"cluster_id": "b", "traits": {t: 0.0 for t in all_traits}},
+    ])
+    assert out["consolidation_candidates"] == []
+
+
+# ---------------------------------------------------------------------------
+# cluster_metadata
+# ---------------------------------------------------------------------------
+
+
+def test_matrix_cluster_metadata_carries_name_and_traits() -> None:
+    from app.simulation.cluster_overlap_matrix import (
+        REQUIRED_TRAITS,
+        build_cluster_overlap_matrix,
+    )
+
+    out = build_cluster_overlap_matrix([
+        {
+            "cluster_id": "metro_pro",
+            "cluster_name": "Metro Power Pro",
+            "traits": {
+                "income_level": 0.80,
+                "digital_literacy": 0.70,
+            },
+        },
+        {
+            "cluster_id": "students",
+            "cluster_name": "Students",
+            "traits": {
+                "income_level": 0.30,
+                "digital_literacy": 0.60,
+            },
+        },
+    ])
+    md = out["cluster_metadata"]
+    assert set(md.keys()) == {"metro_pro", "students"}
+    metro = md["metro_pro"]
+    assert metro["cluster_name"] == "Metro Power Pro"
+    # Traits dict carries the 8 required keys in canonical
+    # order — the dashboard renders a stable tooltip.
+    assert list(metro["traits"].keys()) == list(REQUIRED_TRAITS)
+    # The supplied traits round-trip; missing keys echo None.
+    assert metro["traits"]["income_level"] == pytest.approx(0.80)
+    assert metro["traits"]["digital_literacy"] == pytest.approx(0.70)
+    assert metro["traits"]["motivation"] is None
+
+
+def test_matrix_cluster_metadata_name_falls_back_to_id() -> None:
+    """No cluster_name → cluster_id is echoed."""
+    from app.simulation.cluster_overlap_matrix import (
+        build_cluster_overlap_matrix,
+    )
+
+    out = build_cluster_overlap_matrix([
+        {"cluster_id": "a", "traits": {}},
+        {"cluster_id": "b", "traits": {}},
+    ])
+    assert out["cluster_metadata"]["a"]["cluster_name"] == "a"
+    assert out["cluster_metadata"]["b"]["cluster_name"] == "b"
+
+
+# ---------------------------------------------------------------------------
 # Schema
 # ---------------------------------------------------------------------------
 
@@ -392,6 +525,8 @@ def test_cluster_overlap_matrix_out_default_shape() -> None:
     assert out.cluster_names == []
     assert out.matrix == []
     assert out.pair_summaries == []
+    assert out.consolidation_candidates == []
+    assert out.cluster_metadata == {}
     assert out.strong_pair_count == 0
 
 
