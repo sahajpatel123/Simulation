@@ -350,8 +350,221 @@ def test_public_allowlist_matches_callers() -> None:
         "DEFAULT_OUTLIER_THRESHOLD",
         "MIN_OUTLIER_THRESHOLD",
         "MAX_OUTLIER_THRESHOLD",
+        "WELL_CALIBRATED_MAX_MAE",
+        "NEEDS_ATTENTION_MAX_MAE",
+        "LABEL_INSUFFICIENT_DATA",
+        "LABEL_WELL_CALIBRATED",
+        "LABEL_NEEDS_ATTENTION",
+        "LABEL_POORLY_CALIBRATED",
+        "VALID_CONFIDENCE_LABELS",
         "aggregate_outcomes",
         "normalise_outlier_threshold",
+    }
+
+
+# ---------------------------------------------------------------------------
+# sim_ids linkage
+# ---------------------------------------------------------------------------
+
+
+def test_aggregate_per_pair_carries_sim_id_when_provided() -> None:
+    """When the route supplies sim_ids, every per_pair row must
+    carry the matching sim_id so the UI can drill from a scatter
+    point back to the source simulation."""
+    from app.simulation.outcomes_digest import aggregate_outcomes
+
+    out = aggregate_outcomes(
+        [(0.20, 0.10), (0.05, 0.10)],
+        sim_ids=[101, 202],
+    )
+    assert out["per_pair"][0]["sim_id"] == 101
+    assert out["per_pair"][1]["sim_id"] == 202
+
+
+def test_aggregate_per_pair_sim_id_is_none_when_not_provided() -> None:
+    """Back-compat: callers that don't supply sim_ids still get a
+    valid payload, with ``sim_id`` echoed as ``None``."""
+    from app.simulation.outcomes_digest import aggregate_outcomes
+
+    out = aggregate_outcomes([(0.10, 0.10)])
+    assert out["per_pair"][0]["sim_id"] is None
+    assert out["worst_offender_sim_id"] is None
+
+
+def test_aggregate_per_pair_sim_id_none_slot_is_preserved() -> None:
+    """A ``None`` in the sim_ids list maps to ``None`` on the row —
+    it does NOT pick up the adjacent row's id."""
+    from app.simulation.outcomes_digest import aggregate_outcomes
+
+    out = aggregate_outcomes(
+        [(0.20, 0.10), (0.05, 0.10)],
+        sim_ids=[101, None],
+    )
+    assert out["per_pair"][0]["sim_id"] == 101
+    assert out["per_pair"][1]["sim_id"] is None
+
+
+def test_aggregate_worst_offender_is_highest_abs_variance() -> None:
+    from app.simulation.outcomes_digest import aggregate_outcomes
+
+    # Sim 202 has the largest |variance| (0.15).
+    out = aggregate_outcomes(
+        [(0.10, 0.05), (0.20, 0.05), (0.10, 0.15)],
+        sim_ids=[101, 202, 303],
+    )
+    assert out["worst_offender_sim_id"] == 202
+
+
+def test_aggregate_worst_offender_ignores_missing_pairs() -> None:
+    """A pair without actionable data must not become the worst
+    offender — only actionable rows compete."""
+    from app.simulation.outcomes_digest import aggregate_outcomes
+
+    out = aggregate_outcomes(
+        [(None, None), (0.10, 0.05), (0.20, 0.10)],
+        sim_ids=[101, 202, 303],
+    )
+    # Sim 303 has |variance|=0.10, sim 202 has |variance|=0.05.
+    assert out["worst_offender_sim_id"] == 303
+
+
+def test_aggregate_worst_offender_none_when_all_missing() -> None:
+    from app.simulation.outcomes_digest import aggregate_outcomes
+
+    out = aggregate_outcomes(
+        [(None, None), (None, None)],
+        sim_ids=[101, 202],
+    )
+    assert out["worst_offender_sim_id"] is None
+    assert out["confidence_label"] == "INSUFFICIENT_DATA"
+
+
+def test_aggregate_worst_offender_none_when_sim_id_missing() -> None:
+    """Even when pairs have actionable data, a ``None`` sim_id
+    disqualifies the row from worst-offender — we can't link the
+    error back to a sim, so we don't claim to."""
+    from app.simulation.outcomes_digest import aggregate_outcomes
+
+    out = aggregate_outcomes(
+        [(0.20, 0.10)],
+        sim_ids=[None],
+    )
+    assert out["worst_offender_sim_id"] is None
+
+
+def test_aggregate_worst_offender_stable_on_ties() -> None:
+    """On equal |variance|, the first encountered sim wins so the
+    UI doesn't bounce between ties on every recompute."""
+    from app.simulation.outcomes_digest import aggregate_outcomes
+
+    out = aggregate_outcomes(
+        [(0.10, 0.00), (0.20, 0.10)],
+        sim_ids=[101, 202],
+    )
+    # Both |variance| == 0.10 — first wins.
+    assert out["worst_offender_sim_id"] == 101
+
+
+def test_aggregate_sim_ids_length_mismatch_raises() -> None:
+    """Programming error — the caller passed a misaligned mapping.
+    Raise loud rather than silently dropping pairs."""
+    from app.simulation.outcomes_digest import aggregate_outcomes
+
+    with pytest.raises(ValueError, match="sim_ids length"):
+        aggregate_outcomes(
+            [(0.10, 0.10), (0.20, 0.10)],
+            sim_ids=[101],
+        )
+
+
+# ---------------------------------------------------------------------------
+# confidence_label
+# ---------------------------------------------------------------------------
+
+
+def test_confidence_label_well_calibrated_for_small_mae() -> None:
+    from app.simulation.outcomes_digest import (
+        LABEL_WELL_CALIBRATED,
+        WELL_CALIBRATED_MAX_MAE,
+        aggregate_outcomes,
+    )
+
+    # MAE = 0.01 → below the 2pp threshold.
+    out = aggregate_outcomes(
+        [(0.10, 0.11), (0.10, 0.09)],
+    )
+    assert out["mae"] < WELL_CALIBRATED_MAX_MAE
+    assert out["confidence_label"] == LABEL_WELL_CALIBRATED
+
+
+def test_confidence_label_needs_attention_for_moderate_mae() -> None:
+    from app.simulation.outcomes_digest import (
+        LABEL_NEEDS_ATTENTION,
+        NEEDS_ATTENTION_MAX_MAE,
+        WELL_CALIBRATED_MAX_MAE,
+        aggregate_outcomes,
+    )
+
+    # MAE = 0.035 → between 2pp and 5pp.
+    out = aggregate_outcomes(
+        [(0.135, 0.10), (0.065, 0.10)],
+    )
+    assert WELL_CALIBRATED_MAX_MAE <= out["mae"] < NEEDS_ATTENTION_MAX_MAE
+    assert out["confidence_label"] == LABEL_NEEDS_ATTENTION
+
+
+def test_confidence_label_poorly_calibrated_for_large_mae() -> None:
+    from app.simulation.outcomes_digest import (
+        LABEL_POORLY_CALIBRATED,
+        NEEDS_ATTENTION_MAX_MAE,
+        aggregate_outcomes,
+    )
+
+    # MAE = 0.10 → ≥ 5pp.
+    out = aggregate_outcomes(
+        [(0.20, 0.10), (0.00, 0.10)],
+    )
+    assert out["mae"] >= NEEDS_ATTENTION_MAX_MAE
+    assert out["confidence_label"] == LABEL_POORLY_CALIBRATED
+
+
+def test_confidence_label_boundary_at_2pp_is_needs_attention() -> None:
+    """Inclusive lower bound on the NEEDS_ATTENTION bucket — MAE
+    exactly equal to 2pp is not 'well calibrated'."""
+    from app.simulation.outcomes_digest import (
+        LABEL_NEEDS_ATTENTION,
+        WELL_CALIBRATED_MAX_MAE,
+        aggregate_outcomes,
+    )
+
+    out = aggregate_outcomes([(WELL_CALIBRATED_MAX_MAE, 0.0)])
+    assert out["confidence_label"] == LABEL_NEEDS_ATTENTION
+
+
+def test_confidence_label_insufficient_data_for_no_pairs() -> None:
+    from app.simulation.outcomes_digest import (
+        LABEL_INSUFFICIENT_DATA,
+        aggregate_outcomes,
+    )
+
+    out = aggregate_outcomes(
+        [(None, None), (None, 0.10)],
+    )
+    # No actionable rows → MAE is meaningless → flag it.
+    assert out["mae_count"] == 0
+    assert out["confidence_label"] == LABEL_INSUFFICIENT_DATA
+
+
+def test_confidence_label_allowlist_is_stable() -> None:
+    """Pin the public label enum so a rename breaks here rather
+    than silently at the dashboard."""
+    from app.simulation.outcomes_digest import VALID_CONFIDENCE_LABELS
+
+    assert set(VALID_CONFIDENCE_LABELS) == {
+        "INSUFFICIENT_DATA",
+        "WELL_CALIBRATED",
+        "NEEDS_ATTENTION",
+        "POORLY_CALIBRATED",
     }
 
 
@@ -374,6 +587,8 @@ def test_outcomes_digest_out_default_shape() -> None:
     assert out.per_pair == []
     assert out.simulation_count == 0
     assert out.with_predictions == 0
+    assert out.worst_offender_sim_id is None
+    assert out.confidence_label == "INSUFFICIENT_DATA"
 
 
 def test_outcomes_digest_out_round_trips_aggregate_payload() -> None:

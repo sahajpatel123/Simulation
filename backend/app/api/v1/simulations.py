@@ -701,7 +701,11 @@ def aggregate_simulation_outcomes(
         seen_sim_ids.add(sid)
 
     return OutcomesDigestOut(
-        **aggregate_outcomes(pairs, outlier_threshold=threshold)
+        **aggregate_outcomes(
+            pairs,
+            outlier_threshold=threshold,
+            sim_ids=canonical_ids,
+        )
     )
 
 

@@ -20,11 +20,21 @@ The aggregation is intentionally narrow:
   "over" means the model predicted higher than actual; "under" the
   inverse. "exact" covers pairs within a small epsilon (default 1e-6).
 * ``per_pair`` — the raw (predicted, actual, variance) tuples so the
-  UI can render a scatter plot.
+  UI can render a scatter plot. When ``sim_ids`` is supplied, each
+  row also carries ``sim_id`` so the UI can link a point back to
+  its source simulation.
 * ``simulation_count`` — how many simulations contributed.
 * ``with_predictions`` — how many pairs had a non-null predicted
   value (numerator of the aggregate denominators — useful so the UI
   can show "X of Y predictions were actionable").
+* ``worst_offender_sim_id`` — the sim id with the largest
+  ``|variance|`` among actionable rows; ``None`` if no actionable
+  rows exist. The UI can drill into "which simulation is making
+  us look bad?"
+* ``confidence_label`` — one of ``WELL_CALIBRATED``,
+  ``NEEDS_ATTENTION``, ``POORLY_CALIBRATED``, ``INSUFFICIENT_DATA``.
+  Bucketed from MAE so a non-stats-savvy founder sees one word
+  instead of three decimals.
 
 The aggregate is built in Python (not SQL) because the dataset per
 request is bounded by the batch cap (100 sims) and per-pair numerics
@@ -46,6 +56,26 @@ MAX_OUTLIER_THRESHOLD: float = 1.0
 # treated as a no-error prediction. Keeps the direction_breakdown
 # honest when both sides round to the same value.
 _EXACT_EPSILON: float = 1e-6
+
+# Confidence-label thresholds (absolute MAE in conversion-rate terms).
+# A 2pp gap is "the noise floor" for early-stage funnels; 5pp is
+# where founders start losing money on the difference. Buckets are
+# inclusive on the lower bound, exclusive on the upper bound.
+WELL_CALIBRATED_MAX_MAE: float = 0.02   # MAE < 2pp → calibrated
+NEEDS_ATTENTION_MAX_MAE: float = 0.05   # 2pp ≤ MAE < 5pp → caution
+# anything ≥ 5pp → POORLY_CALIBRATED
+
+# Label allowlist — the route / schema echo this enum verbatim.
+LABEL_INSUFFICIENT_DATA: str = "INSUFFICIENT_DATA"
+LABEL_WELL_CALIBRATED: str = "WELL_CALIBRATED"
+LABEL_NEEDS_ATTENTION: str = "NEEDS_ATTENTION"
+LABEL_POORLY_CALIBRATED: str = "POORLY_CALIBRATED"
+VALID_CONFIDENCE_LABELS: frozenset[str] = frozenset({
+    LABEL_INSUFFICIENT_DATA,
+    LABEL_WELL_CALIBRATED,
+    LABEL_NEEDS_ATTENTION,
+    LABEL_POORLY_CALIBRATED,
+})
 
 
 def _safe_float(raw: object) -> float | None:
@@ -86,6 +116,7 @@ def aggregate_outcomes(
     pairs: list[tuple[float | None, float | None]],
     *,
     outlier_threshold: float = DEFAULT_OUTLIER_THRESHOLD,
+    sim_ids: list[int | None] | None = None,
 ) -> dict:
     """Aggregate predicted vs actual across N simulation outcomes.
 
@@ -95,6 +126,13 @@ def aggregate_outcomes(
             total count but excluded from MAE / MAPE / RMSE.
         outlier_threshold: absolute variance above which the pair is
             counted as an outlier. Default 0.10 (10pp).
+        sim_ids: optional positional mapping from pair → simulation
+            id. When supplied, must have one entry per pair (use
+            ``None`` for pairs without a known sim id, e.g. ad-hoc
+            test data). When provided, every ``per_pair`` row is
+            tagged with its ``sim_id`` and the digest returns the
+            ``worst_offender_sim_id`` (the sim with the highest
+            ``|variance|`` among actionable rows).
 
     Returns:
         A dict matching the ``OutcomesDigestOut`` schema:
@@ -107,16 +145,32 @@ def aggregate_outcomes(
         * ``mape_count`` — number of pairs fed into MAPE.
         * ``outlier_count`` — pairs with |variance| > threshold.
         * ``direction_breakdown`` — ``{"over", "under", "exact"}``.
-        * ``per_pair`` — list of per-simulation tuples (predicted,
-          actual, variance, is_outlier).
+        * ``per_pair`` — list of per-simulation rows (predicted,
+          actual, variance, is_outlier, sim_id). ``sim_id`` is
+          ``None`` when ``sim_ids`` was not supplied or the slot
+          was ``None``.
         * ``simulation_count`` — total pairs in the input.
         * ``with_predictions`` — how many pairs had a non-null
           predicted value.
+        * ``worst_offender_sim_id`` — sim id with the highest
+          ``|variance|`` across actionable rows; ``None`` when no
+          actionable rows exist or no ``sim_ids`` were supplied.
+        * ``confidence_label`` — one of the
+          :data:`VALID_CONFIDENCE_LABELS` strings, bucketed from MAE.
     """
     if outlier_threshold < MIN_OUTLIER_THRESHOLD:
         outlier_threshold = MIN_OUTLIER_THRESHOLD
     if outlier_threshold > MAX_OUTLIER_THRESHOLD:
         outlier_threshold = MAX_OUTLIER_THRESHOLD
+
+    if sim_ids is not None and len(sim_ids) != len(pairs):
+        # Mismatched lengths are a programming error, not a runtime
+        # condition — raise loud so the caller fixes it instead of
+        # silently dropping pairs.
+        raise ValueError(
+            f"sim_ids length ({len(sim_ids)}) must match pairs length "
+            f"({len(pairs)})"
+        )
 
     total = len(pairs)
     if total == 0:
@@ -131,6 +185,8 @@ def aggregate_outcomes(
             "per_pair": [],
             "simulation_count": 0,
             "with_predictions": 0,
+            "worst_offender_sim_id": None,
+            "confidence_label": LABEL_INSUFFICIENT_DATA,
         }
 
     abs_errors: list[float] = []
@@ -140,8 +196,11 @@ def aggregate_outcomes(
     per_pair: list[dict] = []
     outlier_count = 0
     with_predictions = 0
+    worst_offender_sim_id: int | None = None
+    worst_offender_abs_v: float = -1.0
 
-    for predicted, actual in pairs:
+    for index, (predicted, actual) in enumerate(pairs):
+        sim_id = sim_ids[index] if sim_ids is not None else None
         pred = _safe_float(predicted)
         act = _safe_float(actual)
         if pred is None or act is None:
@@ -153,6 +212,7 @@ def aggregate_outcomes(
                 "actual": act,
                 "variance": None,
                 "is_outlier": False,
+                "sim_id": sim_id,
             })
             continue
         with_predictions += 1
@@ -177,7 +237,13 @@ def aggregate_outcomes(
             "actual": act,
             "variance": variance,
             "is_outlier": is_outlier,
+            "sim_id": sim_id,
         })
+        # Track the worst actionable sim for the headline metric.
+        # Strict ``>`` so the first match wins on ties (stable).
+        if sim_id is not None and abs_v > worst_offender_abs_v:
+            worst_offender_abs_v = abs_v
+            worst_offender_sim_id = sim_id
 
     mae = sum(abs_errors) / len(abs_errors) if abs_errors else 0.0
     rmse = (
@@ -186,6 +252,7 @@ def aggregate_outcomes(
     mape = (
         sum(pct_errors) / len(pct_errors) if pct_errors else 0.0
     )
+    confidence_label = _confidence_label(mae, with_predictions)
     return {
         "mae": mae,
         "mape": mape,
@@ -197,7 +264,26 @@ def aggregate_outcomes(
         "per_pair": per_pair,
         "simulation_count": total,
         "with_predictions": with_predictions,
+        "worst_offender_sim_id": worst_offender_sim_id,
+        "confidence_label": confidence_label,
     }
+
+
+def _confidence_label(mae: float, mae_count: int) -> str:
+    """Bucket MAE into a one-word confidence label.
+
+    Returns ``INSUFFICIENT_DATA`` when no actionable rows exist
+    (the MAE average is undefined / meaningless with zero
+    samples). Otherwise picks the bucket whose range contains the
+    MAE.
+    """
+    if mae_count <= 0:
+        return LABEL_INSUFFICIENT_DATA
+    if mae < WELL_CALIBRATED_MAX_MAE:
+        return LABEL_WELL_CALIBRATED
+    if mae < NEEDS_ATTENTION_MAX_MAE:
+        return LABEL_NEEDS_ATTENTION
+    return LABEL_POORLY_CALIBRATED
 
 
 def normalise_outlier_threshold(raw: float | None) -> float:
@@ -220,6 +306,13 @@ __all__ = [
     "DEFAULT_OUTLIER_THRESHOLD",
     "MIN_OUTLIER_THRESHOLD",
     "MAX_OUTLIER_THRESHOLD",
+    "WELL_CALIBRATED_MAX_MAE",
+    "NEEDS_ATTENTION_MAX_MAE",
+    "LABEL_INSUFFICIENT_DATA",
+    "LABEL_WELL_CALIBRATED",
+    "LABEL_NEEDS_ATTENTION",
+    "LABEL_POORLY_CALIBRATED",
+    "VALID_CONFIDENCE_LABELS",
     "aggregate_outcomes",
     "normalise_outlier_threshold",
 ]

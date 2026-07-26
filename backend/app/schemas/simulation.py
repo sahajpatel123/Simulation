@@ -112,12 +112,21 @@ class OutcomesDigestOut(BaseModel):
       ``outlier_threshold`` query param. Default 0.10 (10pp).
     * ``direction_breakdown`` — ``{over, under, exact}`` histogram so
       the UI can render "we over-predicted 6 / under-predicted 2".
-    * ``per_pair`` — raw (predicted, actual, variance, is_outlier)
-      tuples for scatter plots.
+    * ``per_pair`` — raw (predicted, actual, variance, is_outlier,
+      sim_id) tuples for scatter plots. ``sim_id`` is ``None`` when
+      the caller did not supply positional sim ids.
     * ``simulation_count`` — total pairs in the input (incl. ones
       with no predicted value).
     * ``with_predictions`` — how many pairs had a non-null predicted
       value (the numerator of MAE / MAPE / RMSE).
+    * ``worst_offender_sim_id`` — the sim id with the largest
+      ``|variance|`` across actionable rows; ``None`` when no
+      actionable rows exist or no sim ids were supplied. The UI
+      can drill into "which simulation is making us look bad?".
+    * ``confidence_label`` — one of ``WELL_CALIBRATED``,
+      ``NEEDS_ATTENTION``, ``POORLY_CALIBRATED``, ``INSUFFICIENT_DATA``,
+      bucketed from MAE so the dashboard can render a one-word
+      summary tile.
     """
 
     mae: float = 0.0
@@ -134,6 +143,8 @@ class OutcomesDigestOut(BaseModel):
     per_pair: list[dict] = []
     simulation_count: int = 0
     with_predictions: int = 0
+    worst_offender_sim_id: int | None = None
+    confidence_label: str = "INSUFFICIENT_DATA"
 
 
 class SimulationResultOut(BaseModel):
