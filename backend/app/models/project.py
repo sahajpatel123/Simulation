@@ -19,6 +19,17 @@ class Project(Base, TimestampMixin):
     __table_args__ = (
         Index("ix_projects_user_id", "user_id"),
         Index("ix_projects_status", "status"),
+        # GIN index on the JSONB tag list so the ``tags @> '["..."]'``
+        # filter used by list_projects and the bulk rename/delete
+        # queries can use an index lookup. ``jsonb_path_ops`` is the
+        # cheaper variant — it only supports ``@>`` but that's the
+        # only operator we use here.
+        Index(
+            "ix_projects_tags_gin",
+            "tags",
+            postgresql_using="gin",
+            postgresql_ops={"tags": "jsonb_path_ops"},
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

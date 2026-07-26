@@ -59,6 +59,9 @@ from app.schemas.project import (
     ProjectListResponse,
     ProjectOut,
     ProjectPatch,
+    ProjectTagBulkDeleteOut,
+    ProjectTagRenameIn,
+    ProjectTagRenameOut,
     ProjectTagsOut,
     ProjectTagsPatch,
 )
@@ -94,7 +97,11 @@ from app.simulation.competitive_software import CompetitiveSoftwareAnalyser
 from app.simulation.conductor import Conductor
 from app.simulation.product_type import ProductType
 from app.simulation.project_duplicate import duplicate_project_payload
-from app.simulation.project_tags import normalise_tags
+from app.simulation.project_tags import (
+    normalise_tags,
+    remove_tag_from_list,
+    rename_tag_in_list,
+)
 from app.simulation.scored_assumption import score_assumptions, signal_quality_tier
 from app.tasks.simulation_tasks import run_full_simulation
 from app.tasks.stress_test_tasks import run_assumption_stress_test
@@ -423,6 +430,104 @@ def list_user_tags(
             if isinstance(t, str) and t:
                 seen.add(t)
     return sorted(seen)
+
+
+# Bulk operations on the user's tag namespace — implemented as
+# in-process Python loops over the user's projects rather than a
+# single JSONB UPDATE. The dataset is per-user (small, capped by
+# subscription tier) and the loop makes the rename/delete idempotent
+# + observable through the same ORM path as the per-project routes.
+# If a future user has thousands of projects, replace with a single
+# UPDATE … WHERE tags @> '["old"]' ::jsonb.
+
+
+@router.put(
+    "/tags/{old_tag}",
+    response_model=ProjectTagRenameOut,
+    summary="Rename a tag across every project the user owns",
+    # Lower cap than per-project writes — bulk renames are bursty
+    # one-off operations, not steady-state UI traffic.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
+)
+def rename_user_tag(
+    old_tag: str,
+    payload: ProjectTagRenameIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProjectTagRenameOut:
+    try:
+        canonical_old = normalise_tags([old_tag])
+        canonical_new = normalise_tags([payload.new])
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    old = canonical_old[0]
+    new = canonical_new[0]
+    if old == new:
+        # No-op rename — return 0 updates rather than 400 so the UI
+        # can treat "rename to same" as a definitional success.
+        return ProjectTagRenameOut(old=old, new=new, projects_updated=0)
+
+    rows = (
+        db.query(Project)
+        .filter(Project.user_id == current_user.id)
+        .filter(Project.tags.op("@>")([old]))
+        .all()
+    )
+    updated = 0
+    for project in rows:
+        try:
+            new_tags = rename_tag_in_list(list(project.tags or []), old, new)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            )
+        project.tags = new_tags
+        db.add(project)
+        updated += 1
+    if updated:
+        db.commit()
+
+    return ProjectTagRenameOut(old=old, new=new, projects_updated=updated)
+
+
+@router.delete(
+    "/tags/{tag}",
+    response_model=ProjectTagBulkDeleteOut,
+    summary="Delete a tag from every project the user owns",
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
+)
+def delete_user_tag(
+    tag: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProjectTagBulkDeleteOut:
+    try:
+        canonical = normalise_tags([tag])
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    target = canonical[0]
+    rows = (
+        db.query(Project)
+        .filter(Project.user_id == current_user.id)
+        .filter(Project.tags.op("@>")([target]))
+        .all()
+    )
+    updated = 0
+    for project in rows:
+        project.tags = remove_tag_from_list(list(project.tags or []), target)
+        db.add(project)
+        updated += 1
+    if updated:
+        db.commit()
+
+    return ProjectTagBulkDeleteOut(tag=target, projects_updated=updated)
 
 
 @router.patch(

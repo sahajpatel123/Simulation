@@ -112,4 +112,54 @@ __all__ = [
     "MAX_TAG_LEN",
     "MAX_TAGS_PER_PROJECT",
     "normalise_tags",
+    "rename_tag_in_list",
+    "remove_tag_from_list",
 ]
+
+
+def rename_tag_in_list(tags: list[str] | None, old: str, new: str) -> list[str]:
+    """Return a new list with ``old`` replaced by ``new`` wherever it appears.
+
+    Preserves order, deduplicates the result (in case the new tag was
+    already present alongside the old — the merged list is then
+    capped against :data:`MAX_TAGS_PER_PROJECT` so a rename can never
+    blow the per-project cap).
+
+    * ``None``/empty input → ``[]``
+    * if ``old`` is absent, the input is returned unchanged
+    * if the rename would push the list over the cap, a ``ValueError``
+      is raised so the caller can return a 400
+    """
+    if not tags:
+        return []
+    seen: set[str] = set()
+    out: list[str] = []
+    replaced = False
+    for t in tags:
+        if t == old:
+            candidate = new
+            replaced = True
+        else:
+            candidate = t
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        out.append(candidate)
+    if not replaced:
+        return list(tags)
+    if len(out) > MAX_TAGS_PER_PROJECT:
+        raise ValueError(
+            f"rename would push tag count to {len(out)}; max is {MAX_TAGS_PER_PROJECT}"
+        )
+    return out
+
+
+def remove_tag_from_list(tags: list[str] | None, target: str) -> list[str]:
+    """Return a new list with ``target`` removed.
+
+    Order is preserved. Idempotent — calling with a tag that isn't
+    present is a no-op.
+    """
+    if not tags:
+        return []
+    return [t for t in tags if t != target]

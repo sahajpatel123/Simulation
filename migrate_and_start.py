@@ -300,6 +300,11 @@ def run_migrations():
             "CREATE INDEX IF NOT EXISTS idx_user_accuracy_history_sim ON user_simulation_accuracy_history(simulation_id);",
             "CREATE INDEX IF NOT EXISTS idx_cluster_params_cluster ON cluster_parameters(cluster_id);",
             "CREATE INDEX IF NOT EXISTS idx_cluster_run_sim ON cluster_run_summaries(simulation_id);",
+            # GIN index on projects.tags so the JSONB ``@>`` filter
+            # in list_projects + the bulk rename/delete scans can use
+            # index lookups instead of full-table scans. Names match
+            # the SQLAlchemy ``Index`` declarations would produce.
+            "CREATE INDEX IF NOT EXISTS ix_projects_tags_gin ON projects USING GIN (tags jsonb_path_ops);",
         ]:
             try:
                 conn.execute(text(idx_sql))

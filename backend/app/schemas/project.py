@@ -164,3 +164,38 @@ class ProjectTagsOut(BaseModel):
 
     id: int
     tags: list[str]
+
+
+class ProjectTagRenameIn(BaseModel):
+    """Body for ``PUT /projects/tags/{old_tag}``.
+
+    Used to rename a tag across every project the user owns. The new
+    name is canonicalised through the same normalise_tags contract
+    so callers can't sneak in invalid characters or break the cap.
+    """
+
+    new: str = Field(
+        ...,
+        min_length=1,
+        max_length=32,
+        description=(
+            "Canonical tag name to replace the old one with. Must "
+            "satisfy the normalise_tags contract (lowercase, "
+            "[a-z0-9_-], <=32 chars)."
+        ),
+    )
+
+
+class ProjectTagRenameOut(BaseModel):
+    """Response from ``PUT /projects/tags/{old_tag}``."""
+
+    old: str
+    new: str
+    projects_updated: int
+
+
+class ProjectTagBulkDeleteOut(BaseModel):
+    """Response from ``DELETE /projects/tags/{tag}``."""
+
+    tag: str
+    projects_updated: int
