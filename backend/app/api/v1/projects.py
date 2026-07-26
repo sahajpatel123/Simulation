@@ -59,6 +59,7 @@ from app.schemas.project import (
     ProjectListResponse,
     ProjectOut,
     ProjectPatch,
+    ProjectSearchListResponse,
     ProjectTagBulkDeleteOut,
     ProjectTagRenameIn,
     ProjectTagRenameOut,
@@ -97,6 +98,7 @@ from app.simulation.competitive_software import CompetitiveSoftwareAnalyser
 from app.simulation.conductor import Conductor
 from app.simulation.product_type import ProductType
 from app.simulation.project_duplicate import duplicate_project_payload
+from app.simulation.project_search import build_search_filters
 from app.simulation.project_tags import (
     normalise_tags,
     remove_tag_from_list,
@@ -338,6 +340,159 @@ def list_projects(
         projects=[ProjectOut.model_validate(p) for p in projects],
         total=len(projects),
     )
+
+
+# ---------------------------------------------------------------------------
+# Search — multi-filter, paginated, query substring + tag-membership
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/search",
+    response_model=ProjectSearchListResponse,
+    summary="Search the current user's projects (q, tags, status, archived, pagination)",
+)
+def search_projects(
+    q: str | None = Query(
+        default=None,
+        max_length=512,
+        description=(
+            "Substring search (case-insensitive) matched against "
+            "title + description + précis. Multiple words are "
+            "AND-matched."
+        ),
+    ),
+    tag: list[str] | None = Query(
+        default=None,
+        max_length=32,
+        description=(
+            "Repeat to AND-filter by multiple tags. A project must "
+            "carry every supplied tag to match."
+        ),
+    ),
+    status_filter: str | None = Query(
+        default=None,
+        max_length=50,
+        alias="status",
+        description="Exact status match (DRAFT, ACTIVE, …).",
+    ),
+    archived: bool | None = Query(
+        default=None,
+        description=(
+            "When omitted, archived projects are excluded. Pass "
+            "``true`` to include them, ``false`` to exclude only."
+        ),
+    ),
+    limit: int | None = Query(
+        default=None,
+        ge=1,
+        description=(
+            "Max projects to return (1-100, default 50). The "
+            "helper coerces out-of-range values to the bound."
+        ),
+    ),
+    before_id: int | None = Query(
+        default=None,
+        ge=1,
+        description=(
+            "Cursor pagination: return only projects with id < "
+            "before_id. Use the smallest ``id`` from the previous "
+            "page to fetch the next one."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProjectSearchListResponse:
+    try:
+        filters = build_search_filters(
+            q=q,
+            tags=tag,
+            status=status_filter,
+            archived=archived,
+            limit=limit,
+            before_id=before_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    base = db.query(Project).filter(Project.user_id == current_user.id)
+
+    # Archived filter — default excludes archived (the main UI's UX).
+    if filters["archived"] is False:
+        base = base.filter(Project.is_archived.is_(False))
+    elif filters["archived"] is True:
+        base = base.filter(Project.is_archived.is_(True))
+    # None == no filter (both included).
+
+    if filters["status"] is not None:
+        base = base.filter(Project.status == filters["status"])
+
+    # Tag AND-match: every requested tag must be present.
+    for t in filters["tags"]:
+        base = base.filter(Project.tags.op("@>")([t]))
+
+    # q AND-match: every word must appear (case-insensitive ILIKE) in
+    # at least one of the searched columns. We use a ``func.lower``
+    # containment check rather than a full-text index because the
+    # dataset is per-user (small) and the contract is predictable.
+    for word in filters["query_words"]:
+        pattern = f"%{word}%"
+        base = base.filter(
+            text(
+                "(LOWER(title) LIKE :pat OR LOWER(description) LIKE :pat "
+                "OR LOWER(COALESCE(precis, '')) LIKE :pat)"
+            ).bindparams(pat=pattern)
+        )
+
+    # Cursor pagination: id < before_id, ordered by id DESC for newest
+    # first. We pin the order to ``id`` rather than ``created_at``
+    # because the search-with-pagination contract is "give me the
+    # next page of results" — ``id`` is monotonic and unique.
+    if filters["before_id"] is not None:
+        base = base.filter(Project.id < filters["before_id"])
+    base = base.order_by(Project.id.desc())
+
+    # Fetch one extra row to compute ``has_more`` without a second
+    # COUNT query.
+    page_size = filters["limit"]
+    rows = base.limit(page_size + 1).all()
+    has_more = len(rows) > page_size
+    projects = rows[:page_size]
+
+    # Total filtered count (without pagination) — useful for the
+    # "X results" footer in the UI. One extra COUNT query is cheap
+    # at the per-user scale.
+    total = db.query(Project).filter(Project.user_id == current_user.id)
+    if filters["archived"] is False:
+        total = total.filter(Project.is_archived.is_(False))
+    elif filters["archived"] is True:
+        total = total.filter(Project.is_archived.is_(True))
+    if filters["status"] is not None:
+        total = total.filter(Project.status == filters["status"])
+    for t in filters["tags"]:
+        total = total.filter(Project.tags.op("@>")([t]))
+    for word in filters["query_words"]:
+        pattern = f"%{word}%"
+        total = total.filter(
+            text(
+                "(LOWER(title) LIKE :pat OR LOWER(description) LIKE :pat "
+                "OR LOWER(COALESCE(precis, '')) LIKE :pat)"
+            ).bindparams(pat=pattern)
+        )
+    total_count = total.count()
+
+    next_cursor = projects[-1].id if (has_more and projects) else None
+
+    return ProjectSearchListResponse(
+        projects=[ProjectOut.model_validate(p) for p in projects],
+        total=total_count,
+        has_more=has_more,
+        next_before_id=next_cursor,
+    )
+
 
 
 # ---------------------------------------------------------------------------

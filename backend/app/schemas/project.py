@@ -141,6 +141,20 @@ class ProjectListResponse(BaseModel):
     total: int
 
 
+class ProjectSearchListResponse(BaseModel):
+    """Response from ``GET /projects/search``.
+
+    ``has_more`` is the cursor-pagination signal: when ``True`` the
+    client should fetch the next page using the smallest ``id`` in
+    the current batch as the ``before_id`` argument.
+    """
+
+    projects: list[ProjectOut]
+    total: int
+    has_more: bool
+    next_before_id: int | None = None
+
+
 class ProjectTagsPatch(BaseModel):
     """Body for ``PUT /projects/{id}/tags``.
 
