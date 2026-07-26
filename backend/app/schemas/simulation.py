@@ -356,6 +356,46 @@ class PortfolioTrendOut(BaseModel):
     summary: str = ""
 
 
+class ClusterDrillDownOut(BaseModel):
+    """Response from ``GET /simulations/cluster-drill-down``.
+
+    Per-cluster drill-down that complements the cross-sim
+    cluster aggregate: when a cluster surfaces as a laggard in
+    the portfolio view, the founder wants to drill into that
+    specific cluster and see its full profile + per-sim
+    conversion history + aggregate stats + stability flags.
+
+    * ``cluster_profile`` — dict carrying the cluster's
+      metadata: cluster_id, name, description, traits,
+      population_weight, dominant_behavior_pattern,
+      known_failure_modes, product_affinities,
+      demographic_profile.
+    * ``per_sim_history`` — list of per-sim rows
+      (``sim_id``, ``conversion_rate``, ``is_outlier``) sorted
+      by sim_id ascending (None last). Includes rows where the
+      cluster was missing from the sim so the dashboard can
+      render "X of Y saw this cluster".
+    * ``aggregate`` — mean / min / max / std conversion,
+      observation_count, is_outlier_count.
+    * ``stability`` — HIGH_VARIANCE / MODERATE_VARIANCE /
+      LOW_VARIANCE bucketed from coefficient of variation.
+    * ``observation_ratio`` / ``under_observed`` /
+      ``needs_attention`` — coverage flags mirroring the
+      cross-sim aggregate.
+    * ``sim_count`` — how many sims in the batch (denominator
+      for observation_ratio).
+    """
+
+    cluster_profile: dict = {}
+    per_sim_history: list[dict] = []
+    aggregate: dict = {}
+    stability: str = "INSUFFICIENT_DATA"
+    observation_ratio: float = 0.0
+    under_observed: bool = False
+    needs_attention: bool = False
+    sim_count: int = 0
+
+
 class SimulationResultOut(BaseModel):
     id: int
     project_id: int

@@ -22,6 +22,7 @@ from app.schemas.cluster_opportunity import ClusterOpportunityMatrixOut
 from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
 from app.schemas.simulation import (
     ArchitectAccuracyBridgeOut,
+    ClusterDrillDownOut,
     ClustersAggregateOut,
     FindingsAggregateOut,
     OutcomesDigestOut,
@@ -50,6 +51,10 @@ from app.schemas.what_if import WhatIfOut, WhatIfRequest
 from app.simulation.agent_hierarchy import AgentHierarchyRouter
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.cluster_opportunity import build_cluster_opportunity_matrix
+from app.simulation.cluster_drill_down import (
+    build_cluster_drill_down,
+    normalise_outlier_threshold as normalise_drill_outlier,
+)
 from app.simulation.comparison import build_simulation_comparison
 from app.simulation.cohort_retention import build_cohort_retention
 from app.simulation.funnel_diagnosis import build_funnel_diagnosis
@@ -1221,6 +1226,131 @@ def get_portfolio_trend(
     )
     trend = compute_portfolio_trend(earlier_payload, later_payload)
     return PortfolioTrendOut(**trend)
+
+
+@router.get(
+    "/cluster-drill-down",
+    response_model=ClusterDrillDownOut,
+    summary=(
+        "Drill into a single cluster: profile + per-sim "
+        "conversion history + aggregate stats"
+    ),
+    # DB read of N sim rows for one cluster — same cap as the
+    # other aggregate endpoints.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_cluster_drill_down(
+    cluster_id: str = Query(
+        ...,
+        min_length=1,
+        max_length=64,
+        description=(
+            "Cluster id (snake-case). Must match a registered "
+            "cluster; otherwise the route returns 404."
+        ),
+    ),
+    ids: list[str] | None = Query(
+        default=None,
+        description=(
+            "One or more simulation ids. Same parser as "
+            "``/simulations/batch``. Optional; without ids, the "
+            "drill-down returns the cluster profile only (no "
+            "per-sim history)."
+        ),
+    ),
+    outlier_threshold: float | None = Query(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Absolute conversion-rate threshold above which a "
+            "sim counts as an outlier. Default 0.10. Clamped "
+            "to [0.0, 1.0]."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ClusterDrillDownOut:
+    """Per-cluster drill-down for the portfolio dashboard.
+
+    Complements the cross-sim cluster aggregate: when the
+    portfolio surfaces a laggard cluster (e.g.
+    tier3_first_time_app_user consistently under 1% conversion),
+    the founder clicks through and gets the cluster's full
+    profile + every sim in the batch that saw this cluster +
+    aggregate stats.
+    """
+    # Validate the cluster id against the registry — refuse early
+    # so the dashboard can show a clear "unknown cluster" error
+    # rather than a silent empty payload.
+    definition = next(
+        (
+            c for c in _registry.all_clusters()
+            if c.cluster_id == cluster_id
+        ),
+        None,
+    )
+    if definition is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown cluster_id {cluster_id!r}",
+        )
+
+    try:
+        canonical_ids = parse_id_list(ids)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    threshold = normalise_drill_outlier(outlier_threshold)
+
+    per_sim_conversions: list[
+        tuple[int | None, object]
+    ] = []
+    if canonical_ids:
+        rows = (
+            db.query(
+                Simulation.id,
+                Simulation.results_json,
+            )
+            .join(Project, Simulation.project_id == Project.id)
+            .filter(
+                Simulation.id.in_(canonical_ids),
+                Simulation.status == "COMPLETED",
+                Project.user_id == current_user.id,
+            )
+            .all()
+        )
+        by_id: dict[int, dict] = {r.id: r.results_json for r in rows}
+        # Preserve the user's requested order; missing sims
+        # get ``None`` so the per-sim history still reflects
+        # the batch.
+        for sid in canonical_ids:
+            breakdown = by_id.get(sid)
+            if breakdown is None:
+                per_sim_conversions.append((sid, None))
+                continue
+            cluster_breakdown = breakdown.get("cluster_breakdown") or {}
+            per_sim_conversions.append(
+                (sid, cluster_breakdown.get(cluster_id))
+            )
+
+    payload = build_cluster_drill_down(
+        cluster_id,
+        cluster_name=definition.name,
+        cluster_description=definition.description,
+        cluster_traits=dict(definition.base_traits),
+        population_weight=definition.population_weight,
+        dominant_behavior_pattern=definition.dominant_behavior_pattern,
+        known_failure_modes=list(definition.known_failure_modes),
+        product_affinities=list(definition.product_affinities),
+        demographic_profile=dict(definition.demographic_profile),
+        per_sim_conversions=per_sim_conversions,
+        outlier_threshold=threshold,
+    )
+    return ClusterDrillDownOut(**payload)
 
 
 @router.get(
