@@ -595,6 +595,30 @@ class ClusterTrendOut(BaseModel):
     peak_bin: dict | None = None
 
 
+class ArchitectLeaderboardOut(BaseModel):
+    """Response from ``GET /simulations/architect-leaderboard``.
+
+    Single ranked list of architects across the batch so the
+    dashboard can surface 'top architects to investigate'
+    without iterating all 21 architects.
+
+    * ``leaderboard`` — ranked list sorted by ``score`` DESC.
+      Each row: ``architect_name``, ``finding_count``,
+      ``calibration_variance``, ``calibration_direction``,
+      ``recommendation``, ``score``, ``priority_label``.
+    * ``priority_counts`` — ``{HIGH, MEDIUM, LOW, NONE}``
+      histogram for the dashboard's summary tile.
+    * ``total_architects`` — how many architects were
+      considered (including uncalibrated ones with score 0).
+    * ``top_n`` — the cap actually applied.
+    """
+
+    leaderboard: list[dict] = []
+    priority_counts: dict = {}
+    total_architects: int = 0
+    top_n: int = 0
+
+
 class SimulationResultOut(BaseModel):
     id: int
     project_id: int

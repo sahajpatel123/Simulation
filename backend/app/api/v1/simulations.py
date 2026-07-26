@@ -25,6 +25,7 @@ from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
 from app.schemas.simulation import (
     ArchitectAccuracyBridgeOut,
     ArchitectDrillDownOut,
+    ArchitectLeaderboardOut,
     ClusterDiffOut,
     ClusterDrillDownOut,
     ClusterOverlapMatrixOut,
@@ -72,6 +73,10 @@ from app.simulation.cluster_overlap_matrix import (
 from app.simulation.cluster_trend import (
     build_cluster_trend,
     normalise_bin as normalise_trend_bin,
+)
+from app.simulation.architect_leaderboard import (
+    build_architect_leaderboard,
+    MAX_LEADERS as _MAX_LEADERS,
 )
 from app.simulation.conductor import _ARCHITECTS as _architect_registry
 from app.simulation.comparison import build_simulation_comparison
@@ -945,6 +950,107 @@ def aggregate_architect_accuracy(
         top_n=effective_top_n,
     )
     return ArchitectAccuracyBridgeOut(**bridge)
+
+
+@router.get(
+    "/architect-leaderboard",
+    response_model=ArchitectLeaderboardOut,
+    summary=(
+        "Ranked list of architects across the batch by composite "
+        "score (|calibration_variance| × finding_count)"
+    ),
+    # Same cap as the other aggregate endpoints.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_architect_leaderboard(
+    ids: list[str] | None = Query(
+        default=None,
+        description=(
+            "One or more simulation ids. Same parser as "
+            "``/simulations/batch``. Optional; without ids the "
+            "leaderboard returns an empty ranking."
+        ),
+    ),
+    top_n: int | None = Query(
+        default=None,
+        ge=1,
+        description=(
+            "How many top architects to return. Default cap is "
+            "MAX_LEADERS (50). Useful for limiting the "
+            "dashboard tile."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ArchitectLeaderboardOut:
+    """Single ranked list of architects to investigate.
+
+    Runs the architect-accuracy bridge on the supplied batch
+    (or the full owned set when ``ids`` is omitted), then
+    synthesises the bridge's ``by_architect`` rows into a
+    single composite score = ``|calibration_variance| ×
+    finding_count``. Architects that flagged more findings AND
+    were more biased rank highest.
+    """
+    try:
+        canonical_ids = parse_id_list(ids)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    if not canonical_ids:
+        return ArchitectLeaderboardOut()
+
+    rows = (
+        db.query(
+            Simulation.id,
+            Simulation.results_json,
+            Outcome.predicted_conversion_rate,
+            Outcome.actual_conversion_rate,
+            Outcome.created_at,
+        )
+        .outerjoin(
+            Outcome, Outcome.simulation_id == Simulation.id,
+        )
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(
+            Simulation.id.in_(canonical_ids),
+            Project.user_id == current_user.id,
+        )
+        .order_by(Outcome.created_at.desc())
+        .all()
+    )
+
+    by_id: dict[int, object] = {}
+    for r in rows:
+        if r.id in by_id:
+            continue
+        by_id[r.id] = r
+    outcome_pairs: list[
+        tuple[list[dict], tuple[float | None, float | None]]
+    ] = []
+    for sid in canonical_ids:
+        match = by_id.get(sid)
+        if match is None:
+            continue
+        outcome_pairs.append(
+            (
+                (match.results_json or {}).get("domain_findings")
+                or [],
+                (
+                    match.predicted_conversion_rate,
+                    match.actual_conversion_rate,
+                ),
+            )
+        )
+
+    bridge = bridge_architect_accuracy(outcome_pairs)
+    payload = build_architect_leaderboard(
+        bridge.get("by_architect"),
+        top_n=top_n,
+    )
+    return ArchitectLeaderboardOut(**payload)
 
 
 @router.get(
