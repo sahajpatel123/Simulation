@@ -430,16 +430,28 @@ def test_routes_include_list_endpoint() -> None:
 
     from app.api.v1 import share as share_mod
 
-    paths = set()
+    # Same FastAPI-version-agnostic walker as
+    # ``test_share_routes_registered`` — pinned 0.115.0 doesn't
+    # expose ``original_router`` the way 0.139.x does.
+    def _collect_routes(carrier) -> list:
+        leaves = []
+        for item in getattr(carrier, "routes", []):
+            inner = (
+                getattr(item, "original_router", None)
+                or getattr(item, "api_router", None)
+                or getattr(item, "router", None)
+            )
+            if inner is not None and inner is not item:
+                leaves.extend(_collect_routes(inner))
+            else:
+                leaves.append(item)
+        return leaves
+
+    routes = _collect_routes(share_mod.router)
+    paths = {r.path for r in routes}
     methods_by_path: dict[str, set[str]] = {}
-    for sub in share_mod.router.routes:
-        inner = getattr(sub, "original_router", None)
-        inner_routes = getattr(inner, "routes", None) if inner is not None else None
-        if inner_routes is None:
-            continue
-        for r in inner_routes:
-            paths.add(r.path)
-            methods_by_path.setdefault(r.path, set()).update(r.methods or set())
+    for r in routes:
+        methods_by_path.setdefault(r.path, set()).update(r.methods or set())
     assert "/simulations/{simulation_id}/share" in paths
     assert "/share/{token}" in paths
     # The new GET-list shares the same path as POST + DELETE.
