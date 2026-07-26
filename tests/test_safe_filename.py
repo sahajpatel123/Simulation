@@ -1667,3 +1667,19 @@ class TestShellSafety:
         ):
             out = _reports._safe_filename(t)
             assert out == t, f"{t!r} -> {out!r}"
+
+    def test_backslash_replacement(self) -> None:
+        """Pins that backslashes (``\\``) are replaced with ``_``.
+        They're not alnum, not in the allowed specials
+        (``' '``, ``'-'``, ``'_'``), so they become ``_``.
+
+        - ``\"a\\b\"`` → ``\"a_b\"``
+        - ``\"\\hello\"`` → ``\"_hello\"``
+        - ``\"a\\\\b\"`` → ``\"a__b\"``
+
+        Pin so a future \"simplification\" that treated
+        backslashes as escape sequences (e.g. unescaping them)
+        would silently change the output for these inputs."""
+        assert _reports._safe_filename("a\\b") == "a_b"
+        assert _reports._safe_filename("\\hello") == "_hello"
+        assert _reports._safe_filename("a\\\\b") == "a__b"
