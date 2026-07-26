@@ -92,6 +92,34 @@ class FindingsAggregateOut(BaseModel):
     architect_filter: str | None = None
 
 
+class ClustersAggregateOut(BaseModel):
+    """Response from ``GET /simulations/aggregate/clusters``.
+
+    Portfolio view of cluster-level predicted conversion across
+    N simulations — the "which user segment underperforms most
+    consistently?" view. Each simulation contributes a
+    ``cluster_breakdown`` (``cluster_id → conversion_rate``) and
+    the aggregate groups by cluster across the batch.
+
+    * ``by_cluster`` — per-cluster rollup sorted by
+      ``mean_conversion ASC, observation_count DESC, cluster_id ASC``
+      so the worst-performing cluster surfaces first.
+    * ``top_laggards`` — first ``top_n`` cluster ids by worst mean
+      conversion (ASC).
+    * ``top_performers`` — first ``top_n`` cluster ids by best mean
+      conversion (DESC).
+    * ``simulation_count`` — total sims in the input.
+    * ``clusters_seen`` — how many unique cluster ids appeared
+      across the batch.
+    """
+
+    by_cluster: list[dict] = []
+    top_laggards: list[str] = []
+    top_performers: list[str] = []
+    simulation_count: int = 0
+    clusters_seen: int = 0
+
+
 class OutcomesDigestOut(BaseModel):
     """Response from ``GET /simulations/aggregate/outcomes``.
 

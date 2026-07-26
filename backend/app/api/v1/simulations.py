@@ -21,6 +21,7 @@ from app.models.cluster_run_summary import ClusterRunSummary
 from app.schemas.cluster_opportunity import ClusterOpportunityMatrixOut
 from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
 from app.schemas.simulation import (
+    ClustersAggregateOut,
     FindingsAggregateOut,
     OutcomesDigestOut,
     SimulationBatchStatusOut,
@@ -66,6 +67,10 @@ from app.simulation.findings_aggregate import (
     normalise_architect_filter,
     normalise_severity,
     normalise_top_n,
+)
+from app.simulation.clusters_aggregate import (
+    aggregate_clusters,
+    normalise_top_n as normalise_clusters_top_n,
 )
 from app.simulation.outcomes_digest import (
     aggregate_outcomes,
@@ -707,6 +712,85 @@ def aggregate_simulation_outcomes(
             sim_ids=canonical_ids,
         )
     )
+
+
+@router.get(
+    "/aggregate/clusters",
+    response_model=ClustersAggregateOut,
+    summary="Aggregate cluster conversion across N simulations (portfolio view)",
+    # DB read of N result_json blobs — same cap as the sibling
+    # aggregate endpoints so the path can't be used to probe rows
+    # the caller doesn't own.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def aggregate_simulation_clusters(
+    ids: list[str] | None = Query(
+        default=None,
+        description=(
+            "One or more simulation ids. Same parser as "
+            "``/simulations/batch`` — repeat the param or "
+            "pass comma-separated values. Capped at 100 ids."
+        ),
+    ),
+    top_n: int | None = Query(
+        default=None,
+        ge=1,
+        description=(
+            "How many top laggard / top performer cluster ids to "
+            "surface (cap 100). Default: 5."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ClustersAggregateOut:
+    """Cross-simulation cluster portfolio rollup.
+
+    Powers the "which user segment is consistently the
+    weakest / strongest?" widget: across the user's selected
+    simulations, every cluster that appears in any
+    ``cluster_breakdown`` gets a ``mean / min / max / std``
+    conversion summary so the dashboard can rank clusters by
+    under- or over-performance.
+    """
+    try:
+        canonical_ids = parse_id_list(ids)
+        effective_top_n = normalise_clusters_top_n(top_n)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    if not canonical_ids:
+        return ClustersAggregateOut()
+
+    # Build a {cluster_id: name} lookup from the registered cluster
+    # catalog so the response rows carry human-readable names.
+    cluster_names = {
+        cluster.cluster_id: cluster.name
+        for cluster in _registry.all_clusters()
+    }
+
+    rows = (
+        db.query(Simulation.id, Simulation.results_json)
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(
+            Simulation.id.in_(canonical_ids),
+            Simulation.status == "COMPLETED",
+            Project.user_id == current_user.id,
+        )
+        .all()
+    )
+    by_id = {r.id: r.results_json for r in rows}
+    ordered_results = [
+        by_id[sid] for sid in canonical_ids if sid in by_id
+    ]
+
+    aggregate = aggregate_clusters(
+        ordered_results,
+        cluster_names=cluster_names,
+        top_n=effective_top_n,
+    )
+    return ClustersAggregateOut(**aggregate)
 
 
 @router.get(
