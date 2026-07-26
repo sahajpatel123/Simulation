@@ -38,6 +38,7 @@ from app.schemas.simulation import (
     PortfolioSummaryOut,
     PortfolioTrendOut,
     ProjectPortfolioRollupOut,
+    SimDiffOut,
     SimulationBatchStatusOut,
     SimulationCreate,
     SimulationOut,
@@ -93,6 +94,7 @@ from app.simulation.findings_trend import (
 from app.simulation.project_rollup import (
     build_project_portfolio_rollup,
 )
+from app.simulation.sim_diff import build_sim_diff
 from app.simulation.conductor import _ARCHITECTS as _architect_registry
 from app.simulation.comparison import build_simulation_comparison
 from app.simulation.cohort_retention import build_cohort_retention
@@ -2386,6 +2388,110 @@ def get_project_portfolio_rollup(
     )
     payload["confidence_threshold"] = threshold
     return ProjectPortfolioRollupOut(**payload)
+
+
+@router.get(
+    "/sim-diff",
+    response_model=SimDiffOut,
+    summary=(
+        "Side-by-side comparison of two sims — findings + "
+        "conversion + per-metric deltas"
+    ),
+    # DB read of 2 sim rows — same cap as the other
+    # aggregate endpoints.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_sim_diff(
+    sim_a: int = Query(
+        ...,
+        ge=1,
+        description=(
+            "First sim id. Must be an owned, COMPLETED sim."
+        ),
+    ),
+    sim_b: int = Query(
+        ...,
+        ge=1,
+        description=(
+            "Second sim id. Must differ from sim_a."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SimDiffOut:
+    """Side-by-side comparison of two sims.
+
+    Validates both ids against the user's owned set (400 on
+    unknown id or equal ids), fetches the data, and runs the
+    helper. Returns metadata + findings diff + conversion
+    diff + per-metric rows + a one-line summary.
+    """
+    if sim_a == sim_b:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "sim_a and sim_b must differ — diffing a sim "
+                "against itself always returns zero deltas"
+            ),
+        )
+
+    rows = (
+        db.query(
+            Simulation.id,
+            Simulation.project_id,
+            Simulation.status,
+            Simulation.created_at,
+            Simulation.results_json,
+            Outcome.predicted_conversion_rate,
+            Outcome.actual_conversion_rate,
+        )
+        .outerjoin(
+            Outcome, Outcome.simulation_id == Simulation.id,
+        )
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(
+            Simulation.id.in_([sim_a, sim_b]),
+            Simulation.status == "COMPLETED",
+            Project.user_id == current_user.id,
+        )
+        .order_by(Simulation.id.asc(), Outcome.created_at.desc())
+        .all()
+    )
+
+    by_id: dict[int, dict] = {}
+    for r in rows:
+        if r.id in by_id:
+            continue
+        by_id[r.id] = {
+            "project_id": r.project_id,
+            "status": r.status,
+            "created_at": r.created_at,
+            "predicted_conversion_rate": r.predicted_conversion_rate,
+            "actual_conversion_rate": r.actual_conversion_rate,
+            "domain_findings": (
+                (r.results_json or {}).get("domain_findings") or []
+            ),
+        }
+
+    if sim_a not in by_id or sim_b not in by_id:
+        missing = []
+        if sim_a not in by_id:
+            missing.append(f"sim_a={sim_a}")
+        if sim_b not in by_id:
+            missing.append(f"sim_b={sim_b}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "unknown or non-owned sim(s): "
+                + ", ".join(missing)
+            ),
+        )
+
+    payload = build_sim_diff(
+        sim_a, by_id[sim_a],
+        sim_b, by_id[sim_b],
+    )
+    return SimDiffOut(**payload)
 
 
 @router.get(

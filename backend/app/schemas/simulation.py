@@ -728,6 +728,36 @@ class FindingsTrendOut(BaseModel):
     total_info_count: int = 0
 
 
+class SimDiffOut(BaseModel):
+    """Response from ``GET /simulations/sim-diff``.
+
+    Side-by-side comparison of two sims so the founder can
+    answer 'are these two sims actually different?' without
+    iterating each one.
+
+    * ``sim_a_meta`` / ``sim_b_meta`` — echoed metadata
+      (sim_id, project_id, status, created_at,
+      predicted_conversion_rate, actual_conversion_rate).
+    * ``findings_diff`` — dict with per-side critical /
+      warning / info counts, total count, and per-count
+      winner labels (SIM_A / SIM_B / TIE).
+    * ``conversion_diff`` — per-side predicted / actual /
+      variance + deltas (SIM_A − SIM_B) and the variance
+      winner.
+    * ``aggregate_diff`` — list of per-metric rows
+      (metric, sim_a, sim_b, delta, winner) for the
+      dashboard's table.
+    * ``summary`` — one-line headline string.
+    """
+
+    sim_a_meta: dict = {}
+    sim_b_meta: dict = {}
+    findings_diff: dict = {}
+    conversion_diff: dict = {}
+    aggregate_diff: list[dict] = []
+    summary: str = ""
+
+
 class ProjectPortfolioRollupOut(BaseModel):
     """Response from ``GET /simulations/project-portfolio-rollup``.
 
