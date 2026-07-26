@@ -632,6 +632,41 @@ class ArchitectLeaderboardOut(BaseModel):
     top_n: int = 0
 
 
+class ArchitectBiasTrendOut(BaseModel):
+    """Response from ``GET /simulations/architect-bias-trend``.
+
+    Per-architect |calibration_variance| trend over time so
+    the founder can see whether a biased architect is
+    getting better, stable, or getting worse.
+
+    * ``architect_name`` / ``bin_size`` — echoed.
+    * ``bins`` — per-bin dict sorted chronologically. Each
+      row: ``bin``, ``bin_start`` (ISO 8601 UTC),
+      ``mean_abs_variance``, ``mean_signed_variance``,
+      ``observation_count``.
+    * ``overall_direction`` — IMPROVING / DEGRADING /
+      STABLE bucketed from first vs last bin's |variance|.
+      IMPROVING means the bias shrank (good); DEGRADING
+      means it grew (bad).
+    * ``first_bin_abs_variance`` /
+      ``last_bin_abs_variance`` — for the dashboard's
+      headline ("X% → Y%").
+    * ``mean_abs_delta`` — last − first, or None when fewer
+      than 2 bins have data.
+    * ``current_bias_label`` — WELL_CALIBRATED / BIASED /
+      UNKNOWN bucketed from the LAST bin's |variance|.
+    """
+
+    architect_name: str = ""
+    bin_size: str = "month"
+    bins: list[dict] = []
+    overall_direction: str = "UNKNOWN"
+    first_bin_abs_variance: float | None = None
+    last_bin_abs_variance: float | None = None
+    mean_abs_delta: float | None = None
+    current_bias_label: str = "UNKNOWN"
+
+
 class SimulationResultOut(BaseModel):
     id: int
     project_id: int

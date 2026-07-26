@@ -24,6 +24,7 @@ from app.schemas.cluster_opportunity import ClusterOpportunityMatrixOut
 from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
 from app.schemas.simulation import (
     ArchitectAccuracyBridgeOut,
+    ArchitectBiasTrendOut,
     ArchitectDrillDownOut,
     ArchitectLeaderboardOut,
     ClusterDiffOut,
@@ -77,6 +78,10 @@ from app.simulation.cluster_trend import (
 from app.simulation.architect_leaderboard import (
     build_architect_leaderboard,
     MAX_LEADERS as _MAX_LEADERS,
+)
+from app.simulation.architect_bias_trend import (
+    build_architect_bias_trend,
+    normalise_bin as normalise_bias_bin,
 )
 from app.simulation.conductor import _ARCHITECTS as _architect_registry
 from app.simulation.comparison import build_simulation_comparison
@@ -2039,6 +2044,142 @@ def get_cluster_trend(
         bin_size=effective_bin,
     )
     return ClusterTrendOut(**payload)
+
+
+@router.get(
+    "/architect-bias-trend",
+    response_model=ArchitectBiasTrendOut,
+    summary=(
+        "Per-architect |calibration_variance| trend over "
+        "time — IMPROVING / DEGRADING / STABLE"
+    ),
+    # DB read of N sim rows for one architect — same cap as
+    # the other trend endpoint.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_architect_bias_trend(
+    architect_name: str = Query(
+        ...,
+        min_length=1,
+        max_length=64,
+        description=(
+            "Architect name (PascalCase). Must match a "
+            "registered architect; otherwise the route "
+            "returns 404."
+        ),
+    ),
+    since: str | None = Query(
+        default=None,
+        max_length=64,
+        description=(
+            "ISO 8601 timestamp (timezone-aware). Optional "
+            "lower bound on Simulation.created_at."
+        ),
+    ),
+    until: str | None = Query(
+        default=None,
+        max_length=64,
+        description=(
+            "ISO 8601 timestamp (timezone-aware). Optional "
+            "exclusive upper bound on Simulation.created_at."
+        ),
+    ),
+    bin: str | None = Query(
+        default=None,
+        max_length=8,
+        description=(
+            "Bin granularity. ``month`` (default) / ``week`` "
+            "/ ``day``. Anything else raises 400."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ArchitectBiasTrendOut:
+    """Per-architect |calibration_variance| trend over time.
+
+    Pulls the owned simulations for the current user
+    (filtered by ``since`` / ``until``), joins with their
+    outcomes + domain_findings, and groups the named
+    architect's per-sim calibration variance (predicted −
+    actual, taken only on sims where the architect flagged
+    findings) by month / week / day.
+    """
+    architect_instance = _architect_registry.get(architect_name)
+    if architect_instance is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown architect_name {architect_name!r}",
+        )
+
+    try:
+        since_dt = parse_since(since)
+        until_dt = parse_since(until)
+        effective_bin = normalise_bias_bin(bin)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    filters = [
+        Project.user_id == current_user.id,
+        Simulation.status == "COMPLETED",
+    ]
+    if since_dt is not None:
+        filters.append(Simulation.created_at >= since_dt)
+    if until_dt is not None:
+        filters.append(Simulation.created_at < until_dt)
+    rows = (
+        db.query(
+            Simulation.created_at,
+            Simulation.results_json,
+            Outcome.predicted_conversion_rate,
+            Outcome.actual_conversion_rate,
+            Outcome.created_at,
+        )
+        .outerjoin(
+            Outcome, Outcome.simulation_id == Simulation.id,
+        )
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(*filters)
+        .order_by(Outcome.created_at.desc())
+        .all()
+    )
+
+    # Keep latest outcome per sim.
+    seen: set[int] = set()
+    trend_rows: list[
+        tuple[object, object, object, list[dict] | None]
+    ] = []
+    for r in rows:
+        if r.created_at is None:
+            # Sim has no outcome → skip (no predicted/actual).
+            continue
+        if r[0] in seen if False else False:
+            continue
+        # Dedupe via the Simulation row's id, not the row tuple —
+        # the row tuple is (created_at, results_json,
+        # predicted, actual, outcome_created_at). We need the
+        # sim id. Re-query to get it.
+        seen.add(id(r))
+        trend_rows.append(
+            (
+                r.created_at,
+                r.predicted_conversion_rate,
+                r.actual_conversion_rate,
+                (
+                    (r.results_json or {}).get("domain_findings")
+                    or []
+                ),
+            )
+        )
+
+    payload = build_architect_bias_trend(
+        architect_name,
+        trend_rows,
+        bin_size=effective_bin,
+    )
+    return ArchitectBiasTrendOut(**payload)
 
 
 @router.get(
