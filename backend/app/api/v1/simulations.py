@@ -53,7 +53,11 @@ from app.simulation.scored_assumption import (
 )
 from app.simulation.scenario_stress import ScenarioStressAnalyzer
 from app.simulation.sensitivity_analysis import build_sensitivity_analysis
-from app.simulation.sim_batch import parse_id_list
+from app.simulation.sim_batch import (
+    parse_id_list,
+    parse_since,
+    summarise_statuses,
+)
 from app.simulation.what_if import build_what_if_scenario
 from app.tasks.simulation_tasks import run_full_simulation
 from app.worker import celery_app
@@ -381,6 +385,28 @@ def get_simulation_batch_status(
             "(``?ids=1,2,3``). Capped at 100 ids per request."
         ),
     ),
+    since: str | None = Query(
+        default=None,
+        max_length=64,
+        description=(
+            "ISO 8601 timestamp. Only simulations with "
+            "``updated_at >= since`` are returned. Use for "
+            "incremental polling — pass back the max "
+            "``updated_at`` you saw last time."
+        ),
+    ),
+    sort: str | None = Query(
+        default=None,
+        max_length=16,
+        description=(
+            "Sort column. Allowed: id, updated_at. Default: id."
+        ),
+    ),
+    order: str | None = Query(
+        default=None,
+        max_length=4,
+        description="Sort direction: asc or desc. Default: asc.",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> SimulationBatchStatusOut:
@@ -390,9 +416,21 @@ def get_simulation_batch_status(
     reported in ``not_found`` rather than failing the whole batch —
     a UI dashboard polling N simulations shouldn't 404 just because
     one of them was deleted server-side.
+
+    The response carries a ``status_counts`` summary so the UI can
+    render aggregate badges without re-iterating ``items``,
+    and ``filtered_by_since`` so the dashboard can pin its cursor
+    for the next incremental poll.
     """
     try:
         canonical_ids = parse_id_list(ids)
+        since_dt = parse_since(since)
+        from app.simulation.sim_batch import (
+            _normalise_order as _nb_order,
+            _normalise_sort as _nb_sort,
+        )
+        sort_key = _nb_sort(sort)
+        order_key = _nb_order(order)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -401,27 +439,57 @@ def get_simulation_batch_status(
     if not canonical_ids:
         # Empty input — return an empty result rather than 400, so
         # the UI can probe with an empty list during initial render.
-        return SimulationBatchStatusOut(items=[], not_found=[], requested=0)
+        return SimulationBatchStatusOut(
+            items=[],
+            not_found=[],
+            requested=0,
+            status_counts={},
+            filtered_by_since=since_dt,
+        )
 
     # Single JOIN that filters out simulations the user doesn't own.
     # We use ``IN`` with the canonical id list and rely on the
     # ``Project.user_id`` join to scope to the caller.
-    rows = (
+    q = (
         db.query(Simulation)
         .join(Project, Simulation.project_id == Project.id)
         .filter(
             Simulation.id.in_(canonical_ids),
             Project.user_id == current_user.id,
         )
-        .all()
     )
+    if since_dt is not None:
+        q = q.filter(Simulation.updated_at >= since_dt)
+
+    # Sort: id ASC is the default so the response order is stable
+    # for incremental polling — pass ``updated_at desc`` when the
+    # UI wants "recently changed first".
+    sort_attr = getattr(Simulation, sort_key)
+    if order_key == "asc":
+        primary = sort_attr.asc()
+    else:
+        primary = sort_attr.desc()
+    # Tiebreaker keeps pagination deterministic when sort_key ties.
+    if sort_key == "id":
+        q = q.order_by(primary)
+    else:
+        tiebreak = (
+            Simulation.id.asc() if order_key == "asc" else Simulation.id.desc()
+        )
+        q = q.order_by(primary, tiebreak)
+
+    rows = q.all()
     found_ids = {r.id for r in rows}
     not_found = [sid for sid in canonical_ids if sid not in found_ids]
+
+    status_counts = summarise_statuses([r.status for r in rows])
 
     return SimulationBatchStatusOut(
         items=[SimulationStatusOut.model_validate(r) for r in rows],
         not_found=not_found,
         requested=len(canonical_ids),
+        status_counts=status_counts,
+        filtered_by_since=since_dt,
     )
 
 

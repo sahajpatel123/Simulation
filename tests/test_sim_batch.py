@@ -103,6 +103,8 @@ def test_batch_status_out_default_shape() -> None:
     assert out.items == []
     assert out.not_found == []
     assert out.requested == 0
+    assert out.status_counts == {}
+    assert out.filtered_by_since is None
 
 
 def test_batch_status_out_with_data() -> None:
@@ -112,9 +114,151 @@ def test_batch_status_out_with_data() -> None:
         items=[],
         not_found=[5, 7],
         requested=3,
+        status_counts={"COMPLETED": 2, "FAILED": 1},
     )
     assert out.not_found == [5, 7]
     assert out.requested == 3
+    assert out.status_counts == {"COMPLETED": 2, "FAILED": 1}
+
+
+# ---------------------------------------------------------------------------
+# parse_since — ISO 8601 timestamp parsing
+# ---------------------------------------------------------------------------
+
+
+def test_parse_since_none_returns_none() -> None:
+    from app.simulation.sim_batch import parse_since
+
+    assert parse_since(None) is None
+    assert parse_since("") is None
+    assert parse_since("   ") is None
+
+
+def test_parse_since_accepts_z_suffix() -> None:
+    from app.simulation.sim_batch import parse_since
+
+    parsed = parse_since("2026-07-26T00:00:00Z")
+    assert parsed is not None
+    assert parsed.tzinfo is not None
+    assert parsed.year == 2026 and parsed.month == 7 and parsed.day == 26
+
+
+def test_parse_since_accepts_offset() -> None:
+    from app.simulation.sim_batch import parse_since
+
+    parsed = parse_since("2026-07-26T05:30:00+05:30")
+    assert parsed is not None
+    # Always normalised to UTC for consistent DB comparison.
+    assert parsed.utcoffset().total_seconds() == 0
+    assert parsed.hour == 0  # 05:30 IST == 00:00 UTC
+
+
+def test_parse_since_rejects_naive() -> None:
+    """Force callers to be timezone-aware — naive timestamps would
+    silently mismatch across regions."""
+    from app.simulation.sim_batch import parse_since
+
+    with pytest.raises(ValueError):
+        parse_since("2026-07-26T00:00:00")
+
+
+def test_parse_since_rejects_garbage() -> None:
+    from app.simulation.sim_batch import parse_since
+
+    with pytest.raises(ValueError):
+        parse_since("not a date")
+    with pytest.raises(ValueError):
+        parse_since("2026-13-01T00:00:00Z")  # month 13
+
+
+# ---------------------------------------------------------------------------
+# summarise_statuses
+# ---------------------------------------------------------------------------
+
+
+def test_summarise_statuses_counts_each_status() -> None:
+    from app.simulation.sim_batch import summarise_statuses
+
+    out = summarise_statuses(
+        ["COMPLETED", "FAILED", "COMPLETED", "RUNNING", "COMPLETED"]
+    )
+    assert out == {"COMPLETED": 3, "FAILED": 1, "RUNNING": 1}
+
+
+def test_summarise_statuses_empty_input() -> None:
+    from app.simulation.sim_batch import summarise_statuses
+
+    assert summarise_statuses([]) == {}
+
+
+def test_summarise_statuses_drops_non_strings_and_empty() -> None:
+    """Defensive — the DB column is String(50) but the helper is pure
+    and may be called with foreign data (e.g. from a fixture)."""
+    from app.simulation.sim_batch import summarise_statuses
+
+    out = summarise_statuses(["COMPLETED", 123, None, "", "FAILED"])  # type: ignore[list-item]
+    assert out == {"COMPLETED": 1, "FAILED": 1}
+
+
+# ---------------------------------------------------------------------------
+# Sort + order (batch-specific allowlist)
+# ---------------------------------------------------------------------------
+
+
+def test_batch_sort_defaults_to_id_asc() -> None:
+    from app.simulation.sim_batch import (
+        DEFAULT_BATCH_SORT,
+        DEFAULT_BATCH_ORDER,
+    )
+    assert DEFAULT_BATCH_SORT == "id"
+    assert DEFAULT_BATCH_ORDER == "asc"
+
+
+def test_batch_sort_accepts_allowed_values() -> None:
+    from app.simulation.sim_batch import VALID_BATCH_SORT_FIELDS
+
+    assert set(VALID_BATCH_SORT_FIELDS.keys()) == {"id", "updated_at"}
+
+
+def test_batch_order_is_frozen() -> None:
+    from app.simulation.sim_batch import VALID_BATCH_ORDERS
+
+    assert set(VALID_BATCH_ORDERS) == {"asc", "desc"}
+    with pytest.raises(AttributeError):
+        VALID_BATCH_ORDERS.add("random")  # type: ignore[attr-defined]
+
+
+def test_batch_normalise_sort_case_insensitive() -> None:
+    from app.simulation.sim_batch import _normalise_sort
+
+    assert _normalise_sort("UPDATED_AT") == "updated_at"
+    assert _normalise_sort(None) == "id"
+    assert _normalise_sort("") == "id"
+
+
+def test_batch_normalise_sort_rejects_unknown() -> None:
+    from app.simulation.sim_batch import _normalise_sort
+
+    with pytest.raises(ValueError):
+        _normalise_sort("title")  # not allowed in batch endpoint
+    with pytest.raises(ValueError):
+        _normalise_sort("created_at")  # not allowed in batch endpoint
+
+
+def test_batch_normalise_order_case_insensitive() -> None:
+    from app.simulation.sim_batch import _normalise_order
+
+    assert _normalise_order("DESC") == "desc"
+    assert _normalise_order(None) == "asc"
+
+
+def test_batch_normalise_order_rejects_unknown() -> None:
+    from app.simulation.sim_batch import _normalise_order
+
+    with pytest.raises(ValueError):
+        _normalise_order("descending")
+    with pytest.raises(ValueError):
+        _normalise_order("ascending")
 
 
 # ---------------------------------------------------------------------------

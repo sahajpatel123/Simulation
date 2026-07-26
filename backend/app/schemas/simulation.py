@@ -42,11 +42,19 @@ class SimulationBatchStatusOut(BaseModel):
     that matched the requested ids. ``not_found`` lists the ids
     that were either non-existent or owned by a different user —
     we never 404 the whole batch just because one id is bad.
+
+    ``status_counts`` is a ``{status: count}`` summary of the
+    returned items, so dashboard widgets can render "5 running, 12
+    completed" without re-iterating the list. ``filtered_by_since``
+    is the timestamp actually applied (echoed back so the UI can
+    pin it for the next incremental poll).
     """
 
     items: list[SimulationStatusOut]
     not_found: list[int]
     requested: int
+    status_counts: dict[str, int] = {}
+    filtered_by_since: datetime | None = None
 
 
 class SimulationResultOut(BaseModel):
