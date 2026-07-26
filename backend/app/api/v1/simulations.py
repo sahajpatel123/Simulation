@@ -1059,6 +1059,40 @@ def get_portfolio_summary(
     return PortfolioSummaryOut(**summary)
 
 
+def _batch_overall_mean(
+    results_jsons: object,
+) -> float | None:
+    """Mean of every cluster conversion rate across every sim.
+
+    Used as the denominator for the drill-down's
+    ``peer_comparison.batch_overall_mean``. Returns ``None``
+    when no usable data exists (so the dashboard renders
+    ``UNKNOWN`` instead of a misleading zero).
+    """
+    import math
+    rates: list[float] = []
+    for results in results_jsons:
+        if not isinstance(results, dict):
+            continue
+        breakdown = results.get("cluster_breakdown") or {}
+        if not isinstance(breakdown, dict):
+            continue
+        for raw in breakdown.values():
+            if raw is None or isinstance(raw, bool):
+                continue
+            try:
+                value = float(raw)
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(value):
+                continue
+            if 0.0 <= value <= 1.0:
+                rates.append(value)
+    if not rates:
+        return None
+    return sum(rates) / len(rates)
+
+
 def _build_window_portfolio(
     db: Session,
     current_user: User,
@@ -1349,6 +1383,7 @@ def get_cluster_drill_down(
         demographic_profile=dict(definition.demographic_profile),
         per_sim_conversions=per_sim_conversions,
         outlier_threshold=threshold,
+        batch_overall_mean=_batch_overall_mean(by_id.values()),
     )
     return ClusterDrillDownOut(**payload)
 

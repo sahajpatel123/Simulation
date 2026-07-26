@@ -46,6 +46,37 @@ LABEL_HIGH_VARIANCE: str = "HIGH_VARIANCE"
 LABEL_MODERATE_VARIANCE: str = "MODERATE_VARIANCE"
 LABEL_LOW_VARIANCE: str = "LOW_VARIANCE"
 
+# Below this absolute mean conversion (in fraction terms) the
+# cluster is flagged as a "low converter" — the founder should
+# investigate why the segment is barely converting. Same
+# threshold as clusters_aggregate.dropoff-zone intent (5pp).
+LOW_CONVERSION_THRESHOLD: float = 0.05
+
+# Peer-comparison threshold — within this many pp of the
+# batch's overall cluster mean, the cluster is treated as
+# "AT_PEAK" (no meaningful deviation).
+PEER_PEAK_BAND: float = 0.02
+
+# Peer-comparison direction labels.
+PEER_ABOVE: str = "ABOVE_BATCH_MEAN"
+PEER_BELOW: str = "BELOW_BATCH_MEAN"
+PEER_AT_PEAK: str = "AT_BATCH_MEAN"
+PEER_UNKNOWN: str = "UNKNOWN"
+
+# Recommendation labels — the dashboard renders one of these as
+# the primary CTA. Stable so the UI can hard-code the set.
+RECO_INVESTIGATE_OUTLIERS: str = "Investigate outlier sim(s)"
+RECO_RECALIBRATE_VARIANCE: str = (
+    "Recalibrate — high variance across sims"
+)
+RECO_COLLECT_MORE_OUTCOMES: str = (
+    "Collect more outcomes — under-observed"
+)
+RECO_IMPROVE_LOW_CONVERSION: str = (
+    "Improve positioning — converts below 5pp"
+)
+RECO_CONTINUE: str = "Continue current calibration"
+
 
 def _safe_float(raw: object) -> float | None:
     """Coerce to a finite float in [0.0, 1.0] or return ``None``.
@@ -99,6 +130,77 @@ def normalise_outlier_threshold(raw: float | None) -> float:
     return raw
 
 
+def _build_recommendation(
+    *,
+    stability: str,
+    under_observed: bool,
+    is_outlier_count: int,
+    mean_conversion: float,
+) -> str:
+    """Pick the highest-priority recommendation label.
+
+    Priority order (most actionable first):
+      1. Under-observed — can't trust the data at all yet.
+      2. HIGH_VARIANCE — model output is noisy on this cluster.
+      3. Outliers present — at least one sim exceeded the
+         threshold; investigate the inputs.
+      4. Below 5pp — the cluster converts poorly even with
+         stable, well-observed data; review positioning.
+      5. Default — continue current calibration.
+    """
+    if under_observed:
+        return RECO_COLLECT_MORE_OUTCOMES
+    if stability == LABEL_HIGH_VARIANCE:
+        return RECO_RECALIBRATE_VARIANCE
+    if is_outlier_count >= 1:
+        return RECO_INVESTIGATE_OUTLIERS
+    if (
+        mean_conversion > 0.0
+        and mean_conversion < LOW_CONVERSION_THRESHOLD
+    ):
+        return RECO_IMPROVE_LOW_CONVERSION
+    return RECO_CONTINUE
+
+
+def _build_peer_comparison(
+    cluster_mean: float,
+    batch_overall_mean: float | None,
+) -> dict:
+    """Compare this cluster's mean conversion to the batch's
+    overall cluster mean.
+
+    Returns a dict the dashboard can render directly:
+      * ``cluster_mean`` — echoed (rounded).
+      * ``batch_overall_mean`` — echoed (None when the route
+        couldn't compute it).
+      * ``delta`` — cluster_mean − batch_overall_mean, or None.
+      * ``direction`` — ABOVE_BATCH_MEAN / BELOW_BATCH_MEAN /
+        AT_BATCH_MEAN / UNKNOWN.
+    """
+    cluster_mean = round(cluster_mean, 6)
+    out = {
+        "cluster_mean": cluster_mean,
+        "batch_overall_mean": (
+            round(batch_overall_mean, 6)
+            if batch_overall_mean is not None
+            else None
+        ),
+        "delta": None,
+        "direction": PEER_UNKNOWN,
+    }
+    if batch_overall_mean is None:
+        return out
+    delta = cluster_mean - batch_overall_mean
+    out["delta"] = round(delta, 6)
+    if abs(delta) < PEER_PEAK_BAND:
+        out["direction"] = PEER_AT_PEAK
+    elif delta > 0:
+        out["direction"] = PEER_ABOVE
+    else:
+        out["direction"] = PEER_BELOW
+    return out
+
+
 def build_cluster_drill_down(
     cluster_id: str,
     *,
@@ -114,6 +216,7 @@ def build_cluster_drill_down(
         tuple[int | None, object]
     ] | None = None,
     outlier_threshold: float = DEFAULT_OUTLIER_THRESHOLD,
+    batch_overall_mean: float | None = None,
 ) -> dict:
     """Build the per-cluster drill-down payload.
 
@@ -246,6 +349,17 @@ def build_cluster_drill_down(
         under_observed or stability == LABEL_HIGH_VARIANCE
     )
 
+    recommendation = _build_recommendation(
+        stability=stability,
+        under_observed=under_observed,
+        is_outlier_count=outlier_count,
+        mean_conversion=mean_rate,
+    )
+    peer_comparison = _build_peer_comparison(
+        cluster_mean=mean_rate,
+        batch_overall_mean=batch_overall_mean,
+    )
+
     return {
         "cluster_profile": profile,
         "per_sim_history": history_rows,
@@ -255,6 +369,8 @@ def build_cluster_drill_down(
         "under_observed": under_observed,
         "needs_attention": needs_attention,
         "sim_count": sim_count,
+        "recommendation": recommendation,
+        "peer_comparison": peer_comparison,
     }
 
 
@@ -265,9 +381,20 @@ __all__ = [
     "UNDER_OBSERVED_RATIO",
     "LOW_VARIANCE_MAX_CV",
     "MODERATE_VARIANCE_MAX_CV",
+    "LOW_CONVERSION_THRESHOLD",
+    "PEER_PEAK_BAND",
+    "PEER_ABOVE",
+    "PEER_BELOW",
+    "PEER_AT_PEAK",
+    "PEER_UNKNOWN",
     "LABEL_HIGH_VARIANCE",
     "LABEL_MODERATE_VARIANCE",
     "LABEL_LOW_VARIANCE",
+    "RECO_INVESTIGATE_OUTLIERS",
+    "RECO_RECALIBRATE_VARIANCE",
+    "RECO_COLLECT_MORE_OUTCOMES",
+    "RECO_IMPROVE_LOW_CONVERSION",
+    "RECO_CONTINUE",
     "normalise_outlier_threshold",
     "build_cluster_drill_down",
 ]

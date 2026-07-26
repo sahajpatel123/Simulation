@@ -384,6 +384,15 @@ class ClusterDrillDownOut(BaseModel):
       cross-sim aggregate.
     * ``sim_count`` — how many sims in the batch (denominator
       for observation_ratio).
+    * ``recommendation`` — one-line action label derived from
+      stability / under-observed / outlier_count / low-mean
+      thresholds. Priority order: under-observed →
+      high-variance → outliers → low-conversion → continue.
+    * ``peer_comparison`` — dict comparing this cluster's
+      mean to the batch's overall cluster mean: ``cluster_mean``,
+      ``batch_overall_mean``, ``delta``, and ``direction``
+      (``ABOVE_BATCH_MEAN`` / ``BELOW_BATCH_MEAN`` /
+      ``AT_BATCH_MEAN`` / ``UNKNOWN`` when batch mean absent).
     """
 
     cluster_profile: dict = {}
@@ -394,6 +403,8 @@ class ClusterDrillDownOut(BaseModel):
     under_observed: bool = False
     needs_attention: bool = False
     sim_count: int = 0
+    recommendation: str = "Continue current calibration"
+    peer_comparison: dict = {}
 
 
 class SimulationResultOut(BaseModel):

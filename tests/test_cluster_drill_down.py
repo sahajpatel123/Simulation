@@ -30,9 +30,20 @@ def test_public_allowlist_matches_callers() -> None:
         "UNDER_OBSERVED_RATIO",
         "LOW_VARIANCE_MAX_CV",
         "MODERATE_VARIANCE_MAX_CV",
+        "LOW_CONVERSION_THRESHOLD",
+        "PEER_PEAK_BAND",
+        "PEER_ABOVE",
+        "PEER_BELOW",
+        "PEER_AT_PEAK",
+        "PEER_UNKNOWN",
         "LABEL_HIGH_VARIANCE",
         "LABEL_MODERATE_VARIANCE",
         "LABEL_LOW_VARIANCE",
+        "RECO_INVESTIGATE_OUTLIERS",
+        "RECO_RECALIBRATE_VARIANCE",
+        "RECO_COLLECT_MORE_OUTCOMES",
+        "RECO_IMPROVE_LOW_CONVERSION",
+        "RECO_CONTINUE",
         "normalise_outlier_threshold",
         "build_cluster_drill_down",
     }
@@ -391,6 +402,8 @@ def test_cluster_drill_down_out_default_shape() -> None:
     assert out.under_observed is False
     assert out.needs_attention is False
     assert out.sim_count == 0
+    assert out.recommendation == "Continue current calibration"
+    assert out.peer_comparison == {}
 
 
 def test_cluster_drill_down_out_round_trips_helper_payload() -> None:
@@ -414,6 +427,213 @@ def test_cluster_drill_down_out_round_trips_helper_payload() -> None:
     )
     assert out.aggregate["observation_count"] == 2
     assert out.sim_count == 2
+
+
+# ---------------------------------------------------------------------------
+# recommendation
+# ---------------------------------------------------------------------------
+
+
+def test_drill_down_recommendation_continue_for_healthy_cluster() -> None:
+    from app.simulation.cluster_drill_down import (
+        RECO_CONTINUE,
+        build_cluster_drill_down,
+    )
+
+    # All values below the 0.10 outlier threshold, low variance,
+    # well-observed, mean > 5pp → CONTINUE.
+    out = build_cluster_drill_down(
+        "c1",
+        per_sim_conversions=[
+            (101, 0.08),
+            (102, 0.08),
+            (103, 0.08),
+            (104, 0.08),
+        ],
+    )
+    assert out["under_observed"] is False
+    assert out["stability"] != "HIGH_VARIANCE"
+    assert out["aggregate"]["is_outlier_count"] == 0
+    assert out["recommendation"] == RECO_CONTINUE
+
+
+def test_drill_down_recommendation_collect_for_under_observed() -> None:
+    """Priority 1 — under-observed beats every other signal."""
+    from app.simulation.cluster_drill_down import (
+        RECO_COLLECT_MORE_OUTCOMES,
+        build_cluster_drill_down,
+    )
+
+    # High variance AND under-observed → COLLECT wins.
+    out = build_cluster_drill_down(
+        "c1",
+        per_sim_conversions=[
+            (101, 0.05),
+            (102, 0.30),
+        ] + [(None, None) for _ in range(8)],
+    )
+    assert out["under_observed"] is True
+    assert out["recommendation"] == RECO_COLLECT_MORE_OUTCOMES
+
+
+def test_drill_down_recommendation_recalibrate_for_high_variance() -> None:
+    """Priority 2 — HIGH_VARIANCE beats outliers."""
+    from app.simulation.cluster_drill_down import (
+        RECO_RECALIBRATE_VARIANCE,
+        build_cluster_drill_down,
+    )
+
+    # Well-observed, high variance, has outliers → RECALIBRATE wins.
+    out = build_cluster_drill_down(
+        "c1",
+        per_sim_conversions=[
+            (101, 0.05),
+            (102, 0.05),
+            (103, 0.30),
+            (104, 0.30),
+            (105, 0.05),
+            (106, 0.30),
+        ],
+    )
+    assert out["under_observed"] is False
+    assert out["stability"] == "HIGH_VARIANCE"
+    assert out["aggregate"]["is_outlier_count"] >= 1
+    assert out["recommendation"] == RECO_RECALIBRATE_VARIANCE
+
+
+def test_drill_down_recommendation_investigate_for_outliers() -> None:
+    """Priority 3 — outliers present (moderate variance, not high).
+
+    With one outlier among a tight bulk, the CV stays below the
+    HIGH_VARIANCE threshold only when there are many bulk
+    observations. We use 30 bulk + 1 outlier so the variance
+    contribution from the outlier stays small relative to the
+    mean, leaving CV in the MODERATE band.
+    """
+    from app.simulation.cluster_drill_down import (
+        RECO_INVESTIGATE_OUTLIERS,
+        build_cluster_drill_down,
+    )
+
+    per_sim = [(i, 0.07) for i in range(101, 131)]
+    # Outlier above the 0.10 threshold but close enough to the
+    # bulk (0.07) that CV stays in MODERATE_VARIANCE band
+    # rather than spiking to HIGH_VARIANCE.
+    per_sim.append((131, 0.20))
+    out = build_cluster_drill_down("c1", per_sim_conversions=per_sim)
+    assert out["under_observed"] is False
+    assert out["stability"] != "HIGH_VARIANCE"
+    assert out["aggregate"]["is_outlier_count"] == 1
+    assert out["recommendation"] == RECO_INVESTIGATE_OUTLIERS
+
+
+def test_drill_down_recommendation_low_conversion_below_5pp() -> None:
+    """Priority 4 — mean < 5pp (with stable, well-observed data,
+    no outliers)."""
+    from app.simulation.cluster_drill_down import (
+        RECO_IMPROVE_LOW_CONVERSION,
+        build_cluster_drill_down,
+    )
+
+    out = build_cluster_drill_down(
+        "c1",
+        per_sim_conversions=[
+            (101, 0.02),
+            (102, 0.03),
+            (103, 0.04),
+        ],
+    )
+    assert out["under_observed"] is False
+    assert out["stability"] != "HIGH_VARIANCE"
+    assert out["aggregate"]["is_outlier_count"] == 0
+    assert out["aggregate"]["mean_conversion"] < 0.05
+    assert out["recommendation"] == RECO_IMPROVE_LOW_CONVERSION
+
+
+# ---------------------------------------------------------------------------
+# peer_comparison
+# ---------------------------------------------------------------------------
+
+
+def test_drill_down_peer_comparison_above_when_above_mean() -> None:
+    from app.simulation.cluster_drill_down import (
+        PEER_ABOVE,
+        build_cluster_drill_down,
+    )
+
+    out = build_cluster_drill_down(
+        "c1",
+        per_sim_conversions=[(101, 0.20), (102, 0.20)],
+        batch_overall_mean=0.10,
+    )
+    pc = out["peer_comparison"]
+    assert pc["cluster_mean"] == pytest.approx(0.20)
+    assert pc["batch_overall_mean"] == pytest.approx(0.10)
+    assert pc["delta"] == pytest.approx(0.10)
+    assert pc["direction"] == PEER_ABOVE
+
+
+def test_drill_down_peer_comparison_below_when_below_mean() -> None:
+    from app.simulation.cluster_drill_down import (
+        PEER_BELOW,
+        build_cluster_drill_down,
+    )
+
+    out = build_cluster_drill_down(
+        "c1",
+        per_sim_conversions=[(101, 0.02), (102, 0.02)],
+        batch_overall_mean=0.10,
+    )
+    assert out["peer_comparison"]["direction"] == PEER_BELOW
+
+
+def test_drill_down_peer_comparison_at_peak_when_within_band() -> None:
+    """Within ±2pp of the batch mean → AT_BATCH_MEAN, not
+    ABOVE / BELOW."""
+    from app.simulation.cluster_drill_down import (
+        PEER_AT_PEAK,
+        build_cluster_drill_down,
+    )
+
+    out = build_cluster_drill_down(
+        "c1",
+        per_sim_conversions=[(101, 0.10), (102, 0.11)],
+        batch_overall_mean=0.10,
+    )
+    # Delta = 0.005, within the 2pp band.
+    assert out["peer_comparison"]["direction"] == PEER_AT_PEAK
+
+
+def test_drill_down_peer_comparison_unknown_when_batch_mean_absent() -> None:
+    """batch_overall_mean=None → UNKNOWN, delta=None."""
+    from app.simulation.cluster_drill_down import (
+        PEER_UNKNOWN,
+        build_cluster_drill_down,
+    )
+
+    out = build_cluster_drill_down(
+        "c1",
+        per_sim_conversions=[(101, 0.10)],
+    )
+    pc = out["peer_comparison"]
+    assert pc["batch_overall_mean"] is None
+    assert pc["delta"] is None
+    assert pc["direction"] == PEER_UNKNOWN
+
+
+def test_drill_down_peer_comparison_handles_empty_per_sim() -> None:
+    """No rates → mean=0 → delta=None when batch mean given."""
+    from app.simulation.cluster_drill_down import build_cluster_drill_down
+
+    out = build_cluster_drill_down(
+        "c1",
+        per_sim_conversions=[(101, None)],
+        batch_overall_mean=0.10,
+    )
+    pc = out["peer_comparison"]
+    assert pc["cluster_mean"] == 0.0
+    assert pc["delta"] == pytest.approx(-0.10)
+    assert pc["direction"] == "BELOW_BATCH_MEAN"
 
 
 # ---------------------------------------------------------------------------
