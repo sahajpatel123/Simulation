@@ -17,6 +17,12 @@ The search contract is intentionally narrow and predictable:
 * ``status`` — exact match on the ``status`` column.
 * ``archived`` — defaults to *exclude archived* so the main UI shows
   only live projects. Pass ``True`` to include them.
+* ``sort`` — one of :data:`VALID_SORT_FIELDS` (default ``created_at``).
+  ``id`` is also accepted for clients that want monotonic ordering
+  (the cursor pagination is always relative to ``id`` regardless of
+  sort).
+* ``order`` — ``asc`` or ``desc`` (default ``desc``). Anything else
+  raises so a typo never silently flips the user's intent.
 * ``limit`` — 1..100, default 50.
 * ``before_id`` — pagination cursor: return projects with
   ``id < before_id``, ordered by ``id DESC``. The ID cursor is more
@@ -33,6 +39,21 @@ _MIN_LIMIT: int = 1
 _DEFAULT_LIMIT: int = 50
 _MAX_QUERY_WORDS: int = 10
 _MAX_QUERY_WORD_LEN: int = 64
+
+# Allowlist of sortable columns. Each tuple is (caller-facing name,
+# SQLAlchemy attribute name on the ``Project`` model). Anything not in
+# the allowlist raises ``ValueError`` from ``_normalise_sort`` so a
+# typo can't slip into a SQL ORDER BY clause.
+VALID_SORT_FIELDS: dict[str, str] = {
+    "id": "id",
+    "created_at": "created_at",
+    "updated_at": "updated_at",
+    "title": "title",
+}
+DEFAULT_SORT: str = "created_at"
+
+VALID_ORDERS: frozenset[str] = frozenset({"asc", "desc"})
+DEFAULT_ORDER: str = "desc"
 
 
 def _normalise_query_words(raw: str | None) -> list[str]:
@@ -96,6 +117,45 @@ def _normalise_tags(raw_tags: list[str] | None) -> list[str]:
     return normalise_tags(raw_tags)
 
 
+def _normalise_sort(raw: str | None) -> str:
+    """Return a valid sort key from the allowlist, or the default.
+
+    Unknown keys raise ``ValueError`` so the route handler returns
+    400 rather than silently using the default (a typo like
+    ``?sort=create_at`` would otherwise be invisibly ignored).
+    """
+    if raw is None:
+        return DEFAULT_SORT
+    candidate = raw.strip().lower()
+    if not candidate:
+        return DEFAULT_SORT
+    if candidate not in VALID_SORT_FIELDS:
+        allowed = ", ".join(sorted(VALID_SORT_FIELDS.keys()))
+        raise ValueError(
+            f"invalid sort {raw!r}; allowed: {allowed}"
+        )
+    return candidate
+
+
+def _normalise_order(raw: str | None) -> str:
+    """Return ``asc`` / ``desc`` or the default.
+
+    Anything outside the allowlist raises ``ValueError`` so a typo
+    like ``?order=descending`` never silently flips the user's intent.
+    """
+    if raw is None:
+        return DEFAULT_ORDER
+    candidate = raw.strip().lower()
+    if not candidate:
+        return DEFAULT_ORDER
+    if candidate not in VALID_ORDERS:
+        allowed = ", ".join(sorted(VALID_ORDERS))
+        raise ValueError(
+            f"invalid order {raw!r}; allowed: {allowed}"
+        )
+    return candidate
+
+
 def build_search_filters(
     *,
     q: str | None = None,
@@ -104,6 +164,8 @@ def build_search_filters(
     archived: bool | None = None,
     limit: int | None = None,
     before_id: int | None = None,
+    sort: str | None = None,
+    order: str | None = None,
 ) -> dict:
     """Validate + coerce search inputs into a kwargs dict.
 
@@ -116,12 +178,18 @@ def build_search_filters(
     * ``archived`` — bool (None = no filter)
     * ``limit`` — int in ``[_MIN_LIMIT, _MAX_LIMIT]``
     * ``before_id`` — int or None
+    * ``sort`` — caller-facing sort key (validated)
+    * ``order`` — ``asc`` / ``desc``
+    * ``sort_column`` — internal SQLAlchemy attribute name for the
+      route handler to splat into ``.order_by()``
     """
     query_words = _normalise_query_words(q)
     canonical_tags = _normalise_tags(tags)
     status_normalised = (status or "").strip().upper()
     if len(status_normalised) > 50:
         raise ValueError("status filter exceeds 50 chars")
+    sort_key = _normalise_sort(sort)
+    order_key = _normalise_order(order)
     return {
         "query_words": query_words,
         "tags": canonical_tags,
@@ -129,6 +197,9 @@ def build_search_filters(
         "archived": archived,
         "limit": _normalise_limit(limit),
         "before_id": before_id,
+        "sort": sort_key,
+        "order": order_key,
+        "sort_column": VALID_SORT_FIELDS[sort_key],
     }
 
 
@@ -139,6 +210,10 @@ __all__ = [
     "MIN_LIMIT",
     "MAX_QUERY_WORDS",
     "MAX_QUERY_WORD_LEN",
+    "VALID_SORT_FIELDS",
+    "VALID_ORDERS",
+    "DEFAULT_SORT",
+    "DEFAULT_ORDER",
 ]
 
 

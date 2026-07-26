@@ -400,6 +400,19 @@ def search_projects(
             "page to fetch the next one."
         ),
     ),
+    sort: str | None = Query(
+        default=None,
+        max_length=32,
+        description=(
+            "Sort column. Allowed: id, created_at, updated_at, "
+            "title. Default: created_at."
+        ),
+    ),
+    order: str | None = Query(
+        default=None,
+        max_length=4,
+        description="Sort direction: asc or desc. Default: desc.",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ProjectSearchListResponse:
@@ -411,6 +424,8 @@ def search_projects(
             archived=archived,
             limit=limit,
             before_id=before_id,
+            sort=sort,
+            order=order,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -447,13 +462,22 @@ def search_projects(
             ).bindparams(pat=pattern)
         )
 
-    # Cursor pagination: id < before_id, ordered by id DESC for newest
-    # first. We pin the order to ``id`` rather than ``created_at``
-    # because the search-with-pagination contract is "give me the
-    # next page of results" — ``id`` is monotonic and unique.
+    # Cursor pagination: id < before_id. The primary sort column is
+    # configurable (see ``sort`` param), but ``id`` is *always*
+    # appended as a tiebreaker so the cursor pagination contract is
+    # stable even when the primary column has ties.
     if filters["before_id"] is not None:
         base = base.filter(Project.id < filters["before_id"])
-    base = base.order_by(Project.id.desc())
+    sort_col = getattr(Project, filters["sort_column"])
+    direction = filters["order"]
+    # ``id`` always ends up second so cursor pagination stays
+    # deterministic regardless of the primary sort.
+    if filters["sort_column"] == "id":
+        base = base.order_by(sort_col.asc() if direction == "asc" else sort_col.desc())
+    else:
+        primary = sort_col.asc() if direction == "asc" else sort_col.desc()
+        tiebreak = Project.id.asc() if direction == "asc" else Project.id.desc()
+        base = base.order_by(primary, tiebreak)
 
     # Fetch one extra row to compute ``has_more`` without a second
     # COUNT query.

@@ -163,6 +163,118 @@ def test_filters_compose() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Sort + order
+# ---------------------------------------------------------------------------
+
+
+def test_sort_defaults_to_created_at_desc() -> None:
+    from app.simulation.project_search import build_search_filters
+
+    f = build_search_filters()
+    assert f["sort"] == "created_at"
+    assert f["order"] == "desc"
+    assert f["sort_column"] == "created_at"
+
+
+def test_sort_accepts_all_allowed_values() -> None:
+    from app.simulation.project_search import build_search_filters
+
+    for key in ("id", "created_at", "updated_at", "title"):
+        f = build_search_filters(sort=key)
+        assert f["sort"] == key
+        assert f["sort_column"] == key
+
+
+def test_sort_is_case_insensitive() -> None:
+    from app.simulation.project_search import build_search_filters
+
+    assert build_search_filters(sort="CREATED_AT")["sort"] == "created_at"
+    assert build_search_filters(sort="Title")["sort"] == "title"
+
+
+def test_sort_strips_whitespace() -> None:
+    from app.simulation.project_search import build_search_filters
+
+    assert build_search_filters(sort="  title  ")["sort"] == "title"
+
+
+def test_sort_rejects_unknown_keys() -> None:
+    from app.simulation.project_search import build_search_filters
+
+    with pytest.raises(ValueError):
+        build_search_filters(sort="create_at")  # typo
+    with pytest.raises(ValueError):
+        build_search_filters(sort="description")  # not allowed
+    with pytest.raises(ValueError):
+        build_search_filters(sort="; DROP TABLE projects")
+
+
+def test_order_accepts_asc_and_desc() -> None:
+    from app.simulation.project_search import build_search_filters
+
+    assert build_search_filters(order="asc")["order"] == "asc"
+    assert build_search_filters(order="DESC")["order"] == "desc"
+    assert build_search_filters(order="  asc  ")["order"] == "asc"
+
+
+def test_order_rejects_unknown_values() -> None:
+    from app.simulation.project_search import build_search_filters
+
+    with pytest.raises(ValueError):
+        build_search_filters(order="ascending")
+    with pytest.raises(ValueError):
+        build_search_filters(order="descending")
+    with pytest.raises(ValueError):
+        build_search_filters(order="random")
+
+
+def test_sort_and_order_compose_with_other_filters() -> None:
+    """Sanity: adding sort + order must not break the other filters."""
+    from app.simulation.project_search import build_search_filters
+
+    f = build_search_filters(
+        q="ai",
+        tags=["saas"],
+        status="draft",
+        archived=False,
+        limit=25,
+        sort="title",
+        order="asc",
+    )
+    assert f["query_words"] == ["ai"]
+    assert f["tags"] == ["saas"]
+    assert f["status"] == "DRAFT"
+    assert f["archived"] is False
+    assert f["limit"] == 25
+    assert f["sort"] == "title"
+    assert f["order"] == "asc"
+    assert f["sort_column"] == "title"
+
+
+def test_valid_sort_fields_keys_are_canonical() -> None:
+    """Pin the public allowlist — a future addition must surface
+    here so the test file documents the public sort API."""
+    from app.simulation.project_search import VALID_SORT_FIELDS
+
+    assert set(VALID_SORT_FIELDS.keys()) == {
+        "id",
+        "created_at",
+        "updated_at",
+        "title",
+    }
+
+
+def test_valid_orders_is_frozen() -> None:
+    """Pin the order allowlist + its immutability."""
+    from app.simulation.project_search import VALID_ORDERS
+
+    assert set(VALID_ORDERS) == {"asc", "desc"}
+    # frozenset.hasattr check via mutation attempt.
+    with pytest.raises(AttributeError):
+        VALID_ORDERS.add("random")  # type: ignore[attr-defined]
+
+
+# ---------------------------------------------------------------------------
 # Schema
 # ---------------------------------------------------------------------------
 
