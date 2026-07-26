@@ -1641,3 +1641,29 @@ class TestShellSafety:
         )
         assert _reports._safe_filename("!" * 50) == "_" * 40
         assert _reports._safe_filename("a" * 60) == "a" * 40
+
+    def test_various_sizes_of_alnum_round_trip(self) -> None:
+        """Pins that various sizes of alnum inputs (1-10 chars
+        each, letters and digits, in different orderings) all
+        round-trip unchanged.
+
+        Test data:
+        - ``\"a\"`` through ``\"aaaaa\"`` (1-5 a's)
+        - ``\"1\"`` through ``\"11111\"`` (1-5 1's)
+        - ``\"aaaaaaaaaa\"`` (10 a's)
+        - ``\"1111111111\"`` (10 1's)
+        - ``\"aaaaa11111\"`` (5 a's + 5 1's)
+        - ``\"11111aaaaa\"`` (5 1's + 5 a's)
+
+        Pin so a future \"simplification\" that introduced
+        a size-dependent behavior (e.g. truncating alnum to 8
+        chars) would silently break the contract for these
+        common inputs."""
+        for t in (
+            "a", "aa", "aaa", "aaaa", "aaaaa",
+            "1", "11", "111", "1111", "11111",
+            "a" * 10, "1" * 10, "a" * 5 + "1" * 5,
+            "1" * 5 + "a" * 5,
+        ):
+            out = _reports._safe_filename(t)
+            assert out == t, f"{t!r} -> {out!r}"
