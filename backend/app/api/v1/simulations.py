@@ -1725,9 +1725,11 @@ def get_cluster_diff(
         cluster_a_name=def_a.name,
         cluster_a_traits=dict(def_a.base_traits),
         cluster_a_aggregate=cluster_a_aggregate,
+        cluster_a_product_affinities=list(def_a.product_affinities),
         cluster_b_name=def_b.name,
         cluster_b_traits=dict(def_b.base_traits),
         cluster_b_aggregate=cluster_b_aggregate,
+        cluster_b_product_affinities=list(def_b.product_affinities),
     )
     return ClusterDiffOut(**payload)
 

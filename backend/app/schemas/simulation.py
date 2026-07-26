@@ -491,6 +491,16 @@ class ClusterDiffOut(BaseModel):
     * ``similarity_label`` — VERY_SIMILAR / SIMILAR /
       DIFFERENT / VERY_DIFFERENT bucketed from the score.
     * ``summary`` — one-line headline string.
+    * ``top_differences`` — top 3 axes (traits + aggregates)
+      by ``|delta|`` DESC. Each row carries ``axis``,
+      ``source`` ('trait' / 'aggregate'), ``cluster_a``,
+      ``cluster_b``, ``delta``, ``winner``. The dashboard's
+      'what makes them different' headline tile.
+    * ``product_overlap`` — sorted, deduplicated list of
+      shared product affinities (case-insensitive match).
+      Empty when neither cluster has product affinities or
+      there's no overlap. Useful for 'these clusters are
+      often targeted together' hints.
     """
 
     cluster_a_profile: dict = {}
@@ -500,6 +510,8 @@ class ClusterDiffOut(BaseModel):
     similarity_score: float = 0.0
     similarity_label: str = "VERY_DIFFERENT"
     summary: str = ""
+    top_differences: list[dict] = []
+    product_overlap: list[str] = []
 
 
 class SimulationResultOut(BaseModel):

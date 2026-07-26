@@ -216,6 +216,79 @@ def _summary(
     )
 
 
+def _build_top_differences(
+    traits_diff: list[dict],
+    aggregate_diff: list[dict],
+) -> list[dict]:
+    """Top 3 axes (traits + aggregates) by |delta| DESC.
+
+    Mixed-source list so the dashboard has one headline view
+    of 'what makes these clusters different'. Each row
+    carries ``axis`` (the trait or metric name),
+    ``source`` ('trait' or 'aggregate'), and the original
+    row's delta / cluster_a / cluster_b / winner fields.
+
+    Ties on |delta| broken by canonical source order
+    (traits first, then aggregates) so the result is
+    deterministic.
+    """
+    candidates: list[tuple[float, int, dict]] = []
+    for index, row in enumerate(traits_diff):
+        if row["delta"] is None:
+            continue
+        candidates.append((abs(row["delta"]), 0, {
+            "axis": row["trait"],
+            "source": "trait",
+            "cluster_a": row["cluster_a"],
+            "cluster_b": row["cluster_b"],
+            "delta": row["delta"],
+            "winner": row["winner"],
+        }))
+    for index, row in enumerate(aggregate_diff):
+        if row["delta"] is None:
+            continue
+        candidates.append((abs(row["delta"]), 1, {
+            "axis": row["metric"],
+            "source": "aggregate",
+            "cluster_a": row["cluster_a"],
+            "cluster_b": row["cluster_b"],
+            "delta": row["delta"],
+            "winner": row["winner"],
+        }))
+    # Largest |delta| first; tiebreaker: traits before
+    # aggregates (lower sort index wins), then stable
+    # insertion order via Python's sort guarantees.
+    candidates.sort(key=lambda c: (-c[0], c[1]))
+    return [c[2] for c in candidates[:3]]
+
+
+def _build_product_overlap(
+    a_affinities: list[str] | None,
+    b_affinities: list[str] | None,
+) -> list[str]:
+    """Sorted, deduplicated list of shared product affinities.
+
+    Case-insensitive match; original-case strings from the
+    'a' side are kept in the result.
+    """
+    a_set = {s.casefold() for s in (a_affinities or []) if s}
+    b_set = {s.casefold() for s in (b_affinities or []) if s}
+    overlap_cf = a_set & b_set
+    if not overlap_cf:
+        return []
+    # Preserve original-case strings from a's side, then
+    # fall back to b's side for any overlap keys only present
+    # in b (shouldn't happen but defensive).
+    by_case: dict[str, str] = {}
+    for s in a_affinities or []:
+        if s and s.casefold() in overlap_cf:
+            by_case.setdefault(s.casefold(), s)
+    for s in b_affinities or []:
+        if s and s.casefold() in overlap_cf:
+            by_case.setdefault(s.casefold(), s)
+    return sorted(by_case.values())
+
+
 def build_cluster_diff(
     cluster_a_id: str,
     cluster_b_id: str,
@@ -223,9 +296,11 @@ def build_cluster_diff(
     cluster_a_name: str = "",
     cluster_a_traits: dict | None = None,
     cluster_a_aggregate: dict | None = None,
+    cluster_a_product_affinities: list[str] | None = None,
     cluster_b_name: str = "",
     cluster_b_traits: dict | None = None,
     cluster_b_aggregate: dict | None = None,
+    cluster_b_product_affinities: list[str] | None = None,
 ) -> dict:
     """Build the cluster diff payload.
 
@@ -282,6 +357,13 @@ def build_cluster_diff(
         "aggregate_diff": b_aggregate_rows,
         "similarity_score": similarity_score,
         "similarity_label": similarity_label,
+        "top_differences": _build_top_differences(
+            a_traits_rows, b_aggregate_rows
+        ),
+        "product_overlap": _build_product_overlap(
+            cluster_a_product_affinities,
+            cluster_b_product_affinities,
+        ),
         "summary": summary,
     }
 

@@ -403,6 +403,8 @@ def test_cluster_diff_out_default_shape() -> None:
     assert out.similarity_score == 0.0
     assert out.similarity_label == "VERY_DIFFERENT"
     assert out.summary == ""
+    assert out.top_differences == []
+    assert out.product_overlap == []
 
 
 def test_cluster_diff_out_round_trips_helper_payload() -> None:
@@ -422,6 +424,160 @@ def test_cluster_diff_out_round_trips_helper_payload() -> None:
     assert out.cluster_a_profile["cluster_id"] == "metro_pro"
     assert len(out.traits_diff) == 8
     assert out.summary != ""
+
+
+# ---------------------------------------------------------------------------
+# top_differences
+# ---------------------------------------------------------------------------
+
+
+def test_diff_top_differences_empty_when_no_data() -> None:
+    from app.simulation.cluster_diff import build_cluster_diff
+
+    out = build_cluster_diff("a", "b")
+    assert out["top_differences"] == []
+
+
+def test_diff_top_differences_sorts_by_abs_delta_desc() -> None:
+    from app.simulation.cluster_diff import build_cluster_diff
+
+    out = build_cluster_diff(
+        "a", "b",
+        cluster_a_traits={
+            "income_level": 0.90,    # |delta| = 0.40
+            "trust": 0.20,           # |delta| = 0.20
+            "patience_score": 0.50,  # tie on 0.0
+        },
+        cluster_b_traits={
+            "income_level": 0.50,
+            "trust": 0.40,
+            "patience_score": 0.50,
+        },
+        cluster_a_aggregate={"mean_conversion": 0.30},   # |delta| = 0.10
+        cluster_b_aggregate={"mean_conversion": 0.20},
+    )
+    top = out["top_differences"]
+    # 3 valid axes: income (0.40), trust (0.20), mean_conv (0.10).
+    assert len(top) == 3
+    axes = [row["axis"] for row in top]
+    assert axes[0] == "income_level"
+    assert axes[1] == "trust"
+    assert axes[2] == "mean_conversion"
+
+
+def test_diff_top_differences_capped_at_three() -> None:
+    """Top 3 only — keeps the dashboard tile readable."""
+    from app.simulation.cluster_diff import build_cluster_diff
+
+    traits = {
+        "income_level": 0.10, "digital_literacy": 0.10,
+        "motivation": 0.10, "trust": 0.10,
+        "price_sensitivity": 0.10, "risk_aversion": 0.10,
+        "patience_score": 0.10, "social_orientation": 0.10,
+    }
+    out = build_cluster_diff(
+        "a", "b",
+        cluster_a_traits=traits,
+        cluster_b_traits={k: 0.90 for k in traits},
+    )
+    assert len(out["top_differences"]) == 3
+
+
+def test_diff_top_differences_carries_source_label() -> None:
+    """Each row labels its source so the dashboard can render
+    'trait' vs 'aggregate' rows differently."""
+    from app.simulation.cluster_diff import build_cluster_diff
+
+    out = build_cluster_diff(
+        "a", "b",
+        cluster_a_traits={"income_level": 0.90},
+        cluster_b_traits={"income_level": 0.10},
+        cluster_a_aggregate={"mean_conversion": 0.20},
+        cluster_b_aggregate={"mean_conversion": 0.05},
+    )
+    sources = {row["axis"]: row["source"] for row in out["top_differences"]}
+    assert sources["income_level"] == "trait"
+    assert sources["mean_conversion"] == "aggregate"
+
+
+def test_diff_top_differences_skips_missing_deltas() -> None:
+    """A trait / metric missing on one side (delta=None) is
+    skipped, not counted as 0.0."""
+    from app.simulation.cluster_diff import build_cluster_diff
+
+    out = build_cluster_diff(
+        "a", "b",
+        cluster_a_traits={"income_level": 0.90},  # delta = 0.40
+        cluster_b_traits={"income_level": 0.50},
+        # cluster_b_aggregate empty → mean_conversion delta = None.
+        cluster_a_aggregate={"mean_conversion": 0.30},
+    )
+    top = out["top_differences"]
+    axes = [row["axis"] for row in top]
+    assert "mean_conversion" not in axes
+    assert axes[0] == "income_level"
+
+
+# ---------------------------------------------------------------------------
+# product_overlap
+# ---------------------------------------------------------------------------
+
+
+def test_diff_product_overlap_empty_when_no_affinities() -> None:
+    from app.simulation.cluster_diff import build_cluster_diff
+
+    out = build_cluster_diff("a", "b")
+    assert out["product_overlap"] == []
+
+
+def test_diff_product_overlap_intersects_case_insensitive() -> None:
+    """Case-insensitive match: 'SaaS' on A and 'saas' on B
+    overlap."""
+    from app.simulation.cluster_diff import build_cluster_diff
+
+    out = build_cluster_diff(
+        "a", "b",
+        cluster_a_product_affinities=["SaaS", "Mobile App"],
+        cluster_b_product_affinities=["saas", "Developer Tool"],
+    )
+    # Single overlap: saas. Original case from A's side wins.
+    assert out["product_overlap"] == ["SaaS"]
+
+
+def test_diff_product_overlap_returns_sorted_unique_list() -> None:
+    """Sorted alphabetically, deduplicated."""
+    from app.simulation.cluster_diff import build_cluster_diff
+
+    out = build_cluster_diff(
+        "a", "b",
+        cluster_a_product_affinities=["saas", "iot_hardware"],
+        cluster_b_product_affinities=["iot_hardware", "saas"],
+    )
+    assert out["product_overlap"] == ["iot_hardware", "saas"]
+
+
+def test_diff_product_overlap_empty_when_no_intersection() -> None:
+    """Two disjoint sets → empty overlap."""
+    from app.simulation.cluster_diff import build_cluster_diff
+
+    out = build_cluster_diff(
+        "a", "b",
+        cluster_a_product_affinities=["saas"],
+        cluster_b_product_affinities=["iot_hardware"],
+    )
+    assert out["product_overlap"] == []
+
+
+def test_diff_product_overlap_skips_empty_strings() -> None:
+    """Defensive — empty strings in either list are skipped."""
+    from app.simulation.cluster_diff import build_cluster_diff
+
+    out = build_cluster_diff(
+        "a", "b",
+        cluster_a_product_affinities=["saas", ""],
+        cluster_b_product_affinities=["saas"],
+    )
+    assert out["product_overlap"] == ["saas"]
 
 
 # ---------------------------------------------------------------------------
