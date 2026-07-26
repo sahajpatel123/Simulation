@@ -1227,3 +1227,20 @@ class TestShellSafety:
         for t in ("\t", "\n", "\r"):
             out = _reports._safe_filename(t)
             assert out == "_", f"{t!r} -> {out!r}"
+
+    def test_consecutive_disallowed_produce_consecutive_underscores(self) -> None:
+        """Pins that consecutive disallowed chars produce
+        consecutive underscores (not collapsed).
+
+        - ``\"!!\"`` → ``\"__\"``
+        - ``\"###\"`` → ``\"___\"``
+        - ``\"!@!@\"`` → ``\"____\"``
+        - ``\"...\"`` → ``\"___\"``
+
+        Pin so a future \"simplification\" that collapsed
+        adjacent disallowed chars (treating them as a single
+        separator) would silently shorten the output."""
+        for t in ("!!", "###", "!@!@", "..."):
+            out = _reports._safe_filename(t)
+            expected = "_" * len(t)
+            assert out == expected, f"{t!r} -> {out!r}"
