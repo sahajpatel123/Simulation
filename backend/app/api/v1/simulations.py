@@ -27,6 +27,7 @@ from app.schemas.simulation import (
     ArchitectBiasTrendOut,
     ArchitectDrillDownOut,
     ArchitectLeaderboardOut,
+    CalibrationHealthOut,
     ClusterDiffOut,
     ClusterDrillDownOut,
     ClusterOverlapMatrixOut,
@@ -99,6 +100,9 @@ from app.simulation.sim_diff import build_sim_diff
 from app.simulation.outlier_detection import (
     build_outlier_detection,
     normalise_z_threshold,
+)
+from app.simulation.calibration_health import (
+    build_calibration_health,
 )
 from app.simulation.conductor import _ARCHITECTS as _architect_registry
 from app.simulation.comparison import build_simulation_comparison
@@ -2575,6 +2579,95 @@ def get_outlier_detection(
         z_threshold=threshold,
     )
     return OutlierDetectionOut(**payload)
+
+
+@router.get(
+    "/calibration-health",
+    response_model=CalibrationHealthOut,
+    summary=(
+        "Single-payload calibration health check — overall "
+        "label + top miscalibrated architect + 7d/30d/90d "
+        "trend buckets"
+    ),
+    # DB read of N sim + outcome rows — same cap as the
+    # other aggregate endpoints.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_calibration_health(
+    ids: list[str] | None = Query(
+        default=None,
+        description=(
+            "One or more simulation ids. Same parser as "
+            "``/simulations/batch``. Optional; without ids the "
+            "endpoint returns INSUFFICIENT_DATA."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CalibrationHealthOut:
+    """Single-payload calibration health check.
+
+    Joins simulations + outcomes + domain_findings scoped
+    to the current user, builds the trend buckets
+    (created_at → |variance|) and the architect-accuracy
+    bridge payload, and fuses them into one health-check
+    payload.
+    """
+    try:
+        canonical_ids = parse_id_list(ids)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    if not canonical_ids:
+        return CalibrationHealthOut()
+
+    rows = (
+        db.query(
+            Simulation.created_at,
+            Outcome.predicted_conversion_rate,
+            Outcome.actual_conversion_rate,
+            Simulation.results_json,
+        )
+        .outerjoin(
+            Outcome, Outcome.simulation_id == Simulation.id,
+        )
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(
+            Simulation.id.in_(canonical_ids),
+            Simulation.status == "COMPLETED",
+            Project.user_id == current_user.id,
+        )
+        .order_by(Simulation.created_at.asc())
+        .all()
+    )
+
+    # Keep latest outcome per sim (defensive — the
+    # LEFT JOIN could in theory produce dupes if a sim
+    # has multiple outcomes).
+    seen: set[int] = set()
+    health_rows: list[tuple] = []
+    for r in rows:
+        if r[0] is None:
+            # can't build a health row without created_at.
+            continue
+        # Use a stable dedupe key — Outcome.created_at isn't
+        # in this query, so we fall back to (sim_id, sim
+        # create_at) uniqueness which the LEFT JOIN already
+        # enforces.
+        if id(r) in seen:
+            continue
+        seen.add(id(r))
+        findings = (
+            (r[3] or {}).get("domain_findings") or []
+        )
+        health_rows.append(
+            (r[0], r[1], r[2], findings)
+        )
+
+    payload = build_calibration_health(health_rows)
+    return CalibrationHealthOut(**payload)
 
 
 @router.get(

@@ -810,6 +810,41 @@ class OutlierDetectionOut(BaseModel):
     top_deviation_summary: dict | None = None
 
 
+class CalibrationHealthOut(BaseModel):
+    """Response from ``GET /simulations/calibration-health``.
+
+    Single-payload health check for the dashboard's
+    "is the system getting more accurate?" headline.
+    Synthesises the outcomes-digest's mean |variance|,
+    the architect-accuracy bridge's recommendation counts +
+    top miscalibrated architect, and 7d/30d/90d rolling
+    trend buckets.
+
+    * ``overall_health`` — WELL_CALIBRATED /
+      NEEDS_ATTENTION / POORLY_CALIBRATED /
+      INSUFFICIENT_DATA bucketed from mean |variance|.
+    * ``mean_abs_variance`` — float.
+    * ``observation_count`` — sims that contributed.
+    * ``top_miscalibrated_architect`` — dict with name,
+      |variance|, direction, recommendation,
+      finding_count; None when no architect had bias data.
+    * ``architect_accuracy_counts`` — histogram of
+      recommendations (TIGHTEN / LOOSEN / TRUSTED /
+      INVESTIGATE_BIAS / etc.).
+    * ``trend_buckets`` — list of per-window rows
+      (7d / 30d / 90d) with mean_abs_variance.
+    * ``summary`` — one-line headline.
+    """
+
+    overall_health: str = "INSUFFICIENT_DATA"
+    mean_abs_variance: float | None = None
+    observation_count: int = 0
+    top_miscalibrated_architect: dict | None = None
+    architect_accuracy_counts: dict = {}
+    trend_buckets: list[dict] = []
+    summary: str = ""
+
+
 class ProjectPortfolioRollupOut(BaseModel):
     """Response from ``GET /simulations/project-portfolio-rollup``.
 
