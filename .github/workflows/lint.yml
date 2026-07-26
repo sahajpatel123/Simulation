@@ -45,13 +45,11 @@ jobs:
         run: pip install --quiet ruff
 
       - name: Run ruff check
-        # E/W = pycodestyle errors + warnings (real bugs).
-        # Skip F (pyflakes — overlaps with E/W), I (isort —
-        # project hasn't adopted import-sorting yet), B (bugbear
-        # — useful but noisy on first pass).
+        # Rule selection lives in pyproject.toml — the workflow
+        # just runs ``ruff check`` and reports what the config
+        # says to flag.
         run: |
-          ruff check backend/app --output-format=github \
-            --select=E,W --no-fix || true
+          ruff check backend/app --output-format=github || true
 
       - name: Run ruff format check
         # Format-only check; non-blocking initially so we don't

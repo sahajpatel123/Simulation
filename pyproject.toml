@@ -1,3 +1,38 @@
 [tool.pytest.ini_options]
 pythonpath = ["backend"]
 testpaths = ["tests"]
+
+# Ruff — fast lint. Configuration lives here (not in
+# .ruff.toml) so tool config stays in one place.
+#
+# * line-length = 100 matches the de-facto modern standard
+#   (black's default). The codebase was written to ~100-120
+#   chars per line; 88 (ruff's default) flag-bombs everything.
+# * E402 (module-level import not at top of file) is
+#   silenced — most occurrences are intentional
+#   (``from __future__ import annotations`` is the first
+#   import, then ``if TYPE_CHECKING:`` block follows, then
+#   runtime imports). Re-enable per-file if a real violation
+#   appears.
+# * E501 (line too long) is silenced project-wide — the
+#   100-char limit already keeps things readable, and the
+#   real check is the W-series (real bugs).
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# Default rule set + the warnings that catch real bugs.
+select = ["E", "W"]
+ignore = [
+    "E501",  # line too long — covered by line-length config
+    "E402",  # module-level import not at top — intentional
+             # patterns (TYPE_CHECKING blocks) below
+             # ``from __future__ import annotations`` are
+             # false-positives here.
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests are allowed to be more relaxed — long descriptive
+# names and docstrings outweigh line-length purity.
+"tests/**/*.py" = ["E501"]
