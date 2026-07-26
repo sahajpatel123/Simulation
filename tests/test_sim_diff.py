@@ -264,6 +264,101 @@ def test_sim_diff_summary_includes_both_sides() -> None:
 
 
 # ---------------------------------------------------------------------------
+# shared_architect_count / union_architect_count / overlap_pct
+# ---------------------------------------------------------------------------
+
+
+def test_sim_diff_shared_architect_count_intersection() -> None:
+    """shared_architect_count is the size of the intersection."""
+    from app.simulation.sim_diff import build_sim_diff
+
+    a = {"domain_findings": [
+        {"architect_name": "pricing", "severity": "CRITICAL"},
+        {"architect_name": "trust", "severity": "WARNING"},
+        {"architect_name": "onboarding", "severity": "INFO"},
+    ]}
+    b = {"domain_findings": [
+        {"architect_name": "pricing", "severity": "CRITICAL"},
+        {"architect_name": "trust", "severity": "CRITICAL"},
+        {"architect_name": "retention", "severity": "INFO"},
+    ]}
+    out = build_sim_diff(1, a, 2, b)
+    # pricing + trust = 2.
+    assert out["shared_architect_count"] == 2
+
+
+def test_sim_diff_union_architect_count() -> None:
+    """union_architect_count is the size of the union."""
+    from app.simulation.sim_diff import build_sim_diff
+
+    a = {"domain_findings": [
+        {"architect_name": "pricing", "severity": "CRITICAL"},
+        {"architect_name": "trust", "severity": "WARNING"},
+    ]}
+    b = {"domain_findings": [
+        {"architect_name": "pricing", "severity": "CRITICAL"},
+        {"architect_name": "onboarding", "severity": "INFO"},
+    ]}
+    out = build_sim_diff(1, a, 2, b)
+    # pricing + trust + onboarding = 3.
+    assert out["union_architect_count"] == 3
+
+
+def test_sim_diff_overlap_pct_fraction() -> None:
+    """overlap_pct = shared / union."""
+    from app.simulation.sim_diff import build_sim_diff
+
+    a = {"domain_findings": [
+        {"architect_name": "pricing", "severity": "CRITICAL"},
+        {"architect_name": "trust", "severity": "WARNING"},
+    ]}
+    b = {"domain_findings": [
+        {"architect_name": "pricing", "severity": "CRITICAL"},
+    ]}
+    out = build_sim_diff(1, a, 2, b)
+    # shared=1 (pricing), union=2 (pricing + trust) → 0.5.
+    assert out["overlap_pct"] == pytest.approx(0.5)
+
+
+def test_sim_diff_overlap_pct_zero_when_no_findings() -> None:
+    from app.simulation.sim_diff import build_sim_diff
+
+    out = build_sim_diff(1, None, 2, None)
+    assert out["overlap_pct"] == 0.0
+    assert out["shared_architect_count"] == 0
+
+
+def test_sim_diff_overlap_case_insensitive() -> None:
+    """Case-insensitive match: 'Pricing' on sim_a matches
+    'pricing' on sim_b."""
+    from app.simulation.sim_diff import build_sim_diff
+
+    a = {"domain_findings": [
+        {"architect_name": "PricingArchitect", "severity": "CRITICAL"},
+    ]}
+    b = {"domain_findings": [
+        {"architect_name": "pricingarchitect", "severity": "CRITICAL"},
+    ]}
+    out = build_sim_diff(1, a, 2, b)
+    assert out["shared_architect_count"] == 1
+
+
+def test_sim_diff_overlap_skips_empty_architect_names() -> None:
+    """A finding with an empty architect_name is skipped
+    (not counted in the union)."""
+    from app.simulation.sim_diff import build_sim_diff
+
+    a = {"domain_findings": [
+        {"architect_name": "", "severity": "CRITICAL"},
+        {"architect_name": "pricing", "severity": "CRITICAL"},
+    ]}
+    b = {"domain_findings": []}
+    out = build_sim_diff(1, a, 2, b)
+    # Empty name skipped → only pricing in union.
+    assert out["union_architect_count"] == 1
+
+
+# ---------------------------------------------------------------------------
 # Schema
 # ---------------------------------------------------------------------------
 
@@ -278,6 +373,9 @@ def test_sim_diff_out_default_shape() -> None:
     assert out.conversion_diff == {}
     assert out.aggregate_diff == []
     assert out.summary == ""
+    assert out.shared_architect_count == 0
+    assert out.overlap_pct == 0.0
+    assert out.union_architect_count == 0
 
 
 def test_sim_diff_out_round_trips_helper_payload() -> None:

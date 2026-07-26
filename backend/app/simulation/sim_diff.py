@@ -141,6 +141,21 @@ def _variance(pred: float | None, act: float | None) -> float | None:
     return round(pred - act, 6)
 
 
+def _architect_names(findings: list[dict] | None) -> set[str]:
+    """Return the set of architect names (case-folded) that
+    appear in the given findings list. Non-dict findings
+    skipped."""
+    findings = findings or []
+    out: set[str] = set()
+    for f in findings:
+        if not isinstance(f, dict):
+            continue
+        name = str(f.get("architect_name", "")).strip()
+        if name:
+            out.add(name.casefold())
+    return out
+
+
 def build_sim_diff(
     sim_a_id: int,
     sim_a_data: dict | None,
@@ -282,6 +297,19 @@ def build_sim_diff(
         },
     ]
 
+    # Architect overlap — how many distinct architect names
+    # appear in BOTH sims? Lets the dashboard render "X of Y
+    # architects agreed" without iterating.
+    a_architects = _architect_names(a_findings)
+    b_architects = _architect_names(b_findings)
+    union_architects = a_architects | b_architects
+    intersection_architects = a_architects & b_architects
+    shared_architect_count = len(intersection_architects)
+    union_count = len(union_architects)
+    overlap_pct = (
+        shared_architect_count / union_count if union_count else 0.0
+    )
+
     # One-line headline summarising the comparison.
     summary = (
         f"Sim {sim_a_id} vs Sim {sim_b_id}: "
@@ -296,6 +324,9 @@ def build_sim_diff(
         "conversion_diff": conversion_diff,
         "aggregate_diff": aggregate_diff,
         "summary": summary,
+        "shared_architect_count": shared_architect_count,
+        "overlap_pct": round(overlap_pct, 6),
+        "union_architect_count": union_count,
     }
 
 

@@ -748,6 +748,14 @@ class SimDiffOut(BaseModel):
       (metric, sim_a, sim_b, delta, winner) for the
       dashboard's table.
     * ``summary`` — one-line headline string.
+    * ``shared_architect_count`` — number of distinct
+      architect names present in BOTH sims' findings. Useful
+      for "X of Y architects agreed" headline.
+    * ``overlap_pct`` — shared_architect_count /
+      union_architect_count (0.0 when neither sim has any
+      findings).
+    * ``union_architect_count`` — distinct architect names
+      across both sims.
     """
 
     sim_a_meta: dict = {}
@@ -756,6 +764,9 @@ class SimDiffOut(BaseModel):
     conversion_diff: dict = {}
     aggregate_diff: list[dict] = []
     summary: str = ""
+    shared_architect_count: int = 0
+    overlap_pct: float = 0.0
+    union_architect_count: int = 0
 
 
 class ProjectPortfolioRollupOut(BaseModel):
