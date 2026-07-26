@@ -27,6 +27,12 @@ def test_public_allowlist_matches_callers() -> None:
         "DEFAULT_Z_THRESHOLD",
         "MIN_Z_THRESHOLD",
         "MAX_Z_THRESHOLD",
+        "LABEL_MILD",
+        "LABEL_MODERATE",
+        "LABEL_EXTREME",
+        "VALID_SEVERITY_LABELS",
+        "MODERATE_THRESHOLD",
+        "EXTREME_THRESHOLD",
         "normalise_z_threshold",
         "build_outlier_detection",
     }
@@ -261,6 +267,159 @@ def test_outlier_summary_no_data_message() -> None:
 
 
 # ---------------------------------------------------------------------------
+# severity_counts + top_deviation_summary
+# ---------------------------------------------------------------------------
+
+
+def test_outlier_severity_label_per_row() -> None:
+    """Each outlier carries a severity label bucketed from its
+    z-score."""
+    from app.simulation.outlier_detection import build_outlier_detection
+
+    out = build_outlier_detection([
+        (1, 0.10, 0.05),  # |variance| 0.05
+        (2, 0.10, 0.05),
+        (3, 0.10, 0.05),
+        (4, 0.10, 0.05),
+        (5, 0.10, 0.01),  # outlier
+    ], z_threshold=0.5)
+    flagged = out["outliers"][0]
+    assert "deviation_severity" in flagged
+    assert flagged["deviation_severity"] in (
+        "MILD", "MODERATE", "EXTREME",
+    )
+
+
+def test_outlier_severity_label_thresholds() -> None:
+    """MILD < 3σ, MODERATE 3-5σ, EXTREME ≥ 5σ."""
+    from app.simulation.outlier_detection import (
+        LABEL_EXTREME,
+        LABEL_MILD,
+        LABEL_MODERATE,
+        build_outlier_detection,
+    )
+
+    # The original input (4 identical bulk sims) is degenerate:
+    # with constant |variance|, batch std = 0 and every sim
+    # gets z = 0, so the outlier list is empty at any threshold.
+    # Use a deliberately varied batch so each severity bucket
+    # can be exercised.
+    out = build_outlier_detection([
+        (1, 0.10, 0.05),  # bulk (low z)
+        (2, 0.10, 0.05),
+        (3, 0.10, 0.05),
+        (4, 0.10, 0.05),
+        (5, 0.10, 0.20),  # MILD outlier
+    ], z_threshold=0.5)
+    # MILD boundary: < 3σ.
+    flagged_mild = next(
+        o for o in out["outliers"]
+        if 1.5 <= o["z_score"] < 3.0
+    )
+    assert flagged_mild["deviation_severity"] == LABEL_MILD
+    # Find a MODERATE one if any.
+    moderate = [
+        o for o in out["outliers"]
+        if 3.0 <= o["z_score"] < 5.0
+    ]
+    if moderate:
+        assert moderate[0]["deviation_severity"] == LABEL_MODERATE
+    # EXTREME: any z ≥ 5.
+    extreme = [
+        o for o in out["outliers"]
+        if o["z_score"] >= 5.0
+    ]
+    if extreme:
+        assert extreme[0]["deviation_severity"] == LABEL_EXTREME
+
+
+def test_outlier_severity_counts_histogram() -> None:
+    """Counts each outlier by severity bucket."""
+    from app.simulation.outlier_detection import build_outlier_detection
+
+    # 30 bulk + 2 outliers so the mean is dominated by the
+    # bulk. Low threshold (1σ) flags both outliers so the
+    # histogram sum assertion is meaningful.
+    out = build_outlier_detection([
+        (i, 0.10, 0.095) for i in range(1, 31)  # bulk
+    ] + [
+        (31, 0.10, 0.20),  # outlier 1
+        (32, 0.10, 0.30),  # outlier 2
+    ], z_threshold=1.0)
+    counts = out["severity_counts"]
+    # Both outliers flagged at 1σ.
+    assert out["outlier_count"] == 2
+    # Counts sum to outlier_count.
+    assert (
+        counts["MILD"] + counts["MODERATE"] + counts["EXTREME"]
+        == out["outlier_count"]
+    )
+
+
+def test_outlier_severity_counts_zero_for_no_outliers() -> None:
+    """No outliers → all-zero counts (canonical shape)."""
+    from app.simulation.outlier_detection import build_outlier_detection
+
+    out = build_outlier_detection([
+        (1, 0.10, 0.05),
+        (2, 0.10, 0.05),
+        (3, 0.10, 0.05),
+    ], z_threshold=3.0)
+    assert out["outlier_count"] == 0
+    assert out["severity_counts"] == {
+        "MILD": 0, "MODERATE": 0, "EXTREME": 0,
+    }
+
+
+def test_outlier_top_deviation_summary_picks_most_extreme() -> None:
+    """top_deviation_summary carries the most-extreme outlier
+    (highest z-score, which is outliers[0] after sort)."""
+    from app.simulation.outlier_detection import build_outlier_detection
+
+    out = build_outlier_detection([
+        (1, 0.10, 0.05),  # bulk
+        (2, 0.10, 0.05),
+        (3, 0.10, 0.05),
+        (4, 0.10, 0.05),
+        (5, 0.10, 0.30),  # z ~13
+        (6, 0.10, 0.20),  # z ~7
+    ], z_threshold=0.5)
+    top = out["top_deviation_summary"]
+    assert top["sim_id"] == 5
+    assert top["z_score"] == out["outliers"][0]["z_score"]
+
+
+def test_outlier_top_deviation_summary_includes_delta() -> None:
+    """delta = top.abs_variance − batch_mean."""
+    from app.simulation.outlier_detection import build_outlier_detection
+
+    out = build_outlier_detection([
+        (1, 0.10, 0.05),  # bulk
+        (2, 0.10, 0.05),
+        (3, 0.10, 0.05),
+        (4, 0.10, 0.05),
+        (5, 0.10, 0.30),  # outlier
+    ], z_threshold=0.5)
+    top = out["top_deviation_summary"]
+    expected_delta = round(
+        top["abs_variance"] - top["batch_mean_abs_variance"], 6
+    )
+    assert top["delta"] == expected_delta
+    assert top["delta"] > 0  # top is above mean
+
+
+def test_outlier_top_deviation_summary_none_for_no_outliers() -> None:
+    from app.simulation.outlier_detection import build_outlier_detection
+
+    out = build_outlier_detection([
+        (1, 0.10, 0.05),
+        (2, 0.10, 0.05),
+        (3, 0.10, 0.05),
+    ], z_threshold=3.0)
+    assert out["top_deviation_summary"] is None
+
+
+# ---------------------------------------------------------------------------
 # Schema
 # ---------------------------------------------------------------------------
 
@@ -298,6 +457,14 @@ def test_outlier_detection_out_round_trips_helper_payload() -> None:
     assert out.observation_count == 5
     assert out.outlier_count == 1
     assert out.z_threshold == 1.5
+    # The outlier (sim 5, |variance| 0.40) lands in the MILD
+    # bucket (z ≈ 1.79). severity_counts must therefore
+    # tally it — the canonical all-zero shape is reserved
+    # for the no-outliers case.
+    assert out.severity_counts == {
+        "MILD": 1, "MODERATE": 0, "EXTREME": 0,
+    }
+    assert out.top_deviation_summary is not None
 
 
 # ---------------------------------------------------------------------------

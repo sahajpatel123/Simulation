@@ -425,9 +425,11 @@ def test_list_projects_supports_tag_query_param() -> None:
     _install_razorpay_stub()
     from app.api.v1 import projects as projects_mod
 
-    # Find the GET "" route and inspect its dependency-injected params.
+    # Find the GET list-projects route and inspect its
+    # dependency-injected params. The router is mounted at
+    # ``/projects`` so the root path is ``/projects``, not ``""``.
     for r in projects_mod.router.routes:
-        if r.path == "" and "GET" in (r.methods or set()):
+        if r.path == "/projects" and "GET" in (r.methods or set()):
             # The route function is ``list_projects``; check its signature
             # has a ``tag`` parameter (FastAPI inspects it on registration).
             assert "tag" in r.dependant.path_params or any(

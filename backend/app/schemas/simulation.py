@@ -790,6 +790,13 @@ class OutlierDetectionOut(BaseModel):
       |variance| across the batch.
     * ``z_threshold`` — echoed.
     * ``summary`` — one-line headline.
+    * ``severity_counts`` — histogram of outliers bucketed
+      by ``deviation_severity`` (MILD / MODERATE / EXTREME).
+    * ``top_deviation_summary`` — dict carrying the most
+      extreme outlier (sim_id, abs_variance,
+      batch_mean_abs_variance, delta, z_score,
+      deviation_severity) for the dashboard's headline. None
+      when no outliers are flagged.
     """
 
     outliers: list[dict] = []
@@ -799,6 +806,8 @@ class OutlierDetectionOut(BaseModel):
     batch_std_abs_variance: float = 0.0
     z_threshold: float = 3.0
     summary: str = ""
+    severity_counts: dict = {}
+    top_deviation_summary: dict | None = None
 
 
 class ProjectPortfolioRollupOut(BaseModel):

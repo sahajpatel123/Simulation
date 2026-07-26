@@ -35,6 +35,34 @@ MAX_Z_THRESHOLD: float = 10.0
 Z_FLOOR_DENOMINATOR: float = 1e-6
 Z_CAP: float = 9999.99
 
+# Severity buckets — each flagged outlier gets a label
+# based on its z_score so the dashboard can colour-code
+# "how worried should I be". Boundaries: MILD < MODERATE
+# < EXTREME (the higher bound is inclusive on the bucket,
+# i.e. exactly 3.0σ is MODERATE, exactly 5.0σ is EXTREME).
+LABEL_MILD: str = "MILD"
+LABEL_MODERATE: str = "MODERATE"
+LABEL_EXTREME: str = "EXTREME"
+VALID_SEVERITY_LABELS: frozenset[str] = frozenset(
+    {LABEL_MILD, LABEL_MODERATE, LABEL_EXTREME}
+)
+MODERATE_THRESHOLD: float = 3.0
+EXTREME_THRESHOLD: float = 5.0
+
+
+def _severity_for_z(z: float) -> str:
+    """Bucket a z-score into a severity label.
+
+    Boundaries are inclusive on the upper edge: 3.0σ is
+    MODERATE (≥ MODERATE_THRESHOLD), 5.0σ is EXTREME
+    (≥ EXTREME_THRESHOLD), anything below 3.0σ is MILD.
+    """
+    if z >= EXTREME_THRESHOLD:
+        return LABEL_EXTREME
+    if z >= MODERATE_THRESHOLD:
+        return LABEL_MODERATE
+    return LABEL_MILD
+
 
 def _safe_float(raw: object) -> float | None:
     """Coerce to a finite float in [0.0, 1.0] or return None."""
@@ -138,6 +166,12 @@ def build_outlier_detection(
             "batch_std_abs_variance": 0.0,
             "z_threshold": threshold,
             "summary": "No data — outlier detection skipped.",
+            "severity_counts": {
+                LABEL_MILD: 0,
+                LABEL_MODERATE: 0,
+                LABEL_EXTREME: 0,
+            },
+            "top_deviation_summary": None,
         }
 
     batch_mean = sum(abs_variances) / observation_count
@@ -158,13 +192,37 @@ def build_outlier_detection(
         if z > Z_CAP:
             z = Z_CAP
         sim_to_data[sim_id]["z_score"] = round(z, 6)
+        sim_to_data[sim_id]["deviation_severity"] = _severity_for_z(z)
 
-    # Outliers = z ≥ threshold.
+    # Outliers = z ≥ threshold. ``severity_counts`` always
+    # carries the canonical 3-bucket shape (even when zero)
+    # so the dashboard can index into it without key checks.
+    severity_counts: dict[str, int] = {
+        LABEL_MILD: 0,
+        LABEL_MODERATE: 0,
+        LABEL_EXTREME: 0,
+    }
     outliers: list[dict] = []
     for sim_id, payload in sim_to_data.items():
         if payload["z_score"] >= threshold:
             outliers.append(payload)
+            severity_counts[payload["deviation_severity"]] += 1
     outliers.sort(key=lambda r: -r["z_score"])
+
+    # Most-extreme outlier — None when none flagged.
+    top_deviation_summary: dict | None = None
+    if outliers:
+        top = outliers[0]
+        top_deviation_summary = {
+            "sim_id": top["sim_id"],
+            "z_score": top["z_score"],
+            "abs_variance": top["abs_variance"],
+            "batch_mean_abs_variance": round(batch_mean, 6),
+            "delta": round(
+                top["abs_variance"] - batch_mean, 6
+            ),
+            "deviation_severity": top["deviation_severity"],
+        }
 
     summary = (
         f"Outlier detection: {len(outliers)} of "
@@ -180,6 +238,8 @@ def build_outlier_detection(
         "batch_std_abs_variance": round(batch_std, 6),
         "z_threshold": threshold,
         "summary": summary,
+        "severity_counts": severity_counts,
+        "top_deviation_summary": top_deviation_summary,
     }
 
 
@@ -187,6 +247,12 @@ __all__ = [
     "DEFAULT_Z_THRESHOLD",
     "MIN_Z_THRESHOLD",
     "MAX_Z_THRESHOLD",
+    "LABEL_MILD",
+    "LABEL_MODERATE",
+    "LABEL_EXTREME",
+    "VALID_SEVERITY_LABELS",
+    "MODERATE_THRESHOLD",
+    "EXTREME_THRESHOLD",
     "normalise_z_threshold",
     "build_outlier_detection",
 ]
