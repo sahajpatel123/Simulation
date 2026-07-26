@@ -1388,3 +1388,41 @@ class TestShellSafety:
         assert _reports._safe_filename("a\x0bb") == "a_b"
         assert _reports._safe_filename("a\x0cb") == "a_b"
         assert _reports._safe_filename("a\x0bb\x0cc") == "a_b_c"
+
+    def test_long_mixed_safe_inputs_round_trip(self) -> None:
+        """Property test: a comprehensive set of safe inputs
+        round-trips exactly. The set includes single chars,
+        short sequences, version-like strings, and mixed-case
+        words.
+
+        Test set:
+        - Single alnum: ``\"A\"``, ``\"Z\"``, ``\"a\"``, ``\"z\"``,
+          ``\"0\"``, ``\"9\"``
+        - Short sequences: ``\"AA\"``, ``\"ZZ\"``, ``\"aa\"``,
+          ``\"zz\"``, ``\"00\"``, ``\"99\"``
+        - Mixed case: ``\"Az\"``, ``\"aZ\"``, ``\"aA\"``, ``\"0A\"``,
+          ``\"0a\"``
+        - Multi-class: ``\"1A2B3C\"``, ``\"1_2_3\"``, ``\"a-b-c-d\"``
+        - Short digits: ``\"1\"``, ``\"12\"``, ``\"123\"``, ``\"1234\"``
+        - Version-like: ``\"v1_0\"``, ``\"v2_0\"``, ``\"2024\"``,
+          ``\"2024Q3\"``
+        - Mixed case words: ``\"hello\"``, ``\"world\"``,
+          ``\"Hello World\"``, ``\"MyProject\"``, ``\"My Project\"``,
+          ``\"My Project v2\"``
+
+        Pin so a future \"simplification\" that added a case-folding
+        or unicode normalization step would silently change the
+        round-trip for these common inputs."""
+        inputs = [
+            "A", "Z", "a", "z", "0", "9",
+            "AA", "ZZ", "aa", "zz", "00", "99",
+            "Az", "aZ", "aA", "0A", "0a",
+            "1A2B3C", "1_2_3", "a-b-c-d",
+            "1", "12", "123", "1234",
+            "v1_0", "v2_0", "2024", "2024Q3",
+            "hello", "world", "Hello World",
+            "MyProject", "My Project", "My Project v2",
+        ]
+        for t in inputs:
+            out = _reports._safe_filename(t)
+            assert out == t, f"{t!r} -> {out!r}"
