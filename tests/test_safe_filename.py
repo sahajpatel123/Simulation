@@ -1483,3 +1483,23 @@ class TestShellSafety:
         assert _reports._safe_filename("a‏b") == "a_b"
         assert _reports._safe_filename("a⁦b") == "a_b"
         assert _reports._safe_filename("a⁩b") == "a_b"
+
+    def test_tab_replacement_and_strip(self) -> None:
+        """Pins that tabs are replaced with ``_`` (they're not
+        in ``str.strip()``'s whitespace set, they're in the
+        disallowed char set), AND that leading/trailing
+        whitespace (including tabs) is stripped.
+
+        - ``\"\\t\\thello\\t\\t\"`` → ``\"hello\"``
+        - ``\"a\\tb\\tc\"`` → ``\"a_b_c\"``
+        - ``\"\\tabc\\t\"`` → ``\"abc\"``
+
+        Pin so a future \"simplification\" that removed
+        ``str.strip()`` or that added tabs to the strip set
+        wouldn't silently change the contract for these inputs."""
+        for t in ("\t\thello\t\t", "a\tb\tc", "\tabc\t"):
+            out = _reports._safe_filename(t)
+            expected = t.replace("\t", "_").strip()
+            assert out == expected, (
+                f"{t!r} -> {out!r}, expected {expected!r}"
+            )
