@@ -92,6 +92,50 @@ class FindingsAggregateOut(BaseModel):
     architect_filter: str | None = None
 
 
+class OutcomesDigestOut(BaseModel):
+    """Response from ``GET /simulations/aggregate/outcomes``.
+
+    Portfolio view of predicted-vs-actual conversion accuracy across
+    N simulations that have founder-recorded outcomes attached — the
+    "calibration at scale" view. Each Outcome row contributes one
+    ``(predicted, actual)`` pair (we keep the latest outcome per
+    simulation id).
+
+    * ``mae`` — Mean Absolute Error of the conversion rate (|predicted
+      − actual|). Higher = less calibrated.
+    * ``mape`` — Mean Absolute Percentage Error. Pairs where
+      actual == 0 are excluded so the aggregate doesn't blow up.
+    * ``rmse`` — Root Mean Squared Error (penalises outliers).
+    * ``mae_count`` / ``mape_count`` — pair counts fed into each
+      metric (often differ — MAPE drops zero-actuals).
+    * ``outlier_count`` — pairs with |variance| above the (clamped)
+      ``outlier_threshold`` query param. Default 0.10 (10pp).
+    * ``direction_breakdown`` — ``{over, under, exact}`` histogram so
+      the UI can render "we over-predicted 6 / under-predicted 2".
+    * ``per_pair`` — raw (predicted, actual, variance, is_outlier)
+      tuples for scatter plots.
+    * ``simulation_count`` — total pairs in the input (incl. ones
+      with no predicted value).
+    * ``with_predictions`` — how many pairs had a non-null predicted
+      value (the numerator of MAE / MAPE / RMSE).
+    """
+
+    mae: float = 0.0
+    mape: float = 0.0
+    rmse: float = 0.0
+    mae_count: int = 0
+    mape_count: int = 0
+    outlier_count: int = 0
+    direction_breakdown: dict[str, int] = {
+        "over": 0,
+        "under": 0,
+        "exact": 0,
+    }
+    per_pair: list[dict] = []
+    simulation_count: int = 0
+    with_predictions: int = 0
+
+
 class SimulationResultOut(BaseModel):
     id: int
     project_id: int

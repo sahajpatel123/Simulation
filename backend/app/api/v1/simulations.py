@@ -13,6 +13,7 @@ from app.core.rate_limiter import rate_limit
 from app.core.tier_enforcement import enforce_simulation_limit
 from app.models.assumption import Assumption
 from app.models.environment import Environment
+from app.models.outcome import Outcome
 from app.models.project import Project
 from app.models.simulation import Simulation
 from app.models.user import User
@@ -21,6 +22,7 @@ from app.schemas.cluster_opportunity import ClusterOpportunityMatrixOut
 from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
 from app.schemas.simulation import (
     FindingsAggregateOut,
+    OutcomesDigestOut,
     SimulationBatchStatusOut,
     SimulationCreate,
     SimulationOut,
@@ -64,6 +66,10 @@ from app.simulation.findings_aggregate import (
     normalise_architect_filter,
     normalise_severity,
     normalise_top_n,
+)
+from app.simulation.outcomes_digest import (
+    aggregate_outcomes,
+    normalise_outlier_threshold,
 )
 from app.simulation.what_if import build_what_if_scenario
 from app.tasks.simulation_tasks import run_full_simulation
@@ -594,6 +600,109 @@ def aggregate_simulation_findings(
         architect=arch_filter,
     )
     return FindingsAggregateOut(**aggregate)
+
+
+@router.get(
+    "/aggregate/outcomes",
+    response_model=OutcomesDigestOut,
+    summary="Aggregate predicted-vs-actual outcomes across N simulations",
+    # DB read of N outcome rows — same cap as the findings aggregate.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def aggregate_simulation_outcomes(
+    ids: list[str] | None = Query(
+        default=None,
+        description=(
+            "One or more simulation ids. Same parser as "
+            "``/simulations/batch`` — repeat the param or pass "
+            "comma-separated values. Capped at 100 ids."
+        ),
+    ),
+    outlier_threshold: float | None = Query(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Absolute variance (predicted − actual) above which "
+            "a pair is counted as an outlier. Default 0.10 (10pp). "
+            "Clamped to [0.0, 1.0] so a UI typo can't widen the "
+            "outlier definition."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> OutcomesDigestOut:
+    """Cross-simulation calibration-at-scale rollup.
+
+    For each supplied simulation id, we find the latest Outcome
+    record the founder has submitted against it and treat that
+    row's ``predicted_conversion_rate`` and
+    ``actual_conversion_rate`` as one ``(predicted, actual)``
+    pair. The aggregate reports MAE / MAPE / RMSE plus a
+    direction breakdown (over / under / exact) so the dashboard
+    can render "across my 12 sims, we over-predicted conversion
+    6×, under-predicted 2×".
+
+    Pairs with a missing predicted *or* actual value are still
+    counted in ``simulation_count`` (so the UI can show "X of Y
+    actionable") but excluded from MAE / MAPE / RMSE.
+    """
+    try:
+        canonical_ids = parse_id_list(ids)
+        threshold = normalise_outlier_threshold(outlier_threshold)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    if not canonical_ids:
+        return OutcomesDigestOut()
+
+    # Scope the Outcome rows to the current user via Simulation →
+    # Project ownership. Pull every outcome for the requested sims
+    # (newest-first) and dedupe to the latest per sim in Python —
+    # the row count is bounded by MAX_BATCH_SIZE * small constant.
+    rows = (
+        db.query(
+            Outcome.simulation_id,
+            Outcome.predicted_conversion_rate,
+            Outcome.actual_conversion_rate,
+            Outcome.created_at,
+        )
+        .join(Simulation, Outcome.simulation_id == Simulation.id)
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(
+            Outcome.simulation_id.in_(canonical_ids),
+            Project.user_id == current_user.id,
+        )
+        .order_by(Outcome.created_at.desc())
+        .all()
+    )
+
+    # Build (predicted, actual) pairs in the user's requested order;
+    # only the first (newest) outcome per sim id is kept.
+    pairs: list[tuple[float | None, float | None]] = []
+    seen_sim_ids: set[int] = set()
+    for sid in canonical_ids:
+        if sid in seen_sim_ids:
+            continue
+        match = next((r for r in rows if r.simulation_id == sid), None)
+        if match is None:
+            # No outcome row for this sim — count it as a missing
+            # pair so the UI can render "Y of Z have outcomes".
+            pairs.append((None, None))
+        else:
+            pairs.append(
+                (
+                    match.predicted_conversion_rate,
+                    match.actual_conversion_rate,
+                )
+            )
+        seen_sim_ids.add(sid)
+
+    return OutcomesDigestOut(
+        **aggregate_outcomes(pairs, outlier_threshold=threshold)
+    )
 
 
 @router.get(
