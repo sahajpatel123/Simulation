@@ -1526,3 +1526,48 @@ class TestShellSafety:
         for t in ("<", ">", ":", "\"", "/", "\\", "|", "?", "*"):
             out = _reports._safe_filename(t)
             assert out == "_", f"{t!r} -> {out!r}"
+
+    def test_valid_titles_mixing_alnum_space_dash_underscore(self) -> None:
+        """Pins that valid titles that mix alnum, space, dash,
+        and underscore all round-trip unchanged.
+
+        Test data:
+        - ``\"hello-world\"`` → ``\"hello-world\"``
+        - ``\"hello_world\"`` → ``\"hello_world\"``
+        - ``\"hello world\"`` → ``\"hello world\"``
+        - ``\"hello-world-test\"`` → ``\"hello-world-test\"``
+        - ``\"hello_world-test\"`` → ``\"hello_world-test\"``
+        - ``\"hello-world test\"`` → ``\"hello-world test\"``
+        - ``\"hello world test\"`` → ``\"hello world test\"``
+        - ``\"My Project v2\"`` → ``\"My Project v2\"``
+        - ``\"test_123\"`` → ``\"test_123\"``
+        - ``\"test-123\"`` → ``\"test-123\"``
+        - ``\"test 123\"`` → ``\"test 123\"``
+        - ``\"Test-123_abc\"`` → ``\"Test-123_abc\"``
+        - ``\"Test 123 abc\"`` → ``\"Test 123 abc\"``
+        - ``\"a-b_c-d e f\"`` → ``\"a-b_c-d e f\"``
+        - ``\"123-456-7890\"`` → ``\"123-456-7890\"``
+
+        Pin so a future \"simplification\" that stripped or
+        collapsed any of these chars would silently break the
+        round-trip for these common founder-title shapes."""
+        inputs = [
+            "hello-world",
+            "hello_world",
+            "hello world",
+            "hello-world-test",
+            "hello_world-test",
+            "hello-world test",
+            "hello world test",
+            "My Project v2",
+            "test_123",
+            "test-123",
+            "test 123",
+            "Test-123_abc",
+            "Test 123 abc",
+            "a-b_c-d e f",
+            "123-456-7890",
+        ]
+        for t in inputs:
+            out = _reports._safe_filename(t)
+            assert out == t, f"{t!r} -> {out!r}"
