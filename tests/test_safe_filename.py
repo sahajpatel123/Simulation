@@ -1300,3 +1300,23 @@ class TestShellSafety:
         for t in ("1" * 5, "1" * 20, "9" * 39, "1234567890", "abc123def456"):
             out = _reports._safe_filename(t)
             assert out == t, f"{t!r} -> {out!r}"
+
+    def test_unicode_line_separator_replaced(self) -> None:
+        """Pins that Unicode line separator (U+2028) and
+        paragraph separator (U+2029) — the Unicode line-break
+        chars — are replaced with ``_``.
+
+        These are NOT in Python's ``str.strip()`` whitespace set,
+        so they wouldn't be stripped. They are also not alnum,
+        not in the allowed specials, so they become ``_``.
+
+        - ``\"a\\u2028b\"`` → ``\"a_b\"``
+        - ``\"a\\u2029b\"`` → ``\"a_b\"``
+        - ``\"a\\u2028b\\u2029c\"`` → ``\"a_b_c\"``
+
+        Pin so a future \"simplification\" that introduced
+        unicode line-break handling doesn't silently allow
+        line-splitting in the output filename."""
+        assert _reports._safe_filename("a b") == "a_b"
+        assert _reports._safe_filename("a b") == "a_b"
+        assert _reports._safe_filename("a b c") == "a_b_c"
