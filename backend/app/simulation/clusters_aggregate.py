@@ -240,6 +240,25 @@ def aggregate_clusters(
         * ``simulation_count`` — how many simulations contributed.
         * ``clusters_seen`` — how many unique cluster_ids appeared
           in any breakdown.
+        * ``under_observed_count`` — number of clusters with
+          ``observation_count / simulation_count < 30%`` (the
+          portfolio's "data is too thin to trust" count).
+        * ``needs_attention_count`` — number of clusters where
+          ``under_observed`` is True OR ``stability`` is
+          ``HIGH_VARIANCE``. The dashboard's single summary tile.
+
+        Each row of ``by_cluster`` additionally carries:
+
+        * ``stability`` — bucketed coefficient of variation
+          (``std / mean``): ``LOW_VARIANCE`` (<0.15),
+          ``MODERATE_VARIANCE`` (<0.50), ``HIGH_VARIANCE``
+          (otherwise). Zero-mean clusters → ``HIGH_VARIANCE``.
+        * ``observation_ratio`` — fraction of sims that saw this
+          cluster (``observation_count / simulation_count``).
+        * ``under_observed`` — ``True`` when ``observation_ratio``
+          is below :data:`UNDER_OBSERVED_RATIO` (30%).
+        * ``needs_attention`` — combined flag: ``under_observed``
+          OR ``stability == HIGH_VARIANCE``.
     """
     name_lookup = _normalise_cluster_names(cluster_names)
     total = len(simulation_results)
@@ -250,6 +269,8 @@ def aggregate_clusters(
             "top_performers": [],
             "simulation_count": 0,
             "clusters_seen": 0,
+            "under_observed_count": 0,
+            "needs_attention_count": 0,
         }
 
     # Per-cluster accumulators.
@@ -274,9 +295,13 @@ def aggregate_clusters(
             "top_performers": [],
             "simulation_count": total,
             "clusters_seen": 0,
+            "under_observed_count": 0,
+            "needs_attention_count": 0,
         }
 
     rows: list[dict] = []
+    under_observed_count = 0
+    needs_attention_count = 0
     for cluster_id, values in per_cluster.items():
         count = len(values)
         total_conv = sum(values)
@@ -291,6 +316,17 @@ def aggregate_clusters(
             std_conv = (variance * count / (count - 1)) ** 0.5
         else:
             std_conv = 0.0
+        stability = _stability_label(std_conv, mean_conv)
+        observation_ratio = count / total
+        under_observed = observation_ratio < UNDER_OBSERVED_RATIO
+        needs_attention = (
+            under_observed
+            or stability == LABEL_HIGH_VARIANCE
+        )
+        if under_observed:
+            under_observed_count += 1
+        if needs_attention:
+            needs_attention_count += 1
         rows.append({
             "cluster_id": cluster_id,
             "cluster_name": name_lookup.get(cluster_id, cluster_id),
@@ -298,7 +334,11 @@ def aggregate_clusters(
             "min_conversion": round(min_conv, 6),
             "max_conversion": round(max_conv, 6),
             "std_conversion": round(std_conv, 6),
+            "stability": stability,
             "observation_count": count,
+            "observation_ratio": round(observation_ratio, 6),
+            "under_observed": under_observed,
+            "needs_attention": needs_attention,
             "total_conversion": round(total_conv, 6),
         })
 
@@ -334,6 +374,8 @@ def aggregate_clusters(
         "top_performers": top_performers,
         "simulation_count": total,
         "clusters_seen": len(per_cluster),
+        "under_observed_count": under_observed_count,
+        "needs_attention_count": needs_attention_count,
     }
 
 
@@ -342,6 +384,14 @@ __all__ = [
     "MAX_TOP_N",
     "MIN_CONVERSION",
     "MAX_CONVERSION",
+    "LOW_VARIANCE_MAX_CV",
+    "MODERATE_VARIANCE_MAX_CV",
+    "LABEL_HIGH_VARIANCE",
+    "LABEL_MODERATE_VARIANCE",
+    "LABEL_LOW_VARIANCE",
+    "VALID_STABILITY_LABELS",
+    "UNDER_OBSERVED_RATIO",
+    "DROPOFF_ZONE_MAX_MEAN",
     "normalise_top_n",
     "aggregate_clusters",
 ]

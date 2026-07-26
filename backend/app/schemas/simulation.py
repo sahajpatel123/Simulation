@@ -103,7 +103,11 @@ class ClustersAggregateOut(BaseModel):
 
     * ``by_cluster`` — per-cluster rollup sorted by
       ``mean_conversion ASC, observation_count DESC, cluster_id ASC``
-      so the worst-performing cluster surfaces first.
+      so the worst-performing cluster surfaces first. Each row
+      carries ``stability``, ``observation_ratio``,
+      ``under_observed``, and ``needs_attention`` flags so the
+      dashboard can filter "show me only the data-quality
+      warnings" without recomputing.
     * ``top_laggards`` — first ``top_n`` cluster ids by worst mean
       conversion (ASC).
     * ``top_performers`` — first ``top_n`` cluster ids by best mean
@@ -111,6 +115,12 @@ class ClustersAggregateOut(BaseModel):
     * ``simulation_count`` — total sims in the input.
     * ``clusters_seen`` — how many unique cluster ids appeared
       across the batch.
+    * ``under_observed_count`` — number of clusters with
+      ``observation_count / simulation_count`` below 30%.
+    * ``needs_attention_count`` — number of clusters where
+      ``under_observed`` is True or ``stability`` is
+      ``HIGH_VARIANCE``. The dashboard's single "X segments
+      need a closer look" tile.
     """
 
     by_cluster: list[dict] = []
@@ -118,6 +128,8 @@ class ClustersAggregateOut(BaseModel):
     top_performers: list[str] = []
     simulation_count: int = 0
     clusters_seen: int = 0
+    under_observed_count: int = 0
+    needs_attention_count: int = 0
 
 
 class OutcomesDigestOut(BaseModel):
