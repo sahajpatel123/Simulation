@@ -37,6 +37,7 @@ def test_public_allowlist_matches_callers() -> None:
         "LABEL_HIGH_VARIANCE",
         "LABEL_MODERATE_VARIANCE",
         "LABEL_LOW_VARIANCE",
+        "MAX_CRITICAL_CLUSTERS",
         "RECO_COLLECT_MORE_OUTCOMES",
         "RECO_INVESTIGATE_BIAS",
         "RECO_INVESTIGATE_OUTLIERS",
@@ -521,6 +522,8 @@ def test_architect_drill_down_out_default_shape() -> None:
     assert out.sim_count == 0
     assert out.recommendation == "Continue — architect is calibrated"
     assert out.peer_comparison == {}
+    assert out.critical_clusters == []
+    assert out.severity_timeline == []
 
 
 def test_architect_drill_down_out_round_trips_helper_payload() -> None:
@@ -542,6 +545,244 @@ def test_architect_drill_down_out_round_trips_helper_payload() -> None:
     assert out.architect_profile["architect_name"] == "PricingArchitect"
     assert out.aggregate["finding_count"] == 1
     assert out.calibration_variance == pytest.approx(0.05)
+
+
+# ---------------------------------------------------------------------------
+# critical_clusters
+# ---------------------------------------------------------------------------
+
+
+def test_drill_down_critical_clusters_empty_when_no_critical() -> None:
+    """No CRITICAL findings → empty list."""
+    from app.simulation.architect_drill_down import (
+        build_architect_drill_down,
+    )
+
+    out = build_architect_drill_down(
+        "PricingArchitect",
+        per_sim_findings=[
+            (101, [_finding("INFO"), _finding("WARNING")]),
+        ],
+    )
+    assert out["critical_clusters"] == []
+
+
+def test_drill_down_critical_clusters_only_target_architect() -> None:
+    """CRITICAL findings from other architects in the same sim
+    must NOT count."""
+    from app.simulation.architect_drill_down import (
+        build_architect_drill_down,
+    )
+
+    out = build_architect_drill_down(
+        "PricingArchitect",
+        per_sim_findings=[
+            (
+                101,
+                [
+                    {
+                        "architect_name": "PricingArchitect",
+                        "cluster_id": "metro_pro",
+                        "severity": "CRITICAL",
+                    },
+                    {
+                        "architect_name": "TrustArchitect",
+                        "cluster_id": "students",
+                        "severity": "CRITICAL",
+                    },
+                ],
+            ),
+        ],
+    )
+    # Only Pricing's CRITICAL counts.
+    assert len(out["critical_clusters"]) == 1
+    assert out["critical_clusters"][0]["cluster_id"] == "metro_pro"
+
+
+def test_drill_down_critical_clusters_aggregates_across_sims() -> None:
+    """Two CRITICALs from cluster 'metro_pro' across two sims
+    → critical_count=2."""
+    from app.simulation.architect_drill_down import (
+        build_architect_drill_down,
+    )
+
+    def crit(cluster_id: str, cluster_name: str = "Metro Pro") -> dict:
+        return {
+            "architect_name": "PricingArchitect",
+            "cluster_id": cluster_id,
+            "cluster_name": cluster_name,
+            "severity": "CRITICAL",
+        }
+
+    out = build_architect_drill_down(
+        "PricingArchitect",
+        per_sim_findings=[
+            (101, [crit("metro_pro"), crit("students")]),
+            (102, [crit("metro_pro")]),
+        ],
+    )
+    rows = {r["cluster_id"]: r for r in out["critical_clusters"]}
+    assert rows["metro_pro"]["critical_count"] == 2
+    assert rows["students"]["critical_count"] == 1
+
+
+def test_drill_down_critical_clusters_sorted_by_count_then_id() -> None:
+    """Tiebreaker: cluster_id ASC."""
+    from app.simulation.architect_drill_down import (
+        build_architect_drill_down,
+    )
+
+    def crit(cluster_id: str) -> dict:
+        return {
+            "architect_name": "PricingArchitect",
+            "cluster_id": cluster_id,
+            "severity": "CRITICAL",
+        }
+
+    out = build_architect_drill_down(
+        "PricingArchitect",
+        per_sim_findings=[
+            (101, [crit("zebra"), crit("alpha")]),
+        ],
+    )
+    # Both have count=1 → alpha first by tiebreaker.
+    ids = [r["cluster_id"] for r in out["critical_clusters"]]
+    assert ids == ["alpha", "zebra"]
+
+
+def test_drill_down_critical_clusters_capped_at_max() -> None:
+    """Cap keeps the dashboard tile readable."""
+    from app.simulation.architect_drill_down import (
+        MAX_CRITICAL_CLUSTERS,
+        build_architect_drill_down,
+    )
+
+    findings = [
+        {
+            "architect_name": "PricingArchitect",
+            "cluster_id": f"c{i}",
+            "severity": "CRITICAL",
+        }
+        for i in range(10)
+    ]
+    out = build_architect_drill_down(
+        "PricingArchitect",
+        per_sim_findings=[(101, findings)],
+    )
+    assert len(out["critical_clusters"]) == MAX_CRITICAL_CLUSTERS
+    assert MAX_CRITICAL_CLUSTERS == 5
+
+
+def test_drill_down_critical_clusters_skips_missing_cluster_id() -> None:
+    """A CRITICAL finding without a cluster_id must not crash
+    the aggregation — it's skipped."""
+    from app.simulation.architect_drill_down import (
+        build_architect_drill_down,
+    )
+
+    out = build_architect_drill_down(
+        "PricingArchitect",
+        per_sim_findings=[
+            (
+                101,
+                [
+                    {
+                        "architect_name": "PricingArchitect",
+                        # No cluster_id.
+                        "severity": "CRITICAL",
+                    },
+                    {
+                        "architect_name": "PricingArchitect",
+                        "cluster_id": "metro_pro",
+                        "severity": "CRITICAL",
+                    },
+                ],
+            ),
+        ],
+    )
+    assert len(out["critical_clusters"]) == 1
+    assert out["critical_clusters"][0]["cluster_id"] == "metro_pro"
+
+
+# ---------------------------------------------------------------------------
+# severity_timeline
+# ---------------------------------------------------------------------------
+
+
+def test_drill_down_severity_timeline_empty_for_no_sims() -> None:
+    from app.simulation.architect_drill_down import (
+        build_architect_drill_down,
+    )
+
+    out = build_architect_drill_down("PricingArchitect")
+    assert out["severity_timeline"] == []
+
+
+def test_drill_down_severity_timeline_carries_per_sim_counts() -> None:
+    from app.simulation.architect_drill_down import (
+        build_architect_drill_down,
+    )
+
+    out = build_architect_drill_down(
+        "PricingArchitect",
+        per_sim_findings=[
+            (101, [_finding("CRITICAL"), _finding("WARNING")]),
+            (102, [_finding("INFO")]),
+        ],
+    )
+    timeline = out["severity_timeline"]
+    assert len(timeline) == 2
+    # Sim 101: 1 critical, 1 warning, 0 info.
+    by_id = {r["sim_id"]: r for r in timeline}
+    assert by_id[101]["critical_count"] == 1
+    assert by_id[101]["warning_count"] == 1
+    assert by_id[101]["info_count"] == 0
+    assert by_id[101]["finding_count"] == 2
+
+
+def test_drill_down_severity_timeline_cumulative_totals() -> None:
+    """Cumulative totals grow monotonically across the timeline."""
+    from app.simulation.architect_drill_down import (
+        build_architect_drill_down,
+    )
+
+    out = build_architect_drill_down(
+        "PricingArchitect",
+        per_sim_findings=[
+            (101, [_finding("CRITICAL")]),
+            (102, [_finding("CRITICAL"), _finding("WARNING")]),
+            (103, []),
+        ],
+    )
+    timeline = out["severity_timeline"]
+    # Cumulative after sim 101: 1 CRITICAL.
+    assert timeline[0]["cumulative_critical"] == 1
+    assert timeline[0]["cumulative_total"] == 1
+    # Cumulative after sim 102: 2 CRITICAL, 1 WARNING.
+    assert timeline[1]["cumulative_critical"] == 2
+    assert timeline[1]["cumulative_warning"] == 1
+    assert timeline[1]["cumulative_total"] == 3
+    # Cumulative after sim 103 (no findings): unchanged.
+    assert timeline[2]["cumulative_critical"] == 2
+    assert timeline[2]["cumulative_total"] == 3
+
+
+def test_drill_down_severity_timeline_sorted_by_sim_id() -> None:
+    """Sorted by sim_id ASC; None sim_ids go last."""
+    from app.simulation.architect_drill_down import (
+        build_architect_drill_down,
+    )
+
+    out = build_architect_drill_down(
+        "PricingArchitect",
+        per_sim_findings=[
+            (203, [_finding("CRITICAL")]),
+            (101, [_finding("CRITICAL")]),
+            (None, [_finding("CRITICAL")]),
+        ],
+    )
+    sim_ids = [r["sim_id"] for r in out["severity_timeline"]]
+    assert sim_ids == [101, 203, None]
 
 
 # ---------------------------------------------------------------------------

@@ -83,6 +83,12 @@ RECO_RECALIBRATE_VARIANCE: str = (
 )
 RECO_TRUSTED: str = "Continue — architect is calibrated"
 
+# Cap on the critical_clusters list — keeps the dashboard tile
+# readable and prevents one noisy architect from spamming 20
+# cluster rows.
+MAX_CRITICAL_CLUSTERS: int = 5
+MIN_CRITICAL_COUNT: int = 1
+
 
 def _safe_float(raw: object) -> float | None:
     """Coerce to a finite float or return ``None``."""
@@ -198,6 +204,113 @@ def _build_peer_comparison(
     else:
         out["direction"] = PEER_BELOW
     return out
+
+
+def _build_critical_clusters(
+    architect_name: str,
+    per_sim_findings: list[
+        tuple[int | None, list[dict]]
+    ],
+) -> list[dict]:
+    """Top clusters by CRITICAL findings from this architect.
+
+    Filters every per-sim finding to (architect match +
+    CRITICAL severity + valid cluster_id), aggregates counts
+    per cluster, sorts by count DESC then cluster_id ASC,
+    caps at :data:`MAX_CRITICAL_CLUSTERS`. Returns an empty
+    list when the architect never flagged a CRITICAL finding.
+    """
+    counts: dict[str, dict] = {}
+    for _sim_id, findings in per_sim_findings:
+        for f in findings:
+            if not isinstance(f, dict):
+                continue
+            if (
+                str(f.get("architect_name", "")).lower()
+                != architect_name.lower()
+            ):
+                continue
+            if str(f.get("severity", "INFO")).upper() != "CRITICAL":
+                continue
+            cluster_id = str(f.get("cluster_id", "")).strip()
+            if not cluster_id:
+                continue
+            slot = counts.setdefault(
+                cluster_id,
+                {
+                    "cluster_id": cluster_id,
+                    "cluster_name": str(
+                        f.get("cluster_name", cluster_id)
+                    ),
+                    "critical_count": 0,
+                },
+            )
+            slot["critical_count"] += 1
+    rows = sorted(
+        counts.values(),
+        key=lambda r: (-r["critical_count"], r["cluster_id"]),
+    )
+    return rows[:MAX_CRITICAL_CLUSTERS]
+
+
+def _build_severity_timeline(
+    per_sim_findings: list[
+        tuple[int | None, list[dict]]
+    ],
+) -> list[dict]:
+    """Per-sim severity snapshot for the dashboard's timeline.
+
+    Each row carries ``sim_id``, ``critical_count``,
+    ``warning_count``, ``info_count``, ``finding_count``,
+    plus cumulative totals so the dashboard can render an
+    "area chart" without re-aggregating on the client.
+
+    Sorted by sim_id ASC; None sim_ids go last.
+    """
+    rows: list[dict] = []
+    cum_crit = 0
+    cum_warn = 0
+    cum_info = 0
+    cum_total = 0
+    for sim_id, findings in per_sim_findings:
+        crit = sum(
+            1 for f in findings
+            if isinstance(f, dict)
+            and str(f.get("severity", "INFO")).upper() == "CRITICAL"
+        )
+        warn = sum(
+            1 for f in findings
+            if isinstance(f, dict)
+            and str(f.get("severity", "INFO")).upper() == "WARNING"
+        )
+        info = sum(
+            1 for f in findings
+            if isinstance(f, dict)
+            and str(f.get("severity", "INFO")).upper() == "INFO"
+        )
+        total = crit + warn + info
+        cum_crit += crit
+        cum_warn += warn
+        cum_info += info
+        cum_total += total
+        rows.append({
+            "sim_id": sim_id,
+            "critical_count": crit,
+            "warning_count": warn,
+            "info_count": info,
+            "finding_count": total,
+            "cumulative_critical": cum_crit,
+            "cumulative_warning": cum_warn,
+            "cumulative_info": cum_info,
+            "cumulative_total": cum_total,
+        })
+    rows.sort(
+        key=lambda r: (
+            r["sim_id"] is None,
+            r["sim_id"] if r["sim_id"] is not None else 0,
+        )
+    )
+    return rows
 
 
 def build_architect_drill_down(
@@ -435,6 +548,12 @@ def build_architect_drill_down(
         "sim_count": sim_count,
         "recommendation": recommendation,
         "peer_comparison": peer_comparison,
+        "critical_clusters": _build_critical_clusters(
+            architect_name, per_sim_findings
+        ),
+        "severity_timeline": _build_severity_timeline(
+            per_sim_findings
+        ),
     }
 
 
@@ -461,6 +580,7 @@ __all__ = [
     "LABEL_HIGH_VARIANCE",
     "LABEL_MODERATE_VARIANCE",
     "LABEL_LOW_VARIANCE",
+    "MAX_CRITICAL_CLUSTERS",
     "RECO_COLLECT_MORE_OUTCOMES",
     "RECO_INVESTIGATE_BIAS",
     "RECO_INVESTIGATE_OUTLIERS",

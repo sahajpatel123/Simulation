@@ -443,6 +443,16 @@ class ArchitectDrillDownOut(BaseModel):
       under-observed / bias / variance / outlier priority.
     * ``peer_comparison`` — architect |calibration_variance|
       vs batch mean |calibration_variance|.
+    * ``critical_clusters`` — top
+      :data:`MAX_CRITICAL_CLUSTERS` cluster_ids by CRITICAL
+      finding count from this architect. Each row carries
+      ``cluster_id``, ``cluster_name``, ``critical_count``.
+      Empty when the architect never flagged CRITICAL.
+    * ``severity_timeline`` — per-sim severity snapshot list
+      sorted by sim_id ASC (None last). Each row carries
+      per-sim critical/warning/info/total counts + cumulative
+      totals so the dashboard can render an area chart
+      without re-aggregating.
     """
 
     architect_profile: dict = {}
@@ -457,6 +467,8 @@ class ArchitectDrillDownOut(BaseModel):
     sim_count: int = 0
     recommendation: str = "Continue — architect is calibrated"
     peer_comparison: dict = {}
+    critical_clusters: list[dict] = []
+    severity_timeline: list[dict] = []
 
 
 class SimulationResultOut(BaseModel):
