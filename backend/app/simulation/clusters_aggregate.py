@@ -37,6 +37,37 @@ MAX_TOP_N: int = 100
 MIN_CONVERSION: float = 0.0
 MAX_CONVERSION: float = 1.0
 
+# Stability label thresholds — derived from the coefficient of
+# variation (``std / mean``). A cluster with mean=0.20 and std=0.05
+# has CV=0.25 → MODERATE. A cluster with mean=0.05 and std=0.05
+# has CV=1.00 → HIGH_VARIANCE.
+LOW_VARIANCE_MAX_CV: float = 0.15       # CV < 0.15 → low variance
+MODERATE_VARIANCE_MAX_CV: float = 0.50  # 0.15 ≤ CV < 0.50 → moderate
+# anything ≥ 0.50 → HIGH_VARIANCE
+
+# Label allowlist — the route / schema echo this enum verbatim.
+LABEL_HIGH_VARIANCE: str = "HIGH_VARIANCE"
+LABEL_MODERATE_VARIANCE: str = "MODERATE_VARIANCE"
+LABEL_LOW_VARIANCE: str = "LOW_VARIANCE"
+VALID_STABILITY_LABELS: frozenset[str] = frozenset({
+    LABEL_HIGH_VARIANCE,
+    LABEL_MODERATE_VARIANCE,
+    LABEL_LOW_VARIANCE,
+})
+
+# Under-observed threshold — a cluster is "under-observed" when
+# its observation_count is below this fraction of the sim count.
+# 30 % means "the cluster was excluded or rare in > 70 % of sims
+# — the mean conversion is based on too few data points to trust".
+UNDER_OBSERVED_RATIO: float = 0.30
+
+# Below this absolute mean conversion (in fraction terms) the
+# cluster is flagged as a "dropoff zone" — the founder should
+# investigate why the segment is barely converting. Capped at 5pp
+# to match the conversion-rate scale (SaaS funnels rarely convert
+# >10 % so anything < 5pp is "underperforming" by definition).
+DROPOFF_ZONE_MAX_MEAN: float = 0.05
+
 
 def _safe_conversion(raw: object) -> float | None:
     """Coerce a conversion-rate value to a finite ``float`` in
@@ -66,6 +97,32 @@ def _safe_conversion(raw: object) -> float | None:
     if value < MIN_CONVERSION or value > MAX_CONVERSION:
         return None
     return value
+
+
+def _stability_label(
+    std_conversion: float, mean_conversion: float
+) -> str:
+    """Bucket the coefficient of variation into a stability label.
+
+    The coefficient of variation (``std / mean``) is the right
+    metric for stability because it normalises by the mean — a
+    std of 0.05 means very different things at mean=0.05 (huge)
+    vs mean=0.50 (tiny). Single-observation rows (mean-only) are
+    pinned to ``LOW_VARIANCE`` since there's no spread to
+    measure (std=0 with mean>0 → CV=0).
+    """
+    if mean_conversion <= 0.0:
+        # No meaningful mean (zero-conversion cluster) → can't
+        # compute CV. Treat as high-variance so the dashboard
+        # surfaces it for investigation rather than silently
+        # marking "low variance".
+        return LABEL_HIGH_VARIANCE
+    cv = std_conversion / mean_conversion
+    if cv < LOW_VARIANCE_MAX_CV:
+        return LABEL_LOW_VARIANCE
+    if cv < MODERATE_VARIANCE_MAX_CV:
+        return LABEL_MODERATE_VARIANCE
+    return LABEL_HIGH_VARIANCE
 
 
 def normalise_top_n(raw: int | None) -> int:
