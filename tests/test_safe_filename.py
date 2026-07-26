@@ -1337,3 +1337,20 @@ class TestShellSafety:
         assert _reports._safe_filename("a‍b") == "a_b"
         assert _reports._safe_filename("ab‍c") == "ab_c"
         assert _reports._safe_filename("a‍b‍c") == "a_b_c"
+
+    def test_ideographic_space_replaced(self) -> None:
+        """Pins that ideographic space (U+3000) is replaced
+        with ``_``. Unlike ASCII space, it's not in the
+        ``str.strip()`` whitespace set, so it doesn't strip.
+        It IS replaced with ``_`` because it's not alnum and
+        not in the allowed specials.
+
+        - ``\"hello\\u3000world\"`` → ``\"hello_world\"``
+        - ``\"a\\u3000b\\u3000c\"`` → ``\"a_b_c\"``
+
+        Pin so a future \"simplification\" that treated
+        ideographic space as ASCII space (or didn't replace it
+        at all) wouldn't silently allow full-width spaces in
+        the output filename."""
+        assert _reports._safe_filename("hello　world") == "hello_world"
+        assert _reports._safe_filename("a　b　c") == "a_b_c"
