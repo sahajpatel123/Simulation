@@ -33,6 +33,7 @@ from app.schemas.simulation import (
     ClusterTrendOut,
     ClustersAggregateOut,
     FindingsAggregateOut,
+    FindingsTrendOut,
     OutcomesDigestOut,
     PortfolioSummaryOut,
     PortfolioTrendOut,
@@ -82,6 +83,11 @@ from app.simulation.architect_leaderboard import (
 from app.simulation.architect_bias_trend import (
     build_architect_bias_trend,
     normalise_bin as normalise_bias_bin,
+)
+from app.simulation.findings_trend import (
+    build_findings_trend,
+    normalise_bin as normalise_findings_bin,
+    normalise_severity as normalise_findings_severity,
 )
 from app.simulation.conductor import _ARCHITECTS as _architect_registry
 from app.simulation.comparison import build_simulation_comparison
@@ -2180,6 +2186,108 @@ def get_architect_bias_trend(
         bin_size=effective_bin,
     )
     return ArchitectBiasTrendOut(**payload)
+
+
+@router.get(
+    "/findings-trend",
+    response_model=FindingsTrendOut,
+    summary=(
+        "Per-bin findings-severity counts (CRITICAL / "
+        "WARNING / INFO) so the dashboard can render "
+        "'CRITICAL peaked on day X' trend tiles"
+    ),
+    # DB read of N sim rows — same cap as the other trend
+    # endpoint.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_findings_trend(
+    since: str | None = Query(
+        default=None,
+        max_length=64,
+        description=(
+            "ISO 8601 timestamp (timezone-aware). Optional "
+            "lower bound on Simulation.created_at."
+        ),
+    ),
+    until: str | None = Query(
+        default=None,
+        max_length=64,
+        description=(
+            "ISO 8601 timestamp (timezone-aware). Optional "
+            "exclusive upper bound on Simulation.created_at."
+        ),
+    ),
+    bin: str | None = Query(
+        default=None,
+        max_length=8,
+        description=(
+            "Bin granularity. ``day`` (default) / ``week`` "
+            "/ ``month``. Anything else raises 400."
+        ),
+    ),
+    min_severity: str | None = Query(
+        default=None,
+        max_length=16,
+        description=(
+            "Filter findings to >= this severity. "
+            "``INFO`` (default) / ``WARNING`` / "
+            "``CRITICAL``."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FindingsTrendOut:
+    """Per-bin findings-severity counts over time.
+
+    Pulls the owned simulations for the current user
+    (filtered by ``since`` / ``until``), groups their
+    ``domain_findings`` by creation date in ``day`` /
+    ``week`` / ``month`` bins, and reports the count of
+    findings per severity per bin plus an overall
+    direction label (IMPROVING / DEGRADING / STABLE)
+    based on the CRITICAL-count delta between the first
+    and last bins.
+    """
+    try:
+        since_dt = parse_since(since)
+        until_dt = parse_since(until)
+        effective_bin = normalise_findings_bin(bin)
+        effective_severity = normalise_findings_severity(
+            min_severity
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    filters = [
+        Project.user_id == current_user.id,
+        Simulation.status == "COMPLETED",
+    ]
+    if since_dt is not None:
+        filters.append(Simulation.created_at >= since_dt)
+    if until_dt is not None:
+        filters.append(Simulation.created_at < until_dt)
+    rows = (
+        db.query(Simulation.created_at, Simulation.results_json)
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(*filters)
+        .all()
+    )
+
+    payload = build_findings_trend(
+        [
+            (
+                r.created_at,
+                (r.results_json or {}).get("domain_findings") or [],
+            )
+            for r in rows
+        ],
+        min_severity=effective_severity,
+        bin_size=effective_bin,
+    )
+    return FindingsTrendOut(**payload)
 
 
 @router.get(

@@ -679,6 +679,42 @@ class ArchitectBiasTrendOut(BaseModel):
     peak_bias_bin: dict | None = None
 
 
+class FindingsTrendOut(BaseModel):
+    """Response from ``GET /simulations/findings-trend``.
+
+    Per-bin findings-severity counts so the dashboard can
+    render "CRITICAL findings peaked at 12 on day X ·
+    trending DOWN −40 % week-over-week" alongside the bias
+    trend.
+
+    * ``bin_size`` / ``min_severity`` — echoed.
+    * ``bins`` — per-bin dict sorted chronologically. Each
+      row: ``bin``, ``bin_start`` (ISO 8601 UTC),
+      ``critical_count``, ``warning_count``, ``info_count``,
+      ``finding_count`` (total at-or-above min_severity),
+      ``sim_count``.
+    * ``overall_direction`` — IMPROVING (fewer CRITICALs over
+      time) / DEGRADING / STABLE / UNKNOWN bucketed from
+      first vs last bin's CRITICAL count.
+    * ``first_bin_critical`` /
+      ``last_bin_critical`` — for the dashboard's headline.
+    * ``mean_delta_critical`` — last − first, or None when
+      fewer than 2 bins have data.
+    * ``peak_critical_bin`` — the bin with the highest
+      CRITICAL count (tiebreaker: latest bin_start). None
+      when no CRITICAL findings have been recorded.
+    """
+
+    bin_size: str = "day"
+    min_severity: str = "INFO"
+    bins: list[dict] = []
+    overall_direction: str = "UNKNOWN"
+    first_bin_critical: int = 0
+    last_bin_critical: int = 0
+    mean_delta_critical: int | None = None
+    peak_critical_bin: dict | None = None
+
+
 class SimulationResultOut(BaseModel):
     id: int
     project_id: int
