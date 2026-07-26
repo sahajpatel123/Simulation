@@ -1354,3 +1354,20 @@ class TestShellSafety:
         the output filename."""
         assert _reports._safe_filename("hello　world") == "hello_world"
         assert _reports._safe_filename("a　b　c") == "a_b_c"
+
+    def test_rtl_ltr_marks_replaced(self) -> None:
+        """Pins that RTL mark (U+200F) and LTR mark (U+200E)
+        are replaced with ``_``. These are invisible
+        formatting chars that can be used in
+        filename-spoofing attacks.
+
+        - ``\"a\\u200eb\"`` → ``\"a_b\"``
+        - ``\"a\\u200fb\"`` → ``\"a_b\"``
+        - ``\"a\\u200eb\\u200fc\"`` → ``\"a_b_c\"``
+
+        Pin so a future \"simplification\" that ignored
+        RTL/LTR marks doesn't silently allow these
+        direction-overriding chars in the output filename."""
+        assert _reports._safe_filename("a‎b") == "a_b"
+        assert _reports._safe_filename("a‏b") == "a_b"
+        assert _reports._safe_filename("a‎b‏c") == "a_b_c"
