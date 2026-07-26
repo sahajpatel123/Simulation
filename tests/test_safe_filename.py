@@ -1258,3 +1258,26 @@ class TestShellSafety:
             t = "_" * n
             out = _reports._safe_filename(t)
             assert out == t, f"len {n} → {out!r} (expected {t!r})"
+
+    def test_no_crlf_in_output(self) -> None:
+        """Pins that the output never contains a CR (``\\r``) or
+        LF (``\\n``) byte. These would split the
+        ``Content-Disposition`` header on the wire and enable
+        header-smuggling attacks.
+
+        - ``\"a\\nb\"`` → ``\"a_b\"``
+        - ``\"a\\r\\nb\"`` → ``\"a_b\"``
+        - ``\"a\\rb\"`` → ``\"a_b\"``
+        - ``\"a\\r\\nb\\rc\"`` → ``\"a_b_c\"``
+
+        Pin so a future \"simplification\" that stopped
+        replacing control chars would silently allow CR/LF
+        splitting into the file header."""
+        for t in ("a\nb", "a\r\nb", "a\rb", "a\r\nb\rc"):
+            out = _reports._safe_filename(t)
+            assert "\r" not in out, (
+                f"CR in output for {t!r}: {out!r}"
+            )
+            assert "\n" not in out, (
+                f"LF in output for {t!r}: {out!r}"
+            )
