@@ -1320,3 +1320,20 @@ class TestShellSafety:
         assert _reports._safe_filename("a b") == "a_b"
         assert _reports._safe_filename("a b") == "a_b"
         assert _reports._safe_filename("a b c") == "a_b_c"
+
+    def test_zero_width_joiner_replaced(self) -> None:
+        """Pins that zero-width joiner (U+200D) is replaced
+        with ``_``. Zero-width chars are sometimes used in
+        filename-spoofing attacks because they render invisibly
+        in file managers.
+
+        - ``\"a\\u200db\"`` → ``\"a_b\"``
+        - ``\"ab\\u200dc\"`` → ``\"ab_c\"``
+        - ``\"a\\u200db\\u200dc\"`` → ``\"a_b_c\"``
+
+        Pin so a future \"simplification\" that ignored
+        zero-width chars doesn't silently allow invisible
+        chars in the output filename."""
+        assert _reports._safe_filename("a‍b") == "a_b"
+        assert _reports._safe_filename("ab‍c") == "ab_c"
+        assert _reports._safe_filename("a‍b‍c") == "a_b_c"
