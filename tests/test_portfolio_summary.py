@@ -28,6 +28,12 @@ def test_public_allowlist_matches_callers() -> None:
         "LABEL_CRITICAL",
         "LABEL_INSUFFICIENT_DATA",
         "VALID_HEALTH_LABELS",
+        "NEXT_ACTION_CRITICAL",
+        "NEXT_ACTION_NEEDS_ATTENTION",
+        "NEXT_ACTION_HEALTHY",
+        "NEXT_ACTION_INSUFFICIENT_DATA",
+        "VALID_NEXT_ACTIONS",
+        "MAX_RECOMMENDATIONS",
         "build_portfolio_summary",
     }
 
@@ -45,6 +51,19 @@ def test_health_label_allowlist_pinned() -> None:
     }
 
 
+def test_next_action_allowlist_pinned() -> None:
+    """Lock the CTA strings so a rewrite surfaces as a test
+    failure rather than a silent dashboard mismatch."""
+    from app.simulation.portfolio_summary import VALID_NEXT_ACTIONS
+
+    assert set(VALID_NEXT_ACTIONS) == {
+        "Review correlated bias and recalibrate top architects",
+        "Investigate flagged architects and collect more outcomes",
+        "Continue current calibration — no action needed",
+        "Record more outcomes to unlock calibration analysis",
+    }
+
+
 # ---------------------------------------------------------------------------
 # build_portfolio_summary — empty input
 # ---------------------------------------------------------------------------
@@ -58,6 +77,10 @@ def test_summary_with_no_sims_returns_zero_defaults() -> None:
     assert out["correlated_bias_count"] == 0
     assert out["data_quality_score"] == 0.0
     assert out["overall_health"] == "INSUFFICIENT_DATA"
+    assert out["key_recommendations"] == []
+    assert out["next_action"] == (
+        "Record more outcomes to unlock calibration analysis"
+    )
 
 
 def test_summary_handles_missing_sub_payloads() -> None:
@@ -477,6 +500,302 @@ def test_summary_overall_health_healthy_for_clean_signals() -> None:
 
 
 # ---------------------------------------------------------------------------
+# next_action
+# ---------------------------------------------------------------------------
+
+
+def test_summary_next_action_for_critical() -> None:
+    from app.simulation.portfolio_summary import (
+        NEXT_ACTION_CRITICAL,
+        build_portfolio_summary,
+    )
+
+    out = build_portfolio_summary(
+        simulation_count=5,
+        findings_payload={
+            "top_architects": ["pricing", "trust"],
+            "simulations_with_findings": 5,
+        },
+        outcomes_payload={"confidence_label": "POORLY_CALIBRATED"},
+        clusters_payload={"needs_attention_count": 0},
+        architect_accuracy_payload={
+            "most_biased_architects": ["pricing", "trust"],
+            "outcome_attached_sim_count": 5,
+        },
+    )
+    assert out["overall_health"] == "CRITICAL"
+    assert out["next_action"] == NEXT_ACTION_CRITICAL
+
+
+def test_summary_next_action_for_needs_attention() -> None:
+    from app.simulation.portfolio_summary import (
+        NEXT_ACTION_NEEDS_ATTENTION,
+        build_portfolio_summary,
+    )
+
+    out = build_portfolio_summary(
+        simulation_count=5,
+        outcomes_payload={"confidence_label": "NEEDS_ATTENTION"},
+        architect_accuracy_payload={"outcome_attached_sim_count": 5},
+    )
+    assert out["overall_health"] == "NEEDS_ATTENTION"
+    assert out["next_action"] == NEXT_ACTION_NEEDS_ATTENTION
+
+
+def test_summary_next_action_for_healthy() -> None:
+    from app.simulation.portfolio_summary import (
+        NEXT_ACTION_HEALTHY,
+        build_portfolio_summary,
+    )
+
+    out = build_portfolio_summary(
+        simulation_count=5,
+        outcomes_payload={"confidence_label": "WELL_CALIBRATED"},
+        clusters_payload={"needs_attention_count": 0},
+        architect_accuracy_payload={
+            "most_biased_architects": [],
+            "outcome_attached_sim_count": 5,
+        },
+    )
+    assert out["overall_health"] == "HEALTHY"
+    assert out["next_action"] == NEXT_ACTION_HEALTHY
+
+
+def test_summary_next_action_for_insufficient_data() -> None:
+    from app.simulation.portfolio_summary import (
+        NEXT_ACTION_INSUFFICIENT_DATA,
+        build_portfolio_summary,
+    )
+
+    out = build_portfolio_summary(simulation_count=0)
+    assert out["overall_health"] == "INSUFFICIENT_DATA"
+    assert out["next_action"] == NEXT_ACTION_INSUFFICIENT_DATA
+
+
+def test_summary_next_action_falls_back_for_unknown_health() -> None:
+    """Defensive — unknown health strings fall back to the
+    INSUFFICIENT_DATA CTA so the dashboard never shows blank
+    text."""
+    from app.simulation.portfolio_summary import (
+        NEXT_ACTION_INSUFFICIENT_DATA,
+        build_portfolio_summary,
+    )
+
+    # Force an unknown health by monkey-patching the helper.
+    from app.simulation import portfolio_summary as mod
+
+    original = mod._overall_health
+    mod._overall_health = lambda **_: "SOMETHING_NEW"  # type: ignore[assignment]
+    try:
+        out = build_portfolio_summary(simulation_count=3)
+        assert out["overall_health"] == "SOMETHING_NEW"
+        assert out["next_action"] == NEXT_ACTION_INSUFFICIENT_DATA
+    finally:
+        mod._overall_health = original  # type: ignore[assignment]
+
+
+# ---------------------------------------------------------------------------
+# key_recommendations
+# ---------------------------------------------------------------------------
+
+
+def test_summary_recommendations_empty_when_clean() -> None:
+    """A HEALTHY batch with no signal-bearing aggregates produces
+    an empty recommendations list — the dashboard shouldn't
+    manufacture busy-work."""
+    from app.simulation.portfolio_summary import build_portfolio_summary
+
+    out = build_portfolio_summary(
+        simulation_count=5,
+        findings_payload={
+            "top_architects": [],
+            "shared_domain_count": 0,
+            "simulations_with_findings": 5,
+        },
+        outcomes_payload={
+            "confidence_label": "WELL_CALIBRATED",
+            "outlier_count": 0,
+        },
+        clusters_payload={
+            "needs_attention_count": 0,
+            "under_observed_count": 0,
+        },
+        architect_accuracy_payload={
+            "tighten_count": 0,
+            "loosen_count": 0,
+            "most_biased_architects": [],
+            "outcome_attached_sim_count": 5,
+        },
+    )
+    assert out["key_recommendations"] == []
+
+
+def test_summary_recommendations_include_tighten_and_loosen() -> None:
+    from app.simulation.portfolio_summary import build_portfolio_summary
+
+    out = build_portfolio_summary(
+        simulation_count=5,
+        findings_payload={
+            "top_architects": [],
+            "shared_domain_count": 0,
+            "simulations_with_findings": 5,
+        },
+        outcomes_payload={
+            "confidence_label": "WELL_CALIBRATED",
+            "outlier_count": 0,
+        },
+        clusters_payload={
+            "needs_attention_count": 0,
+            "under_observed_count": 0,
+        },
+        architect_accuracy_payload={
+            "tighten_count": 2,
+            "loosen_count": 1,
+            "most_biased_architects": [],
+            "outcome_attached_sim_count": 5,
+        },
+    )
+    recs = out["key_recommendations"]
+    assert any("Tighten" in r and "2" in r for r in recs)
+    assert any("Loosen" in r and "1" in r for r in recs)
+
+
+def test_summary_recommendations_include_correlated_bias() -> None:
+    from app.simulation.portfolio_summary import build_portfolio_summary
+
+    out = build_portfolio_summary(
+        simulation_count=5,
+        findings_payload={
+            "top_architects": ["pricing"],
+            "simulations_with_findings": 5,
+        },
+        outcomes_payload={"confidence_label": "NEEDS_ATTENTION"},
+        clusters_payload={"needs_attention_count": 0},
+        architect_accuracy_payload={
+            "tighten_count": 1,
+            "loosen_count": 0,
+            "most_biased_architects": ["pricing"],
+            "outcome_attached_sim_count": 5,
+        },
+    )
+    recs = out["key_recommendations"]
+    assert any(
+        "flagged CRITICAL" in r and "confirmed biased" in r
+        for r in recs
+    )
+
+
+def test_summary_recommendations_include_data_quality_when_low() -> None:
+    """The data-quality nudge only fires when coverage is below
+    50% — keeps the recommendations list from always ending
+    with a 'collect more outcomes' nag."""
+    from app.simulation.portfolio_summary import build_portfolio_summary
+
+    # data_quality_score = 2 / 10 = 0.2 (low).
+    out = build_portfolio_summary(
+        simulation_count=10,
+        findings_payload={"simulations_with_findings": 2},
+        outcomes_payload={"confidence_label": "WELL_CALIBRATED"},
+        architect_accuracy_payload={
+            "outcome_attached_sim_count": 2,
+            "most_biased_architects": [],
+        },
+    )
+    assert any("Data quality" in r for r in out["key_recommendations"])
+
+
+def test_summary_recommendations_omit_data_quality_when_healthy() -> None:
+    """Coverage ≥ 50 % → no data-quality nag."""
+    from app.simulation.portfolio_summary import build_portfolio_summary
+
+    # data_quality_score = 8 / 10 = 0.8 (healthy).
+    out = build_portfolio_summary(
+        simulation_count=10,
+        findings_payload={"simulations_with_findings": 8},
+        outcomes_payload={"confidence_label": "WELL_CALIBRATED"},
+        architect_accuracy_payload={
+            "outcome_attached_sim_count": 8,
+            "most_biased_architects": [],
+        },
+    )
+    assert not any(
+        "Data quality" in r for r in out["key_recommendations"]
+    )
+
+
+def test_summary_recommendations_capped_at_eight() -> None:
+    """The cap keeps the dashboard tile readable."""
+    from app.simulation.portfolio_summary import (
+        MAX_RECOMMENDATIONS,
+        build_portfolio_summary,
+    )
+
+    # Trigger every available recommendation source.
+    out = build_portfolio_summary(
+        simulation_count=10,
+        findings_payload={
+            "top_architects": ["pricing"],
+            "shared_domain_count": 1,
+            "simulations_with_findings": 10,
+        },
+        outcomes_payload={
+            "confidence_label": "POORLY_CALIBRATED",
+            "outlier_count": 5,
+        },
+        clusters_payload={
+            "needs_attention_count": 3,
+            "under_observed_count": 2,
+        },
+        architect_accuracy_payload={
+            "tighten_count": 2,
+            "loosen_count": 1,
+            "most_biased_architects": ["pricing"],
+            "outcome_attached_sim_count": 2,  # → data quality 20%
+        },
+    )
+    assert len(out["key_recommendations"]) <= MAX_RECOMMENDATIONS
+
+
+def test_summary_recommendations_ordered_by_priority() -> None:
+    """Tighten/Loosen appear before the lower-priority
+    cluster/data-quality hints so the most actionable advice
+    surfaces first."""
+    from app.simulation.portfolio_summary import build_portfolio_summary
+
+    out = build_portfolio_summary(
+        simulation_count=5,
+        findings_payload={
+            "top_architects": [],
+            "simulations_with_findings": 5,
+        },
+        outcomes_payload={
+            "confidence_label": "WELL_CALIBRATED",
+            "outlier_count": 0,
+        },
+        clusters_payload={
+            "needs_attention_count": 2,
+            "under_observed_count": 1,
+        },
+        architect_accuracy_payload={
+            "tighten_count": 1,
+            "loosen_count": 0,
+            "most_biased_architects": [],
+            "outcome_attached_sim_count": 5,
+        },
+    )
+    recs = out["key_recommendations"]
+    # Tighten / Loosen / shared-domain entries come before the
+    # cluster needs-attention hint.
+    tighten_idx = next(
+        i for i, r in enumerate(recs) if "Tighten" in r
+    )
+    cluster_idx = next(
+        i for i, r in enumerate(recs) if "cluster" in r.lower()
+    )
+    assert tighten_idx < cluster_idx
+
+
+# ---------------------------------------------------------------------------
 # Schema
 # ---------------------------------------------------------------------------
 
@@ -493,6 +812,10 @@ def test_portfolio_summary_out_default_shape() -> None:
     assert out.correlated_bias_count == 0
     assert out.data_quality_score == 0.0
     assert out.overall_health == "INSUFFICIENT_DATA"
+    assert out.key_recommendations == []
+    assert out.next_action == (
+        "Record more outcomes to unlock calibration analysis"
+    )
 
 
 def test_portfolio_summary_out_round_trips_build_payload() -> None:

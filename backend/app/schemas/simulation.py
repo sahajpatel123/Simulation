@@ -280,6 +280,14 @@ class PortfolioSummaryOut(BaseModel):
       coverage.
     * ``overall_health`` — one of ``HEALTHY`` /
       ``NEEDS_ATTENTION`` / ``CRITICAL`` / ``INSUFFICIENT_DATA``.
+    * ``key_recommendations`` — list of one-line actionable hints
+      distilled from each sub-aggregate (e.g. "Tighten
+      calibration for 2 over-predicting architect(s)"). Capped
+      so the dashboard tile stays readable; ordered by priority.
+    * ``next_action`` — single primary CTA string derived from
+      ``overall_health`` (e.g. "Review correlated bias and
+      recalibrate top architects" when CRITICAL). The
+      dashboard's headline button text.
     """
 
     simulation_count: int = 0
@@ -290,6 +298,10 @@ class PortfolioSummaryOut(BaseModel):
     correlated_bias_count: int = 0
     data_quality_score: float = 0.0
     overall_health: str = "INSUFFICIENT_DATA"
+    key_recommendations: list[str] = []
+    next_action: str = (
+        "Record more outcomes to unlock calibration analysis"
+    )
 
 
 class SimulationResultOut(BaseModel):

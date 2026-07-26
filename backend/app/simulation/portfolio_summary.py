@@ -63,6 +63,32 @@ TOP_N_CORRELATION: int = 5
 #                        clusters.
 #   CRITICAL           — POORLY_CALIBRATED AND ≥ 2 correlated bias.
 
+# CTA strings for ``next_action`` — one per health bucket. The
+# route / schema echo these verbatim so the dashboard can map a
+# label to its primary call-to-action button.
+NEXT_ACTION_CRITICAL: str = (
+    "Review correlated bias and recalibrate top architects"
+)
+NEXT_ACTION_NEEDS_ATTENTION: str = (
+    "Investigate flagged architects and collect more outcomes"
+)
+NEXT_ACTION_HEALTHY: str = (
+    "Continue current calibration — no action needed"
+)
+NEXT_ACTION_INSUFFICIENT_DATA: str = (
+    "Record more outcomes to unlock calibration analysis"
+)
+VALID_NEXT_ACTIONS: frozenset[str] = frozenset({
+    NEXT_ACTION_CRITICAL,
+    NEXT_ACTION_NEEDS_ATTENTION,
+    NEXT_ACTION_HEALTHY,
+    NEXT_ACTION_INSUFFICIENT_DATA,
+})
+
+# Cap on the recommendations list — keeps the dashboard tile
+# readable and prevents one bad aggregate from spamming 30 lines.
+MAX_RECOMMENDATIONS: int = 8
+
 
 def _set_intersection_size(a: list[str], b: list[str]) -> int:
     """Return the size of the case-insensitive intersection of two
@@ -98,6 +124,111 @@ def _confidence_label(payload: dict) -> str:
     if isinstance(raw, str) and raw:
         return raw
     return LABEL_INSUFFICIENT_DATA
+
+
+def _next_action(overall_health: str) -> str:
+    """Map ``overall_health`` to a single primary call-to-action.
+
+    The string is what the dashboard renders as its primary
+    button / banner headline. Stable so the dashboard can
+    hard-code the four CTAs.
+    """
+    if overall_health == LABEL_CRITICAL:
+        return NEXT_ACTION_CRITICAL
+    if overall_health == LABEL_NEEDS_ATTENTION:
+        return NEXT_ACTION_NEEDS_ATTENTION
+    if overall_health == LABEL_HEALTHY:
+        return NEXT_ACTION_HEALTHY
+    return NEXT_ACTION_INSUFFICIENT_DATA
+
+
+def _build_recommendations(
+    *,
+    findings: dict,
+    outcomes: dict,
+    clusters: dict,
+    architect_accuracy: dict,
+    correlated_bias_count: int,
+    data_quality_score: float,
+    simulation_count: int,
+) -> list[str]:
+    """Distil each sub-aggregate into one-line actionable hints.
+
+    Capped at :data:`MAX_RECOMMENDATIONS` so the dashboard tile
+    stays readable; ordered by priority (critical / bias /
+    coverage first, then the smaller signals).
+    """
+    recs: list[str] = []
+
+    # Architect-accuracy CTAs are the most actionable — flag them
+    # first so the dashboard surfaces a real "fix this" button.
+    tighten = architect_accuracy.get("tighten_count") or 0
+    if tighten > 0:
+        recs.append(
+            f"Tighten calibration for {tighten} over-predicting architect(s)"
+        )
+    loosen = architect_accuracy.get("loosen_count") or 0
+    if loosen > 0:
+        recs.append(
+            f"Loosen calibration for {loosen} under-predicting architect(s)"
+        )
+
+    # Correlated-bias cross-aggregate signal — the strongest "the
+    # CRITICAL flag is real" evidence we have.
+    if correlated_bias_count >= 1:
+        recs.append(
+            f"{correlated_bias_count} architect(s) flagged CRITICAL "
+            f"and confirmed biased — prioritise their calibration"
+        )
+
+    # Findings — the top failure domain, when it's systemic.
+    shared = findings.get("shared_domain_count") or 0
+    if shared > 0:
+        recs.append(
+            f"{shared} architect name(s) appear as the top failure "
+            f"domain in ≥half of sims"
+        )
+
+    # Outcomes — confidence + outliers.
+    confidence = outcomes.get("confidence_label")
+    if confidence == "POORLY_CALIBRATED":
+        recs.append(
+            "Calibration confidence is POORLY_CALIBRATED — recalibrate "
+            "the model"
+        )
+    elif confidence == "NEEDS_ATTENTION":
+        recs.append(
+            "Calibration confidence is NEEDS_ATTENTION — review "
+            "predicted vs actual"
+        )
+    outlier_count = outcomes.get("outlier_count") or 0
+    if outlier_count > 0:
+        recs.append(
+            f"{outlier_count} simulation(s) exceed the outlier "
+            f"variance threshold"
+        )
+
+    # Clusters — coverage + attention.
+    needs_attention = clusters.get("needs_attention_count") or 0
+    if needs_attention > 0:
+        recs.append(
+            f"{needs_attention} cluster segment(s) need closer look"
+        )
+    under_observed = clusters.get("under_observed_count") or 0
+    if under_observed > 0:
+        recs.append(
+            f"{under_observed} cluster(s) are under-observed — collect "
+            f"more sims covering them"
+        )
+
+    # Data-quality nudge — only when the score is meaningfully low.
+    if simulation_count > 0 and data_quality_score < 0.5:
+        recs.append(
+            f"Data quality is {int(round(data_quality_score * 100))}%"
+            f" — record more outcomes to improve calibration confidence"
+        )
+
+    return recs[:MAX_RECOMMENDATIONS]
 
 
 def _overall_health(
@@ -297,6 +428,17 @@ def build_portfolio_summary(
         simulation_count=simulation_count,
     )
 
+    key_recommendations = _build_recommendations(
+        findings=findings_summary,
+        outcomes=outcomes_summary,
+        clusters=clusters_summary,
+        architect_accuracy=architect_accuracy_summary,
+        correlated_bias_count=correlated_bias_count,
+        data_quality_score=data_quality_score,
+        simulation_count=simulation_count,
+    )
+    next_action = _next_action(overall_health)
+
     return {
         "simulation_count": simulation_count,
         "findings_summary": findings_summary,
@@ -306,6 +448,8 @@ def build_portfolio_summary(
         "correlated_bias_count": correlated_bias_count,
         "data_quality_score": round(data_quality_score, 6),
         "overall_health": overall_health,
+        "key_recommendations": key_recommendations,
+        "next_action": next_action,
     }
 
 
@@ -315,5 +459,11 @@ __all__ = [
     "LABEL_CRITICAL",
     "LABEL_INSUFFICIENT_DATA",
     "VALID_HEALTH_LABELS",
+    "NEXT_ACTION_CRITICAL",
+    "NEXT_ACTION_NEEDS_ATTENTION",
+    "NEXT_ACTION_HEALTHY",
+    "NEXT_ACTION_INSUFFICIENT_DATA",
+    "VALID_NEXT_ACTIONS",
+    "MAX_RECOMMENDATIONS",
     "build_portfolio_summary",
 ]
