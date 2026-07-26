@@ -1617,3 +1617,27 @@ class TestShellSafety:
         assert _reports._safe_filename("a  ") == "a"
         assert _reports._safe_filename("  a  ") == "a"
         assert _reports._safe_filename("!@#  ") == "___"
+
+    def test_long_mixed_alnum_and_disallowed(self) -> None:
+        """Pins that long mixed sequences of alnum + disallowed
+        chars are correctly replaced and sliced to 40.
+
+        - ``\"aaa...!\"`` (30 a + 10 !) → ``\"aaa...___\"``
+          (30 a + 10 _)
+        - ``\"aaa...!\"`` (25 a + 25 !) → ``\"aaa...___\"``
+          (25 a + 15 _, truncated to 40)
+        - ``\"!!!...\"`` (50 !) → ``\"___...\"`` (40 _)
+        - ``\"aaa...\"`` (60 a) → ``\"aaa...\"`` (40 a)
+
+        Pin so a future \"simplification\" that changed
+        the order of replace and slice (e.g. slice first, then
+        replace) would silently change the output for these
+        inputs."""
+        assert _reports._safe_filename("a" * 30 + "!" * 10) == (
+            "a" * 30 + "_" * 10
+        )
+        assert _reports._safe_filename("a" * 25 + "!" * 25) == (
+            "a" * 25 + "_" * 15
+        )
+        assert _reports._safe_filename("!" * 50) == "_" * 40
+        assert _reports._safe_filename("a" * 60) == "a" * 40
