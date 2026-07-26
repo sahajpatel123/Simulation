@@ -574,6 +574,14 @@ class ClusterTrendOut(BaseModel):
       dashboard's headline ("X% → Y%").
     * ``mean_delta`` — last_bin_mean − first_bin_mean, or
       None when fewer than 2 bins have data.
+    * ``volatility_label`` — LOW_VOLATILITY / MODERATE /
+      HIGH_VOLATILITY bucketed from the coefficient of
+      variation of per-bin mean conversions. Single bin
+      → HIGH_VOLATILITY (no signal to measure).
+    * ``peak_bin`` — the bin with the highest mean_conversion
+      (tiebreaker: observation_count DESC, then bin_start
+      ASC). ``None`` when no bins have data. Carries bin /
+      bin_start / mean_conversion / observation_count.
     """
 
     cluster_id: str = ""
@@ -583,6 +591,8 @@ class ClusterTrendOut(BaseModel):
     first_bin_mean: float | None = None
     last_bin_mean: float | None = None
     mean_delta: float | None = None
+    volatility_label: str = "HIGH_VOLATILITY"
+    peak_bin: dict | None = None
 
 
 class SimulationResultOut(BaseModel):

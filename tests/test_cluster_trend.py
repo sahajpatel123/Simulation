@@ -30,6 +30,12 @@ def test_public_allowlist_matches_callers() -> None:
         "BIN_DAY",
         "VALID_BINS",
         "STABLE_DELTA_THRESHOLD",
+        "LOW_VOLATILITY_MAX_CV",
+        "MODERATE_VOLATILITY_MAX_CV",
+        "LABEL_LOW_VOLATILITY",
+        "LABEL_MODERATE_VOLATILITY",
+        "LABEL_HIGH_VOLATILITY",
+        "VALID_VOLATILITY_LABELS",
         "TREND_UP",
         "TREND_DOWN",
         "TREND_STABLE",
@@ -54,6 +60,16 @@ def test_trend_label_allowlist_pinned() -> None:
         "DOWN",
         "STABLE",
         "UNKNOWN",
+    }
+
+
+def test_volatility_label_allowlist_pinned() -> None:
+    from app.simulation.cluster_trend import VALID_VOLATILITY_LABELS
+
+    assert set(VALID_VOLATILITY_LABELS) == {
+        "LOW_VOLATILITY",
+        "MODERATE_VOLATILITY",
+        "HIGH_VOLATILITY",
     }
 
 
@@ -448,6 +464,172 @@ def test_trend_naive_datetime_assumed_utc() -> None:
 
 
 # ---------------------------------------------------------------------------
+# peak_bin
+# ---------------------------------------------------------------------------
+
+
+def test_trend_peak_bin_none_when_empty() -> None:
+    from app.simulation.cluster_trend import build_cluster_trend
+
+    out = build_cluster_trend("c1", [])
+    assert out["peak_bin"] is None
+
+
+def test_trend_peak_bin_is_highest_mean_conversion() -> None:
+    from app.simulation.cluster_trend import build_cluster_trend
+
+    rows = [
+        (
+            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            {"cluster_breakdown": {"c1": 0.05}},
+        ),
+        (
+            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            {"cluster_breakdown": {"c1": 0.20}},
+        ),
+        (
+            datetime(2026, 3, 15, tzinfo=timezone.utc),
+            {"cluster_breakdown": {"c1": 0.10}},
+        ),
+    ]
+    out = build_cluster_trend("c1", rows)
+    peak = out["peak_bin"]
+    assert peak is not None
+    assert peak["bin"] == "2026-02"
+    assert peak["mean_conversion"] == pytest.approx(0.20)
+
+
+def test_trend_peak_bin_tiebreak_by_observation_count() -> None:
+    """When two bins have the same mean, the one with more
+    observations wins."""
+    from app.simulation.cluster_trend import build_cluster_trend
+
+    rows = [
+        # Jan: 1 obs at 0.20
+        (
+            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            {"cluster_breakdown": {"c1": 0.20}},
+        ),
+        # Feb: 3 obs averaging 0.20 → mean 0.20, more data.
+        (
+            datetime(2026, 2, 5, tzinfo=timezone.utc),
+            {"cluster_breakdown": {"c1": 0.10}},
+        ),
+        (
+            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            {"cluster_breakdown": {"c1": 0.20}},
+        ),
+        (
+            datetime(2026, 2, 25, tzinfo=timezone.utc),
+            {"cluster_breakdown": {"c1": 0.30}},
+        ),
+    ]
+    out = build_cluster_trend("c1", rows)
+    peak = out["peak_bin"]
+    assert peak["bin"] == "2026-02"
+    assert peak["mean_conversion"] == pytest.approx(0.20)
+    assert peak["observation_count"] == 3
+
+
+def test_trend_peak_bin_carries_bin_start() -> None:
+    from app.simulation.cluster_trend import build_cluster_trend
+
+    rows = [
+        (
+            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            {"cluster_breakdown": {"c1": 0.20}},
+        ),
+    ]
+    out = build_cluster_trend("c1", rows)
+    peak = out["peak_bin"]
+    assert peak["bin_start"].startswith("2026-01-01T00:00:00")
+
+
+# ---------------------------------------------------------------------------
+# volatility_label
+# ---------------------------------------------------------------------------
+
+
+def test_trend_volatility_label_high_for_empty() -> None:
+    """No bins → HIGH_VOLATILITY (no signal to measure)."""
+    from app.simulation.cluster_trend import (
+        LABEL_HIGH_VOLATILITY,
+        build_cluster_trend,
+    )
+
+    out = build_cluster_trend("c1", [])
+    assert out["volatility_label"] == LABEL_HIGH_VOLATILITY
+
+
+def test_trend_volatility_label_low_for_steady_bins() -> None:
+    """CV < 0.15 → LOW_VOLATILITY."""
+    from app.simulation.cluster_trend import (
+        LABEL_LOW_VOLATILITY,
+        build_cluster_trend,
+    )
+
+    rows = [
+        (
+            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            {"cluster_breakdown": {"c1": 0.10}},
+        ),
+        (
+            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            {"cluster_breakdown": {"c1": 0.105}},
+        ),
+        (
+            datetime(2026, 3, 15, tzinfo=timezone.utc),
+            {"cluster_breakdown": {"c1": 0.11}},
+        ),
+    ]
+    out = build_cluster_trend("c1", rows)
+    assert out["volatility_label"] == LABEL_LOW_VOLATILITY
+
+
+def test_trend_volatility_label_high_for_spread_bins() -> None:
+    """CV ≥ 0.50 → HIGH_VOLATILITY."""
+    from app.simulation.cluster_trend import (
+        LABEL_HIGH_VOLATILITY,
+        build_cluster_trend,
+    )
+
+    rows = [
+        (
+            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            {"cluster_breakdown": {"c1": 0.05}},
+        ),
+        (
+            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            {"cluster_breakdown": {"c1": 0.30}},
+        ),
+    ]
+    out = build_cluster_trend("c1", rows)
+    assert out["volatility_label"] == LABEL_HIGH_VOLATILITY
+
+
+def test_trend_volatility_label_moderate_for_mid_spread() -> None:
+    """0.15 ≤ CV < 0.50 → MODERATE_VOLATILITY."""
+    from app.simulation.cluster_trend import (
+        LABEL_MODERATE_VOLATILITY,
+        build_cluster_trend,
+    )
+
+    # Means [0.10, 0.20] → CV = 0.05 / 0.15 ≈ 0.33.
+    rows = [
+        (
+            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            {"cluster_breakdown": {"c1": 0.10}},
+        ),
+        (
+            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            {"cluster_breakdown": {"c1": 0.20}},
+        ),
+    ]
+    out = build_cluster_trend("c1", rows)
+    assert out["volatility_label"] == LABEL_MODERATE_VOLATILITY
+
+
+# ---------------------------------------------------------------------------
 # Schema
 # ---------------------------------------------------------------------------
 
@@ -463,6 +645,8 @@ def test_cluster_trend_out_default_shape() -> None:
     assert out.first_bin_mean is None
     assert out.last_bin_mean is None
     assert out.mean_delta is None
+    assert out.volatility_label == "HIGH_VOLATILITY"
+    assert out.peak_bin is None
 
 
 def test_cluster_trend_out_round_trips_helper_payload() -> None:

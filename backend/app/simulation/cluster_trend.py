@@ -39,6 +39,22 @@ VALID_BINS: frozenset[str] = frozenset({
 # digest.
 STABLE_DELTA_THRESHOLD: float = 0.01
 
+# Volatility label thresholds — coefficient of variation of
+# bin-level mean conversions (std / mean). Same convention as
+# the cluster / architect drill-down stability labels so the
+# dashboard's wording stays consistent.
+LOW_VOLATILITY_MAX_CV: float = 0.15
+MODERATE_VOLATILITY_MAX_CV: float = 0.50
+
+LABEL_LOW_VOLATILITY: str = "LOW_VOLATILITY"
+LABEL_MODERATE_VOLATILITY: str = "MODERATE_VOLATILITY"
+LABEL_HIGH_VOLATILITY: str = "HIGH_VOLATILITY"
+VALID_VOLATILITY_LABELS: frozenset[str] = frozenset({
+    LABEL_LOW_VOLATILITY,
+    LABEL_MODERATE_VOLATILITY,
+    LABEL_HIGH_VOLATILITY,
+})
+
 # Direction labels for the overall trend.
 TREND_UP: str = "UP"
 TREND_DOWN: str = "DOWN"
@@ -129,6 +145,55 @@ def _direction(mean_first: float, mean_last: float) -> str:
     if abs(delta) < STABLE_DELTA_THRESHOLD:
         return TREND_STABLE
     return TREND_UP if delta > 0 else TREND_DOWN
+
+
+def _volatility_label(
+    bin_means: list[float],
+    overall_mean: float,
+) -> str:
+    """Bucket the spread of per-bin mean conversions.
+
+    Uses the coefficient of variation (std / mean) so a
+    0.10→0.20 oscillation and a 0.005→0.015 oscillation read
+    at the same scale — the same convention as the cluster /
+    architect drill-down stability labels.
+
+    A single bin (or zero) → HIGH_VOLATILITY (no signal to
+    measure).
+    """
+    if len(bin_means) < 2 or overall_mean <= 0.0:
+        return LABEL_HIGH_VOLATILITY
+    if len(bin_means) == 1:
+        # Trivially constant → low.
+        return LABEL_LOW_VOLATILITY
+    mean_sq = sum(m * m for m in bin_means) / len(bin_means)
+    variance = max(0.0, mean_sq - overall_mean * overall_mean)
+    std = variance ** 0.5
+    cv = std / overall_mean
+    if cv < LOW_VOLATILITY_MAX_CV:
+        return LABEL_LOW_VOLATILITY
+    if cv < MODERATE_VOLATILITY_MAX_CV:
+        return LABEL_MODERATE_VOLATILITY
+    return LABEL_HIGH_VOLATILITY
+
+
+def _peak_bin(rows_out: list[dict]) -> dict | None:
+    """Return the bin with the highest mean_conversion.
+
+    Tiebreaker: bin with the highest observation_count
+    (more representative), then earliest bin_start (stable).
+    Returns ``None`` when the bin list is empty.
+    """
+    if not rows_out:
+        return None
+    return max(
+        rows_out,
+        key=lambda r: (
+            r["mean_conversion"],
+            r["observation_count"],
+            r["bin_start"],
+        ),
+    )
 
 
 def build_cluster_trend(
@@ -260,6 +325,21 @@ def build_cluster_trend(
         mean_delta = round(last_mean - first_mean, 6)
         overall = _direction(first_mean, last_mean)
 
+    bin_means = [r["mean_conversion"] for r in rows_out]
+    overall_mean = (
+        sum(bin_means) / len(bin_means) if bin_means else 0.0
+    )
+    volatility = _volatility_label(bin_means, overall_mean)
+    peak = _peak_bin(rows_out)
+    peak_payload = None
+    if peak is not None:
+        peak_payload = {
+            "bin": peak["bin"],
+            "bin_start": peak["bin_start"],
+            "mean_conversion": peak["mean_conversion"],
+            "observation_count": peak["observation_count"],
+        }
+
     return {
         "cluster_id": cluster_id,
         "bin_size": effective_bin,
@@ -272,6 +352,8 @@ def build_cluster_trend(
             round(last_mean, 6) if last_mean is not None else None
         ),
         "mean_delta": mean_delta,
+        "volatility_label": volatility,
+        "peak_bin": peak_payload,
     }
 
 
@@ -288,6 +370,12 @@ __all__ = [
     "BIN_DAY",
     "VALID_BINS",
     "STABLE_DELTA_THRESHOLD",
+    "LOW_VOLATILITY_MAX_CV",
+    "MODERATE_VOLATILITY_MAX_CV",
+    "LABEL_LOW_VOLATILITY",
+    "LABEL_MODERATE_VOLATILITY",
+    "LABEL_HIGH_VOLATILITY",
+    "VALID_VOLATILITY_LABELS",
     "TREND_UP",
     "TREND_DOWN",
     "TREND_STABLE",
