@@ -25,6 +25,7 @@ from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
 from app.schemas.simulation import (
     ArchitectAccuracyBridgeOut,
     ArchitectDrillDownOut,
+    ClusterDiffOut,
     ClusterDrillDownOut,
     ClustersAggregateOut,
     FindingsAggregateOut,
@@ -61,6 +62,7 @@ from app.simulation.cluster_drill_down import (
 from app.simulation.architect_drill_down import (
     build_architect_drill_down,
 )
+from app.simulation.cluster_diff import build_cluster_diff
 from app.simulation.conductor import _ARCHITECTS as _architect_registry
 from app.simulation.comparison import build_simulation_comparison
 from app.simulation.cohort_retention import build_cohort_retention
@@ -1574,6 +1576,160 @@ def get_cluster_drill_down(
         batch_overall_mean=_batch_overall_mean(by_id.values()),
     )
     return ClusterDrillDownOut(**payload)
+
+
+@router.get(
+    "/cluster-diff",
+    response_model=ClusterDiffOut,
+    summary=(
+        "Side-by-side comparison of two clusters: per-trait "
+        "deltas + aggregate deltas + similarity score"
+    ),
+    # DB read of N sim rows for two clusters — same cap as the
+    # other drill-down endpoints.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_cluster_diff(
+    cluster_a: str = Query(
+        ...,
+        min_length=1,
+        max_length=64,
+        description=(
+            "First cluster id. Must match a registered cluster; "
+            "otherwise the route returns 404."
+        ),
+    ),
+    cluster_b: str = Query(
+        ...,
+        min_length=1,
+        max_length=64,
+        description=(
+            "Second cluster id. Must match a registered cluster; "
+            "otherwise the route returns 404. ``cluster_a`` and "
+            "``cluster_b`` must differ."
+        ),
+    ),
+    ids: list[str] | None = Query(
+        default=None,
+        description=(
+            "Optional batch of simulation ids. When supplied, "
+            "the route computes aggregate stats (mean "
+            "conversion, observation count, etc.) for each "
+            "cluster across this batch. Without ids, the "
+            "diff falls back to profile-only (no aggregate "
+            "deltas)."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ClusterDiffOut:
+    """Side-by-side comparison of two clusters.
+
+    Pulls both cluster definitions from the registry,
+    optionally runs the cluster drill-down on each side to
+    compute aggregate stats across the user's batch, and
+    emits a per-trait / per-metric diff with a similarity
+    score.
+    """
+    # Validate both cluster ids against the registry. Unknown
+    # id → 404 so the dashboard can show a clear error rather
+    # than silently diff against missing clusters.
+    def_a = next(
+        (c for c in _registry.all_clusters() if c.cluster_id == cluster_a),
+        None,
+    )
+    def_b = next(
+        (c for c in _registry.all_clusters() if c.cluster_id == cluster_b),
+        None,
+    )
+    if def_a is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown cluster_id {cluster_a!r}",
+        )
+    if def_b is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown cluster_id {cluster_b!r}",
+        )
+    if cluster_a == cluster_b:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "cluster_a and cluster_b must differ — diffing "
+                "a cluster against itself always returns "
+                "similarity=1.0 and zero deltas"
+            ),
+        )
+
+    try:
+        canonical_ids = parse_id_list(ids)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    cluster_a_aggregate: dict | None = None
+    cluster_b_aggregate: dict | None = None
+    if canonical_ids:
+        rows = (
+            db.query(Simulation.id, Simulation.results_json)
+            .join(Project, Simulation.project_id == Project.id)
+            .filter(
+                Simulation.id.in_(canonical_ids),
+                Simulation.status == "COMPLETED",
+                Project.user_id == current_user.id,
+            )
+            .all()
+        )
+        by_id: dict[int, dict] = {r.id: r.results_json for r in rows}
+        per_sim_a: list[
+            tuple[int | None, object]
+        ] = []
+        per_sim_b: list[
+            tuple[int | None, object]
+        ] = []
+        for sid in canonical_ids:
+            breakdown = by_id.get(sid)
+            cb = (
+                breakdown.get("cluster_breakdown")
+                if breakdown
+                else None
+            ) or {}
+            per_sim_a.append((sid, cb.get(cluster_a)))
+            per_sim_b.append((sid, cb.get(cluster_b)))
+
+        threshold = normalise_drill_outlier(None)
+
+        def _aggregate(per_sim):
+            payload = build_cluster_drill_down(
+                cluster_a if per_sim is per_sim_a else cluster_b,
+                cluster_name=(
+                    def_a.name if per_sim is per_sim_a else def_b.name
+                ),
+                per_sim_conversions=per_sim,
+                outlier_threshold=threshold,
+                batch_overall_mean=_batch_overall_mean(
+                    by_id.values()
+                ),
+            )
+            return payload["aggregate"]
+
+        cluster_a_aggregate = _aggregate(per_sim_a)
+        cluster_b_aggregate = _aggregate(per_sim_b)
+
+    payload = build_cluster_diff(
+        cluster_a,
+        cluster_b,
+        cluster_a_name=def_a.name,
+        cluster_a_traits=dict(def_a.base_traits),
+        cluster_a_aggregate=cluster_a_aggregate,
+        cluster_b_name=def_b.name,
+        cluster_b_traits=dict(def_b.base_traits),
+        cluster_b_aggregate=cluster_b_aggregate,
+    )
+    return ClusterDiffOut(**payload)
 
 
 @router.get(

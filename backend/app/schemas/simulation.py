@@ -471,6 +471,37 @@ class ArchitectDrillDownOut(BaseModel):
     severity_timeline: list[dict] = []
 
 
+class ClusterDiffOut(BaseModel):
+    """Response from ``GET /simulations/cluster-diff``.
+
+    Side-by-side comparison of two clusters across N sims.
+    Surfaces per-trait deltas + aggregate deltas + a similarity
+    score so the founder can answer "are these two clusters
+    really different?" without eyeballing the cluster catalog.
+
+    * ``cluster_a_profile`` / ``cluster_b_profile`` — echoed
+      cluster metadata (id + name).
+    * ``traits_diff`` — list of per-trait rows (trait,
+      cluster_a, cluster_b, delta, winner). 8 rows in the
+      canonical REQUIRED_TRAITS order.
+    * ``aggregate_diff`` — list of per-metric rows (metric,
+      cluster_a, cluster_b, delta, winner).
+    * ``similarity_score`` — float in [0.0, 1.0]; 1.0 =
+      identical traits, 0.0 = maximally different.
+    * ``similarity_label`` — VERY_SIMILAR / SIMILAR /
+      DIFFERENT / VERY_DIFFERENT bucketed from the score.
+    * ``summary`` — one-line headline string.
+    """
+
+    cluster_a_profile: dict = {}
+    cluster_b_profile: dict = {}
+    traits_diff: list[dict] = []
+    aggregate_diff: list[dict] = []
+    similarity_score: float = 0.0
+    similarity_label: str = "VERY_DIFFERENT"
+    summary: str = ""
+
+
 class SimulationResultOut(BaseModel):
     id: int
     project_id: int
