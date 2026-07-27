@@ -26,6 +26,7 @@ from app.schemas.user import (
     DigestSnapshotOut,
     MostActiveProjectOut,
     NotificationsOut,
+    PortfolioHealthSnapshotOut,
     ProjectsByStatusOut,
     ProjectsSummaryOut,
     QuickStatsOut,
@@ -45,6 +46,9 @@ from app.simulation.most_active_project import (
     build_most_active_project,
 )
 from app.simulation.notifications import build_notifications
+from app.simulation.portfolio_health_snapshot import (
+    build_portfolio_health_snapshot,
+)
 from app.simulation.premortem_digest import build_premortem_digest
 from app.simulation.projects_by_status import (
     build_projects_by_status,
@@ -2137,3 +2141,143 @@ def get_quick_stats(
         ttl_seconds=_USER_QUICK_STATS_CACHE_TTL_S,
     )
     return QuickStatsOut(**payload)
+
+
+@router.get(
+    "/me/portfolio-health-snapshot",
+    response_model=PortfolioHealthSnapshotOut,
+    summary=(
+        "Per-user portfolio health rollup - 0-100 average "
+        "score across all of the user's projects so the "
+        "dashboard header can surface one big number"
+    ),
+    # Read-only; per-project rollup.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_portfolio_health_snapshot(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioHealthSnapshotOut:
+    """Portfolio health snapshot.
+
+    Composes a single 0-100 portfolio health rollup so
+    the dashboard header can surface one big number
+    without fanning out to every per-project
+    ``/projects/{id}/health`` endpoint.
+    """
+    from app.simulation.project_health import build_project_health
+
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+    if not owned_project_ids:
+        return PortfolioHealthSnapshotOut(
+            narrative="No projects on file yet.",
+        )
+
+    # Per-project rollup. For each owned project, pull
+    # the inputs the project-health helper needs (latest
+    # sim confidence, critical-finding count, pending
+    # decision count, weak-link count, outcome presence)
+    # and call build_project_health inline.
+
+    payloads: list[dict] = []
+    for pid in owned_project_ids:
+        project = (
+            db.query(Project)
+            .filter(Project.id == pid)
+            .first()
+        )
+        if project is None:
+            continue
+
+        latest_completed_sim = (
+            db.query(Simulation)
+            .filter(
+                Simulation.project_id == pid,
+                Simulation.status == "COMPLETED",
+            )
+            .order_by(Simulation.created_at.desc())
+            .first()
+        )
+        sim_confidence: float | None = None
+        critical_finding_count = 0
+        if latest_completed_sim is not None:
+            sim_confidence = getattr(
+                latest_completed_sim, "confidence_score", None,
+            )
+            if sim_confidence is not None:
+                sim_confidence = float(sim_confidence) / 100.0
+            for f in (latest_completed_sim.results_json or {}).get(
+                "domain_findings", []
+            ) or []:
+                if isinstance(f, dict) and (
+                    f.get("severity") == "CRITICAL"
+                    or f.get("level") == "CRITICAL"
+                ):
+                    critical_finding_count += 1
+
+        pending_decision_count = (
+            db.query(Decision)
+            .filter(
+                Decision.project_id == pid,
+                Decision.status.in_(("PENDING", "RUNNING")),
+            )
+            .count()
+        )
+
+        weak_link_count = 0
+        assumption_count = (
+            db.query(Assumption)
+            .filter(
+                Assumption.project_id == pid,
+                Assumption.is_hidden.is_(False),
+            )
+            .count()
+        )
+        if assumption_count:
+            from app.simulation.assumption_digest import (
+                build_assumption_digest,
+            )
+            assumption_rows = (
+                db.query(Assumption)
+                .filter(
+                    Assumption.project_id == pid,
+                    Assumption.is_hidden.is_(False),
+                )
+                .all()
+            )
+            digest = build_assumption_digest([
+                {
+                    "id": a.id,
+                    "sensitivity": a.sensitivity,
+                    "specificity_score": a.specificity_score,
+                    "impact_score": a.impact_score,
+                    "is_hidden": a.is_hidden,
+                }
+                for a in assumption_rows
+            ])
+            weak_link_count = digest["weak_link_count"]
+
+        has_outcome = (
+            db.query(Outcome.id)
+            .filter(Outcome.project_id == pid)
+            .first()
+            is not None
+        )
+
+        payloads.append(build_project_health(
+            sim_confidence=sim_confidence,
+            critical_finding_count=critical_finding_count,
+            pending_decision_count=pending_decision_count,
+            weak_link_count=weak_link_count,
+            has_outcome=has_outcome,
+        ))
+
+    payload = build_portfolio_health_snapshot(
+        project_health_payloads=payloads,
+    )
+    return PortfolioHealthSnapshotOut(**payload)

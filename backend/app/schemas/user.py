@@ -338,3 +338,37 @@ class QuickStatsOut(BaseModel):
     narrative: str = ""
     key_signals: list[dict] = []
 
+
+class PortfolioHealthSnapshotOut(BaseModel):
+    """Response from ``GET /me/portfolio-health-snapshot``.
+
+    Single 0-100 portfolio health rollup across all of
+    the user's projects, so the dashboard header can
+    surface one big number without fanning out to every
+    per-project /projects/{id}/health endpoint.
+
+    * ``project_count`` - projects included in the
+      rollup (excludes zero-score entries that look
+      like missing data).
+    * ``portfolio_health_score`` - average project
+      health score (0-100).
+    * ``verdict`` - ``HEALTHY`` (>= 70) /
+      ``NEEDS_ATTENTION`` (41-69) / ``AT_RISK`` (<= 40).
+    * ``average_score`` - same as
+      ``portfolio_health_score`` but as a float
+      (no rounding).
+    * ``lowest_project_score`` - min score across the
+      portfolio (or ``None`` when empty).
+    * ``narrative`` - one paragraph string.
+    * ``key_signals`` - ``{label, value, severity,
+      display}``.
+    """
+
+    project_count: int = 0
+    portfolio_health_score: int = 0
+    verdict: str = "AT_RISK"
+    average_score: float = 0.0
+    lowest_project_score: int | None = None
+    narrative: str = ""
+    key_signals: list[dict] = []
+
