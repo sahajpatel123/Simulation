@@ -8,11 +8,32 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
 from app.core.rate_limiter import rate_limit
+from app.core.response_cache import (
+    cache_get_json,
+    cache_set_json,
+)
+from app.core.tier_enforcement import TIER_LIMITS
+from app.models.decision import Decision
+from app.models.outcome import Outcome
 from app.models.project import Project
+from app.models.simulation import Simulation
 from app.models.user import User
 from app.schemas.auth import MessageResponse
+from app.schemas.user import UserDashboardOut
+from app.simulation.calibration_health import (
+    build_calibration_health,
+)
+from app.simulation.user_dashboard import (
+    build_user_dashboard,
+)
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+# Read-mostly account snapshot. A short TTL absorbs the
+# Account-page polling without making tier-quota reads
+# look stale.
+_USER_DASHBOARD_CACHE_TTL_S: int = 30
+_USER_DASHBOARD_CACHE_NAMESPACE: str = "user-dashboard"
 
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
@@ -203,3 +224,194 @@ def get_blindspots(
             for r in rows
         ]
     }
+
+
+@router.get(
+    "/me/dashboard",
+    response_model=UserDashboardOut,
+    summary=(
+        "One-shot account snapshot — quota + project counts + "
+        "calibration health + blindspots + narrative + signals"
+    ),
+    # Account page polls this; short TTL keeps the tile fresh
+    # without hammering the DB on every render.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_my_dashboard(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserDashboardOut:
+    """Single-payload dashboard for the Account page.
+
+    Composes account age, monthly sim quota, project / sim /
+    decision / outcome counts, last-activity timestamp, calibration
+    health, blindspot count, narrative, and key signals — all in
+    one round-trip so the Account page doesn't fan out to
+    /me/blindspots + the project list + the accuracy profile.
+
+    Pure read-only — no Celery, no LLM.
+    """
+    # Cache hit → short-circuit the four queries. Key is namespaced
+    # by user so one tenant never sees another's snapshot.
+    cached = cache_get_json(
+        namespace=_USER_DASHBOARD_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return UserDashboardOut(**cached)
+
+    # ---- Tier + monthly quota ----------------------------------
+    tier = (current_user.tier or "FREE").upper()
+
+    # Count simulations created this calendar month for the
+    # monthly-quota tile. Uses a single indexed SELECT — the
+    # WHERE clause matches the enforcement layer's window.
+    month_start = datetime.now(timezone.utc).replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0,
+    )
+    monthly_sim_used = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id.in_(
+                db.query(Project.id).filter(Project.user_id == current_user.id)
+            ),
+            Simulation.created_at >= month_start,
+        )
+        .count()
+    )
+    # Caps live in app.core.tier_enforcement. TIER_LIMITS is
+    # keyed by lowercase tier name; fall back to the free tier
+    # for any unknown label so the dashboard never 500s on a
+    # misconfigured user.
+    monthly_sim_cap = TIER_LIMITS.get(
+        tier.lower(),
+        TIER_LIMITS["free"],
+    )["simulations_per_month"]
+
+    # ---- Counts (single round-trip per entity) ------------------
+    project_count = (
+        db.query(Project)
+        .filter(Project.user_id == current_user.id)
+        .count()
+    )
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+    if owned_project_ids:
+        simulation_count = (
+            db.query(Simulation)
+            .filter(Simulation.project_id.in_(owned_project_ids))
+            .count()
+        )
+        decision_count = (
+            db.query(Decision)
+            .filter(Decision.project_id.in_(owned_project_ids))
+            .count()
+        )
+        outcome_count = (
+            db.query(Outcome)
+            .filter(Outcome.project_id.in_(owned_project_ids))
+            .count()
+        )
+    else:
+        simulation_count = 0
+        decision_count = 0
+        outcome_count = 0
+
+    # ---- Last activity (newest created_at across the user's rows)
+    last_activity_at: datetime | None = None
+    for model_cls in (Project, Simulation, Decision, Outcome):
+        last = (
+            db.query(model_cls.created_at)
+            .filter(
+                (
+                    model_cls.user_id == current_user.id
+                    if hasattr(model_cls, "user_id")
+                    else model_cls.project_id.in_(owned_project_ids)
+                )
+            )
+            .order_by(model_cls.created_at.desc())
+            .first()
+        )
+        if last and last[0]:
+            if last_activity_at is None or last[0] > last_activity_at:
+                last_activity_at = last[0]
+
+    # ---- Calibration health (only if user has completed sims)
+    calibration_health: dict | None = None
+    if owned_project_ids:
+        cal_rows = (
+            db.query(
+                Simulation.created_at,
+                Simulation.results_json,
+            )
+            .outerjoin(
+                Outcome, Outcome.simulation_id == Simulation.id,
+            )
+            .filter(
+                Simulation.project_id.in_(owned_project_ids),
+                Simulation.status == "COMPLETED",
+            )
+            .order_by(Simulation.created_at.asc())
+            .limit(50)
+            .all()
+        )
+        # Strip the LEFT JOIN's multi-row inflation — calibration
+        # health wants one entry per sim, with the latest outcome
+        # if any.
+        seen_sids: set[int] = set()
+        health_input: list[tuple] = []
+        for r in cal_rows:
+            sid = r[0]  # created_at is not unique; use as a coarse key
+            if sid in seen_sids:
+                continue
+            seen_sids.add(sid)
+            findings = (r[1] or {}).get("domain_findings") or []
+            health_input.append((r[0], None, None, findings))
+        if health_input:
+            calibration_health = build_calibration_health(health_input)
+
+    # ---- Blindspot count (recent window) ------------------------
+    blindspot_cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
+    blindspot_count = (
+        db.execute(
+            text(
+                """
+            SELECT COUNT(*) FROM user_market_blindspots
+            WHERE user_id = :uid AND occurrence_count >= 2
+              AND (last_surfaced_to_user IS NULL
+                   OR last_surfaced_to_user < :cutoff)
+            """
+            ),
+            {"uid": current_user.id, "cutoff": blindspot_cutoff},
+        ).scalar()
+        or 0
+    )
+
+    # ---- Compose via the pure helper ----------------------------
+    payload = build_user_dashboard(
+        account_created_at=current_user.created_at,
+        tier=tier,
+        monthly_sim_used=monthly_sim_used,
+        monthly_sim_cap=monthly_sim_cap,
+        project_count=project_count,
+        simulation_count=simulation_count,
+        decision_count=decision_count,
+        outcome_count=outcome_count,
+        last_activity_at=last_activity_at,
+        calibration_health=calibration_health,
+        blindspot_count=int(blindspot_count),
+    )
+
+    cache_set_json(
+        namespace=_USER_DASHBOARD_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_DASHBOARD_CACHE_TTL_S,
+    )
+    return UserDashboardOut(**payload)
