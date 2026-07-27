@@ -455,3 +455,24 @@ class AdoptionMilestonesOut(BaseModel):
     milestone_order: list[str] = []
     narrative: str = ""
     key_signals: list[dict] = []
+
+
+class ProjectExportOut(BaseModel):
+    """Response from ``GET /projects/{id}/export``.
+
+    Single-payload export of one project's full state -
+    brief, assumptions, simulations, decisions, outcomes,
+    premortem, interventions. Useful for offline archive,
+    co-founder handoff, or LLM context window.
+    """
+
+    exported_at: str = ""
+    schema_version: int = 1
+    project_meta: dict = {}
+    brief: dict = {}
+    assumptions: list[dict] = []
+    simulations: list[dict] = []
+    decisions: list[dict] = []
+    outcomes: list[dict] = []
+    premortem: dict = {}
+    interventions: dict = {}

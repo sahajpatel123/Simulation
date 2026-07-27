@@ -69,6 +69,7 @@ from app.schemas.project import (
     NextBestActionOut,
     NextBestActionSource,
     PremortemDigestOut,
+    ProjectExportOut,
     ProjectCreate,
     ProjectDuplicateIn,
     ProjectDuplicateOut,
@@ -134,6 +135,7 @@ from app.simulation.intervention_digest import (
 )
 from app.simulation.next_best_action import build_next_best_action
 from app.simulation.premortem_digest import build_premortem_digest
+from app.simulation.project_export import build_project_export
 from app.simulation.project_health import build_project_health
 from app.simulation.recommendations_digest import (
     build_recommendations_digest,
@@ -3854,3 +3856,145 @@ def get_adoption_milestones(
         ttl_seconds=_ADOPTION_MILESTONES_CACHE_TTL_S,
     )
     return AdoptionMilestonesOut(**payload)
+
+
+@router.get(
+    "/{project_id}/export",
+    response_model=ProjectExportOut,
+    summary=(
+        "Full project export - brief + assumptions + sims + "
+        "decisions + outcomes + premortem + interventions "
+        "in a single JSON bundle for handoff/archive"
+    ),
+    # Read-only composition; bounded.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_project_export(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProjectExportOut:
+    """Full project export bundle.
+
+    Composes a JSON-ready payload covering every row
+    tied to the project: brief fields, assumptions, every
+    simulation row, every decision row, every outcome
+    row, plus the AI-generated premortem and
+    intervention analyses. Useful for offline archive,
+    co-founder handoff, or as LLM context.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+
+    project_dict = {
+        "id": getattr(project, "id", None),
+        "title": getattr(project, "title", None),
+        "description": getattr(project, "description", None),
+        "status": getattr(project, "status", None),
+        "intake_mode": getattr(project, "intake_mode", None),
+        "created_at": project.created_at,
+        "updated_at": project.updated_at,
+    }
+    brief_dict = {
+        "positioning": getattr(project, "brief_positioning", None),
+        "features": getattr(project, "brief_features_json", None),
+        "hook": getattr(project, "brief_hook", None),
+        "completed_at": getattr(
+            project, "brief_completed_at", None,
+        ),
+    }
+    if isinstance(brief_dict.get("features"), str):
+        import json as _json
+        try:
+            brief_dict["features"] = _json.loads(
+                brief_dict["features"],
+            )
+        except Exception:
+            brief_dict["features"] = []
+
+    # Pull child rows.
+    assumption_rows = (
+        db.query(Assumption)
+        .filter(Assumption.project_id == project_id)
+        .all()
+    )
+    assumption_dicts = [
+        {
+            "id": a.id,
+            "text": a.text,
+            "category": a.category,
+            "sensitivity": a.sensitivity,
+            "impact_score": a.impact_score,
+            "is_hidden": a.is_hidden,
+            "created_at": a.created_at,
+        }
+        for a in assumption_rows
+    ]
+    simulation_rows = (
+        db.query(Simulation)
+        .filter(Simulation.project_id == project_id)
+        .order_by(Simulation.created_at.asc())
+        .all()
+    )
+    simulation_dicts = [
+        {
+            "id": s.id,
+            "status": s.status,
+            "predicted_conversion_rate": (
+                s.predicted_conversion_rate
+            ),
+            "actual_conversion_rate": (
+                s.actual_conversion_rate
+            ),
+            "results_json": s.results_json,
+            "confidence_score": s.confidence_score,
+            "created_at": s.created_at,
+        }
+        for s in simulation_rows
+    ]
+    decision_rows = (
+        db.query(Decision)
+        .filter(Decision.project_id == project_id)
+        .order_by(Decision.created_at.asc())
+        .all()
+    )
+    decision_dicts = [
+        {
+            "id": d.id,
+            "title": d.title,
+            "status": d.status,
+            "created_at": d.created_at,
+        }
+        for d in decision_rows
+    ]
+    outcome_rows = (
+        db.query(Outcome)
+        .filter(Outcome.project_id == project_id)
+        .order_by(Outcome.created_at.asc())
+        .all()
+    )
+    outcome_dicts = [
+        {
+            "id": o.id,
+            "actual_conversion_rate": o.actual_conversion_rate,
+            "actual_mrr": o.actual_mrr,
+            "calibration_score": o.calibration_score,
+            "created_at": o.created_at,
+        }
+        for o in outcome_rows
+    ]
+
+    payload = build_project_export(
+        project_row=project_dict,
+        brief_dict=brief_dict,
+        assumption_dicts=assumption_dicts,
+        simulation_dicts=simulation_dicts,
+        decision_dicts=decision_dicts,
+        outcome_dicts=outcome_dicts,
+        premortem_data=getattr(
+            project, "premortem_json", None,
+        ),
+        interventions_data=getattr(
+            project, "interventions_json", None,
+        ),
+    )
+    return ProjectExportOut(**payload)
