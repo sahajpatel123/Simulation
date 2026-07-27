@@ -23,6 +23,7 @@ from app.schemas.auth import MessageResponse
 from app.schemas.user import (
     AccountHealthOut,
     CoverageGapsOut,
+    DigestSnapshotOut,
     NotificationsOut,
     UserDashboardOut,
     WeeklyDigestOut,
@@ -32,6 +33,7 @@ from app.simulation.calibration_health import (
     build_calibration_health,
 )
 from app.simulation.coverage_gaps import build_coverage_gaps
+from app.simulation.digest_snapshot import build_digest_snapshot
 from app.simulation.intervention_digest import build_intervention_digest
 from app.simulation.notifications import build_notifications
 from app.simulation.premortem_digest import build_premortem_digest
@@ -1066,3 +1068,338 @@ def get_weekly_digest(
         ttl_seconds=_USER_WEEKLY_DIGEST_CACHE_TTL_S,
     )
     return WeeklyDigestOut(**payload)
+
+
+@router.get(
+    "/me/digest-snapshot",
+    response_model=DigestSnapshotOut,
+    summary=(
+        "Single-payload capture of all 5 user-level "
+        "digests (dashboard + account_health + coverage_gaps "
+        "+ notifications + weekly_digest) for archival or "
+        "weekly-email snapshots"
+    ),
+    # Heavy composition - bounded.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_digest_snapshot(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DigestSnapshotOut:
+    """All-user-levels-in-one snapshot.
+
+    Composes the 5 user-level digests into a single
+    payload suitable for archival comparison
+    (week-over-week diffs) or weekly-email snapshots.
+    No cache - the snapshot is supposed to capture the
+    current state, not a TTL-delayed prior state.
+    """
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+
+    # Tier + monthly usage.
+    tier = (current_user.tier or "FREE").upper()
+    month_start = datetime.now(timezone.utc).replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0,
+    )
+    monthly_sim_used = 0
+    if owned_project_ids:
+        monthly_sim_used = (
+            db.query(Simulation)
+            .filter(
+                Simulation.project_id.in_(owned_project_ids),
+                Simulation.created_at >= month_start,
+            )
+            .count()
+        )
+    monthly_sim_cap = TIER_LIMITS.get(
+        tier.lower(),
+        TIER_LIMITS["free"],
+    )["simulations_per_month"]
+
+    # Counts.
+    project_count = (
+        db.query(Project)
+        .filter(Project.user_id == current_user.id)
+        .count()
+    )
+    simulation_count = decision_count = outcome_count = 0
+    if owned_project_ids:
+        simulation_count = (
+            db.query(Simulation)
+            .filter(Simulation.project_id.in_(owned_project_ids))
+            .count()
+        )
+        decision_count = (
+            db.query(Decision)
+            .filter(Decision.project_id.in_(owned_project_ids))
+            .count()
+        )
+        outcome_count = (
+            db.query(Outcome)
+            .filter(Outcome.project_id.in_(owned_project_ids))
+            .count()
+        )
+
+    dashboard = build_user_dashboard(
+        account_created_at=current_user.created_at,
+        tier=tier,
+        monthly_sim_used=monthly_sim_used,
+        monthly_sim_cap=monthly_sim_cap,
+        project_count=project_count,
+        simulation_count=simulation_count,
+        decision_count=decision_count,
+        outcome_count=outcome_count,
+    )
+
+    # Calibration MAE + critical signals for account_health.
+    mae: float | None = None
+    critical_signal_count = 0
+    if owned_project_ids:
+        health_rows = (
+            db.query(
+                Simulation.created_at,
+                Outcome.predicted_conversion_rate,
+                Outcome.actual_conversion_rate,
+                Simulation.results_json,
+            )
+            .outerjoin(
+                Outcome, Outcome.simulation_id == Simulation.id,
+            )
+            .filter(
+                Simulation.project_id.in_(owned_project_ids),
+                Simulation.status == "COMPLETED",
+            )
+            .order_by(Simulation.created_at.desc())
+            .limit(50)
+            .all()
+        )
+        seen: set[int] = set()
+        deduped: list[tuple] = []
+        for r in health_rows:
+            sid = id(r.created_at)
+            if sid in seen:
+                continue
+            seen.add(sid)
+            deduped.append(
+                (r.created_at,
+                 r.predicted_conversion_rate,
+                 r.actual_conversion_rate,
+                 (r.results_json or {}).get(
+                     "domain_findings"
+                 ) or []),
+            )
+        usable = [
+            (pred, act)
+            for _, pred, act, _ in deduped
+            if isinstance(pred, (int, float))
+            and isinstance(act, (int, float))
+        ]
+        if usable:
+            mae = sum(
+                abs(act - pred) for pred, act in usable
+            ) / len(usable)
+        if deduped:
+            try:
+                cal = build_calibration_health(deduped)
+                for sig in (cal or {}).get("key_signals", []):
+                    if sig.get("severity") == "critical":
+                        critical_signal_count += 1
+            except Exception:
+                pass
+
+    blindspot_cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
+    blindspot_count = (
+        db.execute(
+            text(
+                """SELECT COUNT(*) FROM user_market_blindspots
+                   WHERE user_id = :uid AND occurrence_count >= 2
+                     AND (last_surfaced_to_user IS NULL
+                          OR last_surfaced_to_user < :cutoff)"""
+            ),
+            {"uid": current_user.id, "cutoff": blindspot_cutoff},
+        ).scalar()
+        or 0
+    )
+
+    account_age_days = 0
+    if current_user.created_at is not None:
+        delta = datetime.now(timezone.utc) - current_user.created_at
+        account_age_days = max(0, delta.days)
+
+    failed_outcome_count = 0
+    if owned_project_ids:
+        failed_outcome_count = (
+            db.query(Outcome)
+            .filter(
+                Outcome.project_id.in_(owned_project_ids),
+                Outcome.calibration_score.is_(None),
+            )
+            .count()
+        )
+
+    account_health = build_account_health(
+        mae=mae,
+        blindspot_count=int(blindspot_count),
+        simulation_completed=simulation_count,  # proxy
+        simulation_total=simulation_count,
+        decision_completed=decision_count,
+        decision_total=decision_count,
+        account_age_days=account_age_days,
+        failed_outcome_count=failed_outcome_count,
+        critical_signal_count=critical_signal_count,
+    )
+
+    # coverage_gaps
+    assumption_dicts = []
+    covered_clusters: set[int] = set()
+    if owned_project_ids:
+        assumption_rows = (
+            db.query(Assumption)
+            .filter(
+                Assumption.project_id.in_(owned_project_ids),
+                Assumption.is_hidden.is_(False),
+            )
+            .all()
+        )
+        assumption_dicts = [
+            {
+                "category": a.category,
+                "sensitivity": a.sensitivity,
+                "is_hidden": a.is_hidden,
+            }
+            for a in assumption_rows
+        ]
+        # cluster ids from completed sims
+        results_rows = (
+            db.query(Simulation.results_json)
+            .filter(
+                Simulation.project_id.in_(owned_project_ids),
+                Simulation.status == "COMPLETED",
+            )
+            .all()
+        )
+        for r in results_rows:
+            bd = (r[0] or {}).get("cluster_breakdown") or {}
+            for cid in bd.keys():
+                try:
+                    covered_clusters.add(int(cid))
+                except (TypeError, ValueError):
+                    continue
+    coverage_gaps = build_coverage_gaps(
+        assumptions=assumption_dicts,
+        cluster_ids=list(covered_clusters),
+    )
+
+    # notifications (blindspots + pending decisions)
+    bs_rows = db.execute(
+        text(
+            """SELECT blindspot_type, blindspot_value,
+                      occurrence_count, first_seen,
+                      last_surfaced_to_user
+               FROM user_market_blindspots
+               WHERE user_id = :uid AND occurrence_count >= 2
+                 AND (last_surfaced_to_user IS NULL
+                      OR last_surfaced_to_user < :cutoff)"""
+        ),
+        {"uid": current_user.id, "cutoff": blindspot_cutoff},
+    ).fetchall()
+    blindspot_dicts = [
+        {
+            "blindspot_type": r.blindspot_type,
+            "blindspot_value": r.blindspot_value,
+            "occurrence_count": r.occurrence_count,
+            "first_seen": r.first_seen,
+            "last_surfaced_to_user": r.last_surfaced_to_user,
+        }
+        for r in bs_rows
+    ]
+    pending_decision_dicts: list[dict] = []
+    if owned_project_ids:
+        decision_rows = (
+            db.query(
+                Decision.id,
+                Decision.title,
+                Decision.status,
+                Decision.created_at,
+            )
+            .filter(
+                Decision.project_id.in_(owned_project_ids),
+                Decision.status.in_(("PENDING", "RUNNING")),
+            )
+            .order_by(Decision.created_at.desc())
+            .limit(20)
+            .all()
+        )
+        pending_decision_dicts = [
+            {
+                "id": r.id,
+                "title": r.title,
+                "status": r.status,
+                "created_at": r.created_at,
+            }
+            for r in decision_rows
+        ]
+    notifications = build_notifications(
+        blindspots=blindspot_dicts,
+        pending_decisions=pending_decision_dicts,
+    )
+
+    # weekly_digest (last 7d)
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    sim_count_week = completed_sim_count_week = (
+        decision_count_week
+    ) = outcome_count_week = 0
+    if owned_project_ids:
+        sim_count_week = (
+            db.query(Simulation)
+            .filter(
+                Simulation.project_id.in_(owned_project_ids),
+                Simulation.created_at >= seven_days_ago,
+            )
+            .count()
+        )
+        completed_sim_count_week = (
+            db.query(Simulation)
+            .filter(
+                Simulation.project_id.in_(owned_project_ids),
+                Simulation.created_at >= seven_days_ago,
+                Simulation.status == "COMPLETED",
+            )
+            .count()
+        )
+        decision_count_week = (
+            db.query(Decision)
+            .filter(
+                Decision.project_id.in_(owned_project_ids),
+                Decision.created_at >= seven_days_ago,
+            )
+            .count()
+        )
+        outcome_count_week = (
+            db.query(Outcome)
+            .filter(
+                Outcome.project_id.in_(owned_project_ids),
+                Outcome.created_at >= seven_days_ago,
+            )
+            .count()
+        )
+    weekly_digest = build_weekly_digest(
+        sim_count_week=sim_count_week,
+        decision_count_week=decision_count_week,
+        outcome_count_week=outcome_count_week,
+        completed_sim_count_week=completed_sim_count_week,
+    )
+
+    payload = build_digest_snapshot(
+        dashboard=dashboard,
+        account_health=account_health,
+        coverage_gaps=coverage_gaps,
+        notifications=notifications,
+        weekly_digest=weekly_digest,
+    )
+    return DigestSnapshotOut(**payload)

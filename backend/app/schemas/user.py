@@ -147,3 +147,28 @@ class WeeklyDigestOut(BaseModel):
     narrative: str = ""
     key_signals: list[dict] = []
 
+
+class DigestSnapshotOut(BaseModel):
+    """Response from ``GET /me/digest-snapshot``.
+
+    One-shot capture of every user-level endpoint into a
+    single payload so the founder (or the system) can
+    archive it for later comparison, or send it as a
+    single email.
+
+    Composes the 5 user-level digests:
+    - ``dashboard`` - count snapshot
+    - ``account_health`` - 0-100 health score
+    - ``coverage_gaps`` - missing dimensions
+    - ``notifications`` - inbox feed
+    - ``weekly_digest`` - rolling-7d recap
+    """
+
+    snapshot_at: str = ""
+    schema_version: int = 1
+    dashboard: dict = {}
+    account_health: dict = {}
+    coverage_gaps: dict = {}
+    notifications: dict = {}
+    weekly_digest: dict = {}
+
