@@ -183,6 +183,13 @@ _USER_DECISION_VELOCITY_CACHE_NAMESPACE: str = (
     "user-decision-velocity"
 )
 
+# Outcome velocity - "how fast do you record outcomes?"
+# tile. 60s TTL: 2 cheap queries in the route.
+_USER_OUTCOME_VELOCITY_CACHE_TTL_S: int = 60
+_USER_OUTCOME_VELOCITY_CACHE_NAMESPACE: str = (
+    "user-outcome-velocity"
+)
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -267,6 +274,10 @@ def clear_archive(
     )
     cache_invalidate(
         namespace=_USER_DECISION_VELOCITY_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_OUTCOME_VELOCITY_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     return MessageResponse(message=f"Cleared {deleted} dossiers from your archive")
@@ -2684,6 +2695,15 @@ def get_outcome_velocity(
     if not owned_project_ids:
         return OutcomeVelocityOut()
 
+    # Cache hit - short-circuit the 2 queries.
+    cached = cache_get_json(
+        namespace=_USER_OUTCOME_VELOCITY_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return OutcomeVelocityOut(**cached)
+
     # Latest completed sim per project.
     sim_rows = (
         db.query(
@@ -2725,4 +2745,11 @@ def get_outcome_velocity(
             pairs.append((sim_dt, out_dt))
 
     payload = build_outcome_velocity(sim_outcome_pairs=pairs)
+    cache_set_json(
+        namespace=_USER_OUTCOME_VELOCITY_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_OUTCOME_VELOCITY_CACHE_TTL_S,
+    )
     return OutcomeVelocityOut(**payload)
