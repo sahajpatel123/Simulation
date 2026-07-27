@@ -510,3 +510,30 @@ class DecisionRateOut(BaseModel):
     narrative: str = ""
     key_signals: list[dict] = []
 
+
+class OutcomeRateOut(BaseModel):
+    """Response from ``GET /me/outcome-rate``.
+
+    Outcome coverage: number of outcomes per completed
+    sim across the user's portfolio. Analog of
+    /me/decision-rate but for outcomes.
+
+    * ``sim_count`` - total completed sims.
+    * ``outcome_count`` - total outcomes.
+    * ``rate_per_sim`` - ``outcome_count / sim_count``
+      (None when sim_count is 0).
+    * ``verdict`` - ``HIGH`` (>= 0.5) / ``NORMAL``
+      (>= 0.25) / ``LOW`` (< 0.25) /
+      ``INSUFFICIENT_DATA``.
+    * ``narrative`` - one paragraph string.
+    * ``key_signals`` - ``{label, value, severity,
+      display}``.
+    """
+
+    sim_count: int = 0
+    outcome_count: int = 0
+    rate_per_sim: float | None = None
+    verdict: str = "INSUFFICIENT_DATA"
+    narrative: str = ""
+    key_signals: list[dict] = []
+

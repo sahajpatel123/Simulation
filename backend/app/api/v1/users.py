@@ -29,6 +29,7 @@ from app.schemas.user import (
     LastTouchedProjectOut,
     MostActiveProjectOut,
     NotificationsOut,
+    OutcomeRateOut,
     OutcomeVelocityOut,
     PortfolioHealthSnapshotOut,
     ProjectsByStatusOut,
@@ -58,6 +59,7 @@ from app.simulation.most_active_project import (
     build_most_active_project,
 )
 from app.simulation.notifications import build_notifications
+from app.simulation.outcome_rate import build_outcome_rate
 from app.simulation.outcome_velocity import (
     build_outcome_velocity,
 )
@@ -2837,3 +2839,55 @@ def get_decision_rate(
         ttl_seconds=_USER_DECISION_RATE_CACHE_TTL_S,
     )
     return DecisionRateOut(**payload)
+
+
+@router.get(
+    "/me/outcome-rate",
+    response_model=OutcomeRateOut,
+    summary=(
+        "Per-user outcome coverage rate - outcomes per "
+        "completed sim across the portfolio"
+    ),
+    # Read-only; 2 cheap COUNTs.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_outcome_rate(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> OutcomeRateOut:
+    """Outcome rate.
+
+    Computes total outcomes / total completed sims
+    across the user's portfolio. Analog of
+    /me/decision-rate but for outcomes.
+    """
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+    if not owned_project_ids:
+        return OutcomeRateOut(
+            narrative="No projects on file yet.",
+        )
+
+    sim_count = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id.in_(owned_project_ids),
+            Simulation.status == "COMPLETED",
+        )
+        .count()
+    )
+    outcome_count = (
+        db.query(Outcome)
+        .filter(Outcome.project_id.in_(owned_project_ids))
+        .count()
+    )
+
+    payload = build_outcome_rate(
+        sim_count=sim_count,
+        outcome_count=outcome_count,
+    )
+    return OutcomeRateOut(**payload)
