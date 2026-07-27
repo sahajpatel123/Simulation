@@ -58,8 +58,12 @@ from app.schemas.environment import (
 from app.schemas.intervention import Intervention, InterventionOut, InterventionRequest
 from app.schemas.premortem import FailureMode, PremortemOut, PremortemRequest
 from app.schemas.project import (
+    ActivityEvent,
+    ActivityFeedOut,
     BriefAssistRequest,
     BriefSave,
+    NextBestActionOut,
+    NextBestActionSource,
     ProjectCreate,
     ProjectDuplicateIn,
     ProjectDuplicateOut,
@@ -72,8 +76,6 @@ from app.schemas.project import (
     ProjectTagRenameOut,
     ProjectTagsOut,
     ProjectTagsPatch,
-    NextBestActionOut,
-    NextBestActionSource,
 )
 from app.schemas.prototype import FunnelEdge, FunnelGraph, FunnelNode, PrototypeOut
 from app.schemas.stress_test import (
@@ -114,6 +116,7 @@ from app.simulation.project_tags import (
     rename_tag_in_list,
 )
 from app.simulation.scored_assumption import score_assumptions, signal_quality_tier
+from app.simulation.activity_feed import build_activity_feed
 from app.simulation.next_best_action import build_next_best_action
 from app.tasks.simulation_tasks import run_full_simulation
 from app.tasks.stress_test_tasks import run_assumption_stress_test
@@ -131,6 +134,13 @@ _conductor = Conductor()
 # so the answer reflects the latest state.
 _NEXT_ACTION_CACHE_TTL_S: int = 60
 _NEXT_ACTION_CACHE_NAMESPACE: str = "project-next-action"
+
+# The timeline ("what just happened?") tile. Events
+# mostly arrive in bursts (sim completes, decision
+# completes) so a 30s TTL is enough to absorb dashboard
+# polling without making a recent completion feel stale.
+_ACTIVITY_FEED_CACHE_TTL_S: int = 30
+_ACTIVITY_FEED_CACHE_NAMESPACE: str = "project-activity-feed"
 
 _SOFTWARE_PRODUCT_TYPES: frozenset[ProductType] = frozenset(
     {
@@ -3087,3 +3097,121 @@ def get_next_action(
         source=NextBestActionSource(**payload["source"]),
         fallback=payload["fallback"],
     )
+
+
+@router.get(
+    "/{project_id}/activity-feed",
+    response_model=ActivityFeedOut,
+    summary=(
+        "Chronological feed of the project's recent events "
+        "— sims, decisions, outcomes — capped at 50 newest "
+        "events with founder-readable narrative + key_signals"
+    ),
+    # Read-only; three cheap SELECTs capped at 50 rows.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_activity_feed(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ActivityFeedOut:
+    """Per-project "what just happened?" timeline.
+
+    Composes a single payload covering the most recent
+    sims, decisions, and outcomes so the dashboard can
+    render a timeline tile without fanning out to
+    /simulations, /decisions, and /outcomes separately.
+    """
+    get_owned_project(db, current_user.id, project_id)
+
+    # Cache hit → short-circuit all three SELECTs.
+    cached = cache_get_json(
+        namespace=_ACTIVITY_FEED_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return ActivityFeedOut(**cached)
+
+    sim_rows = (
+        db.query(
+            Simulation.id,
+            Simulation.status,
+            Simulation.created_at,
+            Simulation.updated_at,
+            Simulation.results_json,
+        )
+        .filter(Simulation.project_id == project_id)
+        .order_by(Simulation.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    decision_rows = (
+        db.query(
+            Decision.id,
+            Decision.status,
+            Decision.title,
+            Decision.created_at,
+            Decision.updated_at,
+            Decision.results_json,
+        )
+        .filter(Decision.project_id == project_id)
+        .order_by(Decision.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    outcome_rows = (
+        db.query(
+            Outcome.id,
+            Outcome.created_at,
+            Outcome.actual_conversion_rate,
+        )
+        .filter(Outcome.project_id == project_id)
+        .order_by(Outcome.created_at.desc())
+        .limit(50)
+        .all()
+    )
+
+    sim_dicts = [
+        {
+            "id": r.id,
+            "status": r.status,
+            "created_at": r.created_at,
+            "updated_at": r.updated_at,
+            "results_json": r.results_json,
+        }
+        for r in sim_rows
+    ]
+    decision_dicts = [
+        {
+            "id": r.id,
+            "status": r.status,
+            "title": r.title,
+            "created_at": r.created_at,
+            "updated_at": r.updated_at,
+            "results_json": r.results_json,
+        }
+        for r in decision_rows
+    ]
+    outcome_dicts = [
+        {
+            "id": r.id,
+            "created_at": r.created_at,
+            "actual_conversion_rate": r.actual_conversion_rate,
+        }
+        for r in outcome_rows
+    ]
+
+    payload = build_activity_feed(
+        sims=sim_dicts,
+        decisions=decision_dicts,
+        outcomes=outcome_dicts,
+    )
+    cache_set_json(
+        namespace=_ACTIVITY_FEED_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_ACTIVITY_FEED_CACHE_TTL_S,
+    )
+    return ActivityFeedOut(**payload)

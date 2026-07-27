@@ -256,3 +256,37 @@ class NextBestActionOut(BaseModel):
     category: str = "no_signal"
     source: NextBestActionSource = NextBestActionSource()
     fallback: bool = True
+
+
+class ActivityEvent(BaseModel):
+    """One entry in the per-project activity feed."""
+
+    type: str = ""
+    occurred_at: str = ""
+    ref_id: int | None = None
+    title: str = ""
+    summary: str = ""
+    severity: str = "ok"
+
+
+class ActivityFeedOut(BaseModel):
+    """Response from ``GET /projects/{id}/activity-feed``.
+
+    Chronological (newest-first) timeline of the project's
+    recent events — sims created / completed / failed,
+    decisions created / completed / failed, outcomes
+    submitted. Capped at 50 events so the dashboard
+    timeline tile stays scannable.
+
+    * ``event_count`` — total events found before capping.
+    * ``events`` — capped list of :class:`ActivityEvent`.
+    * ``narrative`` — one paragraph summary.
+    * ``key_signals`` — ``{label, value, severity,
+      display}`` dicts for the dashboard's "what's
+      important" strip.
+    """
+
+    event_count: int = 0
+    events: list[dict] = []
+    narrative: str = ""
+    key_signals: list[dict] = []
