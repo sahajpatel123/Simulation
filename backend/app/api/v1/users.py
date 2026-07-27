@@ -537,8 +537,16 @@ def get_account_health(
     mae: float | None = None
     critical_signal_count = 0
     if owned_project_ids:
+        # Select Simulation.id so we can dedup by sim id (not
+        # by object identity on created_at — the previous
+        # ``id(r.created_at)`` key silently failed when two
+        # sims shared a created_at second or when SQLAlchemy
+        # reused the datetime instance across rows).
+        # ORDER BY Outcome.created_at DESC so the newest
+        # outcome per sim is the first row we encounter.
         health_rows = (
             db.query(
+                Simulation.id,
                 Simulation.created_at,
                 Outcome.predicted_conversion_rate,
                 Outcome.actual_conversion_rate,
@@ -551,18 +559,21 @@ def get_account_health(
                 Simulation.project_id.in_(owned_project_ids),
                 Simulation.status == "COMPLETED",
             )
-            .order_by(Simulation.created_at.desc())
-            .limit(50)
+            .order_by(
+                Simulation.id.asc(),
+                Outcome.created_at.desc(),
+            )
+            .limit(200)
             .all()
         )
-        # Dedupe per-sim (latest outcome wins).
+        # Dedupe per Simulation.id — first row per id wins
+        # (newest outcome per the ORDER BY above).
         seen: set[int] = set()
         deduped: list[tuple] = []
         for r in health_rows:
-            sid = id(r.created_at)  # coarse dedup key
-            if sid in seen:
+            if r.id in seen:
                 continue
-            seen.add(sid)
+            seen.add(r.id)
             deduped.append(
                 (r.created_at,
                  r.predicted_conversion_rate,
