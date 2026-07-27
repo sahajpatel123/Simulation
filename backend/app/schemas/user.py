@@ -593,3 +593,28 @@ class InsightsOut(BaseModel):
     insights: list[str] = []
     narrative: str = ""
     key_signals: list[dict] = []
+
+
+class LastWeekStatsOut(BaseModel):
+    """Response from ``GET /me/last-week-stats``.
+
+    Comparative stats: this week (last 7 days) vs last
+    week (days 8-14 ago). Shows whether the user's
+    activity is accelerating, steady, or slowing.
+
+    * ``this_week`` / ``last_week`` - dicts with
+      ``sim_count``, ``decision_count``, ``outcome_count``.
+    * ``deltas`` - per-key difference (this_week - last_week).
+    * ``verdict`` - ``ACCELERATING`` / ``STEADY`` /
+      ``SLOWING`` / ``INSUFFICIENT_DATA``.
+    * ``narrative`` - one paragraph string.
+    * ``key_signals`` - ``{label, value, severity,
+      display}``.
+    """
+
+    this_week: dict = {}
+    last_week: dict = {}
+    deltas: dict = {}
+    verdict: str = "INSUFFICIENT_DATA"
+    narrative: str = ""
+    key_signals: list[dict] = []

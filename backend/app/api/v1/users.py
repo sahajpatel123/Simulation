@@ -29,6 +29,7 @@ from app.schemas.user import (
     DigestSnapshotOut,
     InsightsOut,
     LastTouchedProjectOut,
+    LastWeekStatsOut,
     MostActiveProjectOut,
     NotificationsOut,
     OutcomeRateOut,
@@ -60,6 +61,9 @@ from app.simulation.insights import build_insights
 from app.simulation.intervention_digest import build_intervention_digest
 from app.simulation.last_touched_project import (
     build_last_touched_project,
+)
+from app.simulation.last_week_stats import (
+    build_last_week_stats,
 )
 from app.simulation.most_active_project import (
     build_most_active_project,
@@ -3230,3 +3234,111 @@ def get_insights(
         ttl_seconds=_USER_INSIGHTS_CACHE_TTL_S,
     )
     return InsightsOut(**payload)
+
+
+@router.get(
+    "/me/last-week-stats",
+    response_model=LastWeekStatsOut,
+    summary=(
+        "Per-user comparative stats - this week (last 7 "
+        "days) vs last week (days 8-14 ago) so the dashboard "
+        "can show whether activity is accelerating, steady, "
+        "or slowing"
+    ),
+    # Read-only; 6 cheap COUNTs (3 this-week, 3 last-week).
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_last_week_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> LastWeekStatsOut:
+    """Last-week stats.
+
+    Compares this week (last 7 days) vs last week
+    (days 8-14 ago) for sim / decision / outcome counts.
+    """
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+    if not owned_project_ids:
+        return LastWeekStatsOut()
+
+    this_week_start = datetime.now(
+        timezone.utc,
+    ) - timedelta(days=7)
+    last_week_end = this_week_start
+    last_week_start = datetime.now(
+        timezone.utc,
+    ) - timedelta(days=14)
+
+    this_week_counts = {
+        "sim_count": 0,
+        "decision_count": 0,
+        "outcome_count": 0,
+    }
+    last_week_counts = {
+        "sim_count": 0,
+        "decision_count": 0,
+        "outcome_count": 0,
+    }
+
+    this_week_counts["sim_count"] = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id.in_(owned_project_ids),
+            Simulation.created_at >= this_week_start,
+        )
+        .count()
+    )
+    this_week_counts["decision_count"] = (
+        db.query(Decision)
+        .filter(
+            Decision.project_id.in_(owned_project_ids),
+            Decision.created_at >= this_week_start,
+        )
+        .count()
+    )
+    this_week_counts["outcome_count"] = (
+        db.query(Outcome)
+        .filter(
+            Outcome.project_id.in_(owned_project_ids),
+            Outcome.created_at >= this_week_start,
+        )
+        .count()
+    )
+    last_week_counts["sim_count"] = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id.in_(owned_project_ids),
+            Simulation.created_at >= last_week_start,
+            Simulation.created_at < last_week_end,
+        )
+        .count()
+    )
+    last_week_counts["decision_count"] = (
+        db.query(Decision)
+        .filter(
+            Decision.project_id.in_(owned_project_ids),
+            Decision.created_at >= last_week_start,
+            Decision.created_at < last_week_end,
+        )
+        .count()
+    )
+    last_week_counts["outcome_count"] = (
+        db.query(Outcome)
+        .filter(
+            Outcome.project_id.in_(owned_project_ids),
+            Outcome.created_at >= last_week_start,
+            Outcome.created_at < last_week_end,
+        )
+        .count()
+    )
+
+    payload = build_last_week_stats(
+        this_week_counts=this_week_counts,
+        last_week_counts=last_week_counts,
+    )
+    return LastWeekStatsOut(**payload)
