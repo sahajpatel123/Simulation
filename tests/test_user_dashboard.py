@@ -132,6 +132,12 @@ def test_dashboard_account_age_label_week() -> None:
 def test_dashboard_account_age_label_quarter() -> None:
     from app.simulation.user_dashboard import build_user_dashboard
 
+    # Jan 1 to Jun 1 = 151 days → past the 90-day "quarter"
+    # band, into the 365-day "year" band. Test the year
+    # label (not quarter) — the ACCOUNT_AGE_BANDS use
+    # upper-bound semantics ("less than X old"), so an
+    # account past day 90 is "less than a year old",
+    # not "less than a quarter old".
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
     created = datetime(2026, 1, 1, tzinfo=timezone.utc)
     out = build_user_dashboard(
@@ -141,7 +147,41 @@ def test_dashboard_account_age_label_quarter() -> None:
         now=now,
     )
     assert out["account_age_days"] >= 90
-    assert "quarter" in out["account_age_label"]
+    assert "year" in out["account_age_label"]
+
+
+def test_dashboard_account_age_inclusive_boundaries() -> None:
+    """Regression: band lookup uses ``<=`` so the exact
+    day of each band limit (7 / 30 / 90 / 365) falls into
+    THAT band, not the next one up. The previous ``<``
+    comparison silently classified day-90 as "less than a
+    year old" — which contradicts the ACCOUNT_AGE_BANDS
+    tuple ordering.
+    """
+    from app.simulation.user_dashboard import build_user_dashboard
+
+    # Day-7 boundary: "less than a week old" (not month).
+    now = datetime(2026, 1, 8, tzinfo=timezone.utc)
+    created = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    out = build_user_dashboard(
+        account_created_at=created, tier="FREE",
+        monthly_sim_used=0, now=now,
+    )
+    assert out["account_age_days"] == 7
+    assert out["account_age_label"] == "less than a week old"
+
+    # Day-90 boundary (Jan 1 to Apr 1 in a non-leap year):
+    # "less than a quarter old", NOT "less than a year old".
+    # The previous ``<`` comparison at line 89 missed this
+    # boundary — day-90 silently fell into the year band.
+    now = datetime(2026, 4, 1, tzinfo=timezone.utc)
+    created = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    out = build_user_dashboard(
+        account_created_at=created, tier="FREE",
+        monthly_sim_used=0, now=now,
+    )
+    assert out["account_age_days"] == 90
+    assert out["account_age_label"] == "less than a quarter old"
 
 
 def test_dashboard_account_age_handles_naive_datetime() -> None:

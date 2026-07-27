@@ -85,8 +85,12 @@ def _safe_int(value: object, default: int = 0) -> int:
 
 
 def _format_account_age(days: int) -> str:
+    # ``<=`` so an account that's exactly 7/30/90/365 days
+    # old falls into the corresponding band rather than
+    # skipping past it (e.g. day-90 → "less than a quarter
+    # old" not "less than a year old").
     for limit, label in ACCOUNT_AGE_BANDS:
-        if days < limit:
+        if days <= limit:
             return label
     return "well established"
 
