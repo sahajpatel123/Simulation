@@ -291,6 +291,13 @@ _USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE: str = (
     "user-oldest-open-item"
 )
 
+# Recent outcomes - "what happened recently?" tile.
+# 60s TTL: 1 query in the route.
+_USER_RECENT_OUTCOMES_CACHE_TTL_S: int = 60
+_USER_RECENT_OUTCOMES_CACHE_NAMESPACE: str = (
+    "user-recent-outcomes"
+)
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -438,6 +445,10 @@ def clear_archive(
     )
     cache_invalidate(
         namespace=_USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_RECENT_OUTCOMES_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     return MessageResponse(message=f"Cleared {deleted} dossiers from your archive")
@@ -3988,6 +3999,17 @@ def get_recent_outcomes(
     Returns the last 5 outcomes across the user's
     projects, sorted by created_at descending.
     """
+    # Cache hit - short-circuit the 1 query. Checked
+    # BEFORE the DB query below so cache hits skip all DB
+    # work (including the empty-project early-return).
+    cached = cache_get_json(
+        namespace=_USER_RECENT_OUTCOMES_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return RecentOutcomesOut(**cached)
+
     owned_project_ids = [
         pid for (pid,) in
         db.query(Project.id)
@@ -4023,5 +4045,12 @@ def get_recent_outcomes(
     ]
     payload = build_recent_outcomes(
         recent_outcome_dicts=recent_outcome_dicts,
+    )
+    cache_set_json(
+        namespace=_USER_RECENT_OUTCOMES_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_RECENT_OUTCOMES_CACHE_TTL_S,
     )
     return RecentOutcomesOut(**payload)

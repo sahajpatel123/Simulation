@@ -4520,6 +4520,17 @@ def get_confidence_explainer(
     score into 5 factors so the dashboard can show
     'why is my confidence 0.85?' instead of just '0.85'.
     """
+    # Cache hit - short-circuit the 4 cheap queries.
+    # Checked BEFORE the DB query below so cache hits
+    # skip all DB work (including the no-sim early-return).
+    cached = cache_get_json(
+        namespace=_CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return ConfidenceExplainerOut(**cached)
+
     project = get_owned_project(db, current_user.id, project_id)
 
     # Latest completed sim.
@@ -4539,15 +4550,6 @@ def get_confidence_explainer(
                 "the confidence breakdown."
             ),
         )
-
-    # Cache hit - short-circuit the 4 cheap queries.
-    cached = cache_get_json(
-        namespace=_CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
-        params={"project_id": project_id},
-        user_id=current_user.id,
-    )
-    if cached is not None:
-        return ConfidenceExplainerOut(**cached)
 
     confidence_score = getattr(
         latest_sim, "confidence_score", None,
