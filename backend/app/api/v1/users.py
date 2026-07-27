@@ -24,6 +24,7 @@ from app.schemas.user import (
     AccountHealthOut,
     CoverageGapsOut,
     DigestSnapshotOut,
+    LastTouchedProjectOut,
     MostActiveProjectOut,
     NotificationsOut,
     PortfolioHealthSnapshotOut,
@@ -42,6 +43,9 @@ from app.simulation.calibration_health import (
 from app.simulation.coverage_gaps import build_coverage_gaps
 from app.simulation.digest_snapshot import build_digest_snapshot
 from app.simulation.intervention_digest import build_intervention_digest
+from app.simulation.last_touched_project import (
+    build_last_touched_project,
+)
 from app.simulation.most_active_project import (
     build_most_active_project,
 )
@@ -2309,3 +2313,108 @@ def get_portfolio_health_snapshot(
         ttl_seconds=_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_TTL_S,
     )
     return PortfolioHealthSnapshotOut(**payload)
+
+
+@router.get(
+    "/me/last-touched-project",
+    response_model=LastTouchedProjectOut,
+    summary=(
+        "Per-user last-touched project - the most-recent "
+        "activity (sim / decision / outcome) across the "
+        "user's projects, surfaced as a 'where was I "
+        "last?' recommendation"
+    ),
+    # Read-only; 3 cheap MAX-by-id queries.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_last_touched_project(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> LastTouchedProjectOut:
+    """Last-touched project.
+
+    Picks the most recent (sim / decision / outcome) row
+    across the user's projects and surfaces the owning
+    project as the 'where was I last?' answer.
+    """
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+    if not owned_project_ids:
+        return LastTouchedProjectOut()
+
+    # Latest sim per project.
+    sim_rows = (
+        db.query(
+            Simulation.id,
+            Simulation.project_id,
+            Simulation.created_at,
+        )
+        .filter(Simulation.project_id.in_(owned_project_ids))
+        .order_by(Simulation.id.desc())
+        .limit(50)
+        .all()
+    )
+    # Latest decision per project.
+    decision_rows = (
+        db.query(
+            Decision.id,
+            Decision.project_id,
+            Decision.created_at,
+        )
+        .filter(Decision.project_id.in_(owned_project_ids))
+        .order_by(Decision.id.desc())
+        .limit(50)
+        .all()
+    )
+    # Latest outcome per project.
+    outcome_rows = (
+        db.query(
+            Outcome.id,
+            Outcome.project_id,
+            Outcome.created_at,
+        )
+        .filter(Outcome.project_id.in_(owned_project_ids))
+        .order_by(Outcome.id.desc())
+        .limit(50)
+        .all()
+    )
+
+    # Project titles.
+    project_rows = (
+        db.query(Project.id, Project.title)
+        .filter(Project.id.in_(owned_project_ids))
+        .all()
+    )
+    title_by_pid = {r.id: r.title for r in project_rows}
+
+    activity_rows: list[dict] = []
+    for s in sim_rows:
+        activity_rows.append({
+            "project_id": s.project_id,
+            "project_title": title_by_pid.get(s.project_id, ""),
+            "activity_type": "sim",
+            "activity_at": s.created_at,
+        })
+    for d in decision_rows:
+        activity_rows.append({
+            "project_id": d.project_id,
+            "project_title": title_by_pid.get(d.project_id, ""),
+            "activity_type": "decision",
+            "activity_at": d.created_at,
+        })
+    for o in outcome_rows:
+        activity_rows.append({
+            "project_id": o.project_id,
+            "project_title": title_by_pid.get(o.project_id, ""),
+            "activity_type": "outcome",
+            "activity_at": o.created_at,
+        })
+
+    payload = build_last_touched_project(
+        activity_rows=activity_rows,
+    )
+    return LastTouchedProjectOut(**payload)

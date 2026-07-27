@@ -372,3 +372,31 @@ class PortfolioHealthSnapshotOut(BaseModel):
     narrative: str = ""
     key_signals: list[dict] = []
 
+
+class LastTouchedProjectOut(BaseModel):
+    """Response from ``GET /me/last-touched-project``.
+
+    Single "where was I last?" payload so the dashboard
+    can return the user to their most recently active
+    project with a single click.
+
+    * ``has_activity`` - ``True`` when at least one
+      activity row exists.
+    * ``project_id`` / ``project_title`` - the winning
+      project (or ``None``).
+    * ``last_activity_at`` - ISO timestamp of the most
+      recent activity (or ``None``).
+    * ``last_activity_type`` - ``sim`` / ``decision`` /
+      ``outcome``.
+    * ``narrative`` - one paragraph string.
+    * ``key_signals`` - ``{label, value, severity, display}``.
+    """
+
+    has_activity: bool = False
+    project_id: int | None = None
+    project_title: str | None = None
+    last_activity_at: str | None = None
+    last_activity_type: str | None = None
+    narrative: str = ""
+    key_signals: list[dict] = []
+
