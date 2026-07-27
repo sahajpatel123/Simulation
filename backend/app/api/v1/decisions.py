@@ -6,6 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.v1.common import get_owned_project
+from app.api.v1.projects import (
+    _ACTIVITY_FEED_CACHE_NAMESPACE,
+    _NEXT_ACTION_CACHE_NAMESPACE,
+)
 from app.core.deps import get_current_user, get_db
 from app.core.rate_limiter import rate_limit
 from app.core.response_cache import (
@@ -116,7 +120,7 @@ def create_decision_comparison(
         user_id=current_user.id,
     )
     cache_invalidate(
-        namespace="project-next-action",
+        namespace=_NEXT_ACTION_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 

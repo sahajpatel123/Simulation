@@ -470,10 +470,18 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         # just-completed simulation immediately rather than
         # waiting out the TTL.
         try:
+            from app.api.v1.projects import (
+                _ACTIVITY_FEED_CACHE_NAMESPACE,
+                _NEXT_ACTION_CACHE_NAMESPACE,
+            )
             from app.core.response_cache import cache_invalidate
 
             cache_invalidate(
-                namespace="project-next-action",
+                namespace=_NEXT_ACTION_CACHE_NAMESPACE,
+                user_id=project.user_id,
+            )
+            cache_invalidate(
+                namespace=_ACTIVITY_FEED_CACHE_NAMESPACE,
                 user_id=project.user_id,
             )
         except Exception as _exc:

@@ -320,6 +320,7 @@ def run_decision_comparison(self, decision_id: int) -> dict[str, Any]:
         # explicitly (the relationship can detach after
         # commit() in some Celery/SQLAlchemy interactions).
         try:
+            from app.api.v1.projects import _NEXT_ACTION_CACHE_NAMESPACE
             from app.core.response_cache import cache_invalidate
             from app.models.project import Project
 
@@ -337,7 +338,7 @@ def run_decision_comparison(self, decision_id: int) -> dict[str, Any]:
                 # the just-completed decision can resolve a
                 # priority-2 CTA or change calibration health.
                 cache_invalidate(
-                    namespace="project-next-action",
+                    namespace=_NEXT_ACTION_CACHE_NAMESPACE,
                     user_id=owner_id,
                 )
         except Exception as _exc:

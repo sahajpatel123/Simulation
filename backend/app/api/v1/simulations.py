@@ -12,6 +12,10 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
 from app.api.v1.common import get_owned_project
+from app.api.v1.projects import (
+    _ACTIVITY_FEED_CACHE_NAMESPACE,
+    _NEXT_ACTION_CACHE_NAMESPACE,
+)
 from app.core.rate_limiter import rate_limit
 from app.core.tier_enforcement import enforce_simulation_limit
 from app.models.assumption import Assumption
@@ -286,14 +290,18 @@ def create_simulation(
     logger.info(f"[API] Simulation enqueued - simulation_id={sim.id} task_id={task.id}")
 
     # Bust the cached portfolio-narrative + the per-project
-    # next-action so the next GET reflects the new sim
-    # rather than waiting out the TTL.
+    # next-action + the activity feed so the next GETs
+    # reflect the new sim rather than waiting out the TTL.
     cache_invalidate(
         namespace=_PORTFOLIO_NARRATIVE_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
-        namespace="project-next-action",
+        namespace=_NEXT_ACTION_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_ACTIVITY_FEED_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 
