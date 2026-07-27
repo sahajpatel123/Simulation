@@ -25,6 +25,7 @@ from app.api.v1.users import (
     _USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
     _USER_DASHBOARD_CACHE_NAMESPACE,
     _USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
+    _USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
     _USER_PROJECTS_SUMMARY_CACHE_NAMESPACE,
     _USER_QUICK_STATS_CACHE_NAMESPACE,
     _USER_USAGE_BY_WEEK_CACHE_NAMESPACE,
@@ -407,6 +408,10 @@ def submit_outcome_feedback(
         namespace=_USER_QUICK_STATS_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
+    cache_invalidate(
+        namespace=_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
 
     return {
         "stored": True,
@@ -567,6 +572,10 @@ def record_outcome(
         namespace=_USER_QUICK_STATS_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
+    cache_invalidate(
+        namespace=_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
     return _hydrate_record(outcome)
 
 
@@ -720,6 +729,10 @@ def delete_outcome(
     )
     cache_invalidate(
         namespace=_USER_QUICK_STATS_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 

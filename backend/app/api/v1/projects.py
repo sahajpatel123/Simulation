@@ -1569,6 +1569,10 @@ def extract_assumptions(
         namespace=_STATUS_BANNER_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
+    cache_invalidate(
+        namespace=_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
 
     return AssumptionListResponse(
         project_id=project_id,
@@ -1934,6 +1938,10 @@ def run_premortem(
     )
     cache_invalidate(
         namespace=_STATUS_BANNER_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
@@ -2318,6 +2326,10 @@ def generate_interventions(
     )
     cache_invalidate(
         namespace=_STATUS_BANNER_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(

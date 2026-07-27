@@ -136,6 +136,14 @@ _USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE: str = (
 _USER_QUICK_STATS_CACHE_TTL_S: int = 60
 _USER_QUICK_STATS_CACHE_NAMESPACE: str = "user-quick-stats"
 
+# Portfolio health snapshot - 0-100 user-level rollup.
+# 60s TTL: 5-min-style cache works for the dashboard
+# header that refreshes often.
+_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_TTL_S: int = 60
+_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE: str = (
+    "user-portfolio-health-snapshot"
+)
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -200,6 +208,10 @@ def clear_archive(
     )
     cache_invalidate(
         namespace=_USER_QUICK_STATS_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     return MessageResponse(message=f"Cleared {deleted} dossiers from your archive")
@@ -2178,6 +2190,15 @@ def get_portfolio_health_snapshot(
             narrative="No projects on file yet.",
         )
 
+    # Cache hit - short-circuit the per-project loop.
+    cached = cache_get_json(
+        namespace=_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return PortfolioHealthSnapshotOut(**cached)
+
     # Per-project rollup. For each owned project, pull
     # the inputs the project-health helper needs (latest
     # sim confidence, critical-finding count, pending
@@ -2279,5 +2300,12 @@ def get_portfolio_health_snapshot(
 
     payload = build_portfolio_health_snapshot(
         project_health_payloads=payloads,
+    )
+    cache_set_json(
+        namespace=_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_TTL_S,
     )
     return PortfolioHealthSnapshotOut(**payload)

@@ -27,6 +27,7 @@ from app.api.v1.users import (
     _USER_DASHBOARD_CACHE_NAMESPACE,
     _USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
     _USER_NOTIFICATIONS_CACHE_NAMESPACE,
+    _USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
     _USER_PROJECTS_SUMMARY_CACHE_NAMESPACE,
     _USER_QUICK_STATS_CACHE_NAMESPACE,
     _USER_USAGE_BY_WEEK_CACHE_NAMESPACE,
@@ -366,6 +367,10 @@ def create_simulation(
     )
     cache_invalidate(
         namespace=_STATUS_BANNER_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
