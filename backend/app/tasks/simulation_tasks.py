@@ -472,6 +472,7 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         try:
             from app.api.v1.projects import (
                 _ACTIVITY_FEED_CACHE_NAMESPACE,
+                _CONVERGENCE_CHECK_CACHE_NAMESPACE,
                 _NEXT_ACTION_CACHE_NAMESPACE,
             )
             from app.core.response_cache import cache_invalidate
@@ -482,6 +483,15 @@ def run_full_simulation(self, simulation_id: int) -> dict:
             )
             cache_invalidate(
                 namespace=_ACTIVITY_FEED_CACHE_NAMESPACE,
+                user_id=project.user_id,
+            )
+            # Convergence is computed from
+            # predicted_conversion_rate across recent
+            # COMPLETED sims — a new completed sim can
+            # change the verdict (CONVERGED ↔ MILDLY_VARIANT
+            # ↔ DIVERGED), so bust it alongside.
+            cache_invalidate(
+                namespace=_CONVERGENCE_CHECK_CACHE_NAMESPACE,
                 user_id=project.user_id,
             )
         except Exception as _exc:
