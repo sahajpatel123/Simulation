@@ -26,6 +26,7 @@ from app.api.v1.users import (
     _USER_DASHBOARD_CACHE_NAMESPACE,
     _USER_INSIGHTS_CACHE_NAMESPACE,
     _USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
+    _USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
     _USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
     _USER_NOTIFICATIONS_CACHE_NAMESPACE,
     _USER_OUTCOME_VELOCITY_CACHE_NAMESPACE,
@@ -444,6 +445,10 @@ def submit_outcome_feedback(
         user_id=current_user.id,
     )
     cache_invalidate(
+        namespace=_USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
         namespace=_CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
@@ -461,6 +466,10 @@ def submit_outcome_feedback(
     )
     cache_invalidate(
         namespace=_USER_INSIGHTS_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 
@@ -652,6 +661,10 @@ def record_outcome(
         user_id=current_user.id,
     )
     cache_invalidate(
+        namespace=_USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
         namespace=_CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
@@ -669,6 +682,10 @@ def record_outcome(
     )
     cache_invalidate(
         namespace=_USER_INSIGHTS_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     return _hydrate_record(outcome)
@@ -855,6 +872,10 @@ def delete_outcome(
         user_id=current_user.id,
     )
     cache_invalidate(
+        namespace=_USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
         namespace=_CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
@@ -872,6 +893,10 @@ def delete_outcome(
     )
     cache_invalidate(
         namespace=_USER_INSIGHTS_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 
