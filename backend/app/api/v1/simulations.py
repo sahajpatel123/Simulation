@@ -37,6 +37,7 @@ from app.schemas.simulation import (
     FindingsTrendOut,
     OutcomesDigestOut,
     OutlierDetectionOut,
+    PortfolioNarrativeOut,
     PortfolioSummaryOut,
     PortfolioTrendOut,
     ProjectPortfolioRollupOut,
@@ -103,6 +104,9 @@ from app.simulation.outlier_detection import (
 )
 from app.simulation.calibration_health import (
     build_calibration_health,
+)
+from app.simulation.portfolio_narrative import (
+    build_portfolio_narrative,
 )
 from app.simulation.conductor import _ARCHITECTS as _architect_registry
 from app.simulation.comparison import build_simulation_comparison
@@ -2668,6 +2672,168 @@ def get_calibration_health(
 
     payload = build_calibration_health(health_rows)
     return CalibrationHealthOut(**payload)
+
+
+@router.get(
+    "/portfolio-narrative",
+    response_model=PortfolioNarrativeOut,
+    summary=(
+        "Single-payload narrative that composes the "
+        "portfolio summary, calibration health, architect "
+        "leaderboard, and outlier detection outputs into "
+        "one founder-readable paragraph + structured signals"
+    ),
+    # Composite of 4 sub-helpers — same cap.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_portfolio_narrative(
+    ids: list[str] | None = Query(
+        default=None,
+        description=(
+            "One or more simulation ids. Same parser as "
+            "``/simulations/batch``. Optional; without ids "
+            "the narrative is empty."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioNarrativeOut:
+    """Single-payload narrative.
+
+    Runs the four sub-helpers (portfolio_summary,
+    calibration_health, architect_leaderboard,
+    outlier_detection) on the same batch, then composes
+    them into one narrative + key_signals + recommended_actions
+    payload. The route pays the cost of all four queries
+    once and amortises the round-trip cost across the
+    composite.
+    """
+    try:
+        canonical_ids = parse_id_list(ids)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    if not canonical_ids:
+        return PortfolioNarrativeOut()
+
+    # Single JOIN that pulls (sim_id, created_at, results_json,
+    # latest outcome) once. Each sub-helper then reuses the
+    # data without re-querying.
+    rows = (
+        db.query(
+            Simulation.id,
+            Simulation.created_at,
+            Simulation.results_json,
+            Simulation.status,
+            Outcome.predicted_conversion_rate,
+            Outcome.actual_conversion_rate,
+            Outcome.created_at,
+        )
+        .outerjoin(
+            Outcome, Outcome.simulation_id == Simulation.id,
+        )
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(
+            Simulation.id.in_(canonical_ids),
+            Project.user_id == current_user.id,
+        )
+        .order_by(Simulation.id.asc(), Outcome.created_at.desc())
+        .all()
+    )
+
+    # Dedupe to the latest outcome per sim.
+    by_id: dict[int, object] = {}
+    for r in rows:
+        if r.id in by_id:
+            continue
+        by_id[r.id] = r
+
+    ordered_results: list[dict] = []
+    outcome_pairs: list[
+        tuple[list[dict], tuple[float | None, float | None]]
+    ] = []
+    health_rows: list[tuple] = []
+    for sid in canonical_ids:
+        match = by_id.get(sid)
+        if match is None:
+            continue
+        if match.status != "COMPLETED":
+            continue
+        ordered_results.append(match.results_json)
+        outcome_pairs.append(
+            (
+                (match.results_json or {}).get("domain_findings")
+                or [],
+                (
+                    match.predicted_conversion_rate,
+                    match.actual_conversion_rate,
+                ),
+            )
+        )
+        health_rows.append(
+            (
+                match.created_at,
+                match.predicted_conversion_rate,
+                match.actual_conversion_rate,
+                (match.results_json or {}).get("domain_findings")
+                or [],
+            )
+        )
+
+    # Build the four sub-payloads.
+    cluster_names = {
+        c.cluster_id: c.name
+        for c in _registry.all_clusters()
+    }
+    findings_payload = aggregate_findings(
+        ordered_results,
+        min_severity=normalise_severity(None),
+        top_n=normalise_top_n(None),
+        architect=None,
+    )
+    outcomes_payload = aggregate_outcomes(
+        [(p[1][0], p[1][1]) for p in outcome_pairs],
+        outlier_threshold=normalise_outlier_threshold(None),
+        sim_ids=list(by_id.keys()),
+    )
+    clusters_payload = aggregate_clusters(
+        ordered_results,
+        cluster_names=cluster_names,
+        top_n=normalise_clusters_top_n(None),
+    )
+    bridge_payload = bridge_architect_accuracy(outcome_pairs)
+    portfolio_summary = build_portfolio_summary(
+        simulation_count=len(ordered_results),
+        findings_payload=findings_payload,
+        outcomes_payload=outcomes_payload,
+        clusters_payload=clusters_payload,
+        architect_accuracy_payload=bridge_payload,
+    )
+    calibration_health = build_calibration_health(health_rows)
+    architect_leaderboard = build_architect_leaderboard(
+        bridge_payload.get("by_architect"),
+    )
+
+    # Outlier detection needs (sim_id, predicted, actual) tuples.
+    outlier_rows = [
+        (r.id, r.predicted_conversion_rate, r.actual_conversion_rate)
+        for r in by_id.values()
+        if r.status == "COMPLETED"
+    ]
+    outlier_detection = build_outlier_detection(
+        outlier_rows,
+        z_threshold=normalise_z_threshold(None),
+    )
+
+    payload = build_portfolio_narrative(
+        portfolio_summary=portfolio_summary,
+        calibration_health=calibration_health,
+        architect_leaderboard=architect_leaderboard,
+        outlier_detection=outlier_detection,
+    )
+    return PortfolioNarrativeOut(**payload)
 
 
 @router.get(

@@ -728,6 +728,28 @@ class FindingsTrendOut(BaseModel):
     total_info_count: int = 0
 
 
+class PortfolioNarrativeOut(BaseModel):
+    """Response from ``GET /simulations/portfolio-narrative``.
+
+    Single-payload narrative for the dashboard's "what's
+    going on with my batch?" headline tile. Composes the
+    portfolio-summary, calibration-health, architect-
+    leaderboard, and outlier-detection outputs into:
+
+    * ``narrative`` — one paragraph string the dashboard
+      renders as plain text.
+    * ``key_signals`` — list of ``{label, value, severity,
+      display}`` dicts for any structured highlights.
+    * ``recommended_actions`` — list of
+      ``{architect, action, score, priority_label}`` dicts
+      for the dashboard's "what to do next" tile.
+    """
+
+    narrative: str = ""
+    key_signals: list[dict] = []
+    recommended_actions: list[dict] = []
+
+
 class SimDiffOut(BaseModel):
     """Response from ``GET /simulations/sim-diff``.
 
