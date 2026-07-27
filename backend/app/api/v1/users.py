@@ -159,6 +159,14 @@ _USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE: str = (
     "user-last-touched-project"
 )
 
+# Runs-this-month - tier-quota widget integer.
+# 30s TTL: the widget refreshes often and the COUNT
+# only changes when a sim lands in the current month.
+_USER_RUNS_THIS_MONTH_CACHE_TTL_S: int = 30
+_USER_RUNS_THIS_MONTH_CACHE_NAMESPACE: str = (
+    "user-runs-this-month"
+)
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -235,6 +243,10 @@ def clear_archive(
     )
     cache_invalidate(
         namespace=_CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_RUNS_THIS_MONTH_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     return MessageResponse(message=f"Cleared {deleted} dossiers from your archive")
@@ -2478,6 +2490,15 @@ def get_runs_this_month(
     from TIER_LIMITS so the widget can show
     '5/50 sims this month'.
     """
+    # Cache hit - short-circuit the COUNT.
+    cached = cache_get_json(
+        namespace=_USER_RUNS_THIS_MONTH_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return RunsThisMonthOut(**cached)
+
     tier = (current_user.tier or "FREE").upper()
     monthly_cap = TIER_LIMITS.get(
         tier.lower(), TIER_LIMITS["free"],
@@ -2508,5 +2529,12 @@ def get_runs_this_month(
         runs_this_month=runs_this_month,
         monthly_cap=monthly_cap,
         tier=tier,
+    )
+    cache_set_json(
+        namespace=_USER_RUNS_THIS_MONTH_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_RUNS_THIS_MONTH_CACHE_TTL_S,
     )
     return RunsThisMonthOut(**payload)

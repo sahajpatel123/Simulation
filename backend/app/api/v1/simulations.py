@@ -31,6 +31,7 @@ from app.api.v1.users import (
     _USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
     _USER_PROJECTS_SUMMARY_CACHE_NAMESPACE,
     _USER_QUICK_STATS_CACHE_NAMESPACE,
+    _USER_RUNS_THIS_MONTH_CACHE_NAMESPACE,
     _USER_USAGE_BY_WEEK_CACHE_NAMESPACE,
     _USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
 )
@@ -383,6 +384,10 @@ def create_simulation(
     )
     cache_invalidate(
         namespace=_CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_RUNS_THIS_MONTH_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
