@@ -23,6 +23,7 @@ from app.api.v1.users import (
     _USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
     _USER_DASHBOARD_CACHE_NAMESPACE,
     _USER_NOTIFICATIONS_CACHE_NAMESPACE,
+    _USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
 )
 from app.core.rate_limiter import rate_limit
 from app.core.tier_enforcement import enforce_simulation_limit
@@ -334,6 +335,10 @@ def create_simulation(
     )
     cache_invalidate(
         namespace=_PROJECT_EXPORT_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 

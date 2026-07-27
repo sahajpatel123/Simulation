@@ -64,6 +64,11 @@ _USER_COVERAGE_GAPS_CACHE_NAMESPACE: str = "user-coverage-gaps"
 _USER_NOTIFICATIONS_CACHE_TTL_S: int = 60
 _USER_NOTIFICATIONS_CACHE_NAMESPACE: str = "user-notifications"
 
+# Weekly digest - rolling 7d activity recap. Short TTL:
+# the home-screen weekly tile refreshes often.
+_USER_WEEKLY_DIGEST_CACHE_TTL_S: int = 60
+_USER_WEEKLY_DIGEST_CACHE_NAMESPACE: str = "user-weekly-digest"
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -100,6 +105,10 @@ def clear_archive(
     )
     cache_invalidate(
         namespace=_USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     return MessageResponse(message=f"Cleared {deleted} dossiers from your archive")
@@ -911,6 +920,16 @@ def get_weekly_digest(
     fanning out to /me/dashboard, /me/account-health, or
     the per-project endpoints.
     """
+    # Cache hit - short-circuit the 4 COUNTs + the
+    # cross-project iteration.
+    cached = cache_get_json(
+        namespace=_USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return WeeklyDigestOut(**cached)
+
     seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
 
     owned_project_ids = [
@@ -1038,5 +1057,12 @@ def get_weekly_digest(
         calibration_health=calibration_health,
         quick_wins_total=quick_wins_total,
         critical_failure_modes_total=critical_failure_modes_total,
+    )
+    cache_set_json(
+        namespace=_USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_WEEKLY_DIGEST_CACHE_TTL_S,
     )
     return WeeklyDigestOut(**payload)
