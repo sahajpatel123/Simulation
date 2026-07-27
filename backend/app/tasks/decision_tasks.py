@@ -314,6 +314,28 @@ def run_decision_comparison(self, decision_id: int) -> dict[str, Any]:
         decision.results_json = results_data
         self.db.commit()
 
+        # Bust the cached decision-digest so the next GET
+        # reflects the just-completed decision rather than
+        # waiting out the 60s TTL. Look up the project owner
+        # explicitly (the relationship can detach after
+        # commit() in some Celery/SQLAlchemy interactions).
+        try:
+            from app.core.response_cache import cache_invalidate
+            from app.models.project import Project
+
+            owner_id = (
+                self.db.query(Project.user_id)
+                .filter(Project.id == decision.project_id)
+                .scalar()
+            )
+            if owner_id is not None:
+                cache_invalidate(
+                    namespace="decision-digest",
+                    user_id=owner_id,
+                )
+        except Exception as _exc:
+            logger.debug("decision-digest cache bust skipped: %s", _exc)
+
         logger.info(
             "[Decision] Complete — decision_id=%s winner='%s' margin=%.4f",
             decision_id,

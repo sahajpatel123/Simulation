@@ -8,6 +8,11 @@ from sqlalchemy.orm import Session
 from app.api.v1.common import get_owned_project
 from app.core.deps import get_current_user, get_db
 from app.core.rate_limiter import rate_limit
+from app.core.response_cache import (
+    cache_get_json,
+    cache_invalidate,
+    cache_set_json,
+)
 from app.models.decision import Decision
 from app.models.environment import Environment
 from app.models.project import Project
@@ -24,6 +29,13 @@ from app.tasks.decision_tasks import run_decision_comparison
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/projects", tags=["decisions"])
+
+# Decisions move slower than simulation results — a new
+# decision is created, runs for seconds-to-minutes, then
+# the digest is stable. 60s TTL absorbs dashboard polling
+# without making a just-completed decision look stale.
+_DECISION_DIGEST_CACHE_TTL_S: int = 60
+_DECISION_DIGEST_CACHE_NAMESPACE: str = "decision-digest"
 
 
 def _hydrate_result(decision: Decision) -> DecisionOut | None:
@@ -94,6 +106,13 @@ def create_decision_comparison(
     task = run_decision_comparison.delay(decision.id)
     decision.task_id = task.id
     db.commit()
+
+    # Bust the cached decision-digest so the new PENDING
+    # row surfaces immediately on the next GET.
+    cache_invalidate(
+        namespace=_DECISION_DIGEST_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
 
     logger.info(
         "[API] Decision comparison enqueued — decision_id=%s task_id=%s",
@@ -191,6 +210,17 @@ def get_decision_digest(
     """
     get_owned_project(db, current_user.id, project_id)
 
+    # Cache hit → short-circuit the SELECT. Key is
+    # namespaced by user + project so tenants and projects
+    # never collide.
+    cached = cache_get_json(
+        namespace=_DECISION_DIGEST_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return DecisionDigestOut(**cached)
+
     rows = (
         db.query(Decision)
         .filter(Decision.project_id == project_id)
@@ -208,6 +238,14 @@ def get_decision_digest(
         for d in rows
     ]
     payload = build_decision_digest(decision_dicts)
+
+    cache_set_json(
+        namespace=_DECISION_DIGEST_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_DECISION_DIGEST_CACHE_TTL_S,
+    )
     return DecisionDigestOut(**payload)
 
 

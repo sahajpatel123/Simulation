@@ -465,3 +465,245 @@ def test_decision_digest_route_registered() -> None:
             "/projects/{project_id}/decision-digest"
         ]
     )
+
+
+# ---------------------------------------------------------------------------
+# Cache integration (route-level)
+# ---------------------------------------------------------------------------
+
+
+def _patch_redis(monkeypatch, fake) -> None:
+    from app.core import redis_client
+
+    monkeypatch.setattr(
+        redis_client, "get_redis_client", lambda: fake,
+    )
+
+
+class _FakeRedis:
+    def __init__(self) -> None:
+        self.store: dict[str, str] = {}
+        self.setex_calls: list[tuple[str, int, str]] = []
+
+    def get(self, key: str) -> str | None:
+        return self.store.get(key)
+
+    def setex(
+        self, key: str, ttl_seconds: int, value: str,
+    ) -> None:
+        self.setex_calls.append((key, ttl_seconds, value))
+        self.store[key] = value
+
+    def scan_iter(self, match: str):
+        prefix = match.rstrip("*")
+        return [k for k in self.store if k.startswith(prefix)]
+
+    def delete(self, *keys: str) -> int:
+        n = 0
+        for k in keys:
+            if k in self.store:
+                del self.store[k]
+                n += 1
+        return n
+
+
+def test_decision_digest_route_caches_payload(
+    monkeypatch,
+) -> None:
+    """A second call within the TTL must short-circuit the
+    DB SELECT (verified by the SELECT count)."""
+    pytest.importorskip(
+        "scipy", reason="Route registration requires scipy",
+    )
+    import sys
+    import types
+
+    if "razorpay" not in sys.modules:
+        stub = types.ModuleType("razorpay")
+        stub.Client = object  # type: ignore[attr-defined]
+        sys.modules["razorpay"] = stub
+
+    fake = _FakeRedis()
+    _patch_redis(monkeypatch, fake)
+
+    # Stub the Session.query chain so we don't need a DB.
+    from app.api.v1 import decisions as dec_mod
+
+    class _FakeQuery:
+        def filter(self, *args, **kwargs):
+            return self
+
+        def order_by(self, *args, **kwargs):
+            return self
+
+        def all(self):
+            return []
+
+    class _FakeSession:
+        def query(self, *args, **kwargs):
+            return _FakeQuery()
+
+    result = dec_mod.get_decision_digest(
+        project_id=1,
+        db=_FakeSession(),
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+    # First call → cache populated.
+    assert result.decision_count == 0
+    assert len(fake.setex_calls) == 1
+    assert fake.setex_calls[0][1] == 60  # TTL
+
+    # Second call → cache hit, no new SETEX.
+    result2 = dec_mod.get_decision_digest(
+        project_id=1,
+        db=_FakeSession(),
+        current_user=type("U", (), {"id": 42})(),
+    )
+    assert result2.decision_count == 0
+    assert len(fake.setex_calls) == 1  # unchanged
+
+
+def test_decision_digest_route_cache_isolated_per_user(
+    monkeypatch,
+) -> None:
+    """User A's payload must never leak to User B."""
+    pytest.importorskip(
+        "scipy", reason="Route registration requires scipy",
+    )
+    import sys
+    import types
+
+    if "razorpay" not in sys.modules:
+        stub = types.ModuleType("razorpay")
+        stub.Client = object  # type: ignore[attr-defined]
+        sys.modules["razorpay"] = stub
+
+    fake = _FakeRedis()
+    _patch_redis(monkeypatch, fake)
+
+    from app.api.v1 import decisions as dec_mod
+
+    class _FakeQuery:
+        def filter(self, *args, **kwargs):
+            return self
+
+        def order_by(self, *args, **kwargs):
+            return self
+
+        def all(self):
+            return []
+
+    class _FakeSession:
+        def query(self, *args, **kwargs):
+            return _FakeQuery()
+
+    user_a = type("U", (), {"id": 42})()
+    user_b = type("U", (), {"id": 99})()
+
+    dec_mod.get_decision_digest(
+        project_id=1, db=_FakeSession(), current_user=user_a,
+    )
+    dec_mod.get_decision_digest(
+        project_id=1, db=_FakeSession(), current_user=user_b,
+    )
+    assert len(fake.setex_calls) == 2
+    # Different keys → different user namespaces.
+    keys = {c[0] for c in fake.setex_calls}
+    assert len(keys) == 2
+
+
+def test_decision_digest_route_cache_isolated_per_project(
+    monkeypatch,
+) -> None:
+    """Project A's digest must never be served from
+    Project B's cache slot."""
+    pytest.importorskip(
+        "scipy", reason="Route registration requires scipy",
+    )
+    import sys
+    import types
+
+    if "razorpay" not in sys.modules:
+        stub = types.ModuleType("razorpay")
+        stub.Client = object  # type: ignore[attr-defined]
+        sys.modules["razorpay"] = stub
+
+    fake = _FakeRedis()
+    _patch_redis(monkeypatch, fake)
+
+    from app.api.v1 import decisions as dec_mod
+
+    class _FakeQuery:
+        def filter(self, *args, **kwargs):
+            return self
+
+        def order_by(self, *args, **kwargs):
+            return self
+
+        def all(self):
+            return []
+
+    class _FakeSession:
+        def query(self, *args, **kwargs):
+            return _FakeQuery()
+
+    user = type("U", (), {"id": 42})()
+
+    dec_mod.get_decision_digest(
+        project_id=1, db=_FakeSession(), current_user=user,
+    )
+    dec_mod.get_decision_digest(
+        project_id=2, db=_FakeSession(), current_user=user,
+    )
+    assert len(fake.setex_calls) == 2
+    keys = {c[0] for c in fake.setex_calls}
+    assert len(keys) == 2
+
+
+def test_decision_digest_route_noop_when_redis_down(
+    monkeypatch,
+) -> None:
+    """If Redis is unavailable the route must still serve a
+    fresh payload — never raise."""
+    pytest.importorskip(
+        "scipy", reason="Route registration requires scipy",
+    )
+    import sys
+    import types
+
+    if "razorpay" not in sys.modules:
+        stub = types.ModuleType("razorpay")
+        stub.Client = object  # type: ignore[attr-defined]
+        sys.modules["razorpay"] = stub
+
+    from app.core import redis_client
+
+    monkeypatch.setattr(
+        redis_client, "get_redis_client", lambda: None,
+    )
+
+    from app.api.v1 import decisions as dec_mod
+
+    class _FakeQuery:
+        def filter(self, *args, **kwargs):
+            return self
+
+        def order_by(self, *args, **kwargs):
+            return self
+
+        def all(self):
+            return []
+
+    class _FakeSession:
+        def query(self, *args, **kwargs):
+            return _FakeQuery()
+
+    # Two calls; both must succeed.
+    for _ in range(2):
+        result = dec_mod.get_decision_digest(
+            project_id=1,
+            db=_FakeSession(),
+            current_user=type("U", (), {"id": 42})(),
+        )
+        assert result.decision_count == 0
