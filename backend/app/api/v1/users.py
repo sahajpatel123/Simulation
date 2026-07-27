@@ -25,6 +25,7 @@ from app.schemas.user import (
     CoverageGapsOut,
     DigestSnapshotOut,
     NotificationsOut,
+    ProjectsSummaryOut,
     UserDashboardOut,
     WeeklyDigestOut,
 )
@@ -37,6 +38,7 @@ from app.simulation.digest_snapshot import build_digest_snapshot
 from app.simulation.intervention_digest import build_intervention_digest
 from app.simulation.notifications import build_notifications
 from app.simulation.premortem_digest import build_premortem_digest
+from app.simulation.projects_summary import build_projects_summary
 from app.simulation.user_dashboard import (
     build_user_dashboard,
 )
@@ -1403,3 +1405,134 @@ def get_digest_snapshot(
         weekly_digest=weekly_digest,
     )
     return DigestSnapshotOut(**payload)
+
+
+@router.get(
+    "/me/projects-summary",
+    response_model=ProjectsSummaryOut,
+    summary=(
+        "Lightweight per-project summary cards for the "
+        "dashboard's projects-list grid view"
+    ),
+    # Read-only composition; bounded by MAX_PROJECTS.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_projects_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProjectsSummaryOut:
+    """Per-project summary cards.
+
+    For each owned project, returns just the fields the
+    dashboard's grid view needs (id, title, status, brief
+    completed, latest sim conversion rate + status + count,
+    sim/decision/outcome totals). Avoids sending full
+    ProjectOut payloads (descriptions, tags, briefs) when
+    the dashboard just needs a thumbnail.
+    """
+    # One SELECT for the basic project listing + brief
+    # completion flag.
+    project_rows = (
+        db.query(
+            Project.id,
+            Project.title,
+            Project.status,
+            Project.brief_completed_at,
+        )
+        .filter(Project.user_id == current_user.id)
+        .order_by(Project.created_at.desc())
+        .all()
+    )
+    if not project_rows:
+        return ProjectsSummaryOut()
+
+    # Latest sim per project via a single subquery.
+    latest_sim_subq = (
+        db.query(
+            Simulation.project_id,
+            Simulation.status,
+            Simulation.predicted_conversion_rate,
+            Simulation.created_at,
+        )
+        .filter(
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc())
+        .subquery()
+    )
+
+    # Count sims/decisions/outcomes per project (3
+    # separate GROUP BY queries).
+    from sqlalchemy import func as _sqlfunc
+
+    sim_counts = dict(
+        db.query(
+            Simulation.project_id,
+            _sqlfunc.count(Simulation.id),
+        )
+        .filter(
+            Simulation.project_id.in_(
+                p.id for p in project_rows
+            ),
+        )
+        .group_by(Simulation.project_id)
+        .all()
+    )
+    decision_counts = dict(
+        db.query(
+            Decision.project_id,
+            _sqlfunc.count(Decision.id),
+        )
+        .filter(
+            Decision.project_id.in_(
+                p.id for p in project_rows
+            ),
+        )
+        .group_by(Decision.project_id)
+        .all()
+    )
+    outcome_counts = dict(
+        db.query(
+            Outcome.project_id,
+            _sqlfunc.count(Outcome.id),
+        )
+        .filter(
+            Outcome.project_id.in_(
+                p.id for p in project_rows
+            ),
+        )
+        .group_by(Outcome.project_id)
+        .all()
+    )
+
+    # Latest completed sim per project.
+    latest_sim_rows = (
+        db.query(latest_sim_subq)
+        .all()
+    )
+    latest_sim_by_project: dict[int, object] = {}
+    for r in latest_sim_rows:
+        latest_sim_by_project[r.project_id] = r
+
+    summaries: list[dict] = []
+    for p in project_rows:
+        ls = latest_sim_by_project.get(p.id)
+        summaries.append({
+            "id": p.id,
+            "title": p.title,
+            "status": p.status,
+            "brief_completed": p.brief_completed_at is not None,
+            "latest_sim_conversion_rate": (
+                ls.predicted_conversion_rate if ls else None
+            ),
+            "latest_sim_status": ls.status if ls else None,
+            "latest_sim_created_at": (
+                ls.created_at if ls else None
+            ),
+            "sim_count": sim_counts.get(p.id, 0),
+            "decision_count": decision_counts.get(p.id, 0),
+            "outcome_count": outcome_counts.get(p.id, 0),
+        })
+
+    payload = build_projects_summary(summaries)
+    return ProjectsSummaryOut(**payload)

@@ -172,3 +172,46 @@ class DigestSnapshotOut(BaseModel):
     notifications: dict = {}
     weekly_digest: dict = {}
 
+
+class ProjectSummaryCard(BaseModel):
+    """One row in /me/projects-summary."""
+
+    id: int | None = None
+    title: str | None = None
+    status: str = "UNKNOWN"
+    brief_completed: bool = False
+    latest_sim_conversion_rate: float | None = None
+    latest_sim_status: str | None = None
+    latest_sim_created_at: str | None = None
+    sim_count: int = 0
+    decision_count: int = 0
+    outcome_count: int = 0
+
+
+class ProjectsSummaryOut(BaseModel):
+    """Response from ``GET /me/projects-summary``.
+
+    Lightweight per-project summary cards for the
+    dashboard's projects-list grid view. Avoids sending
+    full ProjectOut payloads (descriptions, tags, briefs)
+    when only a few fields per project are needed.
+
+    * ``project_count`` - total cards returned (capped).
+    * ``projects`` - capped (50) list of
+      :class:`ProjectSummaryCard` dicts.
+    * ``sim_count_total`` / ``decision_count_total`` /
+      ``outcome_count_total`` - portfolio rollups.
+    * ``narrative`` - one paragraph string the dashboard
+      renders as plain text.
+    * ``key_signals`` - ``{label, value, severity,
+      display}`` dicts for the dashboard tiles.
+    """
+
+    project_count: int = 0
+    projects: list[dict] = []
+    sim_count_total: int = 0
+    decision_count_total: int = 0
+    outcome_count_total: int = 0
+    narrative: str = ""
+    key_signals: list[dict] = []
+
