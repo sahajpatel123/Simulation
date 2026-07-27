@@ -184,6 +184,10 @@ def create_decision_comparison(
         user_id=current_user.id,
     )
     cache_invalidate(
+        namespace=_USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
         namespace=_USER_INSIGHTS_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
