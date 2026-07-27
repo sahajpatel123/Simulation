@@ -19,7 +19,8 @@ from app.models.project import Project
 from app.models.simulation import Simulation
 from app.models.user import User
 from app.schemas.auth import MessageResponse
-from app.schemas.user import UserDashboardOut
+from app.schemas.user import AccountHealthOut, UserDashboardOut
+from app.simulation.account_health import build_account_health
 from app.simulation.calibration_health import (
     build_calibration_health,
 )
@@ -440,3 +441,195 @@ def get_my_dashboard(
         ttl_seconds=_USER_DASHBOARD_CACHE_TTL_S,
     )
     return UserDashboardOut(**payload)
+
+
+@router.get(
+    "/me/account-health",
+    response_model=AccountHealthOut,
+    summary=(
+        "Single-payload qualitative account health verdict "
+        "— 0-100 score + HEALTHY/NEEDS_ATTENTION/AT_RISK "
+        "composed from MAE + blindspots + sim/decision "
+        "success ratios + account age + penalties"
+    ),
+    # Read-only; bounded.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_account_health(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AccountHealthOut:
+    """Per-account qualitative health verdict.
+
+    Composes a single big-number health score (0-100) plus
+    a 3-bucket verdict from the same data slices that
+    /me/dashboard surfaces quantitatively. Avoids the
+    round-trip cost of /me/blindspots + /me/accuracy-profile
+    + the project list + the outcomes digest for the home
+    screen's "how am I doing?" tile.
+    """
+    # Cache hit → short-circuit.
+    cached = cache_get_json(
+        namespace="user-account-health",
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return AccountHealthOut(**cached)
+
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+
+    # ---- Sim success -------------------------------------------------
+    sim_total = 0
+    sim_completed = 0
+    if owned_project_ids:
+        sim_total = (
+            db.query(Simulation)
+            .filter(Simulation.project_id.in_(owned_project_ids))
+            .count()
+        )
+        sim_completed = (
+            db.query(Simulation)
+            .filter(
+                Simulation.project_id.in_(owned_project_ids),
+                Simulation.status == "COMPLETED",
+            )
+            .count()
+        )
+
+    # ---- Decision success --------------------------------------------
+    dec_total = 0
+    dec_completed = 0
+    if owned_project_ids:
+        dec_total = (
+            db.query(Decision)
+            .filter(Decision.project_id.in_(owned_project_ids))
+            .count()
+        )
+        dec_completed = (
+            db.query(Decision)
+            .filter(
+                Decision.project_id.in_(owned_project_ids),
+                Decision.status == "COMPLETED",
+            )
+            .count()
+        )
+
+    # ---- MAE ---------------------------------------------------------
+    mae: float | None = None
+    critical_signal_count = 0
+    if owned_project_ids:
+        health_rows = (
+            db.query(
+                Simulation.created_at,
+                Outcome.predicted_conversion_rate,
+                Outcome.actual_conversion_rate,
+                Simulation.results_json,
+            )
+            .outerjoin(
+                Outcome, Outcome.simulation_id == Simulation.id,
+            )
+            .filter(
+                Simulation.project_id.in_(owned_project_ids),
+                Simulation.status == "COMPLETED",
+            )
+            .order_by(Simulation.created_at.desc())
+            .limit(50)
+            .all()
+        )
+        # Dedupe per-sim (latest outcome wins).
+        seen: set[int] = set()
+        deduped: list[tuple] = []
+        for r in health_rows:
+            sid = id(r.created_at)  # coarse dedup key
+            if sid in seen:
+                continue
+            seen.add(sid)
+            deduped.append(
+                (r.created_at,
+                 r.predicted_conversion_rate,
+                 r.actual_conversion_rate,
+                 (r.results_json or {}).get("domain_findings") or []),
+            )
+        # Filter to rows that actually have both values.
+        usable = [
+            (pred, act)
+            for _, pred, act, _ in deduped
+            if isinstance(pred, (int, float))
+            and isinstance(act, (int, float))
+        ]
+        if usable:
+            mae = sum(
+                abs(act - pred) for pred, act in usable
+            ) / len(usable)
+        if deduped:
+            try:
+                health = build_calibration_health(deduped)
+                # Count CRITICAL signals.
+                for sig in (health or {}).get("key_signals", []):
+                    if sig.get("severity") == "critical":
+                        critical_signal_count += 1
+            except Exception:
+                pass
+
+    # ---- Blindspot count --------------------------------------------
+    blindspot_cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
+    blindspot_count = (
+        db.execute(
+            text(
+                """
+            SELECT COUNT(*) FROM user_market_blindspots
+            WHERE user_id = :uid AND occurrence_count >= 2
+              AND (last_surfaced_to_user IS NULL
+                   OR last_surfaced_to_user < :cutoff)
+            """
+            ),
+            {"uid": current_user.id, "cutoff": blindspot_cutoff},
+        ).scalar()
+        or 0
+    )
+
+    # ---- Failed outcome count ---------------------------------------
+    failed_outcome_count = 0
+    if owned_project_ids:
+        failed_outcome_count = (
+            db.query(Outcome)
+            .filter(
+                Outcome.project_id.in_(owned_project_ids),
+                Outcome.calibration_score.is_(None),
+            )
+            .count()
+        )
+
+    # ---- Account age ------------------------------------------------
+    account_age_days = 0
+    if current_user.created_at is not None:
+        ts = current_user.created_at
+        delta = datetime.now(timezone.utc) - ts
+        account_age_days = max(0, delta.days)
+
+    payload = build_account_health(
+        mae=mae,
+        blindspot_count=int(blindspot_count),
+        simulation_completed=sim_completed,
+        simulation_total=sim_total,
+        decision_completed=dec_completed,
+        decision_total=dec_total,
+        account_age_days=account_age_days,
+        failed_outcome_count=failed_outcome_count,
+        critical_signal_count=critical_signal_count,
+    )
+
+    cache_set_json(
+        namespace="user-account-health",
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=60,
+    )
+    return AccountHealthOut(**payload)

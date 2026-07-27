@@ -52,3 +52,34 @@ class UserDashboardOut(BaseModel):
     narrative: str = ""
     key_signals: list[dict] = []
 
+
+class AccountHealthOut(BaseModel):
+    """Response from ``GET /me/account-health``.
+
+    Qualitative verdict on the user's account — a 0-100
+    score + 3-bucket verdict (HEALTHY / NEEDS_ATTENTION /
+    AT_RISK) that composes calibration MAE, blindspot
+    count, sim/decision success ratios, account age, and
+    failure/penalty counts.
+
+    Different from /me/dashboard (count snapshot) — this
+    is a single big number the home screen can show with a
+    traffic-light colour.
+
+    * ``health_score`` — integer in ``[0, MAX_SCORE]``.
+    * ``verdict`` — ``HEALTHY`` (≥ 70), ``NEEDS_ATTENTION``
+      (40-69), ``AT_RISK`` (≤ 40).
+    * ``score_breakdown`` — per-dimension contribution
+      map (positive points + negative penalties).
+    * ``narrative`` — one paragraph string the dashboard
+      renders as plain text.
+    * ``key_signals`` — ``{label, value, severity,
+      display}`` dicts for the dashboard tiles.
+    """
+
+    health_score: int = 0
+    verdict: str = "AT_RISK"
+    score_breakdown: dict[str, int] = {}
+    narrative: str = ""
+    key_signals: list[dict] = []
+
