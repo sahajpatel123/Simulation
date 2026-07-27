@@ -62,13 +62,27 @@ def _rank_combined(
     items: list[dict],
 ) -> list[dict]:
     """Sort mixed premortem + intervention items by
-    impact / priority score, highest first. Missing
-    scores are treated as 0 so the item still surfaces
-    (sorted to the bottom of the feed)."""
-    def _key(item: dict) -> float:
-        return max(
-            item.get("impact_score") or 0.0,
+    score, highest first.
+
+    Two-axis sort: priority_score is the primary axis
+    (always 0..1, set by the intervention helper). impact_score
+    is the secondary axis and is NOT normalized — premortem
+    passes a raw impact value (typically 1..10) where higher
+    = more important. Using max(impact, priority) here would
+    let a raw impact=1 (LOW importance) outrank a normalised
+    priority_score=0.95 (HIGH importance).
+
+    Sort key is ``(priority_score, impact_score)`` with both
+    treated as 0 when missing. Under DESC order:
+    * interventions (priority_score set) sort above premortem
+      items with the same impact_score
+    * premortem items with higher impact sort above lower
+    * missing scores sink to the bottom of the feed.
+    """
+    def _key(item: dict) -> tuple[float, float]:
+        return (
             item.get("priority_score") or 0.0,
+            item.get("impact_score") or 0.0,
         )
     return sorted(items, key=_key, reverse=True)
 

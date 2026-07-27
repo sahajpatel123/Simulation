@@ -144,8 +144,12 @@ def test_digest_top_recommendations_sorted_by_score() -> None:
         },
     )
     # high (0.95) first, then mid (0.6), then low (1.0).
+    # The helper prepends "Quick win: " to titles when
+    # priority_score > 0.70 (see lines 117-120 in
+    # recommendations_digest.py) — so "high" surfaces as
+    # "Quick win: high" in the output.
     assert [r["title"] for r in out["top_recommendations"]] == [
-        "high", "mid", "low",
+        "Quick win: high", "mid", "low",
     ]
 
 
