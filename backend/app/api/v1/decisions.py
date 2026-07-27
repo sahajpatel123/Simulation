@@ -14,10 +14,12 @@ from app.models.project import Project
 from app.models.user import User
 from app.schemas.decision import (
     DecisionCreate,
+    DecisionDigestOut,
     DecisionOut,
     DecisionStatusOut,
     ScenarioResult,
 )
+from app.simulation.decision_digest import build_decision_digest
 from app.tasks.decision_tasks import run_decision_comparison
 
 logger = logging.getLogger(__name__)
@@ -160,6 +162,53 @@ def list_decisions(
         )
         for decision in decisions
     ]
+
+
+@router.get(
+    "/{project_id}/decision-digest",
+    response_model=DecisionDigestOut,
+    summary=(
+        "Per-project digest of AI-generated decisions — "
+        "status breakdown + pending action queue + top "
+        "completed decisions + narrative + key_signals"
+    ),
+    # Read-only aggregation over the project's decision
+    # rows; same cap as the other list endpoint.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_decision_digest(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DecisionDigestOut:
+    """Per-project decision digest.
+
+    Composes a single payload covering status counts,
+    pending action queue, top completed decisions, and a
+    founder-readable narrative. Avoids the round-trip
+    cost of /projects/{id}/decisions + client-side
+    aggregation for the dashboard's project overview tile.
+    """
+    get_owned_project(db, current_user.id, project_id)
+
+    rows = (
+        db.query(Decision)
+        .filter(Decision.project_id == project_id)
+        .order_by(Decision.created_at.desc())
+        .all()
+    )
+    decision_dicts = [
+        {
+            "id": d.id,
+            "title": d.title,
+            "status": d.status,
+            "created_at": d.created_at,
+            "results_json": d.results_json,
+        }
+        for d in rows
+    ]
+    payload = build_decision_digest(decision_dicts)
+    return DecisionDigestOut(**payload)
 
 
 def _get_owned_decision(

@@ -72,3 +72,38 @@ class DecisionStatusOut(BaseModel):
     status: str
     task_id: str | None
     result: DecisionOut | None = None
+
+
+class DecisionDigestOut(BaseModel):
+    """Response from ``GET /simulations/decision-digest``.
+
+    Per-project digest of all AI-generated decisions so the
+    founder can answer "what has the system recommended for
+    me, what's pending, and which is the clearest winner?"
+    in a single API call.
+
+    * ``decision_count`` — total decisions in scope.
+    * ``status_breakdown`` — ``{status: count}`` for the
+      dashboard's stacked bar.
+    * ``success_rate`` — fraction of COMPLETED decisions
+      that produced a clear winner (margin >= 2%).
+    * ``avg_winner_margin`` — mean winner margin across
+      completed decisions.
+    * ``pending_decisions`` — pending/running decisions
+      sorted oldest-first (the founder's action queue).
+    * ``top_decisions`` — completed decisions sorted by
+      winner margin DESC, capped at 5.
+    * ``narrative`` — one paragraph string the dashboard
+      renders as plain text.
+    * ``key_signals`` — ``{label, value, severity,
+      display}`` dicts for the dashboard tiles.
+    """
+
+    decision_count: int = 0
+    status_breakdown: dict[str, int] = {}
+    success_rate: float = 0.0
+    avg_winner_margin: float = 0.0
+    pending_decisions: list[dict] = []
+    top_decisions: list[dict] = []
+    narrative: str = ""
+    key_signals: list[dict] = []
