@@ -244,6 +244,14 @@ _USER_LAST_WEEK_STATS_CACHE_NAMESPACE: str = (
     "user-last-week-stats"
 )
 
+# Projects needing attention - "which projects need a
+# look?" tile. 60s TTL: the per-project loop is the
+# heaviest user endpoint (5 queries × N projects).
+_USER_PROJECTS_NEEDING_ATTENTION_CACHE_TTL_S: int = 60
+_USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE: str = (
+    "user-projects-needing-attention"
+)
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -3417,6 +3425,16 @@ def get_projects_needing_attention(
             narrative="No projects on file yet.",
         )
 
+    # Cache hit - short-circuit the per-project loop.
+    cached = cache_get_json(
+        namespace=_USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return ProjectsNeedingAttentionOut(**cached)
+        )
+
     # Per-project sim + outcome + decision counts so the
     # helper can decide which reason applies.
     project_rows = []
@@ -3552,6 +3570,13 @@ def get_projects_needing_attention(
 
     payload = build_projects_needing_attention(
         project_status_rows=project_rows,
+    )
+    cache_set_json(
+        namespace=_USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_PROJECTS_NEEDING_ATTENTION_CACHE_TTL_S,
     )
     return ProjectsNeedingAttentionOut(**payload)
 
