@@ -570,3 +570,30 @@ class LatestSnapshotOut(BaseModel):
     snapshot_at: str = ""
     narrative: str = ""
     key_signals: list[dict] = []
+
+
+class SimFailureRateOut(BaseModel):
+    """Response from ``GET /me/sim-failure-rate``.
+
+    Single "what % of your sims failed?" payload so
+    the dashboard can show a system-reliability widget.
+
+    * ``total_simulations`` - total sims across the
+      user's projects.
+    * ``failed_simulations`` - sims with status
+      ``FAILED``.
+    * ``failure_rate_pct`` - 0..100 percent.
+    * ``verdict`` - ``RELIABLE`` (<= 5%) /
+      ``ACCEPTABLE`` (<= 15%) / ``UNRELIABLE`` (> 15%) /
+      ``INSUFFICIENT_DATA``.
+    * ``narrative`` - one paragraph string.
+    * ``key_signals`` - ``{label, value, severity,
+      display}``.
+    """
+
+    total_simulations: int = 0
+    failed_simulations: int = 0
+    failure_rate_pct: float = 0.0
+    verdict: str = "INSUFFICIENT_DATA"
+    narrative: str = ""
+    key_signals: list[dict] = []

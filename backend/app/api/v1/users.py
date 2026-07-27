@@ -51,6 +51,9 @@ from app.simulation.calibration_health import (
 )
 from app.simulation.coverage_gaps import build_coverage_gaps
 from app.simulation.decision_rate import build_decision_rate
+from app.simulation.sim_failure_rate import (
+    build_sim_failure_rate,
+)
 from app.simulation.decision_to_outcome_delay import (
     build_decision_to_outcome_delay,
 )
