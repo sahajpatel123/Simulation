@@ -23,6 +23,7 @@ from app.schemas.auth import MessageResponse
 from app.schemas.user import (
     AccountHealthOut,
     CoverageGapsOut,
+    NotificationsOut,
     UserDashboardOut,
 )
 from app.simulation.account_health import build_account_health
@@ -30,6 +31,7 @@ from app.simulation.calibration_health import (
     build_calibration_health,
 )
 from app.simulation.coverage_gaps import build_coverage_gaps
+from app.simulation.notifications import build_notifications
 from app.simulation.user_dashboard import (
     build_user_dashboard,
 )
@@ -765,3 +767,96 @@ def get_coverage_gaps(
         ttl_seconds=_USER_COVERAGE_GAPS_CACHE_TTL_S,
     )
     return CoverageGapsOut(**payload)
+
+
+@router.get(
+    "/me/notifications",
+    response_model=NotificationsOut,
+    summary=(
+        "Single-payload inbox view - chronological list of "
+        "blindspots + intervention quick wins + pending "
+        "decisions + recent premortem criticals"
+    ),
+    # Read-only composition of multiple user-level slices.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_notifications(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> NotificationsOut:
+    """Inbox feed.
+
+    Composes a chronological (newest-first) feed of items
+    that would warrant a founder's attention: blindspots
+    flagged in the recent window, intervention quick wins,
+    pending decisions, and recent premortem criticals.
+
+    Avoids fanning out to /me/blindspots + the per-project
+    decision/assumption/premortem endpoints for the
+    home-screen inbox tile.
+    """
+    # ---- Blindspots ------------------------------------------------
+    blindspot_cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
+    bs_rows = db.execute(
+        text(
+            """
+        SELECT blindspot_type, blindspot_value, occurrence_count,
+               first_seen, last_surfaced_to_user
+        FROM user_market_blindspots
+        WHERE user_id = :uid AND occurrence_count >= 2
+          AND (last_surfaced_to_user IS NULL
+               OR last_surfaced_to_user < :cutoff)
+        """
+        ),
+        {"uid": current_user.id, "cutoff": blindspot_cutoff},
+    ).fetchall()
+    blindspot_dicts = [
+        {
+            "blindspot_type": r.blindspot_type,
+            "blindspot_value": r.blindspot_value,
+            "occurrence_count": r.occurrence_count,
+            "first_seen": r.first_seen,
+            "last_surfaced_to_user": r.last_surfaced_to_user,
+        }
+        for r in bs_rows
+    ]
+
+    # ---- Pending decisions ----------------------------------------
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+    pending_decision_dicts: list[dict] = []
+    if owned_project_ids:
+        decision_rows = (
+            db.query(
+                Decision.id,
+                Decision.title,
+                Decision.status,
+                Decision.created_at,
+            )
+            .filter(
+                Decision.project_id.in_(owned_project_ids),
+                Decision.status.in_(("PENDING", "RUNNING")),
+            )
+            .order_by(Decision.created_at.desc())
+            .limit(20)
+            .all()
+        )
+        pending_decision_dicts = [
+            {
+                "id": r.id,
+                "title": r.title,
+                "status": r.status,
+                "created_at": r.created_at,
+            }
+            for r in decision_rows
+        ]
+
+    payload = build_notifications(
+        blindspots=blindspot_dicts,
+        pending_decisions=pending_decision_dicts,
+    )
+    return NotificationsOut(**payload)

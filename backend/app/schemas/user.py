@@ -60,38 +60,50 @@ class UserDashboardOut(BaseModel):
     key_signals: list[dict] = []
 
 
-class CoverageGapsOut(BaseModel):
-    """Response from ``GET /me/coverage-gaps``.
-
-    Inverse of the portfolio-narrative: surfaces
-    dimensions the user has NEVER explored so the
-    dashboard can nudge them to broaden their input set.
-
-    * ``covered_categories`` — sorted list of
-      ``Assumption.category`` values present.
-    * ``missing_categories`` — sorted list of standard
-      categories the user has zero coverage on.
-    * ``sensitivity_breakdown`` — ``{HIGH/...: count}``
-      so the tile can render a "you have no HIGH/CRITICAL
-      flagged" warning.
-    * ``covered_cluster_count`` — distinct clusters
-      touched across sims.
-    * ``missing_architect_count`` — proxy: count of
-      standard categories the user has no assumptions
-      in.
-    * ``total_assumption_count`` — total non-hidden.
-    * ``narrative`` — one paragraph string the dashboard
-      renders as plain text.
-    * ``key_signals`` — ``{label, value, severity,
-      display}`` dicts for the dashboard tiles.
-    """
-
     covered_categories: list[str] = []
     missing_categories: list[str] = []
     sensitivity_breakdown: dict[str, int] = {}
     covered_cluster_count: int = 0
     missing_architect_count: int = 0
     total_assumption_count: int = 0
+    narrative: str = ""
+    key_signals: list[dict] = []
+
+
+class NotificationOut(BaseModel):
+    """One inbox notification."""
+
+    category: str = ""
+    title: str = ""
+    summary: str = ""
+    severity: str = "info"
+    occurred_at: str = ""
+    ref_kind: str = ""
+    ref_id: int | None = None
+    ref_label: str | None = None
+
+
+class NotificationsOut(BaseModel):
+    """Response from ``GET /me/notifications``.
+
+    Single-payload inbox view: a chronological (newest-
+    first) list of items that would trigger an inbox or
+    push notification for the founder, composed from
+    blindspots, intervention quick wins, pending
+    decisions, and recent premortem criticals.
+
+    * ``notification_count`` — total items in the
+      capped feed.
+    * ``notifications`` — capped (25) list of
+      :class:`NotificationOut` dicts.
+    * ``narrative`` — one paragraph string the dashboard
+      renders as plain text.
+    * ``key_signals`` — ``{label, value, severity,
+      display}`` dicts for the dashboard tiles.
+    """
+
+    notification_count: int = 0
+    notifications: list[dict] = []
     narrative: str = ""
     key_signals: list[dict] = []
 
