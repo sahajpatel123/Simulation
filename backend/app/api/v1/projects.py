@@ -70,6 +70,7 @@ from app.schemas.project import (
     NextBestActionSource,
     PremortemDigestOut,
     ProjectExportOut,
+    StaleCheckOut,
     ProjectCreate,
     ProjectDuplicateIn,
     ProjectDuplicateOut,
@@ -140,6 +141,7 @@ from app.simulation.project_health import build_project_health
 from app.simulation.recommendations_digest import (
     build_recommendations_digest,
 )
+from app.simulation.stale_check import build_stale_check
 from app.tasks.simulation_tasks import run_full_simulation
 from app.tasks.stress_test_tasks import run_assumption_stress_test
 
@@ -4023,3 +4025,114 @@ def get_project_export(
         ttl_seconds=_PROJECT_EXPORT_CACHE_TTL_S,
     )
     return ProjectExportOut(**payload)
+
+
+@router.get(
+    "/{project_id}/stale-check",
+    response_model=StaleCheckOut,
+    summary=(
+        "Per-project data-freshness check - which sources "
+        "feeding the project are out of date (assumptions / "
+        "sims / outcomes / decisions / premortem / "
+        "interventions)"
+    ),
+    # Read-only composition of MAX-of-child-row timestamps.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_stale_check(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StaleCheckOut:
+    """Per-project stale-check digest.
+
+    For each of 6 data sources (assumptions, sims,
+    outcomes, decisions, premortem, interventions), the
+    digest reports how many days since the source was
+    last refreshed + a staleness severity + a concrete
+    recommendation.
+
+    Useful as the dashboard's "are my predictions still
+    trustworthy?" tile - founders often don't realise
+    their assumptions are weeks old.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+
+    # Latest assumption extraction.
+    latest_assumption = (
+        db.query(Assumption.created_at)
+        .filter(
+            Assumption.project_id == project_id,
+            Assumption.is_hidden.is_(False),
+        )
+        .order_by(Assumption.created_at.desc())
+        .first()
+    )
+    # Latest COMPLETED sim.
+    latest_completed_sim = (
+        db.query(Simulation.created_at)
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc())
+        .first()
+    )
+    # Latest outcome.
+    latest_outcome = (
+        db.query(Outcome.created_at)
+        .filter(Outcome.project_id == project_id)
+        .order_by(Outcome.created_at.desc())
+        .first()
+    )
+    # Latest COMPLETED decision.
+    latest_completed_decision = (
+        db.query(Decision.created_at)
+        .filter(
+            Decision.project_id == project_id,
+            Decision.status == "COMPLETED",
+        )
+        .order_by(Decision.created_at.desc())
+        .first()
+    )
+    # Latest premortem and intervention timestamps come
+    # from JSONB payloads (generation time, not create_at).
+    premortem_payload = getattr(project, "premortem_json", None)
+    interventions_payload = getattr(
+        project, "interventions_json", None,
+    )
+
+    def _parse_iso_dt(raw: object) -> object | None:
+        if not isinstance(raw, dict):
+            return None
+        ts = raw.get("generated_at")
+        if not isinstance(ts, str):
+            return None
+        from datetime import datetime as _dt
+        try:
+            return _dt.fromisoformat(ts)
+        except Exception:
+            return None
+
+    latest_premortem_at = _parse_iso_dt(premortem_payload)
+    latest_intervention_at = _parse_iso_dt(interventions_payload)
+
+    payload = build_stale_check(
+        latest_assumption_at=(
+            latest_assumption[0] if latest_assumption else None
+        ),
+        latest_sim_completed_at=(
+            latest_completed_sim[0]
+            if latest_completed_sim else None
+        ),
+        latest_outcome_at=(
+            latest_outcome[0] if latest_outcome else None
+        ),
+        latest_decision_completed_at=(
+            latest_completed_decision[0]
+            if latest_completed_decision else None
+        ),
+        latest_premortem_at=latest_premortem_at,
+        latest_intervention_at=latest_intervention_at,
+    )
+    return StaleCheckOut(**payload)

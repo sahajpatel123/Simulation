@@ -476,3 +476,29 @@ class ProjectExportOut(BaseModel):
     outcomes: list[dict] = []
     premortem: dict = {}
     interventions: dict = {}
+
+
+class StaleCheckOut(BaseModel):
+    """Response from ``GET /projects/{id}/stale-check``.
+
+    Data-freshness lens: surfaces which sources feeding
+    the project's predictions are out of date so the
+    founder can refresh them. Inverse of activity-feed
+    (which shows what just happened) - stale-check shows
+    what is NOT recent.
+
+    * ``stale_count`` - number of stale sources.
+    * ``sources_checked`` - total sources checked (6).
+    * ``sources`` - per-source list with severity +
+      recommendation.
+    * ``narrative`` - one paragraph string the dashboard
+      renders as plain text.
+    * ``key_signals`` - ``{label, value, severity,
+      display}`` dicts for the dashboard tiles.
+    """
+
+    stale_count: int = 0
+    sources_checked: int = 0
+    sources: list[dict] = []
+    narrative: str = ""
+    key_signals: list[dict] = []
