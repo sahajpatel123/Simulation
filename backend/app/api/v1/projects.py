@@ -23,7 +23,9 @@ from app.core.prompts import (
     build_simulation_summary,
 )
 from app.models.assumption import Assumption
+from app.models.decision import Decision
 from app.models.environment import Environment
+from app.models.outcome import Outcome
 from app.models.project import Project
 from app.models.prototype import Prototype
 from app.models.simulation import Simulation
@@ -65,6 +67,8 @@ from app.schemas.project import (
     ProjectTagRenameOut,
     ProjectTagsOut,
     ProjectTagsPatch,
+    NextBestActionOut,
+    NextBestActionSource,
 )
 from app.schemas.prototype import FunnelEdge, FunnelGraph, FunnelNode, PrototypeOut
 from app.schemas.stress_test import (
@@ -105,6 +109,7 @@ from app.simulation.project_tags import (
     rename_tag_in_list,
 )
 from app.simulation.scored_assumption import score_assumptions, signal_quality_tier
+from app.simulation.next_best_action import build_next_best_action
 from app.tasks.simulation_tasks import run_full_simulation
 from app.tasks.stress_test_tasks import run_assumption_stress_test
 
@@ -2896,3 +2901,149 @@ def regenerate_intelligence(
     db.commit()
     db.refresh(project)
     return ProjectOut.model_validate(project)
+
+
+@router.get(
+    "/{project_id}/next-action",
+    response_model=NextBestActionOut,
+    summary=(
+        "The single most actionable next step the founder "
+        "should take right now — composed from the latest "
+        "sim's top critical finding, the oldest pending "
+        "decision, and the project's calibration health"
+    ),
+    # Read-only composes 3 cheap queries; same cap as
+    # the other lightweight project endpoints.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_next_action(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> NextBestActionOut:
+    """Single-answer "what should I do?" CTA.
+
+    Priority order:
+    1. Top CRITICAL architect finding from the latest
+       completed simulation.
+    2. Oldest pending decision in the project's queue.
+    3. POORLY_CALIBRATED verdict from
+       :func:`build_calibration_health`.
+    4. Fallback nudge for brand-new projects.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+
+    # Latest completed simulation (newest first).
+    latest_sim = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc())
+        .first()
+    )
+    latest_findings: list[dict] = []
+    if latest_sim is not None and latest_sim.results_json:
+        latest_findings = [
+            {
+                "findings": (latest_sim.results_json or {}).get(
+                    "domain_findings"
+                )
+                or [],
+            },
+        ]
+
+    # Oldest pending decision in this project.
+    pending_rows = (
+        db.query(Decision)
+        .filter(
+            Decision.project_id == project_id,
+            Decision.status.in_(("PENDING", "RUNNING")),
+        )
+        .order_by(Decision.created_at.asc())
+        .all()
+    )
+    pending_decisions: list[dict] = [
+        {
+            "id": d.id,
+            "title": d.title,
+            "status": d.status,
+            "created_at": (
+                d.created_at.isoformat()
+                if d.created_at is not None else None
+            ),
+        }
+        for d in pending_rows
+    ]
+
+    # Calibration health for the project's most recent
+    # sims (last 10) — cheap sub-helper.
+    calibration_health: dict | None = None
+    try:
+        from app.simulation.calibration_health import (
+            build_calibration_health,
+        )
+        health_rows: list[tuple] = []
+        recent_for_health = (
+            db.query(
+                Simulation.created_at,
+                Outcome.predicted_conversion_rate,
+                Outcome.actual_conversion_rate,
+                Simulation.results_json,
+            )
+            .outerjoin(
+                Outcome, Outcome.simulation_id == Simulation.id,
+            )
+            .filter(
+                Simulation.project_id == project_id,
+                Simulation.status == "COMPLETED",
+            )
+            .order_by(Simulation.created_at.desc())
+            .limit(10)
+            .all()
+        )
+        for r in recent_for_health:
+            health_rows.append(
+                (
+                    r.created_at,
+                    r.predicted_conversion_rate,
+                    r.actual_conversion_rate,
+                    (r.results_json or {}).get(
+                        "domain_findings"
+                    )
+                    or [],
+                ),
+            )
+        if health_rows:
+            calibration_health = build_calibration_health(
+                health_rows,
+            )
+    except Exception as _exc:
+        logger.debug(
+            "next-action: calibration health skipped: %s",
+            _exc,
+        )
+
+    has_any_simulation = (
+        db.query(Simulation.id)
+        .filter(Simulation.project_id == project_id)
+        .first()
+        is not None
+    )
+
+    payload = build_next_best_action(
+        latest_findings=latest_findings,
+        pending_decisions=pending_decisions,
+        calibration_health=calibration_health,
+        has_any_simulation=has_any_simulation,
+    )
+    return NextBestActionOut(
+        title=payload["title"],
+        action=payload["action"],
+        reason=payload["reason"],
+        severity=payload["severity"],
+        category=payload["category"],
+        source=NextBestActionSource(**payload["source"]),
+        fallback=payload["fallback"],
+    )

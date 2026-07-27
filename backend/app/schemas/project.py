@@ -213,3 +213,46 @@ class ProjectTagBulkDeleteOut(BaseModel):
 
     tag: str
     projects_updated: int
+
+
+class NextBestActionSource(BaseModel):
+    """Pointer to the data that drove the next-best-action."""
+
+    kind: str = ""
+    ref_id: int | None = None
+    ref_label: str | None = None
+
+
+class NextBestActionOut(BaseModel):
+    """Response from ``GET /projects/{id}/next-action``.
+
+    Single-payload "what should I do right now?" answer
+    composed from the latest simulation's top critical
+    finding, the oldest pending decision, and the project's
+    calibration-health verdict.
+
+    * ``title`` — short headline (renders as the dashboard
+      CTA label).
+    * ``action`` — imperative verb phrase ("TIGHTEN
+      PricingArchitect" / "Review & decide" / "Start a
+      simulation").
+    * ``reason`` — one-sentence explanation the dashboard
+      renders as supporting context / tooltip.
+    * ``severity`` — ``ok`` / ``watch`` / ``critical`` so
+      the dashboard can colour-code the CTA.
+    * ``category`` — discriminator for the dashboard icon
+      (``miscalibration`` / ``pending_decision`` /
+      ``calibration_health`` / ``first_sim`` / ``no_signal``).
+    * ``source`` — pointer to the underlying data.
+    * ``fallback`` — True when the answer is a generic
+      nudge (e.g. "Run another simulation") rather than a
+      data-driven recommendation.
+    """
+
+    title: str = ""
+    action: str = ""
+    reason: str = ""
+    severity: str = "ok"
+    category: str = "no_signal"
+    source: NextBestActionSource = NextBestActionSource()
+    fallback: bool = True
