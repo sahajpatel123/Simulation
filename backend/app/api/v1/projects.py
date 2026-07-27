@@ -61,6 +61,7 @@ from app.schemas.premortem import FailureMode, PremortemOut, PremortemRequest
 from app.schemas.project import (
     ActivityEvent,
     ActivityFeedOut,
+    AdoptionMilestonesOut,
     BriefAssistRequest,
     BriefSave,
     ConvergenceCheckOut,
@@ -123,6 +124,9 @@ from app.simulation.project_tags import (
 )
 from app.simulation.scored_assumption import score_assumptions, signal_quality_tier
 from app.simulation.activity_feed import build_activity_feed
+from app.simulation.adoption_milestones import (
+    build_adoption_milestones,
+)
 from app.simulation.assumption_digest import build_assumption_digest
 from app.simulation.convergence_check import build_convergence_check
 from app.simulation.intervention_digest import (
@@ -192,6 +196,14 @@ _PREMORTEM_DIGEST_CACHE_NAMESPACE: str = "project-premortem-digest"
 _RECOMMENDATIONS_DIGEST_CACHE_TTL_S: int = 300
 _RECOMMENDATIONS_DIGEST_CACHE_NAMESPACE: str = (
     "project-recommendations-digest"
+)
+
+# Adoption milestones ("have you done the basics?").
+# Mostly stable, but every project write can flip a
+# milestone - 60s TTL absorbs dashboard polling.
+_ADOPTION_MILESTONES_CACHE_TTL_S: int = 60
+_ADOPTION_MILESTONES_CACHE_NAMESPACE: str = (
+    "project-adoption-milestones"
 )
 
 _SOFTWARE_PRODUCT_TYPES: frozenset[ProductType] = frozenset(
@@ -3750,3 +3762,86 @@ def get_recommendations_digest(
         ttl_seconds=_RECOMMENDATIONS_DIGEST_CACHE_TTL_S,
     )
     return RecommendationsDigestOut(**payload)
+
+
+@router.get(
+    "/{project_id}/adoption-milestones",
+    response_model=AdoptionMilestonesOut,
+    summary=(
+        "Per-project adoption milestones - onboarding "
+        "progress tracker (brief / assumptions / first sim / "
+        "first decision / first outcome / premortem / "
+        "interventions)"
+    ),
+    # Read-only composition of project + child-row counts.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_adoption_milestones(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AdoptionMilestonesOut:
+    """Per-project adoption milestones digest.
+
+    Composes a single onboarding progress payload ("have
+    you done the basics?") so the dashboard can render a
+    milestone progress bar without each component being
+    checked separately.
+    """
+    # Cache hit - short-circuit the 5 child-row counts.
+    cached = cache_get_json(
+        namespace=_ADOPTION_MILESTONES_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return AdoptionMilestonesOut(**cached)
+
+    project = get_owned_project(db, current_user.id, project_id)
+
+    # Count assumptions (non-hidden).
+    assumption_count = (
+        db.query(Assumption)
+        .filter(
+            Assumption.project_id == project_id,
+            Assumption.is_hidden.is_(False),
+        )
+        .count()
+    )
+    simulation_count = (
+        db.query(Simulation)
+        .filter(Simulation.project_id == project_id)
+        .count()
+    )
+    decision_count = (
+        db.query(Decision)
+        .filter(Decision.project_id == project_id)
+        .count()
+    )
+    outcome_count = (
+        db.query(Outcome)
+        .filter(Outcome.project_id == project_id)
+        .count()
+    )
+
+    payload = build_adoption_milestones(
+        brief_completed=project.brief_completed_at is not None,
+        assumption_count=assumption_count,
+        simulation_count=simulation_count,
+        decision_count=decision_count,
+        outcome_count=outcome_count,
+        premortem_present=getattr(
+            project, "premortem_json", None,
+        ) is not None,
+        interventions_present=getattr(
+            project, "interventions_json", None,
+        ) is not None,
+    )
+    cache_set_json(
+        namespace=_ADOPTION_MILESTONES_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_ADOPTION_MILESTONES_CACHE_TTL_S,
+    )
+    return AdoptionMilestonesOut(**payload)

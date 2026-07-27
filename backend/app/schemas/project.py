@@ -427,3 +427,31 @@ class RecommendationsDigestOut(BaseModel):
     top_recommendations: list[dict] = []
     narrative: str = ""
     key_signals: list[dict] = []
+
+
+class AdoptionMilestonesOut(BaseModel):
+    """Response from ``GET /projects/{id}/adoption-milestones``.
+
+    Onboarding progress tracker ("have you done the
+    basics?"). Computes a 0-100 progress percentage +
+    per-milestone boolean map so the dashboard can render
+    a milestone progress bar without checking each
+    component separately.
+
+    Standard milestones:
+    1. brief_completed
+    2. assumptions_extracted (>= 3 non-hidden)
+    3. first_sim_run
+    4. first_decision_enqueued
+    5. first_outcome_recorded
+    6. premortem_run
+    7. interventions_run
+    """
+
+    milestone_count: int = 0
+    completed_count: int = 0
+    progress_pct: int = 0
+    milestones: dict[str, bool] = {}
+    milestone_order: list[str] = []
+    narrative: str = ""
+    key_signals: list[dict] = []
