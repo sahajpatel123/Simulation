@@ -261,6 +261,10 @@ def clear_archive(
         namespace=_USER_RUNS_THIS_MONTH_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
+    cache_invalidate(
+        namespace=_USER_DECISION_VELOCITY_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
     return MessageResponse(message=f"Cleared {deleted} dossiers from your archive")
 
 
