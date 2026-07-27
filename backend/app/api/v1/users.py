@@ -51,6 +51,7 @@ from app.simulation.calibration_health import (
 )
 from app.simulation.coverage_gaps import build_coverage_gaps
 from app.simulation.decision_rate import build_decision_rate
+from app.simulation.runs_per_week import build_runs_per_week
 from app.simulation.sim_failure_rate import (
     build_sim_failure_rate,
 )
@@ -3432,6 +3433,17 @@ def get_projects_needing_attention(
     """
     from app.simulation.status_banner import build_status_banner
 
+    # Cache hit - short-circuit the per-project loop.
+    # Checked BEFORE the DB query below so cache hits skip
+    # all DB work (including the empty-project early-return).
+    cached = cache_get_json(
+        namespace=_USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return ProjectsNeedingAttentionOut(**cached)
+
     owned_project_ids = [
         pid for (pid,) in
         db.query(Project.id)
@@ -3441,16 +3453,6 @@ def get_projects_needing_attention(
     if not owned_project_ids:
         return ProjectsNeedingAttentionOut(
             narrative="No projects on file yet.",
-        )
-
-    # Cache hit - short-circuit the per-project loop.
-    cached = cache_get_json(
-        namespace=_USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
-        params={"user_id": current_user.id},
-        user_id=current_user.id,
-    )
-    if cached is not None:
-        return ProjectsNeedingAttentionOut(**cached)
         )
 
     # Per-project sim + outcome + decision counts so the
@@ -3627,6 +3629,17 @@ def get_sim_failure_rate(
     Computes the % of completed sims (any status) that
     ended in FAILED across the user's projects.
     """
+    # Cache hit - short-circuit the 2 COUNTs. Checked
+    # BEFORE the DB query below so cache hits skip all DB
+    # work (including the empty-project early-return path).
+    cached = cache_get_json(
+        namespace=_USER_SIM_FAILURE_RATE_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return SimFailureRateOut(**cached)
+
     owned_project_ids = [
         pid for (pid,) in
         db.query(Project.id)
@@ -3637,15 +3650,6 @@ def get_sim_failure_rate(
         return SimFailureRateOut(
             narrative="No projects on file yet.",
         )
-
-    # Cache hit - short-circuit the 2 COUNTs.
-    cached = cache_get_json(
-        namespace=_USER_SIM_FAILURE_RATE_CACHE_NAMESPACE,
-        params={"user_id": current_user.id},
-        user_id=current_user.id,
-    )
-    if cached is not None:
-        return SimFailureRateOut(**cached)
 
     total_simulations = (
         db.query(Simulation)
