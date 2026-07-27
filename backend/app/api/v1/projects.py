@@ -1564,6 +1564,7 @@ def extract_assumptions(
     from app.api.v1.users import (
     _USER_COVERAGE_GAPS_CACHE_NAMESPACE,
     _USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
+    _USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
     _CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
 )
     cache_invalidate(
@@ -1584,6 +1585,10 @@ def extract_assumptions(
     )
     cache_invalidate(
         namespace=_STATUS_BANNER_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
@@ -1955,6 +1960,10 @@ def run_premortem(
     )
     cache_invalidate(
         namespace=_STATUS_BANNER_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
@@ -2347,6 +2356,10 @@ def generate_interventions(
     )
     cache_invalidate(
         namespace=_STATUS_BANNER_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
