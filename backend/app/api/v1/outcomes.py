@@ -425,6 +425,10 @@ def submit_outcome_feedback(
         namespace=_CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
+    cache_invalidate(
+        namespace=_CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
 
     return {
         "stored": True,
@@ -597,6 +601,10 @@ def record_outcome(
         namespace=_CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
+    cache_invalidate(
+        namespace=_CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
     return _hydrate_record(outcome)
 
 
@@ -758,6 +766,10 @@ def delete_outcome(
     )
     cache_invalidate(
         namespace=_USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(

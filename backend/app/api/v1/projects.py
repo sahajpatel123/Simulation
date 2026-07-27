@@ -1575,6 +1575,10 @@ def extract_assumptions(
         user_id=current_user.id,
     )
     cache_invalidate(
+        namespace=_CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
         namespace=_LATEST_SNAPSHOT_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
