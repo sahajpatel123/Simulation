@@ -232,6 +232,14 @@ _USER_DECISION_TO_OUTCOME_DELAY_CACHE_NAMESPACE: str = (
 _USER_INSIGHTS_CACHE_TTL_S: int = 60
 _USER_INSIGHTS_CACHE_NAMESPACE: str = "user-insights"
 
+# Last-week stats - comparative stats. 60s TTL: 6
+# cheap COUNTs in the route, but the trend chart
+# refreshes often.
+_USER_LAST_WEEK_STATS_CACHE_TTL_S: int = 60
+_USER_LAST_WEEK_STATS_CACHE_NAMESPACE: str = (
+    "user-last-week-stats"
+)
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -336,6 +344,10 @@ def clear_archive(
     )
     cache_invalidate(
         namespace=_USER_INSIGHTS_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     # Coverage gaps + notifications depend on the user's
@@ -3265,6 +3277,15 @@ def get_last_week_stats(
     ]
     if not owned_project_ids:
         return LastWeekStatsOut()
+
+    # Cache hit - short-circuit the 6 COUNTs.
+    cached = cache_get_json(
+        namespace=_USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return LastWeekStatsOut(**cached)
 
     this_week_start = datetime.now(
         timezone.utc,
