@@ -18,6 +18,7 @@ from app.api.v1.projects import (
     _ACTIVITY_FEED_CACHE_NAMESPACE,
     _NEXT_ACTION_CACHE_NAMESPACE,
 )
+from app.api.v1.users import _USER_DASHBOARD_CACHE_NAMESPACE
 from app.models.outcome import Outcome
 from app.models.project import Project
 from app.models.simulation import Simulation
@@ -350,6 +351,10 @@ def submit_outcome_feedback(
         namespace=_OUTCOMES_DIGEST_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
+    cache_invalidate(
+        namespace=_USER_DASHBOARD_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
 
     return {
         "stored": True,
@@ -470,6 +475,10 @@ def record_outcome(
         namespace=_OUTCOMES_DIGEST_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
+    cache_invalidate(
+        namespace=_USER_DASHBOARD_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
     return _hydrate_record(outcome)
 
 
@@ -577,8 +586,14 @@ def delete_outcome(
     # Bust the per-project outcomes-digest so the deleted
     # outcome disappears from MAE / bias / trend numbers
     # immediately rather than waiting out the 120s TTL.
+    # Also bust /me/dashboard: outcome_count + calibration
+    # health shift on every delete.
     cache_invalidate(
         namespace=_OUTCOMES_DIGEST_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_DASHBOARD_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 

@@ -58,6 +58,13 @@ def clear_archive(
         .delete(synchronize_session=False)
     )
     db.commit()
+    # Bust /me/dashboard so the next render reflects the
+    # cleared project count + simulation count + decision
+    # count + outcome count rather than waiting out the TTL.
+    cache_invalidate(
+        namespace=_USER_DASHBOARD_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
     return MessageResponse(message=f"Cleared {deleted} dossiers from your archive")
 
 

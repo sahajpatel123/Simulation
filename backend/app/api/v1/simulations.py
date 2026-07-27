@@ -16,6 +16,7 @@ from app.api.v1.projects import (
     _ACTIVITY_FEED_CACHE_NAMESPACE,
     _NEXT_ACTION_CACHE_NAMESPACE,
 )
+from app.api.v1.users import _USER_DASHBOARD_CACHE_NAMESPACE
 from app.core.rate_limiter import rate_limit
 from app.core.tier_enforcement import enforce_simulation_limit
 from app.models.assumption import Assumption
@@ -302,6 +303,10 @@ def create_simulation(
     )
     cache_invalidate(
         namespace=_ACTIVITY_FEED_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_DASHBOARD_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 
