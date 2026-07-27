@@ -36,6 +36,7 @@ from app.schemas.user import (
     OutcomeVelocityOut,
     PortfolioHealthSnapshotOut,
     ProjectsByStatusOut,
+    ProjectsNeedingAttentionOut,
     ProjectsSummaryOut,
     QuickStatsOut,
     RunsThisMonthOut,
@@ -79,6 +80,9 @@ from app.simulation.portfolio_health_snapshot import (
 from app.simulation.premortem_digest import build_premortem_digest
 from app.simulation.projects_by_status import (
     build_projects_by_status,
+)
+from app.simulation.projects_needing_attention import (
+    build_projects_needing_attention,
 )
 from app.simulation.projects_summary import build_projects_summary
 from app.simulation.quick_stats import build_quick_stats
@@ -3273,6 +3277,17 @@ def get_last_week_stats(
     Compares this week (last 7 days) vs last week
     (days 8-14 ago) for sim / decision / outcome counts.
     """
+    # Cache hit - short-circuit the 6 COUNTs. Checked
+    # BEFORE the DB query below so cache hits skip all DB
+    # work (including the empty-project early-return path).
+    cached = cache_get_json(
+        namespace=_USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return LastWeekStatsOut(**cached)
+
     owned_project_ids = [
         pid for (pid,) in
         db.query(Project.id)
@@ -3281,15 +3296,6 @@ def get_last_week_stats(
     ]
     if not owned_project_ids:
         return LastWeekStatsOut()
-
-    # Cache hit - short-circuit the 6 COUNTs.
-    cached = cache_get_json(
-        namespace=_USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
-        params={"user_id": current_user.id},
-        user_id=current_user.id,
-    )
-    if cached is not None:
-        return LastWeekStatsOut(**cached)
 
     this_week_start = datetime.now(
         timezone.utc,
