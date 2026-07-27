@@ -2067,6 +2067,15 @@ def get_quick_stats(
     widgets + sidebars. 4 cheap COUNTs + the
     ``current_user.created_at`` timestamp.
     """
+    # Cache hit - short-circuit the 4 COUNTs.
+    cached = cache_get_json(
+        namespace=_USER_QUICK_STATS_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return QuickStatsOut(**cached)
+
     owned_project_ids = [
         pid for (pid,) in
         db.query(Project.id)
@@ -2115,5 +2124,12 @@ def get_quick_stats(
         total_decisions=total_decisions,
         total_outcomes=total_outcomes,
         account_age_days=account_age_days,
+    )
+    cache_set_json(
+        namespace=_USER_QUICK_STATS_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_QUICK_STATS_CACHE_TTL_S,
     )
     return QuickStatsOut(**payload)
