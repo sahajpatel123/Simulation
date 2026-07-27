@@ -28,6 +28,7 @@ from app.schemas.user import (
     LastTouchedProjectOut,
     MostActiveProjectOut,
     NotificationsOut,
+    OutcomeVelocityOut,
     PortfolioHealthSnapshotOut,
     ProjectsByStatusOut,
     ProjectsSummaryOut,
@@ -55,6 +56,9 @@ from app.simulation.most_active_project import (
     build_most_active_project,
 )
 from app.simulation.notifications import build_notifications
+from app.simulation.outcome_velocity import (
+    build_outcome_velocity,
+)
 from app.simulation.portfolio_health_snapshot import (
     build_portfolio_health_snapshot,
 )
@@ -2646,3 +2650,79 @@ def get_decision_velocity(
         ttl_seconds=_USER_DECISION_VELOCITY_CACHE_TTL_S,
     )
     return DecisionVelocityOut(**payload)
+
+
+@router.get(
+    "/me/outcome-velocity",
+    response_model=OutcomeVelocityOut,
+    summary=(
+        "Per-user outcome velocity - average gap between a "
+        "completed sim and the user's first outcome on that "
+        "project"
+    ),
+    # Read-only; 2 cheap queries.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_outcome_velocity(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> OutcomeVelocityOut:
+    """Outcome velocity.
+
+    For each owned project with a COMPLETED sim and an
+    outcome, computes the gap (in hours) between sim
+    completion and the earliest outcome on that project.
+    Returns the average + median + fastest + slowest
+    across the user's portfolio.
+    """
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+    if not owned_project_ids:
+        return OutcomeVelocityOut()
+
+    # Latest completed sim per project.
+    sim_rows = (
+        db.query(
+            Simulation.project_id,
+            Simulation.created_at,
+        )
+        .filter(
+            Simulation.project_id.in_(owned_project_ids),
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.id.desc())
+        .all()
+    )
+    sim_completed_by_pid: dict[int, object] = {}
+    for s in sim_rows:
+        if s.project_id not in sim_completed_by_pid:
+            sim_completed_by_pid[s.project_id] = s.created_at
+
+    # Earliest outcome per project.
+    outcome_rows = (
+        db.query(
+            Outcome.project_id,
+            Outcome.created_at,
+        )
+        .filter(Outcome.project_id.in_(owned_project_ids))
+        .order_by(Outcome.id.asc())
+        .all()
+    )
+    first_outcome_by_pid: dict[int, object] = {}
+    for o in outcome_rows:
+        if o.project_id not in first_outcome_by_pid:
+            first_outcome_by_pid[o.project_id] = o.created_at
+
+    pairs: list[tuple] = []
+    for pid in owned_project_ids:
+        sim_dt = sim_completed_by_pid.get(pid)
+        out_dt = first_outcome_by_pid.get(pid)
+        if sim_dt and out_dt:
+            pairs.append((sim_dt, out_dt))
+
+    payload = build_outcome_velocity(sim_outcome_pairs=pairs)
+    return OutcomeVelocityOut(**payload)
