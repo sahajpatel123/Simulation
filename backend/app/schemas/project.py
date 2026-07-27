@@ -648,3 +648,31 @@ class MostActiveWeekdayOut(BaseModel):
     most_active_count: int = 0
     narrative: str = ""
     key_signals: list[dict] = []
+
+
+class OldestOpenItemOut(BaseModel):
+    """Response from ``GET /me/oldest-open-item``.
+
+    Single "what's been sitting longest?" payload so
+    the dashboard can surface the age of the user's
+    oldest unaddressed activity (sim / decision /
+    outcome).
+
+    * ``oldest_age_days`` - age in days (None when no
+      data).
+    * ``oldest_type`` - ``sim`` / ``decision`` /
+      ``outcome``.
+    * ``oldest_project_id`` - id of the project that
+      owns the oldest item.
+    * ``oldest_created_at`` - ISO timestamp.
+    * ``narrative`` - one paragraph string.
+    * ``key_signals`` - ``{label, value, severity,
+      display}``.
+    """
+
+    oldest_age_days: int | None = None
+    oldest_type: str | None = None
+    oldest_project_id: int | None = None
+    oldest_created_at: str | None = None
+    narrative: str = ""
+    key_signals: list[dict] = []

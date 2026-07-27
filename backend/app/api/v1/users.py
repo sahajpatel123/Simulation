@@ -54,6 +54,9 @@ from app.simulation.decision_rate import build_decision_rate
 from app.simulation.most_active_weekday import (
     build_most_active_weekday,
 )
+from app.simulation.oldest_open_item import (
+    build_oldest_open_item,
+)
 from app.simulation.runs_per_week import build_runs_per_week
 from app.simulation.sim_failure_rate import (
     build_sim_failure_rate,
@@ -3727,6 +3730,17 @@ def get_runs_per_week(
     """
     from sqlalchemy import func as _sqlfunc
 
+    # Cache hit - short-circuit the 1 GROUP BY query.
+    # Checked BEFORE the DB query below so cache hits skip
+    # all DB work (including the empty-project early-return).
+    cached = cache_get_json(
+        namespace=_USER_RUNS_PER_WEEK_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return RunsPerWeekOut(**cached)
+
     owned_project_ids = [
         pid for (pid,) in
         db.query(Project.id)
@@ -3736,16 +3750,6 @@ def get_runs_per_week(
     if not owned_project_ids:
         return RunsPerWeekOut(
             narrative="No projects on file yet.",
-        )
-
-    # Cache hit - short-circuit the 1 GROUP BY query.
-    cached = cache_get_json(
-        namespace=_USER_RUNS_PER_WEEK_CACHE_NAMESPACE,
-        params={"user_id": current_user.id},
-        user_id=current_user.id,
-    )
-    if cached is not None:
-        return RunsPerWeekOut(**cached)
         )
 
     four_weeks_ago = (
@@ -3804,6 +3808,17 @@ def get_most_active_weekday(
     outcome across the user's projects, then picks the
     mode weekday.
     """
+    # Cache hit - short-circuit the 3 queries. Checked
+    # BEFORE the DB query below so cache hits skip all DB
+    # work (including the empty-project early-return).
+    cached = cache_get_json(
+        namespace=_USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return MostActiveWeekdayOut(**cached)
+
     owned_project_ids = [
         pid for (pid,) in
         db.query(Project.id)
@@ -3813,16 +3828,6 @@ def get_most_active_weekday(
     if not owned_project_ids:
         return MostActiveWeekdayOut(
             narrative="No projects on file yet.",
-        )
-
-    # Cache hit - short-circuit the 3 queries.
-    cached = cache_get_json(
-        namespace=_USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
-        params={"user_id": current_user.id},
-        user_id=current_user.id,
-    )
-    if cached is not None:
-        return MostActiveWeekdayOut(**cached)
         )
 
     weekday_actions: list[int] = []
@@ -3859,3 +3864,64 @@ def get_most_active_weekday(
         ttl_seconds=_USER_MOST_ACTIVE_WEEKDAY_CACHE_TTL_S,
     )
     return MostActiveWeekdayOut(**payload)
+
+
+@router.get(
+    "/me/oldest-open-item",
+    response_model=OldestOpenItemOut,
+    summary=(
+        "Per-user oldest-open-item - age of the oldest "
+        "sim / decision / outcome so the dashboard can "
+        "surface 'what's been sitting longest?'"
+    ),
+    # Read-only; 3 queries.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_oldest_open_item(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> OldestOpenItemOut:
+    """Oldest open item.
+
+    Picks the oldest (sim | decision | outcome) across
+    the user's projects by created_at and reports its
+    age in days + project id + type.
+    """
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+    if not owned_project_ids:
+        return OldestOpenItemOut(
+            narrative="No projects on file yet.",
+        )
+
+    activity_rows: list[tuple] = []
+
+    for s in db.query(
+        Simulation.created_at, Simulation.project_id,
+    ).filter(
+        Simulation.project_id.in_(owned_project_ids),
+    ).all():
+        activity_rows.append((s.created_at, "sim", s.project_id))
+
+    for d in db.query(
+        Decision.created_at, Decision.project_id,
+    ).filter(
+        Decision.project_id.in_(owned_project_ids),
+    ).all():
+        activity_rows.append((d.created_at, "decision", d.project_id))
+
+    for o in db.query(
+        Outcome.created_at, Outcome.project_id,
+    ).filter(
+        Outcome.project_id.in_(owned_project_ids),
+    ).all():
+        activity_rows.append((o.created_at, "outcome", o.project_id))
+
+    payload = build_oldest_open_item(
+        activity_rows=activity_rows,
+    )
+    return OldestOpenItemOut(**payload)
