@@ -3091,6 +3091,17 @@ def get_insights(
     is a flat payload of all 5 digests) - this is a
     narrative rollup.
     """
+    # Cache hit - short-circuit the 5 COUNTs + the
+    # needs-attention loop. Checked BEFORE the DB query
+    # below so cache hits don't pay any DB cost.
+    cached = cache_get_json(
+        namespace=_USER_INSIGHTS_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return InsightsOut(**cached)
+
     owned_project_ids = [
         pid for (pid,) in
         db.query(Project.id)
@@ -3206,5 +3217,12 @@ def get_insights(
         weekly_decision_count=weekly_decision_count,
         weekly_outcome_count=weekly_outcome_count,
         needs_attention_count=needs_attention_count,
+    )
+    cache_set_json(
+        namespace=_USER_INSIGHTS_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_INSIGHTS_CACHE_TTL_S,
     )
     return InsightsOut(**payload)
