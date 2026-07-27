@@ -57,6 +57,7 @@ from app.simulation.most_active_weekday import (
 from app.simulation.oldest_open_item import (
     build_oldest_open_item,
 )
+from app.simulation.recent_outcomes import build_recent_outcomes
 from app.simulation.runs_per_week import build_runs_per_week
 from app.simulation.sim_failure_rate import (
     build_sim_failure_rate,
@@ -2873,9 +2874,6 @@ def get_outcome_velocity(
     ]
     if not owned_project_ids:
         return OutcomeVelocityOut()
-    )
-    if cached is not None:
-        return OutcomeVelocityOut(**cached)
 
     # Latest completed sim per project.
     sim_rows = (
@@ -2948,6 +2946,17 @@ def get_decision_rate(
     across the user's portfolio. Useful for the
     dashboard's "decision utilization" widget.
     """
+    # Cache hit - short-circuit the 2 COUNTs. Checked
+    # BEFORE the DB query below so cache hits skip all DB
+    # work (including the empty-project early-return).
+    cached = cache_get_json(
+        namespace=_USER_DECISION_RATE_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return DecisionRateOut(**cached)
+
     owned_project_ids = [
         pid for (pid,) in
         db.query(Project.id)
@@ -2957,18 +2966,6 @@ def get_decision_rate(
     if not owned_project_ids:
         return DecisionRateOut(
             narrative="No projects on file yet.",
-        )
-
-    # Cache hit - short-circuit the 2 COUNTs.
-    cached = cache_get_json(
-        namespace=_USER_DECISION_RATE_CACHE_NAMESPACE,
-        params={"user_id": current_user.id},
-        user_id=current_user.id,
-    )
-    if cached is not None:
-        return DecisionRateOut(**cached)
-
-    sim_count = (
         )
 
     sim_count = (
@@ -3019,6 +3016,17 @@ def get_outcome_rate(
     across the user's portfolio. Analog of
     /me/decision-rate but for outcomes.
     """
+    # Cache hit - short-circuit the 2 COUNTs. Checked
+    # BEFORE the DB query below so cache hits skip all DB
+    # work (including the empty-project early-return).
+    cached = cache_get_json(
+        namespace=_USER_OUTCOME_RATE_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return OutcomeRateOut(**cached)
+
     owned_project_ids = [
         pid for (pid,) in
         db.query(Project.id)
@@ -3028,18 +3036,6 @@ def get_outcome_rate(
     if not owned_project_ids:
         return OutcomeRateOut(
             narrative="No projects on file yet.",
-        )
-
-    # Cache hit - short-circuit the 2 COUNTs.
-    cached = cache_get_json(
-        namespace=_USER_OUTCOME_RATE_CACHE_NAMESPACE,
-        params={"user_id": current_user.id},
-        user_id=current_user.id,
-    )
-    if cached is not None:
-        return OutcomeRateOut(**cached)
-
-    sim_count = (
         )
 
     sim_count = (
@@ -3093,6 +3089,17 @@ def get_decision_to_outcome_delay(
     project. Returns the average + median + fastest +
     slowest across the user's portfolio.
     """
+    # Cache hit - short-circuit the 2 queries. Checked
+    # BEFORE the DB query below so cache hits skip all DB
+    # work (including the empty-project early-return).
+    cached = cache_get_json(
+        namespace=_USER_DECISION_TO_OUTCOME_DELAY_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return DecisionToOutcomeDelayOut(**cached)
+
     owned_project_ids = [
         pid for (pid,) in
         db.query(Project.id)
@@ -3101,15 +3108,6 @@ def get_decision_to_outcome_delay(
     ]
     if not owned_project_ids:
         return DecisionToOutcomeDelayOut()
-
-    # Cache hit - short-circuit the 2 queries.
-    cached = cache_get_json(
-        namespace=_USER_DECISION_TO_OUTCOME_DELAY_CACHE_NAMESPACE,
-        params={"user_id": current_user.id},
-        user_id=current_user.id,
-    )
-    if cached is not None:
-        return DecisionToOutcomeDelayOut(**cached)
 
     # Decisions per project (ascending) and outcomes per
     # project (ascending). For each decision, find the
@@ -3912,6 +3910,17 @@ def get_oldest_open_item(
     the user's projects by created_at and reports its
     age in days + project id + type.
     """
+    # Cache hit - short-circuit the 3 queries. Checked
+    # BEFORE the DB query below so cache hits skip all DB
+    # work (including the empty-project early-return).
+    cached = cache_get_json(
+        namespace=_USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return OldestOpenItemOut(**cached)
+
     owned_project_ids = [
         pid for (pid,) in
         db.query(Project.id)
@@ -3921,16 +3930,6 @@ def get_oldest_open_item(
     if not owned_project_ids:
         return OldestOpenItemOut(
             narrative="No projects on file yet.",
-        )
-
-    # Cache hit - short-circuit the 3 queries.
-    cached = cache_get_json(
-        namespace=_USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
-        params={"user_id": current_user.id},
-        user_id=current_user.id,
-    )
-    if cached is not None:
-        return OldestOpenItemOut(**cached)
         )
 
     activity_rows: list[tuple] = []
@@ -3967,3 +3966,62 @@ def get_oldest_open_item(
         ttl_seconds=_USER_OLDEST_OPEN_ITEM_CACHE_TTL_S,
     )
     return OldestOpenItemOut(**payload)
+
+
+@router.get(
+    "/me/recent-outcomes",
+    response_model=RecentOutcomesOut,
+    summary=(
+        "Per-user recent-outcomes - last 5 outcomes "
+        "across the user's projects so the dashboard can "
+        "show 'what happened recently?'"
+    ),
+    # Read-only; 1 query.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_recent_outcomes(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RecentOutcomesOut:
+    """Recent outcomes.
+
+    Returns the last 5 outcomes across the user's
+    projects, sorted by created_at descending.
+    """
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+    if not owned_project_ids:
+        return RecentOutcomesOut(
+            narrative="No projects on file yet.",
+        )
+
+    outcome_rows = (
+        db.query(
+            Outcome.id,
+            Outcome.project_id,
+            Outcome.actual_conversion_rate,
+            Outcome.created_at,
+        )
+        .filter(Outcome.project_id.in_(owned_project_ids))
+        .order_by(Outcome.id.desc())
+        .limit(5)
+        .all()
+    )
+
+    recent_outcome_dicts = [
+        {
+            "outcome_id": o.id,
+            "project_id": o.project_id,
+            "actual_conversion_rate": o.actual_conversion_rate,
+            "created_at": o.created_at,
+        }
+        for o in outcome_rows
+    ]
+    payload = build_recent_outcomes(
+        recent_outcome_dicts=recent_outcome_dicts,
+    )
+    return RecentOutcomesOut(**payload)

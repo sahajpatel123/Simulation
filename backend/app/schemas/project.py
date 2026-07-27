@@ -676,3 +676,27 @@ class OldestOpenItemOut(BaseModel):
     oldest_created_at: str | None = None
     narrative: str = ""
     key_signals: list[dict] = []
+
+
+class RecentOutcomesOut(BaseModel):
+    """Response from ``GET /me/recent-outcomes``.
+
+    "What happened recently?" payload: the last 5
+    outcomes across the user's projects, suitable for a
+    dashboard widget.
+
+    * ``outcomes`` - capped (5) list of
+      ``{outcome_id, project_id,
+      actual_conversion_rate, created_at}``.
+    * ``outcome_count`` - number of outcomes in the
+      list (0..5).
+    * ``narrative`` - one paragraph string with best
+      vs worst conversion rates when data is present.
+    * ``key_signals`` - ``{label, value, severity,
+      display}``.
+    """
+
+    outcomes: list[dict] = []
+    outcome_count: int = 0
+    narrative: str = ""
+    key_signals: list[dict] = []
