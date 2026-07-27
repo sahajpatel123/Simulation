@@ -222,6 +222,12 @@ _USER_DECISION_TO_OUTCOME_DELAY_CACHE_NAMESPACE: str = (
     "user-decision-to-outcome-delay"
 )
 
+# Insights - executive summary. 60s TTL: the widget
+# refreshes often and the underlying counts only
+# change on a few write paths.
+_USER_INSIGHTS_CACHE_TTL_S: int = 60
+_USER_INSIGHTS_CACHE_NAMESPACE: str = "user-insights"
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -322,6 +328,10 @@ def clear_archive(
     )
     cache_invalidate(
         namespace=_USER_DECISION_TO_OUTCOME_DELAY_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_INSIGHTS_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     # Coverage gaps + notifications depend on the user's
