@@ -290,3 +290,38 @@ class ActivityFeedOut(BaseModel):
     events: list[dict] = []
     narrative: str = ""
     key_signals: list[dict] = []
+
+
+class ConvergenceCheckOut(BaseModel):
+    """Response from ``GET /projects/{id}/convergence``.
+
+    When a founder runs the same brief multiple times, do
+    the predicted conversion rates converge (good — stable)
+    or scatter (bad — unreliable)? Without this, the
+    predicted numbers aren't trustworthy.
+
+    * ``sim_count`` — sim rows considered (capped at 25).
+    * ``mean_pcr`` / ``std_dev`` / ``cv`` — population
+      statistics on ``predicted_conversion_rate``.
+    * ``verdict`` — ``CONVERGED`` (CV < 5%),
+      ``MILDLY_VARIANT`` (5% <= CV < 15%),
+      ``DIVERGED`` (CV >= 15%), or
+      ``INSUFFICIENT_DATA`` (fewer than 3 usable sims).
+    * ``min_pcr`` / ``max_pcr`` / ``range_pcr`` — spread
+      bounds for the dashboard tile.
+    * ``narrative`` — one paragraph string the dashboard
+      renders as plain text.
+    * ``key_signals`` — ``{label, value, severity,
+      display}`` dicts for the dashboard tiles.
+    """
+
+    sim_count: int = 0
+    mean_pcr: float = 0.0
+    std_dev: float = 0.0
+    cv: float = 0.0
+    verdict: str = "INSUFFICIENT_DATA"
+    min_pcr: float = 0.0
+    max_pcr: float = 0.0
+    range_pcr: float = 0.0
+    narrative: str = ""
+    key_signals: list[dict] = []

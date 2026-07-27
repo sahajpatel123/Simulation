@@ -63,6 +63,7 @@ from app.schemas.project import (
     ActivityFeedOut,
     BriefAssistRequest,
     BriefSave,
+    ConvergenceCheckOut,
     NextBestActionOut,
     NextBestActionSource,
     ProjectCreate,
@@ -119,6 +120,7 @@ from app.simulation.project_tags import (
 from app.simulation.scored_assumption import score_assumptions, signal_quality_tier
 from app.simulation.activity_feed import build_activity_feed
 from app.simulation.assumption_digest import build_assumption_digest
+from app.simulation.convergence_check import build_convergence_check
 from app.simulation.next_best_action import build_next_best_action
 from app.tasks.simulation_tasks import run_full_simulation
 from app.tasks.stress_test_tasks import run_assumption_stress_test
@@ -149,6 +151,11 @@ _ACTIVITY_FEED_CACHE_NAMESPACE: str = "project-activity-feed"
 # update) so a longer 5-minute TTL is appropriate.
 _ASSUMPTION_DIGEST_CACHE_TTL_S: int = 300
 _ASSUMPTION_DIGEST_CACHE_NAMESPACE: str = "project-assumption-digest"
+
+# The convergence check — predictions are stable enough
+# that a 2-min TTL is plenty.
+_CONVERGENCE_CHECK_CACHE_TTL_S: int = 120
+_CONVERGENCE_CHECK_CACHE_NAMESPACE: str = "project-convergence"
 
 _SOFTWARE_PRODUCT_TYPES: frozenset[ProductType] = frozenset(
     {
@@ -3300,3 +3307,82 @@ def get_assumption_digest(
         ttl_seconds=_ASSUMPTION_DIGEST_CACHE_TTL_S,
     )
     return AssumptionDigestOut(**payload)
+
+
+@router.get(
+    "/{project_id}/convergence",
+    response_model=ConvergenceCheckOut,
+    summary=(
+        "Per-project convergence check — do repeated sims "
+        "of the same brief agree (CONVERGED), vary mildly "
+        "(MILDLY_VARIANT), or scatter (DIVERGED)?"
+    ),
+    # Read-only aggregation; bounded.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_convergence_check(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ConvergenceCheckOut:
+    """Per-project convergence check.
+
+    Computes the coefficient of variation (CV) across the
+    most recent ``predicted_conversion_rate`` values and
+    buckets the result into a verdict:
+    CV < 5% → CONVERGED, 5-15% → MILDLY_VARIANT,
+    >= 15% → DIVERGED. Fewer than 3 usable sims →
+    INSUFFICIENT_DATA.
+    """
+    get_owned_project(db, current_user.id, project_id)
+
+    # Cache hit → short-circuit the SELECT.
+    cached = cache_get_json(
+        namespace=_CONVERGENCE_CHECK_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return ConvergenceCheckOut(**cached)
+
+    from app.simulation.convergence_check import (
+        MAX_SIMS_CONSIDERED,
+    )
+
+    rows = (
+        db.query(
+            Simulation.id,
+            Simulation.created_at,
+            Simulation.status,
+            Simulation.predicted_conversion_rate,
+            Simulation.results_json,
+        )
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc())
+        .limit(MAX_SIMS_CONSIDERED)
+        .all()
+    )
+    sim_dicts = [
+        {
+            "id": r.id,
+            "created_at": r.created_at,
+            "status": r.status,
+            "predicted_conversion_rate": (
+                r.predicted_conversion_rate
+            ),
+            "results_json": r.results_json,
+        }
+        for r in rows
+    ]
+    payload = build_convergence_check(sim_dicts)
+    cache_set_json(
+        namespace=_CONVERGENCE_CHECK_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_CONVERGENCE_CHECK_CACHE_TTL_S,
+    )
+    return ConvergenceCheckOut(**payload)
