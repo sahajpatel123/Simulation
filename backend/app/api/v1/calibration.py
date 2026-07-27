@@ -133,6 +133,10 @@ def apply_markov_adjustments(
     "/outcome",
     summary="Founder submits post-launch outcome (optional learning path)",
     responses=_JSON_200,
+    # Same reasoning as /projects/{id}/outcome-feedback:
+    # outcome submission kicks off calibration work.
+    # 10/min/IP keeps concurrent calibration runs bounded.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 def submit_outcome(
     body: FounderOutcomeSubmit,

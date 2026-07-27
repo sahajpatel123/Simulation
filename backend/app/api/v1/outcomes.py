@@ -180,6 +180,11 @@ def _predicted_from_results(results: dict) -> float:
     "/{project_id}/outcome-feedback",
     summary="Submit founder outcome with calibration pipeline (full flow)",
     responses=_JSON_200,
+    # Outcome submission kicks off CalibrationEngine + a
+    # potential Celery task. Cap path-spam at 10/min/IP so
+    # a runaway script can't trigger many concurrent
+    # calibration runs against the same project.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 def submit_outcome_feedback(
     project_id: int,

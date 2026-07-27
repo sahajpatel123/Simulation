@@ -329,6 +329,10 @@ def get_brief(
 @router.put(
     "/{project_id}/brief",
     summary="Save brief fields for a dossier",
+    # Brief writes are per-project, low-frequency. 30/min/IP
+    # keeps an accidental double-click + retry storm from
+    # spamming DB writes without blocking normal use.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
 def save_brief(
     project_id: int,

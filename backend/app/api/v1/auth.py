@@ -307,6 +307,10 @@ def delete_me(
     "/logout",
     response_model=MessageResponse,
     summary="Log out and revoke active refresh tokens",
+    # Logout is per-user, not IP-spammable, but a compromised
+    # script could otherwise spam logout + DB-log writes
+    # unbounded. 30/min/IP keeps accidental log spam bounded.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
 def logout(
     db: Session = Depends(get_db),
