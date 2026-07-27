@@ -4085,6 +4085,17 @@ def get_recent_decisions(
     projects, sorted by id descending (proxy for
     created_at descending).
     """
+    # Cache hit - short-circuit the 1 query. Checked
+    # BEFORE the DB query below so cache hits skip all DB
+    # work (including the empty-project early-return).
+    cached = cache_get_json(
+        namespace=_USER_RECENT_DECISIONS_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return RecentDecisionsOut(**cached)
+
     owned_project_ids = [
         pid for (pid,) in
         db.query(Project.id)
@@ -4122,5 +4133,12 @@ def get_recent_decisions(
     ]
     payload = build_recent_decisions(
         recent_decision_dicts=recent_decision_dicts,
+    )
+    cache_set_json(
+        namespace=_USER_RECENT_DECISIONS_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_RECENT_DECISIONS_CACHE_TTL_S,
     )
     return RecentDecisionsOut(**payload)
