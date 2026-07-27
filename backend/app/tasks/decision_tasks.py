@@ -333,6 +333,13 @@ def run_decision_comparison(self, decision_id: int) -> dict[str, Any]:
                     namespace="decision-digest",
                     user_id=owner_id,
                 )
+                # Also bust the per-project next-action —
+                # the just-completed decision can resolve a
+                # priority-2 CTA or change calibration health.
+                cache_invalidate(
+                    namespace="project-next-action",
+                    user_id=owner_id,
+                )
         except Exception as _exc:
             logger.debug("decision-digest cache bust skipped: %s", _exc)
 

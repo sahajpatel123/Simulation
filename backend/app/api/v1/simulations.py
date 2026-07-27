@@ -285,10 +285,15 @@ def create_simulation(
 
     logger.info(f"[API] Simulation enqueued - simulation_id={sim.id} task_id={task.id}")
 
-    # Bust the cached portfolio-narrative so the next GET
-    # reflects the new sim rather than waiting out the TTL.
+    # Bust the cached portfolio-narrative + the per-project
+    # next-action so the next GET reflects the new sim
+    # rather than waiting out the TTL.
     cache_invalidate(
         namespace=_PORTFOLIO_NARRATIVE_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace="project-next-action",
         user_id=current_user.id,
     )
 

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
 from app.core.rate_limiter import rate_limit
+from app.core.response_cache import cache_invalidate
 from app.api.v1.common import get_owned_project
 from app.models.outcome import Outcome
 from app.models.project import Project
@@ -304,6 +305,15 @@ def submit_outcome_feedback(
     ).fetchone()
     trend = trend_row.accuracy_trend if trend_row else "INSUFFICIENT_DATA"
 
+    # Bust the cached per-project next-action so the
+    # dashboard's CTA reflects the new outcome immediately
+    # (the calibration verdict is exactly what drives
+    # priority-3 of the priority chain).
+    cache_invalidate(
+        namespace="project-next-action",
+        user_id=current_user.id,
+    )
+
     return {
         "stored": True,
         "will_improve_model": will_learn,
@@ -407,6 +417,12 @@ def record_outcome(
         payload.actual_conversion_rate,
         pred_conv,
         cal_score,
+    )
+    # Bust the cached per-project next-action so the
+    # dashboard CTA reflects the new outcome immediately.
+    cache_invalidate(
+        namespace="project-next-action",
+        user_id=current_user.id,
     )
     return _hydrate_record(outcome)
 

@@ -465,6 +465,19 @@ def run_full_simulation(self, simulation_id: int) -> dict:
 
         self.db.commit()
         increment_simulation_count(project.user_id, self.db)
+        # Bust the cached per-project next-action so the
+        # dashboard's "what should I do?" CTA reflects the
+        # just-completed simulation immediately rather than
+        # waiting out the TTL.
+        try:
+            from app.core.response_cache import cache_invalidate
+
+            cache_invalidate(
+                namespace="project-next-action",
+                user_id=project.user_id,
+            )
+        except Exception as _exc:
+            logger.debug("next-action cache bust skipped: %s", _exc)
         sync_broadcast(
             simulation_id,
             "COMPLETED",

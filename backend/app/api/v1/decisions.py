@@ -107,10 +107,16 @@ def create_decision_comparison(
     decision.task_id = task.id
     db.commit()
 
-    # Bust the cached decision-digest so the new PENDING
-    # row surfaces immediately on the next GET.
+    # Bust the cached decision-digest + the per-project
+    # next-action so the new PENDING row surfaces
+    # immediately on the next GET (the digest AND the
+    # "what should I do?" CTA both care about it).
     cache_invalidate(
         namespace=_DECISION_DIGEST_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace="project-next-action",
         user_id=current_user.id,
     )
 

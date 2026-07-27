@@ -13,6 +13,11 @@ from app.core.claude_client import claude_call_with_fallback
 from app.core.intake_processor import adjust_assumption_confidence, build_enriched_description
 from app.core.deps import get_current_user, get_db
 from app.core.rate_limiter import rate_limit
+from app.core.response_cache import (
+    cache_get_json,
+    cache_invalidate,
+    cache_set_json,
+)
 from app.core.sanitiser import sanitise_assumption, sanitise_description, sanitise_text
 from app.core.prompts import (
     ASSUMPTION_EXTRACTION_PROMPT,
@@ -119,6 +124,13 @@ _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}
 
 _comp_software_analyser = CompetitiveSoftwareAnalyser()
 _conductor = Conductor()
+
+# The "what should I do right now?" CTA lives here.
+# 60s TTL absorbs dashboard polling; sim creation,
+# decision creation, and outcome submission bust it
+# so the answer reflects the latest state.
+_NEXT_ACTION_CACHE_TTL_S: int = 60
+_NEXT_ACTION_CACHE_NAMESPACE: str = "project-next-action"
 
 _SOFTWARE_PRODUCT_TYPES: frozenset[ProductType] = frozenset(
     {
@@ -2933,6 +2945,25 @@ def get_next_action(
     """
     project = get_owned_project(db, current_user.id, project_id)
 
+    # Cache hit → short-circuit the three child queries.
+    # Key is namespaced by user + project so tenants and
+    # projects never collide.
+    cached = cache_get_json(
+        namespace=_NEXT_ACTION_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return NextBestActionOut(
+            title=cached["title"],
+            action=cached["action"],
+            reason=cached["reason"],
+            severity=cached["severity"],
+            category=cached["category"],
+            source=NextBestActionSource(**cached["source"]),
+            fallback=cached["fallback"],
+        )
+
     # Latest completed simulation (newest first).
     latest_sim = (
         db.query(Simulation)
@@ -3037,6 +3068,15 @@ def get_next_action(
         pending_decisions=pending_decisions,
         calibration_health=calibration_health,
         has_any_simulation=has_any_simulation,
+    )
+    # Populate the cache so the next dashboard poll within
+    # the 60s window short-circuits the three child queries.
+    cache_set_json(
+        namespace=_NEXT_ACTION_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_NEXT_ACTION_CACHE_TTL_S,
     )
     return NextBestActionOut(
         title=payload["title"],
