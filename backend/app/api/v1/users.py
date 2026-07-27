@@ -201,6 +201,13 @@ _USER_DECISION_RATE_CACHE_NAMESPACE: str = (
     "user-decision-rate"
 )
 
+# Outcome rate - "how many outcomes per sim?" tile.
+# 60s TTL: 2 cheap COUNTs in the route.
+_USER_OUTCOME_RATE_CACHE_TTL_S: int = 60
+_USER_OUTCOME_RATE_CACHE_NAMESPACE: str = (
+    "user-outcome-rate"
+)
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -293,6 +300,10 @@ def clear_archive(
     )
     cache_invalidate(
         namespace=_USER_DECISION_RATE_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_OUTCOME_RATE_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     return MessageResponse(message=f"Cleared {deleted} dossiers from your archive")
@@ -2872,6 +2883,18 @@ def get_outcome_rate(
             narrative="No projects on file yet.",
         )
 
+    # Cache hit - short-circuit the 2 COUNTs.
+    cached = cache_get_json(
+        namespace=_USER_OUTCOME_RATE_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return OutcomeRateOut(**cached)
+
+    sim_count = (
+        )
+
     sim_count = (
         db.query(Simulation)
         .filter(
@@ -2889,5 +2912,12 @@ def get_outcome_rate(
     payload = build_outcome_rate(
         sim_count=sim_count,
         outcome_count=outcome_count,
+    )
+    cache_set_json(
+        namespace=_USER_OUTCOME_RATE_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_OUTCOME_RATE_CACHE_TTL_S,
     )
     return OutcomeRateOut(**payload)
