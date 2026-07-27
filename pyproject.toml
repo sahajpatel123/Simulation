@@ -36,3 +36,17 @@ ignore = [
 # Tests are allowed to be more relaxed — long descriptive
 # names and docstrings outweigh line-length purity.
 "tests/**/*.py" = ["E501"]
+
+# Architect modules use compact one-liners with ``=`` padding
+# for visual alignment of sub-score assignments (e.g.
+# ``app_install = ...`` and ``account_aband = ...``). The
+# W292 sibling warning also fires on these lines.
+"backend/app/simulation/architects/physical_sensory.py" = ["E701"]
+"backend/app/simulation/architects/purchase_decision.py" = ["E701"]
+"backend/app/simulation/architects/setup_first_use.py" = ["E701"]
+
+# Prompt templates are sent verbatim to LLMs — trailing
+# whitespace inside triple-quoted strings may carry semantic
+# weight (line breaks, prompt formatting) and must NOT be
+# auto-stripped.
+"backend/app/core/prompts.py" = ["W291"]
