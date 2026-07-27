@@ -65,9 +65,15 @@ def test_default_empty_at_risk() -> None:
     )
 
     out = build_account_health()
-    # No calibration, no sims, no decisions → low score.
+    # Empty input → verdict AT_RISK (no data to evaluate)
+    # but score is 25, NOT 0: the helper credits
+    #   * 20 points for "clean blindspot history" (zero blindspots)
+    #   * 5  points for "no MAE yet" (neutral watch state, not critical)
+    # Empty accounts earn a baseline for having nothing
+    # wrong, but stay well below VERDICT_AT_RISK_MAX (40)
+    # so the verdict correctly stays AT_RISK.
     assert out["verdict"] == VERDICT_AT_RISK
-    assert out["health_score"] == 0
+    assert out["health_score"] == 25
 
 
 # ---------------------------------------------------------------------------

@@ -36,6 +36,11 @@ router = APIRouter(prefix="/users", tags=["users"])
 _USER_DASHBOARD_CACHE_TTL_S: int = 30
 _USER_DASHBOARD_CACHE_NAMESPACE: str = "user-dashboard"
 
+# Qualitative health verdict (0-100 score). Slightly
+# longer TTL since it composes heavier queries.
+_USER_ACCOUNT_HEALTH_CACHE_TTL_S: int = 60
+_USER_ACCOUNT_HEALTH_CACHE_NAMESPACE: str = "user-account-health"
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -62,8 +67,16 @@ def clear_archive(
     # Bust /me/dashboard so the next render reflects the
     # cleared project count + simulation count + decision
     # count + outcome count rather than waiting out the TTL.
+    # Also bust /me/account-health: the health score
+    # depends on every dim — sim/decision success ratios,
+    # calibration MAE, blindspots — all of which shift
+    # when the archive is wiped.
     cache_invalidate(
         namespace=_USER_DASHBOARD_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     return MessageResponse(message=f"Cleared {deleted} dossiers from your archive")
@@ -470,7 +483,7 @@ def get_account_health(
     """
     # Cache hit → short-circuit.
     cached = cache_get_json(
-        namespace="user-account-health",
+        namespace=_USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
         params={"user_id": current_user.id},
         user_id=current_user.id,
     )
@@ -626,7 +639,7 @@ def get_account_health(
     )
 
     cache_set_json(
-        namespace="user-account-health",
+        namespace=_USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
         params={"user_id": current_user.id},
         user_id=current_user.id,
         value=payload,

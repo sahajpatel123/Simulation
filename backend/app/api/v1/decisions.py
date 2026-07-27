@@ -10,7 +10,10 @@ from app.api.v1.projects import (
     _ACTIVITY_FEED_CACHE_NAMESPACE,
     _NEXT_ACTION_CACHE_NAMESPACE,
 )
-from app.api.v1.users import _USER_DASHBOARD_CACHE_NAMESPACE
+from app.api.v1.users import (
+    _USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
+    _USER_DASHBOARD_CACHE_NAMESPACE,
+)
 from app.core.deps import get_current_user, get_db
 from app.core.rate_limiter import rate_limit
 from app.core.response_cache import (
@@ -130,6 +133,10 @@ def create_decision_comparison(
     )
     cache_invalidate(
         namespace=_USER_DASHBOARD_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 
