@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -1423,7 +1424,6 @@ def _batch_overall_mean(
     when no usable data exists (so the dashboard renders
     ``UNKNOWN`` instead of a misleading zero).
     """
-    import math
     rates: list[float] = []
     for results in results_jsons:
         if not isinstance(results, dict):
@@ -1906,8 +1906,12 @@ def get_cluster_diff(
         "the dashboard can render a consolidation heatmap"
     ),
     # DB read of N cluster definitions — same cap as the
-    # other aggregate endpoints.
-    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+    # other aggregate endpoints. Auth required so the cluster
+    # taxonomy isn't anonymously enumerable.
+    dependencies=[
+        Depends(rate_limit(limit=30, window_s=60)),
+        Depends(get_current_user),
+    ],
 )
 def get_cluster_overlap_matrix(
     cluster_ids: list[str] = Query(
@@ -1919,6 +1923,7 @@ def get_cluster_overlap_matrix(
             "preserved in the response. Capped at 25 ids."
         ),
     ),
+    current_user: User = Depends(get_current_user),
 ):
     """Pairwise similarity matrix across N clusters."""
     # Normalise the ids: split comma-separated values, strip,
@@ -2174,6 +2179,7 @@ def get_architect_bias_trend(
         filters.append(Simulation.created_at < until_dt)
     rows = (
         db.query(
+            Simulation.id,
             Simulation.created_at,
             Simulation.results_json,
             Outcome.predicted_conversion_rate,
@@ -2189,22 +2195,23 @@ def get_architect_bias_trend(
         .all()
     )
 
-    # Keep latest outcome per sim.
+    # Keep latest outcome per sim. The LEFT JOIN can produce
+    # multiple rows per sim if a founder has submitted more than
+    # one outcome; the ORDER BY Outcome.created_at DESC above
+    # puts the newest outcome first, so we just take the first
+    # row we see per Simulation.id.
     seen: set[int] = set()
     trend_rows: list[
         tuple[object, object, object, list[dict] | None]
     ] = []
     for r in rows:
         if r.created_at is None:
-            # Sim has no outcome → skip (no predicted/actual).
+            # Sim without a created_at — can't bin it on the
+            # trend timeline.
             continue
-        if r[0] in seen if False else False:
+        if r.id in seen:
             continue
-        # Dedupe via the Simulation row's id, not the row tuple —
-        # the row tuple is (created_at, results_json,
-        # predicted, actual, outcome_created_at). We need the
-        # sim id. Re-query to get it.
-        seen.add(id(r))
+        seen.add(r.id)
         trend_rows.append(
             (
                 r.created_at,
@@ -2647,6 +2654,7 @@ def get_calibration_health(
 
     rows = (
         db.query(
+            Simulation.id,
             Simulation.created_at,
             Outcome.predicted_conversion_rate,
             Outcome.actual_conversion_rate,
@@ -2661,31 +2669,33 @@ def get_calibration_health(
             Simulation.status == "COMPLETED",
             Project.user_id == current_user.id,
         )
-        .order_by(Simulation.created_at.asc())
+        .order_by(Simulation.created_at.asc(), Outcome.created_at.desc())
         .all()
     )
 
-    # Keep latest outcome per sim (defensive — the
-    # LEFT JOIN could in theory produce dupes if a sim
-    # has multiple outcomes).
+    # Keep latest outcome per sim. The LEFT JOIN produces one
+    # row per (sim, outcome) pair; with the ORDER BY above the
+    # newest outcome for each sim is the FIRST row we see, so
+    # the ``seen`` set keeps one row per Simulation.id.
     seen: set[int] = set()
     health_rows: list[tuple] = []
     for r in rows:
-        if r[0] is None:
+        if r.created_at is None:
             # can't build a health row without created_at.
             continue
-        # Use a stable dedupe key — Outcome.created_at isn't
-        # in this query, so we fall back to (sim_id, sim
-        # create_at) uniqueness which the LEFT JOIN already
-        # enforces.
-        if id(r) in seen:
+        if r.id in seen:
             continue
-        seen.add(id(r))
+        seen.add(r.id)
         findings = (
-            (r[3] or {}).get("domain_findings") or []
+            (r.results_json or {}).get("domain_findings") or []
         )
         health_rows.append(
-            (r[0], r[1], r[2], findings)
+            (
+                r.created_at,
+                r.predicted_conversion_rate,
+                r.actual_conversion_rate,
+                findings,
+            )
         )
 
     payload = build_calibration_health(health_rows)
