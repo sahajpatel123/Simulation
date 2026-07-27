@@ -1837,9 +1837,16 @@ def run_premortem(
 
     # Bust the cached premortem-digest so the next GET
     # reflects the freshly-generated failure modes rather
-    # than waiting out the 5-min TTL.
+    # than waiting out the 5-min TTL. Also bust the
+    # recommendations-digest - it composes both premortem
+    # + intervention, so it must refresh when premortem
+    # mutates.
     cache_invalidate(
         namespace=_PREMORTEM_DIGEST_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_RECOMMENDATIONS_DIGEST_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 
@@ -2195,9 +2202,15 @@ def generate_interventions(
 
     # Bust the cached intervention-digest so the next GET
     # reflects the freshly-generated set rather than
-    # waiting out the 5-min TTL.
+    # waiting out the 5-min TTL. Also bust the
+    # recommendations-digest (composes both intervention
+    # + premortem).
     cache_invalidate(
         namespace=_INTERVENTION_DIGEST_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_RECOMMENDATIONS_DIGEST_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 
