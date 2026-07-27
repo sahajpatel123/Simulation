@@ -24,6 +24,7 @@ from app.schemas.user import (
     AccountHealthOut,
     CoverageGapsOut,
     DecisionRateOut,
+    DecisionToOutcomeDelayOut,
     DecisionVelocityOut,
     DigestSnapshotOut,
     LastTouchedProjectOut,
@@ -47,6 +48,9 @@ from app.simulation.calibration_health import (
 )
 from app.simulation.coverage_gaps import build_coverage_gaps
 from app.simulation.decision_rate import build_decision_rate
+from app.simulation.decision_to_outcome_delay import (
+    build_decision_to_outcome_delay,
+)
 from app.simulation.decision_velocity import (
     build_decision_velocity,
 )
@@ -304,6 +308,17 @@ def clear_archive(
     )
     cache_invalidate(
         namespace=_USER_OUTCOME_RATE_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    # Coverage gaps + notifications depend on the user's
+    # owned projects — wiping the archive would otherwise
+    # leave stale data showing for up to the cache TTL.
+    cache_invalidate(
+        namespace=_USER_COVERAGE_GAPS_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_NOTIFICATIONS_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     return MessageResponse(message=f"Cleared {deleted} dossiers from your archive")
@@ -2921,3 +2936,93 @@ def get_outcome_rate(
         ttl_seconds=_USER_OUTCOME_RATE_CACHE_TTL_S,
     )
     return OutcomeRateOut(**payload)
+
+
+@router.get(
+    "/me/decision-to-outcome-delay",
+    response_model=DecisionToOutcomeDelayOut,
+    summary=(
+        "Per-user decision->outcome loop time - average "
+        "gap between a decision and the user's next outcome "
+        "on the same project. Closes the decision->outcome "
+        "chain."
+    ),
+    # Read-only; 2 cheap queries.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_decision_to_outcome_delay(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DecisionToOutcomeDelayOut:
+    """Decision-to-outcome delay.
+
+    For each owned project, computes the gap (in hours)
+    between each decision and the next outcome on that
+    project. Returns the average + median + fastest +
+    slowest across the user's portfolio.
+    """
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+    if not owned_project_ids:
+        return DecisionToOutcomeDelayOut()
+
+    # Decisions per project (ascending) and outcomes per
+    # project (ascending). For each decision, find the
+    # next outcome on the same project that's strictly
+    # after it.
+    decision_rows = (
+        db.query(
+            Decision.id,
+            Decision.project_id,
+            Decision.created_at,
+        )
+        .filter(Decision.project_id.in_(owned_project_ids))
+        .order_by(Decision.id.asc())
+        .all()
+    )
+    outcome_rows = (
+        db.query(
+            Outcome.id,
+            Outcome.project_id,
+            Outcome.created_at,
+        )
+        .filter(Outcome.project_id.in_(owned_project_ids))
+        .order_by(Outcome.id.asc())
+        .all()
+    )
+
+    # Bucket by project_id.
+    decisions_by_pid: dict[int, list] = {}
+    for d in decision_rows:
+        decisions_by_pid.setdefault(
+            d.project_id, []
+        ).append(d)
+    outcomes_by_pid: dict[int, list] = {}
+    for o in outcome_rows:
+        outcomes_by_pid.setdefault(
+            o.project_id, []
+        ).append(o)
+
+    pairs: list[tuple] = []
+    for pid in owned_project_ids:
+        decs = decisions_by_pid.get(pid, [])
+        outs = outcomes_by_pid.get(pid, [])
+        for dec in decs:
+            # Find the first outcome strictly after dec.
+            next_out = next(
+                (o for o in outs if o.created_at > dec.created_at),
+                None,
+            )
+            if next_out is not None:
+                pairs.append(
+                    (dec.created_at, next_out.created_at)
+                )
+
+    payload = build_decision_to_outcome_delay(
+        decision_outcome_pairs=pairs,
+    )
+    return DecisionToOutcomeDelayOut(**payload)

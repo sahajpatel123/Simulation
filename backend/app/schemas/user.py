@@ -537,3 +537,35 @@ class OutcomeRateOut(BaseModel):
     narrative: str = ""
     key_signals: list[dict] = []
 
+
+class DecisionToOutcomeDelayOut(BaseModel):
+    """Response from ``GET /me/decision-to-outcome-delay``.
+
+    Average gap between a decision and the user's next
+    outcome on the same project. Closes the loop on the
+    decision->outcome chain (decision-velocity measures
+    sim->decision, outcome-velocity measures sim->outcome,
+    this one measures decision->outcome).
+
+    * ``sample_count`` - decision/outcome pairs counted.
+    * ``average_gap_hours`` / ``median_gap_hours`` -
+      mean / median gap in hours (None when no pairs).
+    * ``fastest_gap_hours`` / ``slowest_gap_hours`` -
+      min / max gap in hours.
+    * ``verdict`` - ``FAST`` (<= 24h) / ``NORMAL``
+      (<= 168h / 7d) / ``SLOW`` (> 168h) /
+      ``INSUFFICIENT_DATA``.
+    * ``narrative`` - one paragraph string.
+    * ``key_signals`` - ``{label, value, severity,
+      display}``.
+    """
+
+    sample_count: int = 0
+    average_gap_hours: float | None = None
+    median_gap_hours: float | None = None
+    fastest_gap_hours: float | None = None
+    slowest_gap_hours: float | None = None
+    verdict: str = "INSUFFICIENT_DATA"
+    narrative: str = ""
+    key_signals: list[dict] = []
+
