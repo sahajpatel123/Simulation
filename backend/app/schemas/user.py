@@ -569,3 +569,27 @@ class DecisionToOutcomeDelayOut(BaseModel):
     narrative: str = ""
     key_signals: list[dict] = []
 
+
+
+class InsightsOut(BaseModel):
+    """Response from ``GET /me/insights``.
+
+    Executive summary that composes a single headline +
+    2-3 short insight sentences synthesized from the
+    existing user-level digests (dashes in users.py +
+    portfolio-health-snapshot + weekly-digest +
+    projects-by-status).
+
+    * ``has_data`` - ``True`` when at least one count is > 0.
+    * ``headline`` - one-line summary.
+    * ``insights`` - list of 2-3 short sentences.
+    * ``narrative`` - pipe-separated insights (or
+      "No activity yet - start a sim to get insights.").
+    * ``key_signals`` - severity-tagged display dicts.
+    """
+
+    has_data: bool = False
+    headline: str = ""
+    insights: list[str] = []
+    narrative: str = ""
+    key_signals: list[dict] = []

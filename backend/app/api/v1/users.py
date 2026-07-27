@@ -27,6 +27,7 @@ from app.schemas.user import (
     DecisionToOutcomeDelayOut,
     DecisionVelocityOut,
     DigestSnapshotOut,
+    InsightsOut,
     LastTouchedProjectOut,
     MostActiveProjectOut,
     NotificationsOut,
@@ -55,6 +56,7 @@ from app.simulation.decision_velocity import (
     build_decision_velocity,
 )
 from app.simulation.digest_snapshot import build_digest_snapshot
+from app.simulation.insights import build_insights
 from app.simulation.intervention_digest import build_intervention_digest
 from app.simulation.last_touched_project import (
     build_last_touched_project,
@@ -3054,3 +3056,145 @@ def get_decision_to_outcome_delay(
         ttl_seconds=_USER_DECISION_TO_OUTCOME_DELAY_CACHE_TTL_S,
     )
     return DecisionToOutcomeDelayOut(**payload)
+
+
+@router.get(
+    "/me/insights",
+    response_model=InsightsOut,
+    summary=(
+        "Per-user executive summary - one-line headline + "
+        "2-3 short insight sentences synthesized from "
+        "the existing user-level digests"
+    ),
+    # Read-only; multiple cheap COUNTs in the route.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_insights(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> InsightsOut:
+    """Executive summary.
+
+    Composes a single headline + 2-3 short insight
+    sentences synthesized from the existing user-level
+    digests. Different from /me/digest-snapshot (which
+    is a flat payload of all 5 digests) - this is a
+    narrative rollup.
+    """
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+
+    project_count = len(owned_project_ids)
+    sim_count_total = 0
+    decision_count_total = 0
+    outcome_count_total = 0
+    weekly_sim_count = 0
+    weekly_decision_count = 0
+    weekly_outcome_count = 0
+
+    if owned_project_ids:
+        sim_count_total = (
+            db.query(Simulation)
+            .filter(Simulation.project_id.in_(owned_project_ids))
+            .count()
+        )
+        decision_count_total = (
+            db.query(Decision)
+            .filter(Decision.project_id.in_(owned_project_ids))
+            .count()
+        )
+        outcome_count_total = (
+            db.query(Outcome)
+            .filter(Outcome.project_id.in_(owned_project_ids))
+            .count()
+        )
+        seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+        weekly_sim_count = (
+            db.query(Simulation)
+            .filter(
+                Simulation.project_id.in_(owned_project_ids),
+                Simulation.created_at >= seven_days_ago,
+            )
+            .count()
+        )
+        weekly_decision_count = (
+            db.query(Decision)
+            .filter(
+                Decision.project_id.in_(owned_project_ids),
+                Decision.created_at >= seven_days_ago,
+            )
+            .count()
+        )
+        weekly_outcome_count = (
+            db.query(Outcome)
+            .filter(
+                Outcome.project_id.in_(owned_project_ids),
+                Outcome.created_at >= seven_days_ago,
+            )
+            .count()
+        )
+
+    # Simple portfolio-score proxy: weighted sum of
+    # ratios vs the weekly activity.
+    total_recent = max(
+        weekly_sim_count + weekly_decision_count +
+        weekly_outcome_count,
+        1,
+    )
+    portfolio_score = min(
+        100, total_recent * 15 + project_count * 5,
+    )
+    if portfolio_score >= 70:
+        portfolio_verdict = "HEALTHY"
+    elif portfolio_score >= 40:
+        portfolio_verdict = "NEEDS_ATTENTION"
+    else:
+        portfolio_verdict = "AT_RISK"
+
+    # Simple needs_attention proxy: projects with
+    # pending decision count >= 1 OR outcome count < sim
+    # count / 2.
+    needs_attention_count = 0
+    if owned_project_ids:
+        for pid in owned_project_ids:
+            pending = (
+                db.query(Decision)
+                .filter(
+                    Decision.project_id == pid,
+                    Decision.status.in_(("PENDING", "RUNNING")),
+                )
+                .count()
+            )
+            sims = (
+                db.query(Simulation)
+                .filter(
+                    Simulation.project_id == pid,
+                    Simulation.status == "COMPLETED",
+                )
+                .count()
+            )
+            outcomes = (
+                db.query(Outcome)
+                .filter(Outcome.project_id == pid)
+                .count()
+            )
+            if pending > 0 or (sims > 0 and outcomes < sims / 2):
+                needs_attention_count += 1
+
+    payload = build_insights(
+        project_count=project_count,
+        sim_count_total=sim_count_total,
+        decision_count_total=decision_count_total,
+        outcome_count_total=outcome_count_total,
+        portfolio_verdict=portfolio_verdict,
+        portfolio_score=portfolio_score,
+        weekly_sim_count=weekly_sim_count,
+        weekly_decision_count=weekly_decision_count,
+        weekly_outcome_count=weekly_outcome_count,
+        needs_attention_count=needs_attention_count,
+    )
+    return InsightsOut(**payload)
