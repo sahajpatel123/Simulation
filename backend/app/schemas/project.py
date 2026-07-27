@@ -525,6 +525,31 @@ class StatusBannerOut(BaseModel):
     key_signals: list[dict] = []
 
 
+class ConfidenceExplainerOut(BaseModel):
+    """Response from ``GET /projects/{id}/confidence-explainer``.
+
+    Decomposes the latest completed sim's confidence
+    score into its contributing factors so the dashboard
+    can show *why* the confidence is what it is.
+
+    * ``confidence_score`` - the same 0..1 from the sim
+      (``sim.confidence_score``).
+    * ``factors`` - list of
+      ``{label, value, factor}`` dicts (one per
+      contributing factor). ``factor`` is the 0..1
+      subscore for that factor.
+    * ``narrative`` - one paragraph string the dashboard
+      renders as plain text.
+    * ``key_signals`` - ``{label, value, severity,
+      display}``.
+    """
+
+    confidence_score: float = 0.0
+    factors: list[dict] = []
+    narrative: str = ""
+    key_signals: list[dict] = []
+
+
 class LatestSnapshotOut(BaseModel):
     """Response from ``GET /projects/{id}/latest-snapshot``.
 

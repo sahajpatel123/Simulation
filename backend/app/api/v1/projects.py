@@ -87,6 +87,7 @@ from app.schemas.project import (
     ProjectTagsOut,
     ProjectTagsPatch,
     StatusBannerOut,
+    ConfidenceExplainerOut,
 )
 from app.schemas.prototype import FunnelEdge, FunnelGraph, FunnelNode, PrototypeOut
 from app.schemas.stress_test import (
@@ -132,6 +133,9 @@ from app.simulation.adoption_milestones import (
     build_adoption_milestones,
 )
 from app.simulation.assumption_digest import build_assumption_digest
+from app.simulation.confidence_explainer import (
+    build_confidence_explainer,
+)
 from app.simulation.convergence_check import build_convergence_check
 from app.simulation.intervention_digest import (
     build_intervention_digest,
@@ -4456,3 +4460,142 @@ def get_status_banner(
         ttl_seconds=_STATUS_BANNER_CACHE_TTL_S,
     )
     return StatusBannerOut(**payload)
+
+
+@router.get(
+    "/{project_id}/confidence-explainer",
+    response_model=ConfidenceExplainerOut,
+    summary=(
+        "Per-project confidence explainer - decomposes the "
+        "latest completed sim's confidence score into 5 "
+        "contributing factors (sample volume, conversion "
+        "agreement, assumption coverage, assumption "
+        "freshness, outcome history depth)"
+    ),
+    # Read-only; 4 cheap queries.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_confidence_explainer(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ConfidenceExplainerOut:
+    """Confidence explainer.
+
+    Decomposes the latest completed sim's confidence
+    score into 5 factors so the dashboard can show
+    'why is my confidence 0.85?' instead of just '0.85'.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+
+    # Latest completed sim.
+    latest_sim = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc())
+        .first()
+    )
+    if latest_sim is None:
+        return ConfidenceExplainerOut(
+            narrative=(
+                "No completed simulation yet. Run one to see "
+                "the confidence breakdown."
+            ),
+        )
+
+    confidence_score = getattr(
+        latest_sim, "confidence_score", None,
+    )
+    if confidence_score is None:
+        agg = (latest_sim.results_json or {}).get(
+            "aggregated", {},
+        )
+        confidence_score = agg.get("confidence_score")
+    if confidence_score is not None:
+        confidence_score = float(confidence_score) / 100.0
+
+    # Sample volume = sim's consumer_volume (the number
+    # of simulated agents).
+    sample_volume = _safe_int(getattr(
+        latest_sim, "consumer_volume", 0,
+    ))
+
+    # Conversion agreement = predicted_conversion_rate
+    # (the higher the rate, the more agents agreed).
+    agreement_rate = _safe_float(getattr(
+        latest_sim, "predicted_conversion_rate", None,
+    ))
+
+    # Assumption coverage = count of assumptions / 5
+    # (5 sensitivity bands: LOW/MEDIUM/HIGH/CRITICAL
+    # + 1 implicit; capped at 1.0).
+    assumption_count = (
+        db.query(Assumption)
+        .filter(
+            Assumption.project_id == project_id,
+            Assumption.is_hidden.is_(False),
+        )
+        .count()
+    )
+    assumption_coverage = min(1.0, assumption_count / 5.0)
+
+    # Assumption freshness = days since latest assumption.
+    days_since_latest_assumption: int | None = None
+    if assumption_count > 0:
+        latest_assumption = (
+            db.query(Assumption)
+            .filter(
+                Assumption.project_id == project_id,
+                Assumption.is_hidden.is_(False),
+            )
+            .order_by(Assumption.created_at.desc())
+            .first()
+        )
+        if (
+            latest_assumption is not None
+            and latest_assumption.created_at is not None
+        ):
+            ts = latest_assumption.created_at
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            delta = datetime.now(timezone.utc) - ts
+            days_since_latest_assumption = max(0, delta.days)
+
+    # Outcome history depth = count of past outcomes for
+    # the project (calibration target).
+    outcome_history_depth = (
+        db.query(Outcome)
+        .filter(Outcome.project_id == project_id)
+        .count()
+    )
+
+    payload = build_confidence_explainer(
+        confidence_score=confidence_score,
+        sample_volume=sample_volume,
+        agreement_rate=agreement_rate,
+        assumption_coverage=assumption_coverage,
+        days_since_latest_assumption=(
+            days_since_latest_assumption
+        ),
+        outcome_history_depth=outcome_history_depth,
+    )
+    return ConfidenceExplainerOut(**payload)
+
+
+def _safe_int(value):
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return int(value)
+    return 0
+
+
+def _safe_float(value):
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
