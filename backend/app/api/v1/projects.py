@@ -1559,6 +1559,7 @@ def extract_assumptions(
     # created_at changes).
     from app.api.v1.users import (
     _USER_COVERAGE_GAPS_CACHE_NAMESPACE,
+    _USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
     _USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
     _CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
 )
