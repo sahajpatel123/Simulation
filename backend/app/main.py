@@ -16,6 +16,7 @@ from app.core.logging_config import configure_logging
 from app.core.metrics import metrics
 from app.core.redis_client import get_redis_client
 from app.core.timing_middleware import TimingMiddleware
+from app.core.audit_middleware import AuditLogMiddleware
 from app.worker import celery_app as _celery_app
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,13 @@ app.add_exception_handler(TheCeeError, thecee_error_handler)
 app.add_exception_handler(Exception, generic_error_handler)
 
 app.add_middleware(TimingMiddleware)
+# Audit log must wrap TimingMiddleware so the request has already been
+# served (response object available) before we attempt the DB insert.
+# Adding it AFTER TimingMiddleware means it runs FIRST on the request
+# path and LAST on the response path — Starlette middleware order is
+# last-added = outermost, so audit sees the post-Timing response and
+# its timing headers.
+app.add_middleware(AuditLogMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

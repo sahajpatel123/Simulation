@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -14,11 +14,13 @@ from app.core.response_cache import (
 )
 from app.core.tier_enforcement import TIER_LIMITS
 from app.models.assumption import Assumption
+from app.models.audit_log import ApiAuditLog
 from app.models.decision import Decision
 from app.models.outcome import Outcome
 from app.models.project import Project
 from app.models.simulation import Simulation
 from app.models.user import User
+from app.schemas.audit_log import AuditLogListOut, AuditLogOut
 from app.schemas.auth import MessageResponse
 from app.schemas.user import (
     AccountHealthOut,
@@ -304,6 +306,14 @@ _USER_RECENT_OUTCOMES_CACHE_NAMESPACE: str = (
 _USER_RECENT_DECISIONS_CACHE_TTL_S: int = 60
 _USER_RECENT_DECISIONS_CACHE_NAMESPACE: str = (
     "user-recent-decisions"
+)
+
+# Audit log - "what did your account just do?" timeline. Short TTL
+# because the table is written every mutation, so a long cache would
+# hide fresh rows from the user for too long after they make a change.
+_USER_AUDIT_LOG_CACHE_TTL_S: int = 15
+_USER_AUDIT_LOG_CACHE_NAMESPACE: str = (
+    "user-audit-log"
 )
 
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
@@ -4146,3 +4156,94 @@ def get_recent_decisions(
         ttl_seconds=_USER_RECENT_DECISIONS_CACHE_TTL_S,
     )
     return RecentDecisionsOut(**payload)
+
+
+@router.get(
+    "/me/audit-log",
+    response_model=AuditLogListOut,
+    summary=(
+        "Per-user audit log - reverse-chronological list of every "
+        "mutating request this account has made, so the dashboard "
+        "can show 'what did your account just do?'."
+    ),
+    # Read-only; 1 query. The 15s TTL keeps the response snappy while
+    # surfacing fresh writes quickly - long enough to absorb dashboard
+    # polling, short enough that a write the user just made shows up.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_audit_log(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    limit: int = Query(
+        default=50,
+        ge=1,
+        le=200,
+        description=(
+            "Page size (1-200, default 50). Hard cap of 200 keeps "
+            "the payload bounded; the ``next_before_id`` cursor "
+            "is the supported way to fetch more."
+        ),
+    ),
+    before_id: int | None = Query(
+        default=None,
+        ge=1,
+        description=(
+            "Cursor pagination: return only entries with id < "
+            "before_id. Use the smallest ``id`` from the previous "
+            "page to fetch the page before it."
+        ),
+    ),
+) -> AuditLogListOut:
+    """Audit log timeline.
+
+    Returns the user's most recent mutations, newest first.
+    Each row is one HTTP request: the matched FastAPI route
+    template (so dynamic IDs are folded away), the HTTP method,
+    the status code, and how long the request took.
+
+    Reads bypass the per-user cache when ``before_id`` is supplied
+    — a paginated walk should never see stale "page 1" rows from
+    the cache once the user has scrolled past them.
+    """
+    # Cache only the unfiltered first page; any paginated query goes
+    # straight to the DB so the cursor doesn't fight a stale snapshot.
+    cache_params: dict[str, object] | None = None
+    if before_id is None:
+        cache_params = {"user_id": current_user.id, "limit": limit}
+        cached = cache_get_json(
+            namespace=_USER_AUDIT_LOG_CACHE_NAMESPACE,
+            params=cache_params,
+            user_id=current_user.id,
+        )
+        if cached is not None:
+            return AuditLogListOut(**cached)
+
+    query = (
+        db.query(ApiAuditLog)
+        .filter(ApiAuditLog.user_id == current_user.id)
+    )
+    if before_id is not None:
+        query = query.filter(ApiAuditLog.id < before_id)
+
+    # Fetch limit+1 so we can tell ``has_more`` without a COUNT(*).
+    rows = query.order_by(ApiAuditLog.id.desc()).limit(limit + 1).all()
+    has_more = len(rows) > limit
+    page_rows = rows[:limit]
+
+    items = [AuditLogOut.model_validate(r) for r in page_rows]
+    next_before_id = page_rows[-1].id if page_rows and has_more else None
+
+    response = AuditLogListOut(
+        items=items,
+        has_more=has_more,
+        next_before_id=next_before_id,
+    )
+    if cache_params is not None:
+        cache_set_json(
+            namespace=_USER_AUDIT_LOG_CACHE_NAMESPACE,
+            params=cache_params,
+            user_id=current_user.id,
+            value=response.model_dump(mode="json"),
+            ttl_seconds=_USER_AUDIT_LOG_CACHE_TTL_S,
+        )
+    return response

@@ -955,6 +955,55 @@ def run_migrations():
             conn.rollback()
             print(f"⚠️ share_tokens skip: {e}")
 
+        # Step 96: api_audit_log — durable record of every mutating request
+        # (POST/PUT/PATCH/DELETE). Populated by AuditLogMiddleware in the
+        # request path so users have a self-service "what did my session
+        # just do?" timeline, and security can spot unusual write patterns.
+        # GETs are intentionally excluded: the same table would otherwise
+        # grow tens of thousands of rows per user per day and the read
+        # endpoint's pagination becomes useless.
+        try:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS api_audit_log (
+                        id BIGSERIAL PRIMARY KEY,
+                        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                        method VARCHAR(10) NOT NULL,
+                        route VARCHAR(255) NOT NULL,
+                        status SMALLINT NOT NULL,
+                        duration_ms INTEGER NOT NULL,
+                        ip_address VARCHAR(64),
+                        request_id VARCHAR(64),
+                        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+                    );
+                    """
+                )
+            )
+            conn.commit()
+            print("✅ api_audit_log table ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ api_audit_log table skip: {e}")
+
+        for idx_sql in [
+            # Reverse-chronological lookup for ``GET /me/audit-log`` uses
+            # (user_id, id DESC) so the index supports both the filter and
+            # the cursor pagination key.
+            "CREATE INDEX IF NOT EXISTS idx_api_audit_log_user_id "
+            "ON api_audit_log (user_id, id DESC);",
+            # Catch-all time index lets ops query "all writes in the last
+            # hour" without a sequential scan.
+            "CREATE INDEX IF NOT EXISTS idx_api_audit_log_created_at "
+            "ON api_audit_log (created_at DESC);",
+        ]:
+            try:
+                conn.execute(text(idx_sql))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+        print("✅ api_audit_log indexes ready")
+
     # Seed cluster_parameters with 416 placeholder rows (52 clusters × 8 traits)
     _seed_cluster_parameters()
 

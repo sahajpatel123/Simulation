@@ -15,6 +15,7 @@ from app.models.generated_ui import GeneratedUI
 from app.models.ui_simulation_session import UISimulationSession
 from app.models.ui_simulation_run import UISimulationRun
 from app.models.project_hardware import Hardware3DModel, HardwareProduct
+from app.models.audit_log import ApiAuditLog
 
 __all__ = [
     "Base",
@@ -38,4 +39,5 @@ __all__ = [
     "UISimulationRun",
     "HardwareProduct",
     "Hardware3DModel",
+    "ApiAuditLog",
 ]
