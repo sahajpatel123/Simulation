@@ -407,6 +407,10 @@ def clear_archive(
         namespace=_USER_SIM_FAILURE_RATE_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
+    cache_invalidate(
+        namespace=_USER_RUNS_PER_WEEK_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
     return MessageResponse(message=f"Cleared {deleted} dossiers from your archive")
 
 
@@ -3720,6 +3724,16 @@ def get_runs_per_week(
             narrative="No projects on file yet.",
         )
 
+    # Cache hit - short-circuit the 1 GROUP BY query.
+    cached = cache_get_json(
+        namespace=_USER_RUNS_PER_WEEK_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return RunsPerWeekOut(**cached)
+        )
+
     four_weeks_ago = (
         datetime.now(timezone.utc) - timedelta(weeks=4)
     )
@@ -3745,4 +3759,11 @@ def get_runs_per_week(
     week_buckets.sort(key=lambda w: w[0])
 
     payload = build_runs_per_week(week_buckets=week_buckets)
+    cache_set_json(
+        namespace=_USER_RUNS_PER_WEEK_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_RUNS_PER_WEEK_CACHE_TTL_S,
+    )
     return RunsPerWeekOut(**payload)
