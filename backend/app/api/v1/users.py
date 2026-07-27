@@ -25,6 +25,7 @@ from app.schemas.user import (
     CoverageGapsOut,
     DigestSnapshotOut,
     NotificationsOut,
+    ProjectsByStatusOut,
     ProjectsSummaryOut,
     UsageByWeekOut,
     UserDashboardOut,
@@ -39,6 +40,9 @@ from app.simulation.digest_snapshot import build_digest_snapshot
 from app.simulation.intervention_digest import build_intervention_digest
 from app.simulation.notifications import build_notifications
 from app.simulation.premortem_digest import build_premortem_digest
+from app.simulation.projects_by_status import (
+    build_projects_by_status,
+)
 from app.simulation.projects_summary import build_projects_summary
 from app.simulation.usage_by_week import build_usage_by_week
 from app.simulation.user_dashboard import (
@@ -1728,3 +1732,38 @@ def get_usage_by_week(
         ttl_seconds=_USER_USAGE_BY_WEEK_CACHE_TTL_S,
     )
     return UsageByWeekOut(**payload)
+
+
+@router.get(
+    "/me/projects-by-status",
+    response_model=ProjectsByStatusOut,
+    summary=(
+        "Per-user project status breakdown - count of "
+        "projects per status for the dashboard's pie chart"
+    ),
+    # Read-only; bounded by project count.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_projects_by_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProjectsByStatusOut:
+    """Project status breakdown.
+
+    Single GROUP BY query that returns (status, count)
+    pairs for the user's projects, plus an actionable
+    count (PENDING + RUNNING). Useful for the pie-chart
+    widget on the home screen.
+    """
+    from sqlalchemy import func as _sqlfunc
+
+    rows = (
+        db.query(Project.status, _sqlfunc.count(Project.id))
+        .filter(Project.user_id == current_user.id)
+        .group_by(Project.status)
+        .all()
+    )
+    payload = build_projects_by_status(
+        status_counts=[(r[0], r[1]) for r in rows],
+    )
+    return ProjectsByStatusOut(**payload)

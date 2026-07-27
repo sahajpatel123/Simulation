@@ -109,7 +109,7 @@ class CalibrationEngine:
     ) -> CategoryAccuracy:
         """Generic accuracy computation for a given metric category."""
         difficulty = CATEGORY_DIFFICULTY.get(difficulty_key or category, 1.0)
-        
+
         # Handle different outcome field structures
         if category == "conversion":
             variances = [

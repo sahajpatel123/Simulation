@@ -241,3 +241,28 @@ class UsageByWeekOut(BaseModel):
     narrative: str = ""
     key_signals: list[dict] = []
 
+
+class ProjectsByStatusOut(BaseModel):
+    """Response from ``GET /me/projects-by-status``.
+
+    Tiny status-bucket count summary for the dashboard's
+    projects-by-status pie chart.
+
+    * ``project_count`` - total projects owned.
+    * ``status_breakdown`` - ``{status: count}`` sorted by
+      the most-common first.
+    * ``most_common_status`` - the single most common
+      status, useful for the pie chart's center label.
+    * ``actionable_count`` - count of projects in PENDING
+      or RUNNING status.
+    * ``narrative`` - one paragraph string.
+    * ``key_signals`` - severity-tagged display dicts.
+    """
+
+    project_count: int = 0
+    status_breakdown: dict[str, int] = {}
+    most_common_status: str | None = None
+    actionable_count: int = 0
+    narrative: str = ""
+    key_signals: list[dict] = []
+
