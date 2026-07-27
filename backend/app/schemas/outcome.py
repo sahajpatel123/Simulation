@@ -112,3 +112,53 @@ class OutcomeHistoryOut(BaseModel):
     worst_calibration_score: float
     calibration_trend: str
     message: str = "Outcome history retrieved"
+
+
+class OutcomesDigestOut(BaseModel):
+    """Response from ``GET /projects/{id}/outcomes-digest``.
+
+    Single-payload digest of how accurate the project's
+    predictions have been — composes the
+    architect-leaderboard and calibration-health outputs
+    into "how trustable are my numbers?" so the dashboard
+    can render a one-tile calibration view without fanning
+    out to /portfolio-summary + /calibration-health +
+    /architect-leaderboard.
+
+    * ``outcome_count`` — total outcomes recorded (incl.
+      rows without both predicted + actual values).
+    * ``usable_count`` — count of outcomes with both
+      predicted + actual values (the only ones that
+      contribute to MAE / bias / trend).
+    * ``mean_abs_variance`` — population MAE across the
+      usable rows (None when unusable).
+    * ``bias_direction`` — ``OVER-PREDICTING`` /
+      ``UNDER-PREDICTING`` / ``BALANCED`` /
+      ``INSUFFICIENT_DATA``.
+    * ``accuracy_trend`` — ``IMPROVING`` / ``STABLE`` /
+      ``DEGRADING`` / ``INSUFFICIENT_DATA`` based on the
+      recent-MAE vs prior-MAE delta.
+    * ``best_architect`` / ``worst_architect`` — leaderboard
+      entries flagged TRUSTED / TIGHTEN. ``None`` when no
+      architect qualifies.
+    * ``calibration_health`` — pass-through output of
+      :func:`build_calibration_health` (or ``None``).
+    * ``narrative`` — one paragraph string the dashboard
+      renders as plain text.
+    * ``key_signals`` — ``{label, value, severity,
+      display}`` dicts for the dashboard tiles.
+    """
+
+    outcome_count: int = 0
+    usable_count: int = 0
+    mean_abs_variance: float | None = None
+    bias_direction: str = "INSUFFICIENT_DATA"
+    accuracy_trend: str = "INSUFFICIENT_DATA"
+    best_architect: dict | None = None
+    worst_architect: dict | None = None
+    calibration_health: dict | None = None
+    narrative: str = ""
+    key_signals: list[dict] = []
+
+
+

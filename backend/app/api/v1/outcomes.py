@@ -8,7 +8,11 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
 from app.core.rate_limiter import rate_limit
-from app.core.response_cache import cache_invalidate
+from app.core.response_cache import (
+    cache_get_json,
+    cache_invalidate,
+    cache_set_json,
+)
 from app.api.v1.common import get_owned_project
 from app.api.v1.projects import (
     _ACTIVITY_FEED_CACHE_NAMESPACE,
@@ -20,10 +24,23 @@ from app.models.simulation import Simulation
 from app.models.user import User
 from app.schemas.outcome import (
     OutcomeCreate,
+    OutcomeDigestOut,
     OutcomeFeedbackRequest,
     OutcomeHistoryOut,
     OutcomeRecord,
     VarianceReport,
+)
+from app.simulation.architect_accuracy_bridge import (
+    bridge_architect_accuracy,
+)
+from app.simulation.architect_leaderboard import (
+    build_architect_leaderboard,
+)
+from app.simulation.calibration_health import (
+    build_calibration_health,
+)
+from app.simulation.outcomes_digest_v2 import (
+    build_outcomes_digest,
 )
 
 logger = logging.getLogger(__name__)
@@ -542,3 +559,114 @@ def delete_outcome(
 
     db.delete(outcome)
     db.commit()
+
+
+@router.get(
+    "/{project_id}/outcomes-digest",
+    response_model=OutcomeDigestOut,
+    summary=(
+        "Per-project outcomes digest — composes outcomes + "
+        "leaderboard + calibration health into a single "
+        "'how trustable are my numbers?' payload"
+    ),
+    # Read-only aggregation; bounded.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_outcomes_digest(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> OutcomeDigestOut:
+    """Per-project outcomes digest.
+
+    Composes ``build_outcomes_digest`` from:
+
+    * The project's recorded ``Outcome`` rows (predicted /
+      actual conversion-rate pairs).
+    * The ``bridge_architect_accuracy`` output, reused
+      from the calibration-health pipeline.
+    * The ``build_calibration_health`` output.
+
+    Avoids fanning out to /portfolio-summary,
+    /calibration-health, and /architect-leaderboard on the
+    dashboard's project-overview tile.
+    """
+    get_owned_project(db, current_user.id, project_id)
+
+    # Cache hit → short-circuit the four queries.
+    cached = cache_get_json(
+        namespace="project-outcomes-digest",
+        params={"project_id": project_id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return OutcomeDigestOut(**cached)
+
+    # Pull the prediction pairs (newest first).
+    outcome_rows = (
+        db.query(
+            Outcome.created_at,
+            Outcome.predicted_conversion_rate,
+            Outcome.actual_conversion_rate,
+            Outcome.simulation_id,
+            Simulation.results_json,
+        )
+        .outerjoin(
+            Simulation, Simulation.id == Outcome.simulation_id,
+        )
+        .filter(Outcome.project_id == project_id)
+        .order_by(Outcome.created_at.desc())
+        .all()
+    )
+    pairs: list[tuple[float | None, float | None]] = []
+    outcome_pairs: list[
+        tuple[list[dict], tuple[float | None, float | None]]
+    ] = []
+    health_rows: list[tuple] = []
+    for r in outcome_rows:
+        domain_findings = (
+            (r.results_json or {}).get("domain_findings") or []
+        )
+        pairs.append(
+            (r.predicted_conversion_rate,
+             r.actual_conversion_rate),
+        )
+        outcome_pairs.append(
+            (domain_findings,
+             (r.predicted_conversion_rate,
+              r.actual_conversion_rate)),
+        )
+        health_rows.append(
+            (
+                r.created_at,
+                r.predicted_conversion_rate,
+                r.actual_conversion_rate,
+                domain_findings,
+            ),
+        )
+
+    # Architect leaderboard from the bridge output.
+    bridge = bridge_architect_accuracy(outcome_pairs)
+    leaderboard = build_architect_leaderboard(
+        bridge.get("by_architect"),
+    )
+
+    # Calibration health verdict.
+    calibration_health = (
+        build_calibration_health(health_rows)
+        if health_rows else None
+    )
+
+    payload = build_outcomes_digest(
+        prediction_pairs=pairs,
+        architect_leaderboard=leaderboard.get("leaderboard"),
+        calibration_health=calibration_health,
+    )
+    cache_set_json(
+        namespace="project-outcomes-digest",
+        params={"project_id": project_id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=120,
+    )
+    return OutcomeDigestOut(**payload)
