@@ -28,6 +28,7 @@ from app.api.v1.users import (
     _USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
     _USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
     _USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
+    _USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
     _USER_NOTIFICATIONS_CACHE_NAMESPACE,
     _USER_OUTCOME_VELOCITY_CACHE_NAMESPACE,
     _USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
@@ -433,6 +434,10 @@ def submit_outcome_feedback(
         user_id=current_user.id,
     )
     cache_invalidate(
+        namespace=_USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
         namespace=_USER_OUTCOME_RATE_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
@@ -458,6 +463,10 @@ def submit_outcome_feedback(
     )
     cache_invalidate(
         namespace=_USER_OUTCOME_VELOCITY_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
@@ -657,6 +666,10 @@ def record_outcome(
         user_id=current_user.id,
     )
     cache_invalidate(
+        namespace=_USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
         namespace=_USER_OUTCOME_RATE_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
@@ -682,6 +695,10 @@ def record_outcome(
     )
     cache_invalidate(
         namespace=_USER_OUTCOME_VELOCITY_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
@@ -876,6 +893,10 @@ def delete_outcome(
         user_id=current_user.id,
     )
     cache_invalidate(
+        namespace=_USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
         namespace=_USER_OUTCOME_RATE_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
@@ -901,6 +922,10 @@ def delete_outcome(
     )
     cache_invalidate(
         namespace=_USER_OUTCOME_VELOCITY_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
