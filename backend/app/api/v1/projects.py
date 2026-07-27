@@ -1852,13 +1852,18 @@ def run_premortem(
     # than waiting out the 5-min TTL. Also bust the
     # recommendations-digest - it composes both premortem
     # + intervention, so it must refresh when premortem
-    # mutates.
+    # mutates. Also bust adoption-milestones - premortem
+    # completion flips the premortem_run milestone.
     cache_invalidate(
         namespace=_PREMORTEM_DIGEST_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
         namespace=_RECOMMENDATIONS_DIGEST_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_ADOPTION_MILESTONES_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 
@@ -2223,6 +2228,10 @@ def generate_interventions(
     )
     cache_invalidate(
         namespace=_RECOMMENDATIONS_DIGEST_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_ADOPTION_MILESTONES_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 
