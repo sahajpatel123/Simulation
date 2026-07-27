@@ -148,6 +148,13 @@ _USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE: str = (
     "user-portfolio-health-snapshot"
 )
 
+# Last-touched project - "where was I last?" tile.
+# 60s TTL: 3 MAX-by-id queries in the route.
+_USER_LAST_TOUCHED_PROJECT_CACHE_TTL_S: int = 60
+_USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE: str = (
+    "user-last-touched-project"
+)
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -216,6 +223,10 @@ def clear_archive(
     )
     cache_invalidate(
         namespace=_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     return MessageResponse(message=f"Cleared {deleted} dossiers from your archive")
@@ -2346,6 +2357,15 @@ def get_last_touched_project(
     if not owned_project_ids:
         return LastTouchedProjectOut()
 
+    # Cache hit - short-circuit the 3 MAX-by-id queries.
+    cached = cache_get_json(
+        namespace=_USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return LastTouchedProjectOut(**cached)
+
     # Latest sim per project.
     sim_rows = (
         db.query(
@@ -2416,5 +2436,12 @@ def get_last_touched_project(
 
     payload = build_last_touched_project(
         activity_rows=activity_rows,
+    )
+    cache_set_json(
+        namespace=_USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_LAST_TOUCHED_PROJECT_CACHE_TTL_S,
     )
     return LastTouchedProjectOut(**payload)
