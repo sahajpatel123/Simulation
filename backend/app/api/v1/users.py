@@ -3677,3 +3677,65 @@ def get_sim_failure_rate(
         ttl_seconds=_USER_SIM_FAILURE_RATE_CACHE_TTL_S,
     )
     return SimFailureRateOut(**payload)
+
+
+@router.get(
+    "/me/runs-per-week",
+    response_model=RunsPerWeekOut,
+    summary=(
+        "Per-user runs-per-week - 4-week activity history "
+        "(sims per week for the last 4 weeks) for the "
+        "dashboard's 'activity over time' bar chart"
+    ),
+    # Read-only; 1 GROUP BY query.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_runs_per_week(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RunsPerWeekOut:
+    """Runs-per-week.
+
+    4-week history: oldest week first, current week last.
+    Compares latest vs earliest to derive an UP / DOWN /
+    STEADY trend.
+    """
+    from sqlalchemy import func as _sqlfunc
+
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+    if not owned_project_ids:
+        return RunsPerWeekOut(
+            narrative="No projects on file yet.",
+        )
+
+    four_weeks_ago = (
+        datetime.now(timezone.utc) - timedelta(weeks=4)
+    )
+
+    rows = (
+        db.query(
+            _sqlfunc.date_trunc(
+                "week", Simulation.created_at,
+            ).label("week_start"),
+            _sqlfunc.count(Simulation.id).label("sim_count"),
+        )
+        .filter(
+            Simulation.project_id.in_(owned_project_ids),
+            Simulation.created_at >= four_weeks_ago,
+        )
+        .group_by("week_start")
+        .all()
+    )
+
+    week_buckets = [
+        (r.week_start.date(), r.sim_count) for r in rows
+    ]
+    week_buckets.sort(key=lambda w: w[0])
+
+    payload = build_runs_per_week(week_buckets=week_buckets)
+    return RunsPerWeekOut(**payload)
