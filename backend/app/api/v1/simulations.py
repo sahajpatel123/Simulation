@@ -102,12 +102,23 @@ from app.simulation.outlier_detection import (
     build_outlier_detection,
     normalise_z_threshold,
 )
+from app.core.response_cache import (
+    cache_get_json,
+    cache_invalidate,
+    cache_set_json,
+)
 from app.simulation.calibration_health import (
     build_calibration_health,
 )
 from app.simulation.portfolio_narrative import (
     build_portfolio_narrative,
 )
+
+# Short TTL — the dashboard polls /portfolio-narrative
+# while a batch is open, but a new sim creation must be
+# reflected promptly so we don't exceed ~30s of staleness.
+_PORTFOLIO_NARRATIVE_CACHE_TTL_S: int = 30
+_PORTFOLIO_NARRATIVE_CACHE_NAMESPACE: str = "portfolio-narrative"
 from app.simulation.conductor import _ARCHITECTS as _architect_registry
 from app.simulation.comparison import build_simulation_comparison
 from app.simulation.cohort_retention import build_cohort_retention
@@ -272,6 +283,13 @@ def create_simulation(
     db.refresh(sim)
 
     logger.info(f"[API] Simulation enqueued - simulation_id={sim.id} task_id={task.id}")
+
+    # Bust the cached portfolio-narrative so the next GET
+    # reflects the new sim rather than waiting out the TTL.
+    cache_invalidate(
+        namespace=_PORTFOLIO_NARRATIVE_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
 
     return SimulationStatusOut.model_validate(sim)
 
@@ -2718,6 +2736,18 @@ def get_portfolio_narrative(
     if not canonical_ids:
         return PortfolioNarrativeOut()
 
+    # Cache hit → short-circuit the JOIN + four sub-helpers.
+    # Key is namespaced by user + sorted canonical ids so
+    # two distinct batches never collide and one tenant
+    # never sees another tenant's payload.
+    cached = cache_get_json(
+        namespace=_PORTFOLIO_NARRATIVE_CACHE_NAMESPACE,
+        params={"ids": canonical_ids},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return PortfolioNarrativeOut(**cached)
+
     # Single JOIN that pulls (sim_id, created_at, results_json,
     # latest outcome) once. Each sub-helper then reuses the
     # data without re-querying.
@@ -2832,6 +2862,15 @@ def get_portfolio_narrative(
         calibration_health=calibration_health,
         architect_leaderboard=architect_leaderboard,
         outlier_detection=outlier_detection,
+    )
+    # Populate cache so the next dashboard poll within the
+    # 30s window short-circuits the JOIN + four sub-helpers.
+    cache_set_json(
+        namespace=_PORTFOLIO_NARRATIVE_CACHE_NAMESPACE,
+        params={"ids": canonical_ids},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_PORTFOLIO_NARRATIVE_CACHE_TTL_S,
     )
     return PortfolioNarrativeOut(**payload)
 
