@@ -106,6 +106,12 @@ _USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE: str = (
     "user-projects-by-status"
 )
 
+# Tag taxonomy - tag + project_count map. 5-min TTL:
+# tags change rarely (only on project create / patch
+# / archive), so a longer staleness window is fine.
+_USER_TAG_TAXONOMY_CACHE_TTL_S: int = 300
+_USER_TAG_TAXONOMY_CACHE_NAMESPACE: str = "user-tag-taxonomy"
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -158,6 +164,10 @@ def clear_archive(
     )
     cache_invalidate(
         namespace=_USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_TAG_TAXONOMY_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     return MessageResponse(message=f"Cleared {deleted} dossiers from your archive")
@@ -1821,6 +1831,15 @@ def get_tag_taxonomy(
     tag to compute the count. Useful for tag-filter
     dropdowns that need a current tag list.
     """
+    # Cache hit - short-circuit the JSONB unnest + GROUP BY.
+    cached = cache_get_json(
+        namespace=_USER_TAG_TAXONOMY_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return TagTaxonomyOut(**cached)
+
     # Single SELECT that flattens tags to one row per
     # (tag, project_id) pair via JSONB unnest.
     rows = db.execute(
@@ -1843,5 +1862,12 @@ def get_tag_taxonomy(
     ).fetchall()
     payload = build_tag_taxonomy(
         tag_counts=[(r[0], r[1]) for r in rows],
+    )
+    cache_set_json(
+        namespace=_USER_TAG_TAXONOMY_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_TAG_TAXONOMY_CACHE_TTL_S,
     )
     return TagTaxonomyOut(**payload)
