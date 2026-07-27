@@ -107,7 +107,7 @@ def _direction_from_variance(
     if abs(delta) < STABLE_DELTA_THRESHOLD:
         return TREND_STABLE
     if delta < 0:
-        return TREND_IMPROVING if False else LABEL_IMPROVING
+        return LABEL_IMPROVING
     return LABEL_DEGRADING
 
 

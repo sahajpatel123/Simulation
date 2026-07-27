@@ -70,7 +70,68 @@ def test_trend_empty_rows_returns_unknown() -> None:
     assert out["current_bias_label"] == "UNKNOWN"
 
 
-def test_trend_skips_sims_without_outcome() -> None:
+def test_direction_from_variance_uses_label_improving() -> None:
+    """Regression: ``_direction_from_variance`` previously had
+    ``TREND_IMPROVING if False else LABEL_IMPROVING`` — a
+    dead-code toggle that always returned ``LABEL_IMPROVING``
+    but obscured intent and tripped lint. Pin that improving
+    direction is LABEL_IMPROVING, not the cluster trend's
+    TREND_UP.
+    """
+    from app.simulation.architect_bias_trend import (
+        LABEL_IMPROVING,
+        LABEL_DEGRADING,
+        LABEL_STABLE,
+        _direction_from_variance,
+    )
+    # Last is smaller (improving): delta < 0 → LABEL_IMPROVING.
+    assert _direction_from_variance(0.10, 0.02) == LABEL_IMPROVING
+    # Last is larger (degrading): delta > 0 → LABEL_DEGRADING.
+    assert _direction_from_variance(0.02, 0.10) == LABEL_DEGRADING
+    # Within stable threshold: → LABEL_STABLE.
+    assert _direction_from_variance(0.05, 0.06) == LABEL_STABLE
+    # Either side missing → UNKNOWN.
+    assert _direction_from_variance(None, 0.05) == "UNKNOWN"
+    assert _direction_from_variance(0.05, None) == "UNKNOWN"
+
+
+def test_trend_dedupes_to_latest_outcome_per_sim() -> None:
+    """Regression: the route layer's dedup logic kept the
+    newest outcome per sim. If a founder submitted 3 outcomes
+    for the same sim, the trend used to see 3 rows (one per
+    outcome) because the dedup used ``id(r)`` on object
+    identity and dead-code ``if r[0] in seen if False else
+    False``. After the fix, the route selects ``Simulation.id``
+    in the query and dedupes on ``r.id`` so the helper sees
+    exactly 1 row per sim. This test pins the helper's input
+    contract: pass the post-dedup rows, get 1 bin per sim.
+    """
+    from app.simulation.architect_bias_trend import (
+        build_architect_bias_trend,
+    )
+
+    findings = [
+        {
+            "architect_name": "PricingArchitect",
+            "severity": "CRITICAL",
+        },
+    ]
+    # Pre-dedup rows would be 3 (oldest, middle, newest
+    # outcome for the same sim). The post-dedup row is the
+    # newest (Outcome.created_at DESC → first row per sim).
+    post_dedup_rows = [
+        (
+            datetime(2026, 3, 20, tzinfo=timezone.utc),
+            0.30,  # newest outcome: predicted
+            0.05,  # actual
+            findings,
+        ),
+    ]
+    out = build_architect_bias_trend("PricingArchitect", post_dedup_rows)
+    # Exactly 1 bin, observation_count == 1, no double-counting.
+    assert len(out["bins"]) == 1
+    assert out["bins"][0]["observation_count"] == 1
+    assert out["last_bin_abs_variance"] == round(abs(0.30 - 0.05), 6)
     """A sim with None predicted / actual is skipped."""
     from app.simulation.architect_bias_trend import (
         build_architect_bias_trend,
