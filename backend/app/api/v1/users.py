@@ -3362,4 +3362,11 @@ def get_last_week_stats(
         this_week_counts=this_week_counts,
         last_week_counts=last_week_counts,
     )
+    cache_set_json(
+        namespace=_USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_LAST_WEEK_STATS_CACHE_TTL_S,
+    )
     return LastWeekStatsOut(**payload)
