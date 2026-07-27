@@ -504,6 +504,27 @@ class StaleCheckOut(BaseModel):
     key_signals: list[dict] = []
 
 
+class StatusBannerOut(BaseModel):
+    """Response from ``GET /projects/{id}/status-banner``.
+
+    Single one-liner status for the project header.
+    Cheap to fetch, useful for surfacing the project's
+    state at a glance.
+
+    * ``status`` - one of ``Healthy``, ``Action needed``,
+      ``Stale``, or ``Empty``.
+    * ``severity`` - ``ok`` / ``watch`` / ``critical``.
+    * ``narrative`` - one paragraph string the dashboard
+      renders as plain text.
+    * ``key_signals`` - ``{label, value, severity, display}``.
+    """
+
+    status: str = "Empty"
+    severity: str = "watch"
+    narrative: str = ""
+    key_signals: list[dict] = []
+
+
 class LatestSnapshotOut(BaseModel):
     """Response from ``GET /projects/{id}/latest-snapshot``.
 

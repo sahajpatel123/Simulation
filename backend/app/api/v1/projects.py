@@ -86,6 +86,7 @@ from app.schemas.project import (
     ProjectTagRenameOut,
     ProjectTagsOut,
     ProjectTagsPatch,
+    StatusBannerOut,
 )
 from app.schemas.prototype import FunnelEdge, FunnelGraph, FunnelNode, PrototypeOut
 from app.schemas.stress_test import (
@@ -144,6 +145,7 @@ from app.simulation.recommendations_digest import (
     build_recommendations_digest,
 )
 from app.simulation.stale_check import build_stale_check
+from app.simulation.status_banner import build_status_banner
 from app.tasks.simulation_tasks import run_full_simulation
 from app.tasks.stress_test_tasks import run_assumption_stress_test
 
@@ -4301,3 +4303,107 @@ def get_latest_snapshot(
         ttl_seconds=_LATEST_SNAPSHOT_CACHE_TTL_S,
     )
     return LatestSnapshotOut(**payload)
+
+
+@router.get(
+    "/{project_id}/status-banner",
+    response_model=StatusBannerOut,
+    summary=(
+        "Per-project one-liner status banner - "
+        "'Healthy' / 'Action needed' / 'Stale' / 'Empty' "
+        "based on the project's recent activity"
+    ),
+    # Read-only; 3 cheap queries.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_status_banner(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StatusBannerOut:
+    """Status banner.
+
+    Composes a single one-liner status string for the
+    project's header. Cheap to fetch, useful for the
+    project's at-a-glance state.
+    """
+    from app.simulation.status_banner import (
+        ASSUMPTION_STALE_DAYS,
+    )
+
+    project = get_owned_project(db, current_user.id, project_id)
+
+    # Latest completed sim.
+    latest_completed_sim = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc())
+        .first()
+    )
+    has_completed_sim = latest_completed_sim is not None
+    days_since_latest_sim: int | None = None
+    if has_completed_sim and latest_completed_sim.created_at is not None:
+        ts = latest_completed_sim.created_at
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        delta = datetime.now(timezone.utc) - ts
+        days_since_latest_sim = max(0, delta.days)
+
+    # Pending decisions count.
+    pending_decision_count = (
+        db.query(Decision)
+        .filter(
+            Decision.project_id == project_id,
+            Decision.status.in_(("PENDING", "RUNNING")),
+        )
+        .count()
+    )
+
+    # Assumption count + latest assumption extraction age.
+    assumption_count = (
+        db.query(Assumption)
+        .filter(
+            Assumption.project_id == project_id,
+            Assumption.is_hidden.is_(False),
+        )
+        .count()
+    )
+    days_since_latest_assumption_extraction: int | None = None
+    if assumption_count > 0:
+        latest_assumption = (
+            db.query(Assumption)
+            .filter(
+                Assumption.project_id == project_id,
+                Assumption.is_hidden.is_(False),
+            )
+            .order_by(Assumption.created_at.desc())
+            .first()
+        )
+        if (
+            latest_assumption is not None
+            and latest_assumption.created_at is not None
+        ):
+            ts = latest_assumption.created_at
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            delta = datetime.now(timezone.utc) - ts
+            days_since_latest_assumption_extraction = max(
+                0, delta.days,
+            )
+
+    payload = build_status_banner(
+        brief_completed=getattr(
+            project, "brief_completed_at", None,
+        ) is not None,
+        assumption_count=assumption_count,
+        has_completed_sim=has_completed_sim,
+        days_since_latest_sim=days_since_latest_sim,
+        pending_decision_count=pending_decision_count,
+        days_since_latest_assumption_extraction=(
+            days_since_latest_assumption_extraction
+        ),
+    )
+    return StatusBannerOut(**payload)
