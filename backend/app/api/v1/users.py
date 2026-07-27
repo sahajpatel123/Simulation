@@ -3594,3 +3594,55 @@ def _days_since(ts):
     if ts.tzinfo is None:
         ts = ts.replace(tzinfo=timezone.utc)
     return max(0, (datetime.now(timezone.utc) - ts).days)
+
+
+@router.get(
+    "/me/sim-failure-rate",
+    response_model=SimFailureRateOut,
+    summary=(
+        "Per-user sim failure rate - what % of sims ended "
+        "in FAILED status so the dashboard can show a "
+        "system-reliability widget"
+    ),
+    # Read-only; 2 cheap COUNTs.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_sim_failure_rate(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SimFailureRateOut:
+    """Sim failure rate.
+
+    Computes the % of completed sims (any status) that
+    ended in FAILED across the user's projects.
+    """
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+    if not owned_project_ids:
+        return SimFailureRateOut(
+            narrative="No projects on file yet.",
+        )
+
+    total_simulations = (
+        db.query(Simulation)
+        .filter(Simulation.project_id.in_(owned_project_ids))
+        .count()
+    )
+    failed_simulations = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id.in_(owned_project_ids),
+            Simulation.status == "FAILED",
+        )
+        .count()
+    )
+
+    payload = build_sim_failure_rate(
+        total_simulations=total_simulations,
+        failed_simulations=failed_simulations,
+    )
+    return SimFailureRateOut(**payload)
