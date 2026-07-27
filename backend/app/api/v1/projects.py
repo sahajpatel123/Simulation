@@ -66,6 +66,7 @@ from app.schemas.project import (
     BriefSave,
     ConvergenceCheckOut,
     InterventionDigestOut,
+    LatestSnapshotOut,
     NextBestActionOut,
     NextBestActionSource,
     PremortemDigestOut,
@@ -134,6 +135,7 @@ from app.simulation.convergence_check import build_convergence_check
 from app.simulation.intervention_digest import (
     build_intervention_digest,
 )
+from app.simulation.latest_snapshot import build_latest_snapshot
 from app.simulation.next_best_action import build_next_best_action
 from app.simulation.premortem_digest import build_premortem_digest
 from app.simulation.project_export import build_project_export
@@ -4184,3 +4186,81 @@ def get_stale_check(
         ttl_seconds=_STALE_CHECK_CACHE_TTL_S,
     )
     return StaleCheckOut(**payload)
+
+
+@router.get(
+    "/{project_id}/latest-snapshot",
+    response_model=LatestSnapshotOut,
+    summary=(
+        "Per-project latest snapshot - focused view of "
+        "the most recent sim / decision / outcome / "
+        "assumption extraction"
+    ),
+    # Read-only; 4 cheap max-by-id queries.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_latest_snapshot(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> LatestSnapshotOut:
+    """Per-project latest snapshot.
+
+    Composes the "what is the current state of this
+    project?" payload by pulling just the most-recent
+    row from each of the 4 feed tables (simulations,
+    decisions, outcomes, assumptions). Faster than
+    project-export (no historical bundle) and tighter
+    than projects-summary (per-user grid).
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+
+    latest_sim = (
+        db.query(Simulation)
+        .filter(Simulation.project_id == project_id)
+        .order_by(Simulation.id.desc())
+        .first()
+    )
+    latest_dec = (
+        db.query(Decision)
+        .filter(Decision.project_id == project_id)
+        .order_by(Decision.id.desc())
+        .first()
+    )
+    latest_out = (
+        db.query(Outcome)
+        .filter(Outcome.project_id == project_id)
+        .order_by(Outcome.id.desc())
+        .first()
+    )
+    latest_ass = (
+        db.query(Assumption)
+        .filter(
+            Assumption.project_id == project_id,
+            Assumption.is_hidden.is_(False),
+        )
+        .order_by(Assumption.id.desc())
+        .first()
+    )
+
+    def _row_dict(row: object | None) -> dict | None:
+        if row is None:
+            return None
+        return {
+            c.key: getattr(row, c.key, None)
+            for c in row.__table__.columns
+        }
+
+    payload = build_latest_snapshot(
+        project_id=project.id,
+        project_title=getattr(project, "title", None),
+        project_status=getattr(project, "status", None),
+        brief_completed=getattr(
+            project, "brief_completed_at", None,
+        ) is not None,
+        latest_simulation_row=_row_dict(latest_sim),
+        latest_decision_row=_row_dict(latest_dec),
+        latest_outcome_row=_row_dict(latest_out),
+        latest_assumption_row=_row_dict(latest_ass),
+    )
+    return LatestSnapshotOut(**payload)

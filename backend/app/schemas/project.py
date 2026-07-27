@@ -502,3 +502,25 @@ class StaleCheckOut(BaseModel):
     sources: list[dict] = []
     narrative: str = ""
     key_signals: list[dict] = []
+
+
+class LatestSnapshotOut(BaseModel):
+    """Response from ``GET /projects/{id}/latest-snapshot``.
+
+    Focused "what is the current state of this project?"
+    payload. Different from project-export (historical
+    full bundle) and projects-summary (per-user grid).
+    This is per-project, fast, latest-only.
+    """
+
+    project_id: int | None = None
+    project_title: str | None = None
+    project_status: str = "UNKNOWN"
+    brief_completed: bool = False
+    latest_simulation: dict | None = None
+    latest_decision: dict | None = None
+    latest_outcome: dict | None = None
+    latest_assumption_extraction: dict | None = None
+    snapshot_at: str = ""
+    narrative: str = ""
+    key_signals: list[dict] = []
