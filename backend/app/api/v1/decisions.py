@@ -11,6 +11,7 @@ from app.api.v1.projects import (
     _ADOPTION_MILESTONES_CACHE_NAMESPACE,
     _NEXT_ACTION_CACHE_NAMESPACE,
     _PROJECT_HEALTH_CACHE_NAMESPACE,
+    _STALE_CHECK_CACHE_NAMESPACE,
 )
 from app.api.v1.users import (
     _USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
@@ -157,6 +158,10 @@ def create_decision_comparison(
     )
     cache_invalidate(
         namespace=_USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_STALE_CHECK_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 

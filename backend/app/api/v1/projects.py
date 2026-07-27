@@ -219,6 +219,12 @@ _PROJECT_EXPORT_CACHE_NAMESPACE: str = (
     "project-export"
 )
 
+# Stale-check (data freshness lens). 60s TTL - the
+# staleness thresholds are in days so most staleness
+# flips don't need sub-minute precision.
+_STALE_CHECK_CACHE_TTL_S: int = 60
+_STALE_CHECK_CACHE_NAMESPACE: str = "project-stale-check"
+
 _SOFTWARE_PRODUCT_TYPES: frozenset[ProductType] = frozenset(
     {
         ProductType.SAAS,
@@ -1518,10 +1524,16 @@ def extract_assumptions(
     )
     # Bust the cached /me/coverage-gaps — the covered
     # categories + sensitivity breakdown change when the
-    # user's assumption set is regenerated.
+    # user's assumption set is regenerated. Also bust the
+    # project-level stale-check (latest assumption
+    # created_at changes).
     from app.api.v1.users import _USER_COVERAGE_GAPS_CACHE_NAMESPACE
     cache_invalidate(
         namespace=_USER_COVERAGE_GAPS_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_STALE_CHECK_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 
@@ -1877,6 +1889,10 @@ def run_premortem(
     )
     cache_invalidate(
         namespace=_ADOPTION_MILESTONES_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_STALE_CHECK_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 
@@ -2245,6 +2261,10 @@ def generate_interventions(
     )
     cache_invalidate(
         namespace=_ADOPTION_MILESTONES_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_STALE_CHECK_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 
@@ -4056,6 +4076,16 @@ def get_stale_check(
     trustworthy?" tile - founders often don't realise
     their assumptions are weeks old.
     """
+    # Cache hit - short-circuit the 4 child-row
+    # MAX-of-timestamp queries + 2 JSONB-timestamp parses.
+    cached = cache_get_json(
+        namespace=_STALE_CHECK_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return StaleCheckOut(**cached)
+
     project = get_owned_project(db, current_user.id, project_id)
 
     # Latest assumption extraction.
@@ -4134,5 +4164,12 @@ def get_stale_check(
         ),
         latest_premortem_at=latest_premortem_at,
         latest_intervention_at=latest_intervention_at,
+    )
+    cache_set_json(
+        namespace=_STALE_CHECK_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_STALE_CHECK_CACHE_TTL_S,
     )
     return StaleCheckOut(**payload)

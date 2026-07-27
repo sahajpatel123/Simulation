@@ -18,6 +18,7 @@ from app.api.v1.projects import (
     _ACTIVITY_FEED_CACHE_NAMESPACE,
     _NEXT_ACTION_CACHE_NAMESPACE,
     _PROJECT_HEALTH_CACHE_NAMESPACE,
+    _STALE_CHECK_CACHE_NAMESPACE,
 )
 from app.api.v1.users import (
     _USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
@@ -372,6 +373,10 @@ def submit_outcome_feedback(
         namespace=_USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
+    cache_invalidate(
+        namespace=_STALE_CHECK_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
 
     return {
         "stored": True,
@@ -508,6 +513,10 @@ def record_outcome(
         namespace=_USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
+    cache_invalidate(
+        namespace=_STALE_CHECK_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
     return _hydrate_record(outcome)
 
 
@@ -637,6 +646,10 @@ def delete_outcome(
     )
     cache_invalidate(
         namespace=_USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_STALE_CHECK_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 
