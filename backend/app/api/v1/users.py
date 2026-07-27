@@ -395,6 +395,10 @@ def clear_archive(
         namespace=_USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
+    cache_invalidate(
+        namespace=_USER_SIM_FAILURE_RATE_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
     return MessageResponse(message=f"Cleared {deleted} dossiers from your archive")
 
 
@@ -3660,5 +3664,12 @@ def get_sim_failure_rate(
     payload = build_sim_failure_rate(
         total_simulations=total_simulations,
         failed_simulations=failed_simulations,
+    )
+    cache_set_json(
+        namespace=_USER_SIM_FAILURE_RATE_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_SIM_FAILURE_RATE_CACHE_TTL_S,
     )
     return SimFailureRateOut(**payload)
