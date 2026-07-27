@@ -4055,3 +4055,65 @@ def get_recent_outcomes(
         ttl_seconds=_USER_RECENT_OUTCOMES_CACHE_TTL_S,
     )
     return RecentOutcomesOut(**payload)
+
+
+@router.get(
+    "/me/recent-decisions",
+    response_model=RecentDecisionsOut,
+    summary=(
+        "Per-user recent-decisions - last 5 decisions "
+        "across the user's projects so the dashboard can "
+        "show 'what did you decide recently?'"
+    ),
+    # Read-only; 1 query.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_recent_decisions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RecentDecisionsOut:
+    """Recent decisions.
+
+    Returns the last 5 decisions across the user's
+    projects, sorted by id descending (proxy for
+    created_at descending).
+    """
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+    if not owned_project_ids:
+        return RecentDecisionsOut(
+            narrative="No projects on file yet.",
+        )
+
+    decision_rows = (
+        db.query(
+            Decision.id,
+            Decision.project_id,
+            Decision.title,
+            Decision.status,
+            Decision.created_at,
+        )
+        .filter(Decision.project_id.in_(owned_project_ids))
+        .order_by(Decision.id.desc())
+        .limit(5)
+        .all()
+    )
+
+    recent_decision_dicts = [
+        {
+            "decision_id": d.id,
+            "project_id": d.project_id,
+            "title": d.title,
+            "status": d.status,
+            "created_at": d.created_at,
+        }
+        for d in decision_rows
+    ]
+    payload = build_recent_decisions(
+        recent_decision_dicts=recent_decision_dicts,
+    )
+    return RecentDecisionsOut(**payload)
