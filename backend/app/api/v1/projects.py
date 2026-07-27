@@ -223,6 +223,14 @@ _ADOPTION_MILESTONES_CACHE_NAMESPACE: str = (
 _STATUS_BANNER_CACHE_TTL_S: int = 60
 _STATUS_BANNER_CACHE_NAMESPACE: str = "project-status-banner"
 
+# Confidence explainer - "why is my confidence X?" tile.
+# 60s TTL: 4 cheap queries in the route, but the
+# dashboard's project-detail page refreshes often.
+_CONFIDENCE_EXPLAINER_CACHE_TTL_S: int = 60
+_CONFIDENCE_EXPLAINER_CACHE_NAMESPACE: str = (
+    "project-confidence-explainer"
+)
+
 # Project export (full bundle: brief + assumptions +
 # sims + decisions + outcomes + premortem + interventions).
 # Read-rare (manual export / handoff), but each query is
@@ -1556,6 +1564,7 @@ def extract_assumptions(
     from app.api.v1.users import (
     _USER_COVERAGE_GAPS_CACHE_NAMESPACE,
     _USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
+    _CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
 )
     cache_invalidate(
         namespace=_USER_COVERAGE_GAPS_CACHE_NAMESPACE,
@@ -1950,6 +1959,7 @@ def run_premortem(
     )
     cache_invalidate(
         namespace=_USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
+    _CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 
@@ -2338,6 +2348,7 @@ def generate_interventions(
     )
     cache_invalidate(
         namespace=_USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
+    _CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 
@@ -4506,6 +4517,15 @@ def get_confidence_explainer(
             ),
         )
 
+    # Cache hit - short-circuit the 4 cheap queries.
+    cached = cache_get_json(
+        namespace=_CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return ConfidenceExplainerOut(**cached)
+
     confidence_score = getattr(
         latest_sim, "confidence_score", None,
     )
@@ -4581,6 +4601,13 @@ def get_confidence_explainer(
             days_since_latest_assumption
         ),
         outcome_history_depth=outcome_history_depth,
+    )
+    cache_set_json(
+        namespace=_CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_CONFIDENCE_EXPLAINER_CACHE_TTL_S,
     )
     return ConfidenceExplainerOut(**payload)
 

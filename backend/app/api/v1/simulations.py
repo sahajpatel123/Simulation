@@ -34,6 +34,9 @@ from app.api.v1.users import (
     _USER_USAGE_BY_WEEK_CACHE_NAMESPACE,
     _USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
 )
+from app.api.v1.projects import (
+    _CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
+)
 from app.core.rate_limiter import rate_limit
 from app.core.tier_enforcement import enforce_simulation_limit
 from app.models.assumption import Assumption
@@ -376,6 +379,10 @@ def create_simulation(
     )
     cache_invalidate(
         namespace=_USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
