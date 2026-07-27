@@ -438,6 +438,10 @@ def submit_outcome_feedback(
         user_id=current_user.id,
     )
     cache_invalidate(
+        namespace=_USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
         namespace=_USER_OUTCOME_RATE_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
@@ -467,6 +471,10 @@ def submit_outcome_feedback(
     )
     cache_invalidate(
         namespace=_USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
@@ -670,6 +678,10 @@ def record_outcome(
         user_id=current_user.id,
     )
     cache_invalidate(
+        namespace=_USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
         namespace=_USER_OUTCOME_RATE_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
@@ -699,6 +711,10 @@ def record_outcome(
     )
     cache_invalidate(
         namespace=_USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
@@ -897,6 +913,10 @@ def delete_outcome(
         user_id=current_user.id,
     )
     cache_invalidate(
+        namespace=_USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
         namespace=_USER_OUTCOME_RATE_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
@@ -926,6 +946,10 @@ def delete_outcome(
     )
     cache_invalidate(
         namespace=_USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(

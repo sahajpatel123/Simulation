@@ -188,6 +188,10 @@ def create_decision_comparison(
         user_id=current_user.id,
     )
     cache_invalidate(
+        namespace=_USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
         namespace=_USER_INSIGHTS_CACHE_NAMESPACE,
         user_id=current_user.id,
     )

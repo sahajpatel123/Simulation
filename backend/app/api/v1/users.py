@@ -283,6 +283,13 @@ _USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE: str = (
     "user-most-active-weekday"
 )
 
+# Oldest open item - "what has been sitting longest?"
+# tile. 60s TTL: 3 queries in the route.
+_USER_OLDEST_OPEN_ITEM_CACHE_TTL_S: int = 60
+_USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE: str = (
+    "user-oldest-open-item"
+)
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -426,6 +433,10 @@ def clear_archive(
     )
     cache_invalidate(
         namespace=_USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     return MessageResponse(message=f"Cleared {deleted} dossiers from your archive")
@@ -2393,6 +2404,18 @@ def get_portfolio_health_snapshot(
     """
     from app.simulation.project_health import build_project_health
 
+    # Cache hit - short-circuit the per-project loop.
+    # Checked BEFORE the DB query below so cache hits
+    # skip all DB work (including the empty-project
+    # early-return).
+    cached = cache_get_json(
+        namespace=_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return PortfolioHealthSnapshotOut(**cached)
+
     owned_project_ids = [
         pid for (pid,) in
         db.query(Project.id)
@@ -2403,15 +2426,6 @@ def get_portfolio_health_snapshot(
         return PortfolioHealthSnapshotOut(
             narrative="No projects on file yet.",
         )
-
-    # Cache hit - short-circuit the per-project loop.
-    cached = cache_get_json(
-        namespace=_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
-        params={"user_id": current_user.id},
-        user_id=current_user.id,
-    )
-    if cached is not None:
-        return PortfolioHealthSnapshotOut(**cached)
 
     # Per-project rollup. For each owned project, pull
     # the inputs the project-health helper needs (latest
@@ -2547,6 +2561,18 @@ def get_last_touched_project(
     across the user's projects and surfaces the owning
     project as the 'where was I last?' answer.
     """
+    # Cache hit - short-circuit the 3 MAX-by-id queries.
+    # Checked BEFORE the DB query below so cache hits
+    # skip all DB work (including the empty-project
+    # early-return).
+    cached = cache_get_json(
+        namespace=_USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return LastTouchedProjectOut(**cached)
+
     owned_project_ids = [
         pid for (pid,) in
         db.query(Project.id)
@@ -2555,14 +2581,6 @@ def get_last_touched_project(
     ]
     if not owned_project_ids:
         return LastTouchedProjectOut()
-
-    # Cache hit - short-circuit the 3 MAX-by-id queries.
-    cached = cache_get_json(
-        namespace=_USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
-        params={"user_id": current_user.id},
-        user_id=current_user.id,
-    )
-    if cached is not None:
         return LastTouchedProjectOut(**cached)
 
     # Latest sim per project.
@@ -2742,6 +2760,17 @@ def get_decision_velocity(
     Returns the average + median + fastest + slowest
     across the user's portfolio.
     """
+    # Cache hit - short-circuit the 2 queries. Checked
+    # BEFORE the DB query below so cache hits skip all DB
+    # work (including the empty-project early-return).
+    cached = cache_get_json(
+        namespace=_USER_DECISION_VELOCITY_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return DecisionVelocityOut(**cached)
+
     owned_project_ids = [
         pid for (pid,) in
         db.query(Project.id)
@@ -2750,15 +2779,6 @@ def get_decision_velocity(
     ]
     if not owned_project_ids:
         return DecisionVelocityOut()
-
-    # Cache hit - short-circuit the 2 queries.
-    cached = cache_get_json(
-        namespace=_USER_DECISION_VELOCITY_CACHE_NAMESPACE,
-        params={"user_id": current_user.id},
-        user_id=current_user.id,
-    )
-    if cached is not None:
-        return DecisionVelocityOut(**cached)
 
     # Latest completed sim per project.
     sim_rows = (
@@ -2834,6 +2854,17 @@ def get_outcome_velocity(
     Returns the average + median + fastest + slowest
     across the user's portfolio.
     """
+    # Cache hit - short-circuit the 2 queries. Checked
+    # BEFORE the DB query below so cache hits skip all DB
+    # work (including the empty-project early-return).
+    cached = cache_get_json(
+        namespace=_USER_OUTCOME_VELOCITY_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return OutcomeVelocityOut(**cached)
+
     owned_project_ids = [
         pid for (pid,) in
         db.query(Project.id)
@@ -2842,12 +2873,6 @@ def get_outcome_velocity(
     ]
     if not owned_project_ids:
         return OutcomeVelocityOut()
-
-    # Cache hit - short-circuit the 2 queries.
-    cached = cache_get_json(
-        namespace=_USER_OUTCOME_VELOCITY_CACHE_NAMESPACE,
-        params={"user_id": current_user.id},
-        user_id=current_user.id,
     )
     if cached is not None:
         return OutcomeVelocityOut(**cached)
@@ -3898,6 +3923,16 @@ def get_oldest_open_item(
             narrative="No projects on file yet.",
         )
 
+    # Cache hit - short-circuit the 3 queries.
+    cached = cache_get_json(
+        namespace=_USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return OldestOpenItemOut(**cached)
+        )
+
     activity_rows: list[tuple] = []
 
     for s in db.query(
@@ -3923,5 +3958,12 @@ def get_oldest_open_item(
 
     payload = build_oldest_open_item(
         activity_rows=activity_rows,
+    )
+    cache_set_json(
+        namespace=_USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_OLDEST_OPEN_ITEM_CACHE_TTL_S,
     )
     return OldestOpenItemOut(**payload)
