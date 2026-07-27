@@ -25,16 +25,20 @@ from app.schemas.user import (
     CoverageGapsOut,
     NotificationsOut,
     UserDashboardOut,
+    WeeklyDigestOut,
 )
 from app.simulation.account_health import build_account_health
 from app.simulation.calibration_health import (
     build_calibration_health,
 )
 from app.simulation.coverage_gaps import build_coverage_gaps
+from app.simulation.intervention_digest import build_intervention_digest
 from app.simulation.notifications import build_notifications
+from app.simulation.premortem_digest import build_premortem_digest
 from app.simulation.user_dashboard import (
     build_user_dashboard,
 )
+from app.simulation.weekly_digest import build_weekly_digest
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -882,3 +886,157 @@ def get_notifications(
         ttl_seconds=_USER_NOTIFICATIONS_CACHE_TTL_S,
     )
     return NotificationsOut(**payload)
+
+
+@router.get(
+    "/me/weekly-digest",
+    response_model=WeeklyDigestOut,
+    summary=(
+        "Weekly digest - rolling 7-day activity summary "
+        "across all projects (sims, decisions, outcomes, "
+        "calibration, quick wins, critical failures)"
+    ),
+    # Read-only; bounded.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_weekly_digest(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> WeeklyDigestOut:
+    """Weekly digest.
+
+    Composes a single rolling-7-day summary so the
+    weekly email preview + the home-screen "this week"
+    tile can render one paragraph + key signals without
+    fanning out to /me/dashboard, /me/account-health, or
+    the per-project endpoints.
+    """
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+
+    # ---- Counts ----------------------------------------------------
+    sim_count_week = 0
+    decision_count_week = 0
+    outcome_count_week = 0
+    completed_sim_count_week = 0
+    if owned_project_ids:
+        sim_count_week = (
+            db.query(Simulation)
+            .filter(
+                Simulation.project_id.in_(owned_project_ids),
+                Simulation.created_at >= seven_days_ago,
+            )
+            .count()
+        )
+        completed_sim_count_week = (
+            db.query(Simulation)
+            .filter(
+                Simulation.project_id.in_(owned_project_ids),
+                Simulation.created_at >= seven_days_ago,
+                Simulation.status == "COMPLETED",
+            )
+            .count()
+        )
+        decision_count_week = (
+            db.query(Decision)
+            .filter(
+                Decision.project_id.in_(owned_project_ids),
+                Decision.created_at >= seven_days_ago,
+            )
+            .count()
+        )
+        outcome_count_week = (
+            db.query(Outcome)
+            .filter(
+                Outcome.project_id.in_(owned_project_ids),
+                Outcome.created_at >= seven_days_ago,
+            )
+            .count()
+        )
+
+    # ---- Calibration health for the rolling 7d window ----------
+    calibration_health: dict | None = None
+    if owned_project_ids:
+        cal_rows = (
+            db.query(
+                Simulation.created_at,
+                Outcome.predicted_conversion_rate,
+                Outcome.actual_conversion_rate,
+                Simulation.results_json,
+            )
+            .outerjoin(
+                Outcome, Outcome.simulation_id == Simulation.id,
+            )
+            .filter(
+                Simulation.project_id.in_(owned_project_ids),
+                Simulation.status == "COMPLETED",
+                Simulation.created_at >= seven_days_ago,
+            )
+            .order_by(Simulation.created_at.asc())
+            .all()
+        )
+        # Dedupe per sim by id (rough coarse key).
+        seen: set[int] = set()
+        deduped: list[tuple] = []
+        for r in cal_rows:
+            sid = id(r.created_at)
+            if sid in seen:
+                continue
+            seen.add(sid)
+            deduped.append(
+                (
+                    r.created_at,
+                    r.predicted_conversion_rate,
+                    r.actual_conversion_rate,
+                    (r.results_json or {}).get(
+                        "domain_findings"
+                    ) or [],
+                ),
+            )
+        if deduped:
+            try:
+                calibration_health = build_calibration_health(
+                    deduped,
+                )
+            except Exception:
+                calibration_health = None
+
+    # ---- Cross-project rollups (quick wins + CRITICAL failures) -
+    quick_wins_total = 0
+    critical_failure_modes_total = 0
+    if owned_project_ids:
+        project_rows = (
+            db.query(Project.interventions_json,
+                     Project.premortem_json)
+            .filter(Project.id.in_(owned_project_ids))
+            .all()
+        )
+        for iv_json, pm_json in project_rows:
+            if isinstance(iv_json, dict):
+                iv_digest = build_intervention_digest(iv_json)
+                quick_wins_total += iv_digest.get(
+                    "quick_win_count", 0,
+                )
+            if isinstance(pm_json, dict):
+                pm_digest = build_premortem_digest(pm_json)
+                sev = pm_digest.get("severity_breakdown", {})
+                critical_failure_modes_total += sev.get(
+                    "CRITICAL", 0,
+                )
+
+    payload = build_weekly_digest(
+        sim_count_week=sim_count_week,
+        decision_count_week=decision_count_week,
+        outcome_count_week=outcome_count_week,
+        completed_sim_count_week=completed_sim_count_week,
+        calibration_health=calibration_health,
+        quick_wins_total=quick_wins_total,
+        critical_failure_modes_total=critical_failure_modes_total,
+    )
+    return WeeklyDigestOut(**payload)

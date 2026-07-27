@@ -107,3 +107,43 @@ class NotificationsOut(BaseModel):
     narrative: str = ""
     key_signals: list[dict] = []
 
+
+class WeeklyDigestOut(BaseModel):
+    """Response from ``GET /me/weekly-digest``.
+
+    One-shot "what happened in my account this week?"
+    payload - rolling 7-day counts (sims, decisions,
+    outcomes, completed sims) + last-week calibration
+    health + cross-project rollups (quick wins, CRITICAL
+    failure modes).
+
+    Different from /me/dashboard (count snapshot) -
+    this is the rolling-7d activity summary, useful as
+    the preview content for the weekly email.
+
+    * ``sim_count_week`` - sims created in last 7d.
+    * ``decision_count_week`` - decisions enqueued in last 7d.
+    * ``outcome_count_week`` - outcomes submitted in last 7d.
+    * ``completed_sim_count_week`` - subset reached COMPLETED.
+    * ``calibration_health`` - pass-through build_calibration_health
+      for the rolling 7d window.
+    * ``quick_wins_total`` - LOW-difficulty + priority > 0.70
+      interventions across projects.
+    * ``critical_failure_modes_total`` - CRITICAL premortem
+      failure modes across projects.
+    * ``narrative`` - one paragraph string the dashboard
+      renders as plain text.
+    * ``key_signals`` - ``{label, value, severity, display}``
+      dicts for the dashboard tiles.
+    """
+
+    sim_count_week: int = 0
+    decision_count_week: int = 0
+    outcome_count_week: int = 0
+    completed_sim_count_week: int = 0
+    calibration_health: dict | None = None
+    quick_wins_total: int = 0
+    critical_failure_modes_total: int = 0
+    narrative: str = ""
+    key_signals: list[dict] = []
+
