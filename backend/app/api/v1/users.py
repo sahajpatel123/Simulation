@@ -73,6 +73,15 @@ _USER_NOTIFICATIONS_CACHE_NAMESPACE: str = "user-notifications"
 _USER_WEEKLY_DIGEST_CACHE_TTL_S: int = 60
 _USER_WEEKLY_DIGEST_CACHE_NAMESPACE: str = "user-weekly-digest"
 
+# Projects summary - lightweight per-project grid cards.
+# 60s TTL: the dashboard list view renders often, but
+# each card's counts only mutate when sims/decisions/
+# outcomes are added.
+_USER_PROJECTS_SUMMARY_CACHE_TTL_S: int = 60
+_USER_PROJECTS_SUMMARY_CACHE_NAMESPACE: str = (
+    "user-projects-summary"
+)
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -113,6 +122,10 @@ def clear_archive(
     )
     cache_invalidate(
         namespace=_USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_PROJECTS_SUMMARY_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     return MessageResponse(message=f"Cleared {deleted} dossiers from your archive")
@@ -1430,6 +1443,15 @@ def get_projects_summary(
     ProjectOut payloads (descriptions, tags, briefs) when
     the dashboard just needs a thumbnail.
     """
+    # Cache hit - short-circuit the 4 batch queries.
+    cached = cache_get_json(
+        namespace=_USER_PROJECTS_SUMMARY_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return ProjectsSummaryOut(**cached)
+
     # One SELECT for the basic project listing + brief
     # completion flag.
     project_rows = (
@@ -1535,4 +1557,11 @@ def get_projects_summary(
         })
 
     payload = build_projects_summary(summaries)
+    cache_set_json(
+        namespace=_USER_PROJECTS_SUMMARY_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_PROJECTS_SUMMARY_CACHE_TTL_S,
+    )
     return ProjectsSummaryOut(**payload)
