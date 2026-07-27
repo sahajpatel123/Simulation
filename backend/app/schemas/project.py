@@ -700,3 +700,26 @@ class RecentOutcomesOut(BaseModel):
     outcome_count: int = 0
     narrative: str = ""
     key_signals: list[dict] = []
+
+
+class RecentDecisionsOut(BaseModel):
+    """Response from ``GET /me/recent-decisions``.
+
+    "What did you decide recently?" payload: the last
+    5 decisions across the user's projects, suitable
+    for a dashboard widget.
+
+    * ``decisions`` - capped (5) list of
+      ``{decision_id, project_id, title, status,
+      created_at}``.
+    * ``decision_count`` - number of decisions in the
+      list (0..5).
+    * ``narrative`` - one paragraph string.
+    * ``key_signals`` - ``{label, value, severity,
+      display}``.
+    """
+
+    decisions: list[dict] = []
+    decision_count: int = 0
+    narrative: str = ""
+    key_signals: list[dict] = []

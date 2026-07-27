@@ -57,6 +57,7 @@ from app.simulation.most_active_weekday import (
 from app.simulation.oldest_open_item import (
     build_oldest_open_item,
 )
+from app.simulation.recent_decisions import build_recent_decisions
 from app.simulation.recent_outcomes import build_recent_outcomes
 from app.simulation.runs_per_week import build_runs_per_week
 from app.simulation.sim_failure_rate import (
