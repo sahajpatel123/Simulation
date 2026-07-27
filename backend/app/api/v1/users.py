@@ -51,6 +51,9 @@ from app.simulation.calibration_health import (
 )
 from app.simulation.coverage_gaps import build_coverage_gaps
 from app.simulation.decision_rate import build_decision_rate
+from app.simulation.most_active_weekday import (
+    build_most_active_weekday,
+)
 from app.simulation.runs_per_week import build_runs_per_week
 from app.simulation.sim_failure_rate import (
     build_sim_failure_rate,
@@ -3767,3 +3770,64 @@ def get_runs_per_week(
         ttl_seconds=_USER_RUNS_PER_WEEK_CACHE_TTL_S,
     )
     return RunsPerWeekOut(**payload)
+
+
+@router.get(
+    "/me/most-active-weekday",
+    response_model=MostActiveWeekdayOut,
+    summary=(
+        "Per-user most-active weekday - which day of the "
+        "week the user runs the most sim/decision/outcome "
+        "actions, surfaced as a personal schedule insight"
+    ),
+    # Read-only; per-row action attribute extraction.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_most_active_weekday(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MostActiveWeekdayOut:
+    """Most-active weekday.
+
+    Extracts the weekday (0-6) of each sim, decision, and
+    outcome across the user's projects, then picks the
+    mode weekday.
+    """
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+    if not owned_project_ids:
+        return MostActiveWeekdayOut(
+            narrative="No projects on file yet.",
+        )
+
+    weekday_actions: list[int] = []
+
+    for s in db.query(Simulation.created_at).filter(
+        Simulation.project_id.in_(owned_project_ids),
+    ).all():
+        if s.created_at is None:
+            continue
+        weekday_actions.append(s.created_at.weekday())
+
+    for d in db.query(Decision.created_at).filter(
+        Decision.project_id.in_(owned_project_ids),
+    ).all():
+        if d.created_at is None:
+            continue
+        weekday_actions.append(d.created_at.weekday())
+
+    for o in db.query(Outcome.created_at).filter(
+        Outcome.project_id.in_(owned_project_ids),
+    ).all():
+        if o.created_at is None:
+            continue
+        weekday_actions.append(o.created_at.weekday())
+
+    payload = build_most_active_weekday(
+        weekday_actions=weekday_actions,
+    )
+    return MostActiveWeekdayOut(**payload)
