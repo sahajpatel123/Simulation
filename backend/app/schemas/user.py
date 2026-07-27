@@ -400,3 +400,28 @@ class LastTouchedProjectOut(BaseModel):
     narrative: str = ""
     key_signals: list[dict] = []
 
+
+class RunsThisMonthOut(BaseModel):
+    """Response from ``GET /me/runs-this-month``.
+
+    Tiny integer payload for the dashboard's tier-quota
+    widget. Composes the count of sims created this
+    calendar month against the user's tier cap.
+
+    * ``runs_this_month`` - count of sims created since
+      the first day of the current calendar month.
+    * ``monthly_cap`` - the tier's monthly cap (from
+      ``TIER_LIMITS``).
+    * ``remaining`` - ``max(0, cap - used)``.
+    * ``tier`` - tier label.
+    * ``narrative`` - one paragraph string.
+    * ``key_signals`` - severity-tagged display dicts.
+    """
+
+    runs_this_month: int = 0
+    monthly_cap: int = 0
+    remaining: int = 0
+    tier: str = "FREE"
+    narrative: str = ""
+    key_signals: list[dict] = []
+

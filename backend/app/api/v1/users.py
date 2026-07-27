@@ -31,6 +31,7 @@ from app.schemas.user import (
     ProjectsByStatusOut,
     ProjectsSummaryOut,
     QuickStatsOut,
+    RunsThisMonthOut,
     TagTaxonomyOut,
     UsageByWeekOut,
     UserDashboardOut,
@@ -59,6 +60,9 @@ from app.simulation.projects_by_status import (
 )
 from app.simulation.projects_summary import build_projects_summary
 from app.simulation.quick_stats import build_quick_stats
+from app.simulation.runs_this_month import (
+    build_runs_this_month,
+)
 from app.simulation.tag_taxonomy import build_tag_taxonomy
 from app.simulation.usage_by_week import build_usage_by_week
 from app.simulation.user_dashboard import (
@@ -2449,3 +2453,60 @@ def get_last_touched_project(
         ttl_seconds=_USER_LAST_TOUCHED_PROJECT_CACHE_TTL_S,
     )
     return LastTouchedProjectOut(**payload)
+
+
+@router.get(
+    "/me/runs-this-month",
+    response_model=RunsThisMonthOut,
+    summary=(
+        "Per-user runs-this-month - tiny integer payload "
+        "for the dashboard's tier-quota widget: count of "
+        "sims created this calendar month + tier cap + "
+        "remaining"
+    ),
+    # Read-only; 1 cheap COUNT.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_runs_this_month(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RunsThisMonthOut:
+    """Runs-this-month.
+
+    Single COUNT query for the sims created this calendar
+    month across the user's projects. The tier cap comes
+    from TIER_LIMITS so the widget can show
+    '5/50 sims this month'.
+    """
+    tier = (current_user.tier or "FREE").upper()
+    monthly_cap = TIER_LIMITS.get(
+        tier.lower(), TIER_LIMITS["free"],
+    )["simulations_per_month"]
+
+    month_start = datetime.now(timezone.utc).replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0,
+    )
+
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+    runs_this_month = 0
+    if owned_project_ids:
+        runs_this_month = (
+            db.query(Simulation)
+            .filter(
+                Simulation.project_id.in_(owned_project_ids),
+                Simulation.created_at >= month_start,
+            )
+            .count()
+        )
+
+    payload = build_runs_this_month(
+        runs_this_month=runs_this_month,
+        monthly_cap=monthly_cap,
+        tier=tier,
+    )
+    return RunsThisMonthOut(**payload)

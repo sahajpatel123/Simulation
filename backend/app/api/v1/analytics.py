@@ -45,6 +45,11 @@ def _require_admin(current_user: User) -> None:
     "/platform",
     summary="Admin platform analytics aggregates",
     responses=_JSON_200,
+    # Defense-in-depth: even an authenticated admin shouldn't
+    # be able to spam 5-6 full-table GROUP BYs. 10/min/IP
+    # keeps accidental dashboard-script loops bounded without
+    # blocking normal admin polling.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 def platform_analytics(
     db: Session = Depends(get_db),
