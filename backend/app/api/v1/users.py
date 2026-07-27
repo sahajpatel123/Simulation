@@ -13,17 +13,23 @@ from app.core.response_cache import (
     cache_set_json,
 )
 from app.core.tier_enforcement import TIER_LIMITS
+from app.models.assumption import Assumption
 from app.models.decision import Decision
 from app.models.outcome import Outcome
 from app.models.project import Project
 from app.models.simulation import Simulation
 from app.models.user import User
 from app.schemas.auth import MessageResponse
-from app.schemas.user import AccountHealthOut, UserDashboardOut
+from app.schemas.user import (
+    AccountHealthOut,
+    CoverageGapsOut,
+    UserDashboardOut,
+)
 from app.simulation.account_health import build_account_health
 from app.simulation.calibration_health import (
     build_calibration_health,
 )
+from app.simulation.coverage_gaps import build_coverage_gaps
 from app.simulation.user_dashboard import (
     build_user_dashboard,
 )
@@ -657,3 +663,84 @@ def get_account_health(
         ttl_seconds=60,
     )
     return AccountHealthOut(**payload)
+
+
+@router.get(
+    "/me/coverage-gaps",
+    response_model=CoverageGapsOut,
+    summary=(
+        "Coverage gaps digest - surfaces dimensions the user "
+        "has never explored (missing categories, no "
+        "HIGH/CRITICAL sensitivity assumptions, thin cluster "
+        "coverage)"
+    ),
+    # Read-only.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_coverage_gaps(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CoverageGapsOut:
+    """Coverage gaps digest.
+
+    Inverse of the portfolio-narrative: surfaces the
+    dimensions the user has NEVER explored. Useful for
+    nudging founders to broaden their inputs before
+    trusting the next round of predictions.
+
+    Bounded:
+    - assumptions: all non-hidden rows across owned projects
+    - clusters: distinct cluster IDs from cluster_breakdown
+      across the user's completed sims
+    """
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+
+    # All non-hidden assumptions across the user's projects.
+    assumption_rows = []
+    if owned_project_ids:
+        assumption_rows = (
+            db.query(Assumption)
+            .filter(
+                Assumption.project_id.in_(owned_project_ids),
+                Assumption.is_hidden.is_(False),
+            )
+            .all()
+        )
+    assumption_dicts = [
+        {
+            "category": a.category,
+            "sensitivity": a.sensitivity,
+            "is_hidden": a.is_hidden,
+        }
+        for a in assumption_rows
+    ]
+
+    # Distinct cluster IDs touched across COMPLETED sims.
+    cluster_ids: set[int] = set()
+    if owned_project_ids:
+        results_rows = (
+            db.query(Simulation.results_json)
+            .filter(
+                Simulation.project_id.in_(owned_project_ids),
+                Simulation.status == "COMPLETED",
+            )
+            .all()
+        )
+        for r in results_rows:
+            breakdown = (r[0] or {}).get("cluster_breakdown") or {}
+            for cid in breakdown.keys():
+                try:
+                    cluster_ids.add(int(cid))
+                except (TypeError, ValueError):
+                    continue
+
+    payload = build_coverage_gaps(
+        assumptions=assumption_dicts,
+        cluster_ids=list(cluster_ids),
+    )
+    return CoverageGapsOut(**payload)
