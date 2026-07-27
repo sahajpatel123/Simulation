@@ -351,10 +351,18 @@ def get_my_dashboard(
     # ---- Calibration health (only if user has completed sims)
     calibration_health: dict | None = None
     if owned_project_ids:
+        # Pull the sim id + the latest outcome's predicted /
+        # actual rates so build_calibration_health can compute
+        # real trend buckets instead of INSUFFICIENT_DATA.
+        # Order by Outcome.created_at DESC so the LEFT JOIN's
+        # newest outcome per sim is the first row we see per id.
         cal_rows = (
             db.query(
+                Simulation.id,
                 Simulation.created_at,
                 Simulation.results_json,
+                Outcome.predicted_conversion_rate,
+                Outcome.actual_conversion_rate,
             )
             .outerjoin(
                 Outcome, Outcome.simulation_id == Simulation.id,
@@ -363,22 +371,32 @@ def get_my_dashboard(
                 Simulation.project_id.in_(owned_project_ids),
                 Simulation.status == "COMPLETED",
             )
-            .order_by(Simulation.created_at.asc())
-            .limit(50)
+            .order_by(
+                Simulation.id.asc(),
+                Outcome.created_at.desc(),
+            )
+            .limit(200)
             .all()
         )
-        # Strip the LEFT JOIN's multi-row inflation — calibration
-        # health wants one entry per sim, with the latest outcome
-        # if any.
+        # Dedupe to one row per Simulation.id (newest outcome
+        # first per the ORDER BY above). Pass the real predicted
+        # / actual pair to the helper — None,None would force
+        # every trend bucket to INSUFFICIENT_DATA.
         seen_sids: set[int] = set()
         health_input: list[tuple] = []
         for r in cal_rows:
-            sid = r[0]  # created_at is not unique; use as a coarse key
-            if sid in seen_sids:
+            if r.id in seen_sids:
                 continue
-            seen_sids.add(sid)
-            findings = (r[1] or {}).get("domain_findings") or []
-            health_input.append((r[0], None, None, findings))
+            seen_sids.add(r.id)
+            findings = (r.results_json or {}).get("domain_findings") or []
+            health_input.append(
+                (
+                    r.created_at,
+                    r.predicted_conversion_rate,
+                    r.actual_conversion_rate,
+                    findings,
+                )
+            )
         if health_input:
             calibration_health = build_calibration_health(health_input)
 
