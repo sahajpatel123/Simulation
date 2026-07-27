@@ -1823,6 +1823,14 @@ def run_premortem(
     project.status = "PREMORTEM_COMPLETE"
     db.commit()
 
+    # Bust the cached premortem-digest so the next GET
+    # reflects the freshly-generated failure modes rather
+    # than waiting out the 5-min TTL.
+    cache_invalidate(
+        namespace=_PREMORTEM_DIGEST_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+
     critical_count = sum(1 for fm in failure_modes if fm.severity == "CRITICAL")
 
     return PremortemOut(
