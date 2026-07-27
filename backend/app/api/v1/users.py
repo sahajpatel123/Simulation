@@ -263,6 +263,13 @@ _USER_SIM_FAILURE_RATE_CACHE_NAMESPACE: str = (
     "user-sim-failure-rate"
 )
 
+# Runs-per-week - 4-week activity history. 60s TTL: 1
+# GROUP BY query in the route.
+_USER_RUNS_PER_WEEK_CACHE_TTL_S: int = 60
+_USER_RUNS_PER_WEEK_CACHE_NAMESPACE: str = (
+    "user-runs-per-week"
+)
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
