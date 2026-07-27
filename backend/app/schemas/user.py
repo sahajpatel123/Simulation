@@ -312,3 +312,29 @@ class MostActiveProjectOut(BaseModel):
     narrative: str = ""
     key_signals: list[dict] = []
 
+
+class QuickStatsOut(BaseModel):
+    """Response from ``GET /me/quick-stats``.
+
+    Minimal "one-liner" account summary for mobile
+    widgets + sidebars. Different from /me/dashboard
+    (verbose) — this is intentionally small so it can
+    be embedded in a tight UI surface.
+
+    * ``total_projects`` / ``total_simulations`` /
+      ``total_decisions`` / ``total_outcomes`` -
+      portfolio rollups.
+    * ``account_age_days`` - days since signup.
+    * ``narrative`` - one paragraph string the dashboard
+      renders as plain text.
+    * ``key_signals`` - ``{label, value, severity, display}``.
+    """
+
+    total_projects: int = 0
+    total_simulations: int = 0
+    total_decisions: int = 0
+    total_outcomes: int = 0
+    account_age_days: int = 0
+    narrative: str = ""
+    key_signals: list[dict] = []
+

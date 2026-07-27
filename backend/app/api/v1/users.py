@@ -28,6 +28,7 @@ from app.schemas.user import (
     NotificationsOut,
     ProjectsByStatusOut,
     ProjectsSummaryOut,
+    QuickStatsOut,
     TagTaxonomyOut,
     UsageByWeekOut,
     UserDashboardOut,
@@ -49,6 +50,7 @@ from app.simulation.projects_by_status import (
     build_projects_by_status,
 )
 from app.simulation.projects_summary import build_projects_summary
+from app.simulation.quick_stats import build_quick_stats
 from app.simulation.tag_taxonomy import build_tag_taxonomy
 from app.simulation.usage_by_week import build_usage_by_week
 from app.simulation.user_dashboard import (
@@ -2012,3 +2014,76 @@ def get_most_active_project(
         ttl_seconds=_USER_MOST_ACTIVE_PROJECT_CACHE_TTL_S,
     )
     return MostActiveProjectOut(**payload)
+
+
+@router.get(
+    "/me/quick-stats",
+    response_model=QuickStatsOut,
+    summary=(
+        "Per-user minimal one-liner stats for mobile "
+        "widgets + sidebars - just project / sim / decision / "
+        "outcome totals + account age"
+    ),
+    # Read-only; bounded.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_quick_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> QuickStatsOut:
+    """Quick stats.
+
+    Minimal "one-liner" account summary for mobile
+    widgets + sidebars. 4 cheap COUNTs + the
+    ``current_user.created_at`` timestamp.
+    """
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+
+    total_projects = len(owned_project_ids)
+    total_simulations = 0
+    total_decisions = 0
+    total_outcomes = 0
+    if owned_project_ids:
+        total_simulations = (
+            db.query(Simulation)
+            .filter(
+                Simulation.project_id.in_(owned_project_ids),
+            )
+            .count()
+        )
+        total_decisions = (
+            db.query(Decision)
+            .filter(
+                Decision.project_id.in_(owned_project_ids),
+            )
+            .count()
+        )
+        total_outcomes = (
+            db.query(Outcome)
+            .filter(
+                Outcome.project_id.in_(owned_project_ids),
+            )
+            .count()
+        )
+
+    account_age_days = 0
+    if current_user.created_at is not None:
+        ts = current_user.created_at
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        delta = datetime.now(timezone.utc) - ts
+        account_age_days = max(0, delta.days)
+
+    payload = build_quick_stats(
+        total_projects=total_projects,
+        total_simulations=total_simulations,
+        total_decisions=total_decisions,
+        total_outcomes=total_outcomes,
+        account_age_days=account_age_days,
+    )
+    return QuickStatsOut(**payload)
