@@ -15,6 +15,7 @@ from app.api.v1.common import get_owned_project
 from app.api.v1.projects import (
     _ACTIVITY_FEED_CACHE_NAMESPACE,
     _ADOPTION_MILESTONES_CACHE_NAMESPACE,
+    _LATEST_SNAPSHOT_CACHE_NAMESPACE,
     _NEXT_ACTION_CACHE_NAMESPACE,
     _PROJECT_EXPORT_CACHE_NAMESPACE,
     _PROJECT_HEALTH_CACHE_NAMESPACE,
@@ -354,6 +355,10 @@ def create_simulation(
     )
     cache_invalidate(
         namespace=_STALE_CHECK_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_LATEST_SNAPSHOT_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 

@@ -16,6 +16,7 @@ from app.core.response_cache import (
 from app.api.v1.common import get_owned_project
 from app.api.v1.projects import (
     _ACTIVITY_FEED_CACHE_NAMESPACE,
+    _LATEST_SNAPSHOT_CACHE_NAMESPACE,
     _NEXT_ACTION_CACHE_NAMESPACE,
     _PROJECT_HEALTH_CACHE_NAMESPACE,
     _STALE_CHECK_CACHE_NAMESPACE,
@@ -372,6 +373,10 @@ def submit_outcome_feedback(
         user_id=current_user.id,
     )
     cache_invalidate(
+        namespace=_LATEST_SNAPSHOT_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
         namespace=_USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
@@ -520,6 +525,10 @@ def record_outcome(
         user_id=current_user.id,
     )
     cache_invalidate(
+        namespace=_LATEST_SNAPSHOT_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
         namespace=_USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
@@ -660,6 +669,10 @@ def delete_outcome(
     )
     cache_invalidate(
         namespace=_PROJECT_HEALTH_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_LATEST_SNAPSHOT_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(

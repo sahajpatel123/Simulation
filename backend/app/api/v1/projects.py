@@ -227,6 +227,15 @@ _PROJECT_EXPORT_CACHE_NAMESPACE: str = (
 _STALE_CHECK_CACHE_TTL_S: int = 60
 _STALE_CHECK_CACHE_NAMESPACE: str = "project-stale-check"
 
+# Latest snapshot (focused current-state view).
+# 60s TTL: per-project, fast - dashboard's project
+# header refreshes often but each source's "latest"
+# only mutates on the same write paths as other tiles.
+_LATEST_SNAPSHOT_CACHE_TTL_S: int = 60
+_LATEST_SNAPSHOT_CACHE_NAMESPACE: str = (
+    "project-latest-snapshot"
+)
+
 _SOFTWARE_PRODUCT_TYPES: frozenset[ProductType] = frozenset(
     {
         ProductType.SAAS,
@@ -1541,6 +1550,10 @@ def extract_assumptions(
         namespace=_STALE_CHECK_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
+    cache_invalidate(
+        namespace=_LATEST_SNAPSHOT_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
 
     return AssumptionListResponse(
         project_id=project_id,
@@ -1898,6 +1911,10 @@ def run_premortem(
     )
     cache_invalidate(
         namespace=_STALE_CHECK_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_LATEST_SNAPSHOT_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
@@ -2274,6 +2291,10 @@ def generate_interventions(
     )
     cache_invalidate(
         namespace=_STALE_CHECK_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_LATEST_SNAPSHOT_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
@@ -4213,6 +4234,15 @@ def get_latest_snapshot(
     project-export (no historical bundle) and tighter
     than projects-summary (per-user grid).
     """
+    # Cache hit - short-circuit the 4 max-by-id queries.
+    cached = cache_get_json(
+        namespace=_LATEST_SNAPSHOT_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return LatestSnapshotOut(**cached)
+
     project = get_owned_project(db, current_user.id, project_id)
 
     latest_sim = (
@@ -4262,5 +4292,12 @@ def get_latest_snapshot(
         latest_decision_row=_row_dict(latest_dec),
         latest_outcome_row=_row_dict(latest_out),
         latest_assumption_row=_row_dict(latest_ass),
+    )
+    cache_set_json(
+        namespace=_LATEST_SNAPSHOT_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_LATEST_SNAPSHOT_CACHE_TTL_S,
     )
     return LatestSnapshotOut(**payload)
