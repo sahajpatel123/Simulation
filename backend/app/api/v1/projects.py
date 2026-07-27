@@ -1461,9 +1461,14 @@ def extract_assumptions(
 
     # Bust the cached assumption-digest so the next GET
     # reflects the re-extracted set rather than waiting
-    # out the 5-min TTL.
+    # out the 5-min TTL. Also bust the per-project health
+    # score — the weak-link count input changes.
     cache_invalidate(
         namespace=_ASSUMPTION_DIGEST_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_PROJECT_HEALTH_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 

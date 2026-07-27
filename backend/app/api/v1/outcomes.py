@@ -17,6 +17,7 @@ from app.api.v1.common import get_owned_project
 from app.api.v1.projects import (
     _ACTIVITY_FEED_CACHE_NAMESPACE,
     _NEXT_ACTION_CACHE_NAMESPACE,
+    _PROJECT_HEALTH_CACHE_NAMESPACE,
 )
 from app.api.v1.users import (
     _USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
@@ -362,6 +363,10 @@ def submit_outcome_feedback(
         namespace=_USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
+    cache_invalidate(
+        namespace=_PROJECT_HEALTH_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
 
     return {
         "stored": True,
@@ -490,6 +495,10 @@ def record_outcome(
         namespace=_USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
+    cache_invalidate(
+        namespace=_PROJECT_HEALTH_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
     return _hydrate_record(outcome)
 
 
@@ -597,9 +606,10 @@ def delete_outcome(
     # Bust the per-project outcomes-digest so the deleted
     # outcome disappears from MAE / bias / trend numbers
     # immediately rather than waiting out the 120s TTL.
-    # Also bust /me/dashboard + /me/account-health:
-    # outcome_count + calibration health + health-score
-    # inputs all shift on every delete.
+    # Also bust /me/dashboard + /me/account-health + the
+    # per-project health score: outcome_count +
+    # calibration health + health-score inputs all shift
+    # on every delete.
     cache_invalidate(
         namespace=_OUTCOMES_DIGEST_CACHE_NAMESPACE,
         user_id=current_user.id,
@@ -610,6 +620,10 @@ def delete_outcome(
     )
     cache_invalidate(
         namespace=_USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_PROJECT_HEALTH_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 
