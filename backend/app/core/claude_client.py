@@ -154,21 +154,50 @@ def claude_call_with_fallback(
         text = ""
         if resp.choices:
             text = (resp.choices[0].message.content or "").strip()
-        # Record the call BEFORE returning so failed/timeout branches get
-        # their own separate ``failure`` counter below — this branch is
-        # the happy path only.
+        # Record the call BEFORE returning so failed/timeout branches
+        # get their own separate ``failure`` counter below. The
+        # success counter is incremented in the happy path; the
+        # failure counter is incremented in every except branch.
+        # Without the failure counter, a sudden drop in
+        # metrics.claude_call counter would be indistinguishable from
+        # "no one is using the endpoint" — the failure counter
+        # makes API outages visible.
         from app.core.metrics import metrics
 
         metrics.claude_call(model=grok_model, task=fallback_key)
         return {"content": text, "error": None}
     except APITimeoutError:
         logger.warning("Grok timeout on %s (model=%s)", fallback_key, grok_model)
+        try:
+            from app.core.metrics import metrics
+            metrics.claude_call_failure(
+                model=grok_model, task=fallback_key,
+                reason="timeout",
+            )
+        except Exception:
+            pass
         return TIMEOUT_FALLBACK.get(fallback_key, {"error": "timeout"})
     except APIError as e:
         sc = getattr(e, "status_code", None)
         logger.error("Grok API error on %s: status=%s err=%s", fallback_key, sc, e)
         error_msg = f"API error {sc}: {e}" if sc is not None else str(e)
+        try:
+            from app.core.metrics import metrics
+            metrics.claude_call_failure(
+                model=grok_model, task=fallback_key,
+                reason=f"api_error_{sc or 'unknown'}",
+            )
+        except Exception:
+            pass
         return _error_fallback(fallback_key, error_msg)
     except Exception as e:  # noqa: BLE001 — last-resort: never let the LLM crash a request.
         logger.exception("Grok unexpected error on %s: %s", fallback_key, e)
+        try:
+            from app.core.metrics import metrics
+            metrics.claude_call_failure(
+                model=grok_model, task=fallback_key,
+                reason="unexpected",
+            )
+        except Exception:
+            pass
         return _error_fallback(fallback_key, str(e))

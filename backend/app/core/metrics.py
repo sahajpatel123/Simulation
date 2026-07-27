@@ -136,6 +136,21 @@ class _Metrics:
             {"model": model, "task": task},
         )
 
+    def claude_call_failure(self, model: str, task: str, reason: str) -> None:
+        """Record one failed / timed-out / errored LLM call.
+
+        Distinct counter from ``claude_call`` (success) so the
+        dashboard can compute success-rate alerts. The ``reason``
+        label is a coarse category (``"timeout"``,
+        ``"api_error_4xx"``, ``"api_error_5xx"``,
+        ``"api_error_unknown"``, ``"unexpected"``) so the cardinality
+        stays bounded.
+        """
+        self.inc_counter(
+            "thecee_llm_failures_total",
+            {"model": model, "task": task, "reason": reason},
+        )
+
     def http_request(
         self,
         method: str,
