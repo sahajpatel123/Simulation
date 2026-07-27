@@ -266,3 +266,23 @@ class ProjectsByStatusOut(BaseModel):
     narrative: str = ""
     key_signals: list[dict] = []
 
+
+class TagTaxonomyOut(BaseModel):
+    """Response from ``GET /me/tag-taxonomy``.
+
+    Tag + project_count map for the dashboard's
+    tag-filter dropdowns. Composes the user's distinct
+    tags with how many projects each is on, sorted by
+    project_count DESC then alphabetically.
+
+    * ``tag_count`` - total distinct tags in use.
+    * ``tags`` - sorted list of ``{tag, project_count}``.
+    * ``narrative`` - one paragraph string.
+    * ``key_signals`` - ``{label, value, severity, display}``.
+    """
+
+    tag_count: int = 0
+    tags: list[dict] = []
+    narrative: str = ""
+    key_signals: list[dict] = []
+

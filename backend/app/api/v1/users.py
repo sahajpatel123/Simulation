@@ -27,6 +27,7 @@ from app.schemas.user import (
     NotificationsOut,
     ProjectsByStatusOut,
     ProjectsSummaryOut,
+    TagTaxonomyOut,
     UsageByWeekOut,
     UserDashboardOut,
     WeeklyDigestOut,
@@ -44,6 +45,7 @@ from app.simulation.projects_by_status import (
     build_projects_by_status,
 )
 from app.simulation.projects_summary import build_projects_summary
+from app.simulation.tag_taxonomy import build_tag_taxonomy
 from app.simulation.usage_by_week import build_usage_by_week
 from app.simulation.user_dashboard import (
     build_user_dashboard,
@@ -1795,3 +1797,51 @@ def get_projects_by_status(
         ttl_seconds=_USER_PROJECTS_BY_STATUS_CACHE_TTL_S,
     )
     return ProjectsByStatusOut(**payload)
+
+
+@router.get(
+    "/me/tag-taxonomy",
+    response_model=TagTaxonomyOut,
+    summary=(
+        "Per-user tag taxonomy - distinct tags with "
+        "project counts for the dashboard's tag-filter "
+        "dropdowns"
+    ),
+    # Read-only composition; bounded.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_tag_taxonomy(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TagTaxonomyOut:
+    """Tag taxonomy.
+
+    For each owned project, flattens ``Project.tags`` (a
+    list) into one row per (project, tag), then groups by
+    tag to compute the count. Useful for tag-filter
+    dropdowns that need a current tag list.
+    """
+    # Single SELECT that flattens tags to one row per
+    # (tag, project_id) pair via JSONB unnest.
+    rows = db.execute(
+        text(
+            """
+        SELECT tag, COUNT(*) AS project_count
+        FROM projects,
+             jsonb_array_elements_text(
+                 CASE WHEN jsonb_typeof(tags) = 'array'
+                      THEN tags
+                      ELSE '[]'::jsonb
+                 END
+             ) AS tag
+        WHERE user_id = :uid
+        GROUP BY tag
+        ORDER BY project_count DESC, tag ASC
+        """
+        ),
+        {"uid": current_user.id},
+    ).fetchall()
+    payload = build_tag_taxonomy(
+        tag_counts=[(r[0], r[1]) for r in rows],
+    )
+    return TagTaxonomyOut(**payload)
