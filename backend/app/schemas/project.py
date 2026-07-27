@@ -597,3 +597,29 @@ class SimFailureRateOut(BaseModel):
     verdict: str = "INSUFFICIENT_DATA"
     narrative: str = ""
     key_signals: list[dict] = []
+
+
+class RunsPerWeekOut(BaseModel):
+    """Response from ``GET /me/runs-per-week``.
+
+    "Activity over time" payload: the number of sims
+    the user ran in each of the last 4 weeks, suitable
+    for a small bar chart.
+
+    * ``weeks`` - list of ``{week_start, sim_count}``.
+    * ``total_simulations`` - sum across all weeks.
+    * ``average_per_week`` - ``total / len(weeks)`` (0 if
+      no data).
+    * ``trend`` - ``UP`` (latest > earliest) / ``DOWN``
+      (latest < earliest) / ``STEADY`` (equal) /
+      ``INSUFFICIENT_DATA`` (< 2 weeks).
+    * ``narrative`` - one paragraph string.
+    * ``key_signals`` - ``{label, value, severity, display}``.
+    """
+
+    weeks: list[dict] = []
+    total_simulations: int = 0
+    average_per_week: float = 0.0
+    trend: str = "INSUFFICIENT_DATA"
+    narrative: str = ""
+    key_signals: list[dict] = []
