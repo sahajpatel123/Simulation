@@ -23,6 +23,7 @@ from app.schemas.auth import MessageResponse
 from app.schemas.user import (
     AccountHealthOut,
     CoverageGapsOut,
+    DecisionRateOut,
     DecisionVelocityOut,
     DigestSnapshotOut,
     LastTouchedProjectOut,
@@ -44,6 +45,7 @@ from app.simulation.calibration_health import (
     build_calibration_health,
 )
 from app.simulation.coverage_gaps import build_coverage_gaps
+from app.simulation.decision_rate import build_decision_rate
 from app.simulation.decision_velocity import (
     build_decision_velocity,
 )
@@ -2753,3 +2755,55 @@ def get_outcome_velocity(
         ttl_seconds=_USER_OUTCOME_VELOCITY_CACHE_TTL_S,
     )
     return OutcomeVelocityOut(**payload)
+
+
+@router.get(
+    "/me/decision-rate",
+    response_model=DecisionRateOut,
+    summary=(
+        "Per-user decision utilization rate - decisions "
+        "per completed sim across the portfolio"
+    ),
+    # Read-only; 2 cheap COUNTs.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_decision_rate(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DecisionRateOut:
+    """Decision rate.
+
+    Computes total decisions / total completed sims
+    across the user's portfolio. Useful for the
+    dashboard's "decision utilization" widget.
+    """
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+    if not owned_project_ids:
+        return DecisionRateOut(
+            narrative="No projects on file yet.",
+        )
+
+    sim_count = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id.in_(owned_project_ids),
+            Simulation.status == "COMPLETED",
+        )
+        .count()
+    )
+    decision_count = (
+        db.query(Decision)
+        .filter(Decision.project_id.in_(owned_project_ids))
+        .count()
+    )
+
+    payload = build_decision_rate(
+        sim_count=sim_count,
+        decision_count=decision_count,
+    )
+    return DecisionRateOut(**payload)

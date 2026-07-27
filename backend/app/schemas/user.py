@@ -484,3 +484,29 @@ class OutcomeVelocityOut(BaseModel):
     narrative: str = ""
     key_signals: list[dict] = []
 
+
+class DecisionRateOut(BaseModel):
+    """Response from ``GET /me/decision-rate``.
+
+    Decision utilization: number of decisions per
+    completed sim across the user's portfolio. Useful
+    for the dashboard's "decision rate" widget.
+
+    * ``sim_count`` - total completed sims.
+    * ``decision_count`` - total decisions.
+    * ``rate_per_sim`` - ``decision_count / sim_count``
+      (None when sim_count is 0).
+    * ``verdict`` - ``HIGH`` (>= 1.0) / ``NORMAL``
+      (>= 0.5) / ``LOW`` (< 0.5) / ``INSUFFICIENT_DATA``.
+    * ``narrative`` - one paragraph string.
+    * ``key_signals`` - ``{label, value, severity,
+      display}``.
+    """
+
+    sim_count: int = 0
+    decision_count: int = 0
+    rate_per_sim: float | None = None
+    verdict: str = "INSUFFICIENT_DATA"
+    narrative: str = ""
+    key_signals: list[dict] = []
+
