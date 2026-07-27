@@ -49,10 +49,16 @@ _USER_DASHBOARD_CACHE_NAMESPACE: str = "user-dashboard"
 _USER_ACCOUNT_HEALTH_CACHE_TTL_S: int = 60
 _USER_ACCOUNT_HEALTH_CACHE_NAMESPACE: str = "user-account-health"
 
-# Coverage gaps — recomputed on extract-assumptions +
+# Coverage gaps - recomputed on extract-assumptions +
 # new completed sims only, so a longer 5-min TTL is fine.
 _USER_COVERAGE_GAPS_CACHE_TTL_S: int = 300
 _USER_COVERAGE_GAPS_CACHE_NAMESPACE: str = "user-coverage-gaps"
+
+# Notifications inbox - short TTL because the bell icon
+# refreshes often and blindspot detection can mutate
+# the underlying rows.
+_USER_NOTIFICATIONS_CACHE_TTL_S: int = 60
+_USER_NOTIFICATIONS_CACHE_NAMESPACE: str = "user-notifications"
 
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
@@ -795,6 +801,15 @@ def get_notifications(
     decision/assumption/premortem endpoints for the
     home-screen inbox tile.
     """
+    # Cache hit - short-circuit the two SELECTs.
+    cached = cache_get_json(
+        namespace=_USER_NOTIFICATIONS_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return NotificationsOut(**cached)
+
     # ---- Blindspots ------------------------------------------------
     blindspot_cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
     bs_rows = db.execute(
@@ -858,5 +873,12 @@ def get_notifications(
     payload = build_notifications(
         blindspots=blindspot_dicts,
         pending_decisions=pending_decision_dicts,
+    )
+    cache_set_json(
+        namespace=_USER_NOTIFICATIONS_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_NOTIFICATIONS_CACHE_TTL_S,
     )
     return NotificationsOut(**payload)
