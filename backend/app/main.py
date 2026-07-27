@@ -202,6 +202,62 @@ async def health():
     return JSONResponse(content=payload, status_code=status_code)
 
 
+# K8s-style readiness probe. Distinct from /health so a process that has
+# started but hasn't finished warming up (e.g. migrations still running,
+# clusters not yet synced to DB) can be removed from the load-balancer
+# rotation without restarting. Returns 200 only when DB + Redis are both
+# reachable; Celery is reported but does NOT gate readiness — simulations
+# can run synchronously in tests / local dev, so a missing worker isn't
+# sufficient reason to drop traffic.
+@app.get(
+    "/readyz",
+    tags=["system"],
+    summary="Readiness probe (DB + Redis reachable)",
+    responses={
+        200: {"description": "Process is ready to serve traffic", "content": {"application/json": {}}},
+        503: {"description": "Process is not yet ready", "content": {"application/json": {}}},
+    },
+)
+async def readyz() -> JSONResponse:
+    checks: dict[str, dict[str, object]] = {}
+
+    # Database — same query as /health; an exception here means the pool is
+    # exhausted or the connection is broken, both reason enough to drop out
+    # of rotation until it recovers.
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        checks["database"] = {"status": "ok"}
+        db_ok = True
+    except Exception as exc:
+        checks["database"] = {"status": "error", "error": str(exc)[:200]}
+        db_ok = False
+
+    # Redis — unconfigured (no REDIS_URL) is treated as ready because the
+    # rest of the app degrades gracefully when the cache is absent. Only
+    # an actual ping failure marks us not-ready.
+    redis_client = get_redis_client()
+    if redis_client is None:
+        checks["redis"] = {"status": "unconfigured"}
+        redis_ok = True
+    else:
+        try:
+            redis_client.ping()
+            checks["redis"] = {"status": "ok"}
+            redis_ok = True
+        except Exception as exc:
+            checks["redis"] = {"status": "error", "error": str(exc)[:200]}
+            redis_ok = False
+
+    body = {
+        "ready": db_ok and redis_ok,
+        "checks": checks,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    code = 200 if body["ready"] else 503
+    return JSONResponse(content=body, status_code=code)
+
+
 # Prometheus text format requires the exact content type below — including
 # the version param — otherwise some scrapers reject the payload.
 _PROM_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"

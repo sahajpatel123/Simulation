@@ -136,6 +136,28 @@ class _Metrics:
             {"model": model, "task": task},
         )
 
+    def http_request(
+        self,
+        method: str,
+        path: str,
+        status: str,
+        duration_seconds: float,
+    ) -> None:
+        """Record one HTTP request: bump the per-route counter and observe
+        its latency on the shared duration histogram.
+
+        ``path`` should be the matched route template (``/projects/{id}``),
+        not the raw URL — callers are responsible for normalisation so the
+        label cardinality stays bounded.
+        """
+        labels = {"method": method, "path": path, "status": status}
+        self.inc_counter("thecee_http_requests_total", labels)
+        self.observe(
+            "thecee_http_request_duration_seconds",
+            duration_seconds,
+            labels={"method": method, "path": path},
+        )
+
     def set_active_simulations(self, n: int) -> None:
         self.set_gauge("thecee_active_simulations", n)
 

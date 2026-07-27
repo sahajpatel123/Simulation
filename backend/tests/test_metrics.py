@@ -84,3 +84,53 @@ def test_helper_shortcuts_produce_expected_lines():
     assert "thecee_celery_workers_online 1" in out
     # The duration observation should land in the le=10 bucket.
     assert 'thecee_simulation_duration_seconds_bucket{le="10"} 1' in out
+
+
+def test_http_request_bumps_counter_and_histogram():
+    m = _Metrics()
+    m.http_request("GET", "/projects/{id}", "2xx", 0.043)
+    m.http_request("GET", "/projects/{id}", "2xx", 0.087)
+    m.http_request("POST", "/projects/{id}/simulate", "2xx", 12.3)
+    m.http_request("GET", "/projects/{id}", "4xx", 0.005)
+    m.http_request("GET", "/projects/{id}", "5xx", 1.2)
+    out = m.render()
+
+    # Counter: each (method, path, status) tuple is its own series.
+    assert (
+        'thecee_http_requests_total{method="GET",path="/projects/{id}",status="2xx"} 2'
+        in out
+    )
+    assert (
+        'thecee_http_requests_total{method="GET",path="/projects/{id}",status="4xx"} 1'
+        in out
+    )
+    assert (
+        'thecee_http_requests_total{method="GET",path="/projects/{id}",status="5xx"} 1'
+        in out
+    )
+    assert (
+        'thecee_http_requests_total{method="POST",path="/projects/{id}/simulate",status="2xx"} 1'
+        in out
+    )
+
+    # Histogram: the {id} path got 4 GET observations; the le=0.5 bucket
+    # should hold the 3 sub-500ms responses and the le=2 bucket the 1.2s one.
+    assert (
+        'thecee_http_request_duration_seconds_bucket{le="0.5",method="GET",path="/projects/{id}"} 3'
+        in out
+    )
+    assert (
+        'thecee_http_request_duration_seconds_bucket{le="2",method="GET",path="/projects/{id}"} 4'
+        in out
+    )
+    assert (
+        'thecee_http_request_duration_seconds_count{method="GET",path="/projects/{id}"} 4'
+        in out
+    )
+
+    # Histogram count + sum should agree with the sum of observed values.
+    # 0.043 + 0.087 + 0.005 + 1.2 = 1.335
+    assert (
+        'thecee_http_request_duration_seconds_sum{method="GET",path="/projects/{id}"} 1.335'
+        in out
+    )
