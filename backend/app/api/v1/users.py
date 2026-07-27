@@ -273,6 +273,13 @@ _USER_RUNS_PER_WEEK_CACHE_NAMESPACE: str = (
     "user-runs-per-week"
 )
 
+# Most-active weekday - "when are you busiest?"
+# tile. 60s TTL: 3 queries in the route.
+_USER_MOST_ACTIVE_WEEKDAY_CACHE_TTL_S: int = 60
+_USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE: str = (
+    "user-most-active-weekday"
+)
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -3804,6 +3811,16 @@ def get_most_active_weekday(
             narrative="No projects on file yet.",
         )
 
+    # Cache hit - short-circuit the 3 queries.
+    cached = cache_get_json(
+        namespace=_USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return MostActiveWeekdayOut(**cached)
+        )
+
     weekday_actions: list[int] = []
 
     for s in db.query(Simulation.created_at).filter(
@@ -3829,5 +3846,12 @@ def get_most_active_weekday(
 
     payload = build_most_active_weekday(
         weekday_actions=weekday_actions,
+    )
+    cache_set_json(
+        namespace=_USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_MOST_ACTIVE_WEEKDAY_CACHE_TTL_S,
     )
     return MostActiveWeekdayOut(**payload)
