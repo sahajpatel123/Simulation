@@ -327,35 +327,6 @@ class ConvergenceCheckOut(BaseModel):
     key_signals: list[dict] = []
 
 
-class InterventionDigestOut(BaseModel):
-    """Response from ``GET /projects/{id}/intervention-digest``.
-
-    Per-project digest of AI-generated interventions so the
-    dashboard's "what should I change next?" tile can render
-    a single payload without fanning out to the intervention
-    generator.
-
-    * ``intervention_count`` — total non-empty items.
-    * ``difficulty_breakdown`` /
-      ``priority_breakdown`` /
-      ``category_breakdown`` — ``{bucket: count}`` so the
-      tile can render small stacked bars.
-    * ``quick_win_count`` — count of items with ``LOW``
-      difficulty + ``priority_score > 0.70``.
-    * ``top_interventions`` — capped (5) list sorted by
-      ``priority_score`` DESC.
-    * ``generated_at`` — ISO timestamp of when the
-      underlying interventions were generated; ``None``
-      when there's no record.
-    * ``stale`` — ``True`` when the recommendations are
-      older than :data:`STALE_AFTER_DAYS` days (or when
-      no timestamp is found).
-    * ``narrative`` — one paragraph string the dashboard
-      renders as plain text.
-    * ``key_signals`` — ``{label, value, severity,
-      display}`` dicts for the dashboard tiles.
-    """
-
     intervention_count: int = 0
     difficulty_breakdown: dict[str, int] = {}
     priority_breakdown: dict[str, int] = {}
@@ -364,5 +335,39 @@ class InterventionDigestOut(BaseModel):
     top_interventions: list[dict] = []
     generated_at: str | None = None
     stale: bool = True
+    narrative: str = ""
+    key_signals: list[dict] = []
+
+
+class ProjectHealthOut(BaseModel):
+    """Response from ``GET /projects/{id}/health``.
+
+    Per-project qualitative health verdict — 0-100 score +
+    3-bucket verdict (HEALTHY ≥70 / NEEDS_ATTENTION
+    40-69 / AT_RISK ≤40). Composed from the project's
+    latest sim confidence, critical-finding count,
+    pending-decision count, outcome presence, and
+    assumption weak-link count.
+
+    Different from /me/account-health (user-level, across
+    all projects) — this is per-project. The dashboard's
+    project-list view can use it to sort projects by
+    health.
+
+    * ``project_health_score`` — integer in
+      ``[0, MAX_SCORE]``.
+    * ``verdict`` — ``HEALTHY`` / ``NEEDS_ATTENTION`` /
+      ``AT_RISK``.
+    * ``score_breakdown`` — per-dimension contribution
+      map (positive points + negative penalties).
+    * ``narrative`` — one paragraph string the dashboard
+      renders as plain text.
+    * ``key_signals`` — ``{label, value, severity,
+      display}`` dicts for the dashboard tiles.
+    """
+
+    project_health_score: int = 0
+    verdict: str = "AT_RISK"
+    score_breakdown: dict[str, int] = {}
     narrative: str = ""
     key_signals: list[dict] = []

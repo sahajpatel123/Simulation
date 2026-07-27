@@ -70,6 +70,7 @@ from app.schemas.project import (
     ProjectCreate,
     ProjectDuplicateIn,
     ProjectDuplicateOut,
+    ProjectHealthOut,
     ProjectListResponse,
     ProjectOut,
     ProjectPatch,
@@ -126,6 +127,7 @@ from app.simulation.intervention_digest import (
     build_intervention_digest,
 )
 from app.simulation.next_best_action import build_next_best_action
+from app.simulation.project_health import build_project_health
 from app.tasks.simulation_tasks import run_full_simulation
 from app.tasks.stress_test_tasks import run_assumption_stress_test
 
@@ -166,6 +168,11 @@ _CONVERGENCE_CHECK_CACHE_NAMESPACE: str = "project-convergence"
 # (per analysis run) so longer staleness is fine.
 _INTERVENTION_DIGEST_CACHE_TTL_S: int = 300
 _INTERVENTION_DIGEST_CACHE_NAMESPACE: str = "project-intervention-digest"
+
+# Per-project health score — recomputed on every
+# significant project event; short TTL is fine.
+_PROJECT_HEALTH_CACHE_TTL_S: int = 60
+_PROJECT_HEALTH_CACHE_NAMESPACE: str = "project-health"
 
 _SOFTWARE_PRODUCT_TYPES: frozenset[ProductType] = frozenset(
     {
@@ -3456,3 +3463,132 @@ def get_intervention_digest(
         ttl_seconds=_INTERVENTION_DIGEST_CACHE_TTL_S,
     )
     return InterventionDigestOut(**payload)
+
+
+@router.get(
+    "/{project_id}/health",
+    response_model=ProjectHealthOut,
+    summary=(
+        "Per-project qualitative health score — 0-100 + "
+        "HEALTHY/NEEDS_ATTENTION/AT_RISK verdict composed "
+        "from sim confidence + critical findings + "
+        "pending decisions + outcome + assumption weak links"
+    ),
+    # Read-only composition; bounded.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_project_health(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProjectHealthOut:
+    """Per-project qualitative health score.
+
+    Composes a 0-100 health score from five dimensions +
+    penalties. Different from /me/account-health (which is
+    user-level across all projects) — this answers "is THIS
+    specific project in good shape?".
+
+    Use case: the project-list view sorts projects by this
+    score, surfacing the worst first.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+
+    # Cache hit → short-circuit.
+    cached = cache_get_json(
+        namespace=_PROJECT_HEALTH_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return ProjectHealthOut(**cached)
+
+    # Latest completed sim.
+    latest_sim = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc())
+        .first()
+    )
+    sim_confidence: float | None = None
+    critical_finding_count = 0
+    if latest_sim is not None:
+        sim_confidence = getattr(latest_sim, "confidence_score", None)
+        if sim_confidence is None and latest_sim.results_json:
+            agg = latest_sim.results_json.get("aggregated") or {}
+            sim_confidence = agg.get("confidence_score")
+        if sim_confidence is not None:
+            sim_confidence = float(sim_confidence) / 100.0
+        # Count CRITICAL findings.
+        for f in (latest_sim.results_json or {}).get(
+            "domain_findings", []
+        ) or []:
+            if isinstance(f, dict) and (
+                f.get("severity") == "CRITICAL"
+                or f.get("level") == "CRITICAL"
+            ):
+                critical_finding_count += 1
+
+    # Pending decisions.
+    pending_decision_count = (
+        db.query(Decision)
+        .filter(
+            Decision.project_id == project_id,
+            Decision.status.in_(("PENDING", "RUNNING")),
+        )
+        .count()
+    )
+
+    # Any recorded outcome?
+    has_outcome = (
+        db.query(Outcome.id)
+        .filter(Outcome.project_id == project_id)
+        .first()
+        is not None
+    )
+
+    # Assumption weak-link count.
+    weak_link_count = 0
+    from app.simulation.assumption_digest import (
+        build_assumption_digest,
+    )
+    assumption_rows = (
+        db.query(Assumption)
+        .filter(
+            Assumption.project_id == project_id,
+            Assumption.is_hidden.is_(False),
+            Assumption.sensitivity.in_(("HIGH", "CRITICAL")),
+        )
+        .all()
+    )
+    if assumption_rows:
+        digest = build_assumption_digest([
+            {
+                "id": a.id,
+                "sensitivity": a.sensitivity,
+                "specificity_score": a.specificity_score,
+                "impact_score": a.impact_score,
+                "is_hidden": a.is_hidden,
+            }
+            for a in assumption_rows
+        ])
+        weak_link_count = digest["weak_link_count"]
+
+    payload = build_project_health(
+        sim_confidence=sim_confidence,
+        critical_finding_count=critical_finding_count,
+        pending_decision_count=pending_decision_count,
+        weak_link_count=weak_link_count,
+        has_outcome=has_outcome,
+    )
+    cache_set_json(
+        namespace=_PROJECT_HEALTH_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_PROJECT_HEALTH_CACHE_TTL_S,
+    )
+    return ProjectHealthOut(**payload)
