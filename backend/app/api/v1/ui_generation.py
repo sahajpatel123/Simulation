@@ -1261,13 +1261,10 @@ async def get_simulation_report_pdf(
 ):
     from app.reports.simulation_report import SimulationReportGenerator
     from app.simulation.channel_attribution import ChannelAttributionEngine
-    from app.simulation.clusters.registry import ClusterRegistry
-    from app.simulation.conductor import Conductor
     from app.simulation.funnel_analytics import FunnelAnalyticsEngine
     from app.simulation.heatmap import HeatmapEngine
     from app.simulation.infra_scaling import InfraScalingEngine
     from app.simulation.pricing_sensitivity import PricingSensitivityEngine
-    from app.simulation.product_type import ProductType
     from app.simulation.retention_churn import RetentionChurnEngine
 
     project = get_owned_project(db, current_user.id, project_id)

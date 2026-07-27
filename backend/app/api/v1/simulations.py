@@ -77,7 +77,6 @@ from app.schemas.simulation import (
     SimDiffOut,
     SimulationBatchStatusOut,
     SimulationCreate,
-    SimulationOut,
     SimulationResultOut,
     SimulationStatusOut,
 )
@@ -116,7 +115,6 @@ from app.simulation.cluster_trend import (
 )
 from app.simulation.architect_leaderboard import (
     build_architect_leaderboard,
-    MAX_LEADERS as _MAX_LEADERS,
 )
 from app.simulation.architect_bias_trend import (
     build_architect_bias_trend,
@@ -1615,7 +1613,6 @@ def _build_window_portfolio(
     """Build the full portfolio-summary payload for one time
     window. Internal helper used by the trend route so both
     windows run the same DB query + sub-aggregate pipeline."""
-    from app.simulation.sim_batch import parse_since
 
     # Single DB round-trip per window: LEFT JOIN outcomes to
     # simulations, scoped to the current user. The optional

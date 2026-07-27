@@ -13,7 +13,6 @@ from app.api.v1.common import get_owned_project
 from app.models.assumption import Assumption
 from app.models.decision import Decision
 from app.models.outcome import Outcome
-from app.models.project import Project
 from app.models.simulation import Simulation
 from app.models.user import User
 from app.reports.generator import ReportGenerator

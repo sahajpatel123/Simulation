@@ -10,7 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.claude_client import claude_call_with_fallback
-from app.core.intake_processor import adjust_assumption_confidence, build_enriched_description
+from app.core.intake_processor import adjust_assumption_confidence
 from app.core.deps import get_current_user, get_db
 from app.core.rate_limiter import rate_limit
 from app.core.response_cache import (
@@ -25,7 +25,6 @@ from app.core.prompts import (
     INTERVENTION_PROMPT,
     PREMORTEM_PROMPT,
     PROTOTYPE_GENERATION_PROMPT,
-    build_simulation_summary,
 )
 from app.models.assumption import Assumption
 from app.models.decision import Decision
@@ -52,14 +51,12 @@ from app.schemas.competitive import (
 from app.schemas.environment import (
     EnvironmentCreate,
     EnvironmentOut,
-    EnvironmentSummary,
     ManualParams,
     SCENARIO_PRESETS,
 )
 from app.schemas.intervention import Intervention, InterventionOut, InterventionRequest
 from app.schemas.premortem import FailureMode, PremortemOut, PremortemRequest
 from app.schemas.project import (
-    ActivityEvent,
     ActivityFeedOut,
     AdoptionMilestonesOut,
     BriefAssistRequest,
@@ -72,7 +69,6 @@ from app.schemas.project import (
     PremortemDigestOut,
     ProjectExportOut,
     StaleCheckOut,
-    ProjectCreate,
     ProjectDuplicateIn,
     ProjectDuplicateOut,
     ProjectHealthOut,
@@ -1563,7 +1559,6 @@ def extract_assumptions(
     # created_at changes).
     from app.api.v1.users import (
     _USER_COVERAGE_GAPS_CACHE_NAMESPACE,
-    _USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
     _USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
     _CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
 )
@@ -4398,9 +4393,6 @@ def get_status_banner(
     project's header. Cheap to fetch, useful for the
     project's at-a-glance state.
     """
-    from app.simulation.status_banner import (
-        ASSUMPTION_STALE_DAYS,
-    )
 
     project = get_owned_project(db, current_user.id, project_id)
 
