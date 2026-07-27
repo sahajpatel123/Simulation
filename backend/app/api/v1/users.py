@@ -47,6 +47,11 @@ _USER_DASHBOARD_CACHE_NAMESPACE: str = "user-dashboard"
 _USER_ACCOUNT_HEALTH_CACHE_TTL_S: int = 60
 _USER_ACCOUNT_HEALTH_CACHE_NAMESPACE: str = "user-account-health"
 
+# Coverage gaps — recomputed on extract-assumptions +
+# new completed sims only, so a longer 5-min TTL is fine.
+_USER_COVERAGE_GAPS_CACHE_TTL_S: int = 300
+_USER_COVERAGE_GAPS_CACHE_NAMESPACE: str = "user-coverage-gaps"
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -693,6 +698,15 @@ def get_coverage_gaps(
     - clusters: distinct cluster IDs from cluster_breakdown
       across the user's completed sims
     """
+    # Cache hit → short-circuit the SELECTs.
+    cached = cache_get_json(
+        namespace=_USER_COVERAGE_GAPS_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return CoverageGapsOut(**cached)
+
     owned_project_ids = [
         pid for (pid,) in
         db.query(Project.id)
@@ -742,5 +756,12 @@ def get_coverage_gaps(
     payload = build_coverage_gaps(
         assumptions=assumption_dicts,
         cluster_ids=list(cluster_ids),
+    )
+    cache_set_json(
+        namespace=_USER_COVERAGE_GAPS_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_COVERAGE_GAPS_CACHE_TTL_S,
     )
     return CoverageGapsOut(**payload)

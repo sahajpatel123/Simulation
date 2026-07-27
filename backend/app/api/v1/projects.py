@@ -1471,6 +1471,14 @@ def extract_assumptions(
         namespace=_PROJECT_HEALTH_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
+    # Bust the cached /me/coverage-gaps — the covered
+    # categories + sensitivity breakdown change when the
+    # user's assumption set is regenerated.
+    from app.api.v1.users import _USER_COVERAGE_GAPS_CACHE_NAMESPACE
+    cache_invalidate(
+        namespace=_USER_COVERAGE_GAPS_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
 
     return AssumptionListResponse(
         project_id=project_id,
