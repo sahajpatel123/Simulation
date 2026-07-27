@@ -208,6 +208,15 @@ _ADOPTION_MILESTONES_CACHE_NAMESPACE: str = (
     "project-adoption-milestones"
 )
 
+# Project export (full bundle: brief + assumptions +
+# sims + decisions + outcomes + premortem + interventions).
+# Read-rare (manual export / handoff), but each query is
+# non-trivial - 60s TTL bounds worst-case latency.
+_PROJECT_EXPORT_CACHE_TTL_S: int = 60
+_PROJECT_EXPORT_CACHE_NAMESPACE: str = (
+    "project-export"
+)
+
 _SOFTWARE_PRODUCT_TYPES: frozenset[ProductType] = frozenset(
     {
         ProductType.SAAS,
@@ -3883,6 +3892,15 @@ def get_project_export(
     intervention analyses. Useful for offline archive,
     co-founder handoff, or as LLM context.
     """
+    # Cache hit — short-circuit the 4 child SELECTs.
+    cached = cache_get_json(
+        namespace=_PROJECT_EXPORT_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return ProjectExportOut(**cached)
+
     project = get_owned_project(db, current_user.id, project_id)
 
     project_dict = {
@@ -3996,5 +4014,12 @@ def get_project_export(
         interventions_data=getattr(
             project, "interventions_json", None,
         ),
+    )
+    cache_set_json(
+        namespace=_PROJECT_EXPORT_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_PROJECT_EXPORT_CACHE_TTL_S,
     )
     return ProjectExportOut(**payload)
