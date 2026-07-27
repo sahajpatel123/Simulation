@@ -57,7 +57,14 @@ def _table_exists(db: Session, table_name: str) -> bool:
 
 
 def _cluster_param_table() -> str:
-    return "cluster" + "_" + "parameters"
+    # Single source of truth for the cluster-parameters
+    # table name. Returning a literal here (not f-string
+    # interpolation) so the bandit B608 hardcoded_sql flag
+    # stays a false positive — and so a future refactor
+    # that lets this value come from a config or query
+    # param can't silently turn this into an injection
+    # vector.
+    return "cluster_parameters"
 
 
 # ── existing platform endpoints ──
@@ -473,11 +480,17 @@ def admin_calibration_status(
     product_type_counts = [dict(r._mapping) for r in counts] if counts else []
 
     if _table_exists(db, _cluster_param_table()):
+        # Plain string (not f-string) so bandit B608 doesn't
+        # flag the table-name interpolation as a possible
+        # injection vector. The table name comes from a
+        # module-local helper that returns a literal, so this
+        # is provably safe — but using a plain ``""..."`` here
+        # keeps the false-positive out of CI noise.
         eff_rows = db.execute(
             text(
-                f"""
+                """
             SELECT cluster_id, trait_name, effective_sample_count
-            FROM {_cluster_param_table()}
+            FROM cluster_parameters
             WHERE effective_sample_count >= 15
             ORDER BY effective_sample_count DESC
             LIMIT 200
