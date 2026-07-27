@@ -433,6 +433,10 @@ def create_simulation(
         user_id=current_user.id,
     )
     cache_invalidate(
+        namespace=_USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
         namespace=_STALE_CHECK_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
