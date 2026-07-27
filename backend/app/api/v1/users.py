@@ -116,6 +116,14 @@ _USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE: str = (
 _USER_TAG_TAXONOMY_CACHE_TTL_S: int = 300
 _USER_TAG_TAXONOMY_CACHE_NAMESPACE: str = "user-tag-taxonomy"
 
+# Most-active project - "where should I focus?" tile.
+# 60s TTL: 3 GROUP BY queries in the route, so the
+# cache matters more than for the lighter endpoints.
+_USER_MOST_ACTIVE_PROJECT_CACHE_TTL_S: int = 60
+_USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE: str = (
+    "user-most-active-project"
+)
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -172,6 +180,10 @@ def clear_archive(
     )
     cache_invalidate(
         namespace=_USER_TAG_TAXONOMY_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     return MessageResponse(message=f"Cleared {deleted} dossiers from your archive")
@@ -1902,6 +1914,15 @@ def get_most_active_project(
     """
     from sqlalchemy import func as _sqlfunc
 
+    # Cache hit - short-circuit the 3 GROUP BYs.
+    cached = cache_get_json(
+        namespace=_USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return MostActiveProjectOut(**cached)
+
     seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
 
     owned_project_ids = [
@@ -1983,4 +2004,11 @@ def get_most_active_project(
         for pid in owned_project_ids
     ]
     payload = build_most_active_project(project_activity=activity)
+    cache_set_json(
+        namespace=_USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_MOST_ACTIVE_PROJECT_CACHE_TTL_S,
+    )
     return MostActiveProjectOut(**payload)
