@@ -45,13 +45,19 @@ def test_public_allowlist_matches_callers() -> None:
 
 def test_default_empty_at_risk() -> None:
     from app.simulation.project_health import (
-        VERDICT_AT_RISK,
+        VERDICT_NEEDS_ATTENTION,
         build_project_health,
     )
 
     out = build_project_health()
-    assert out["verdict"] == VERDICT_AT_RISK
-    assert out["project_health_score"] == 0
+    # Empty input → verdict NEEDS_ATTENTION (NOT AT_RISK).
+    # The helper credits baseline points for "nothing wrong
+    # yet": 20 zero_critical_findings + 10 zero_pending
+    # decisions + 15 zero_weak_links = 45, which lands in
+    # the NEEDS_ATTENTION band (41-69). This mirrors the
+    # account_health helper's "baseline for empty" semantics.
+    assert out["verdict"] == VERDICT_NEEDS_ATTENTION
+    assert out["project_health_score"] == 45
 
 
 # ---------------------------------------------------------------------------
@@ -140,10 +146,12 @@ def test_zero_weak_links_bonus() -> None:
 def test_critical_findings_penalty() -> None:
     from app.simulation.project_health import build_project_health
 
-    out = build_project_health(
-        critical_finding_count=3,
-        zero_critical_findings_bonus=0,
-    )
+    # 3 CRITICAL findings × -4 per = -12. The helper has no
+    # ``zero_critical_findings_bonus`` parameter — that
+    # baseline bonus is awarded automatically when
+    # critical_finding_count == 0; passing the kwarg here
+    # used to TypeError. Drop it.
+    out = build_project_health(critical_finding_count=3)
     assert out["score_breakdown"]["penalties"] == -12
 
 
