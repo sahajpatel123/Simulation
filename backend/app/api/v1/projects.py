@@ -36,6 +36,7 @@ from app.models.prototype import Prototype
 from app.models.simulation import Simulation
 from app.models.user import User
 from app.schemas.assumption import (
+    AssumptionDigestOut,
     AssumptionExtractRequest,
     AssumptionListResponse,
     AssumptionOut,
@@ -117,6 +118,7 @@ from app.simulation.project_tags import (
 )
 from app.simulation.scored_assumption import score_assumptions, signal_quality_tier
 from app.simulation.activity_feed import build_activity_feed
+from app.simulation.assumption_digest import build_assumption_digest
 from app.simulation.next_best_action import build_next_best_action
 from app.tasks.simulation_tasks import run_full_simulation
 from app.tasks.stress_test_tasks import run_assumption_stress_test
@@ -141,6 +143,12 @@ _NEXT_ACTION_CACHE_NAMESPACE: str = "project-next-action"
 # polling without making a recent completion feel stale.
 _ACTIVITY_FEED_CACHE_TTL_S: int = 30
 _ACTIVITY_FEED_CACHE_NAMESPACE: str = "project-activity-feed"
+
+# The assumption digest ("what does TheCee assume?").
+# Assumptions are extracted infrequently (per brief
+# update) so a longer 5-minute TTL is appropriate.
+_ASSUMPTION_DIGEST_CACHE_TTL_S: int = 300
+_ASSUMPTION_DIGEST_CACHE_NAMESPACE: str = "project-assumption-digest"
 
 _SOFTWARE_PRODUCT_TYPES: frozenset[ProductType] = frozenset(
     {
@@ -3215,3 +3223,72 @@ def get_activity_feed(
         ttl_seconds=_ACTIVITY_FEED_CACHE_TTL_S,
     )
     return ActivityFeedOut(**payload)
+
+
+@router.get(
+    "/{project_id}/assumption-digest",
+    response_model=AssumptionDigestOut,
+    summary=(
+        "Per-project digest of AI-extracted assumptions — "
+        "sensitivity + category breakdown + weak-link "
+        "flags + recent additions + narrative + key_signals"
+    ),
+    # Read-only aggregation; assumptions don't change
+    # often, so a slightly higher cap is fine.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_assumption_digest(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AssumptionDigestOut:
+    """Per-project assumption digest.
+
+    Composes a single payload covering the sensitivity /
+    category distribution, weak-link flags (vague claims
+    flagged HIGH/CRITICAL), recent additions, and a
+    founder-readable narrative. Avoids the round-trip
+    cost of /projects/{id}/assumptions + client-side
+    aggregation for the dashboard's tile.
+    """
+    get_owned_project(db, current_user.id, project_id)
+
+    # Cache hit → short-circuit the SELECT. Key is
+    # namespaced by user + project so tenants and projects
+    # never collide.
+    cached = cache_get_json(
+        namespace=_ASSUMPTION_DIGEST_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return AssumptionDigestOut(**cached)
+
+    rows = (
+        db.query(Assumption)
+        .filter(Assumption.project_id == project_id)
+        .order_by(Assumption.created_at.desc())
+        .all()
+    )
+    assumption_dicts = [
+        {
+            "id": a.id,
+            "text": a.text,
+            "category": a.category,
+            "sensitivity": a.sensitivity,
+            "impact_score": a.impact_score,
+            "is_hidden": a.is_hidden,
+            "created_at": a.created_at,
+        }
+        for a in rows
+    ]
+    payload = build_assumption_digest(assumption_dicts)
+
+    cache_set_json(
+        namespace=_ASSUMPTION_DIGEST_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_ASSUMPTION_DIGEST_CACHE_TTL_S,
+    )
+    return AssumptionDigestOut(**payload)
