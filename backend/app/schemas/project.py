@@ -623,3 +623,28 @@ class RunsPerWeekOut(BaseModel):
     trend: str = "INSUFFICIENT_DATA"
     narrative: str = ""
     key_signals: list[dict] = []
+
+
+class MostActiveWeekdayOut(BaseModel):
+    """Response from ``GET /me/most-active-weekday``.
+
+    Single "what day of the week are you most active?"
+    payload so the dashboard can show a personal
+    schedule insight.
+
+    * ``total_actions`` - total sim + decision + outcome
+      actions counted.
+    * ``most_active_weekday`` - 0 (Monday) - 6 (Sunday),
+      or ``None`` when no data.
+    * ``most_active_count`` - count on the busiest
+      weekday.
+    * ``narrative`` - one paragraph string.
+    * ``key_signals`` - ``{label, value, severity,
+      display}``.
+    """
+
+    total_actions: int = 0
+    most_active_weekday: int | None = None
+    most_active_count: int = 0
+    narrative: str = ""
+    key_signals: list[dict] = []
