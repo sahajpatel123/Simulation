@@ -74,10 +74,18 @@ def _cluster_param_table() -> str:
     "/",
     response_model=dict,
     summary="Platform-wide calibration accuracy metrics",
+    # Locked down to admins — exposes internal config
+    # (markov_adjustments, sampling_adjustments, category
+    # accuracy breakdowns) that shouldn't be visible to any
+    # logged-in user.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
 )
 def get_platform_calibration(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    _require_admin(current_user)
+
     engine = PlatformCalibrationEngine()
     metrics = engine.calculate_platform_accuracy(db)
     return {
