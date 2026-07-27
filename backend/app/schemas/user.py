@@ -618,3 +618,28 @@ class LastWeekStatsOut(BaseModel):
     verdict: str = "INSUFFICIENT_DATA"
     narrative: str = ""
     key_signals: list[dict] = []
+
+
+class ProjectsNeedingAttentionOut(BaseModel):
+    """Response from ``GET /me/projects-needing-attention``.
+
+    List of projects whose status-banner would say
+    "Action needed" or "Stale" so the dashboard can
+    surface a focused "what to look at next" widget.
+
+    * ``needing_attention_count`` - count of flagged
+      projects.
+    * ``stale_count`` - count of "Stale" projects
+      (subgroup of the above).
+    * ``projects`` - list of ``{project_id,
+      project_title, status, reason}`` dicts.
+    * ``narrative`` - one paragraph string.
+    * ``key_signals`` - ``{label, value, severity,
+      display}``.
+    """
+
+    needing_attention_count: int = 0
+    stale_count: int = 0
+    projects: list[dict] = []
+    narrative: str = ""
+    key_signals: list[dict] = []

@@ -3380,3 +3380,185 @@ def get_last_week_stats(
         ttl_seconds=_USER_LAST_WEEK_STATS_CACHE_TTL_S,
     )
     return LastWeekStatsOut(**payload)
+
+
+@router.get(
+    "/me/projects-needing-attention",
+    response_model=ProjectsNeedingAttentionOut,
+    summary=(
+        "Per-user projects needing attention - list of "
+        "projects whose status-banner would say 'Action "
+        "needed' or 'Stale', so the dashboard can surface "
+        "a focused 'what to look at next' widget"
+    ),
+    # Read-only; per-project loops.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_projects_needing_attention(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProjectsNeedingAttentionOut:
+    """Projects needing attention.
+
+    Lists owned projects whose status-banner verdict
+    would be 'Stale' or 'Action needed', so the dashboard
+    can surface a focused 'what to look at next' widget.
+    """
+    from app.simulation.status_banner import build_status_banner
+
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+    if not owned_project_ids:
+        return ProjectsNeedingAttentionOut(
+            narrative="No projects on file yet.",
+        )
+
+    # Per-project sim + outcome + decision counts so the
+    # helper can decide which reason applies.
+    project_rows = []
+    for pid in owned_project_ids:
+        project = (
+            db.query(Project)
+            .filter(Project.id == pid)
+            .first()
+        )
+        if project is None:
+            continue
+
+        latest_sim = (
+            db.query(Simulation)
+            .filter(
+                Simulation.project_id == pid,
+                Simulation.status == "COMPLETED",
+            )
+            .order_by(Simulation.created_at.desc())
+            .first()
+        )
+        sim_count = (
+            db.query(Simulation)
+            .filter(
+                Simulation.project_id == pid,
+                Simulation.status == "COMPLETED",
+            )
+            .count()
+        )
+        outcome_count = (
+            db.query(Outcome)
+            .filter(Outcome.project_id == pid)
+            .count()
+        )
+        pending_decision_count = (
+            db.query(Decision)
+            .filter(
+                Decision.project_id == pid,
+                Decision.status.in_(("PENDING", "RUNNING")),
+            )
+            .count()
+        )
+
+        # Compute the days_since_latest_assumption for
+        # the status-banner helper.
+        assumption_count = (
+            db.query(Assumption)
+            .filter(
+                Assumption.project_id == pid,
+                Assumption.is_hidden.is_(False),
+            )
+            .count()
+        )
+        days_since_latest_assumption = None
+        if assumption_count > 0:
+            latest_assumption = (
+                db.query(Assumption)
+                .filter(
+                    Assumption.project_id == pid,
+                    Assumption.is_hidden.is_(False),
+                )
+                .order_by(Assumption.created_at.desc())
+                .first()
+            )
+            if (
+                latest_assumption is not None
+                and latest_assumption.created_at is not None
+            ):
+                ts = latest_assumption.created_at
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                delta = datetime.now(timezone.utc) - ts
+                days_since_latest_assumption = max(0, delta.days)
+
+        sim_confidence = None
+        if latest_sim is not None:
+            sim_confidence = getattr(
+                latest_sim, "confidence_score", None,
+            )
+            if sim_confidence is not None:
+                sim_confidence = float(sim_confidence) / 100.0
+        has_completed_sim = latest_sim is not None
+        has_outcome = outcome_count > 0
+
+        weak_link_count = 0
+        if assumption_count > 0:
+            from app.simulation.assumption_digest import (
+                build_assumption_digest,
+            )
+            assumption_rows = (
+                db.query(Assumption)
+                .filter(
+                    Assumption.project_id == pid,
+                    Assumption.is_hidden.is_(False),
+                )
+                .all()
+            )
+            digest = build_assumption_digest([
+                {
+                    "id": a.id,
+                    "sensitivity": a.sensitivity,
+                    "specificity_score": a.specificity_score,
+                    "impact_score": a.impact_score,
+                    "is_hidden": a.is_hidden,
+                }
+                for a in assumption_rows
+            ])
+            weak_link_count = digest["weak_link_count"]
+
+        banner_payload = build_status_banner(
+            brief_completed=getattr(
+                project, "brief_completed_at", None,
+            ) is not None,
+            assumption_count=assumption_count,
+            has_completed_sim=has_completed_sim,
+            days_since_latest_sim=(
+                _days_since(getattr(
+                    latest_sim, "created_at", None,
+                ))
+            ),
+            pending_decision_count=pending_decision_count,
+            days_since_latest_assumption=(
+                days_since_latest_assumption
+            ),
+        )
+        project_rows.append({
+            "project_id": pid,
+            "project_title": getattr(project, "title", None),
+            "status": banner_payload["status"],
+            "sims_count": sim_count,
+            "outcomes_count": outcome_count,
+        })
+
+    payload = build_projects_needing_attention(
+        project_status_rows=project_rows,
+    )
+    return ProjectsNeedingAttentionOut(**payload)
+
+
+def _days_since(ts):
+    if ts is None:
+        return None
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return max(0, (datetime.now(timezone.utc) - ts).days)
