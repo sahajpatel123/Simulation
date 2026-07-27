@@ -64,6 +64,7 @@ from app.schemas.project import (
     BriefAssistRequest,
     BriefSave,
     ConvergenceCheckOut,
+    InterventionDigestOut,
     NextBestActionOut,
     NextBestActionSource,
     ProjectCreate,
@@ -121,6 +122,9 @@ from app.simulation.scored_assumption import score_assumptions, signal_quality_t
 from app.simulation.activity_feed import build_activity_feed
 from app.simulation.assumption_digest import build_assumption_digest
 from app.simulation.convergence_check import build_convergence_check
+from app.simulation.intervention_digest import (
+    build_intervention_digest,
+)
 from app.simulation.next_best_action import build_next_best_action
 from app.tasks.simulation_tasks import run_full_simulation
 from app.tasks.stress_test_tasks import run_assumption_stress_test
@@ -156,6 +160,12 @@ _ASSUMPTION_DIGEST_CACHE_NAMESPACE: str = "project-assumption-digest"
 # that a 2-min TTL is plenty.
 _CONVERGENCE_CHECK_CACHE_TTL_S: int = 120
 _CONVERGENCE_CHECK_CACHE_NAMESPACE: str = "project-convergence"
+
+# Intervention digest ("what should I change next?").
+# 5-min TTL — interventions are generated infrequently
+# (per analysis run) so longer staleness is fine.
+_INTERVENTION_DIGEST_CACHE_TTL_S: int = 300
+_INTERVENTION_DIGEST_CACHE_NAMESPACE: str = "project-intervention-digest"
 
 _SOFTWARE_PRODUCT_TYPES: frozenset[ProductType] = frozenset(
     {
@@ -3386,3 +3396,55 @@ def get_convergence_check(
         ttl_seconds=_CONVERGENCE_CHECK_CACHE_TTL_S,
     )
     return ConvergenceCheckOut(**payload)
+
+
+@router.get(
+    "/{project_id}/intervention-digest",
+    response_model=InterventionDigestOut,
+    summary=(
+        "Per-project digest of AI-generated interventions — "
+        "difficulty/priority/category breakdown + quick "
+        "wins + top recommendations + narrative + stale "
+        "flag + key_signals"
+    ),
+    # Read-only composition of the project's interventions_json.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_intervention_digest(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> InterventionDigestOut:
+    """Per-project intervention digest.
+
+    Composes a single payload covering the difficulty /
+    priority / category breakdown, the quick-win count,
+    the top recommendations, the staleness flag, and a
+    founder-readable narrative + key_signals so the
+    dashboard can render a "what should I change next?"
+    tile without fanning out to the intervention generator.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+
+    # Cache hit → short-circuit.
+    cached = cache_get_json(
+        namespace=_INTERVENTION_DIGEST_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return InterventionDigestOut(**cached)
+
+    payload = build_intervention_digest(
+        interventions_data=getattr(
+            project, "interventions_json", None,
+        ),
+    )
+    cache_set_json(
+        namespace=_INTERVENTION_DIGEST_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_INTERVENTION_DIGEST_CACHE_TTL_S,
+    )
+    return InterventionDigestOut(**payload)

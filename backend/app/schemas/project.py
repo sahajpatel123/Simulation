@@ -325,3 +325,44 @@ class ConvergenceCheckOut(BaseModel):
     range_pcr: float = 0.0
     narrative: str = ""
     key_signals: list[dict] = []
+
+
+class InterventionDigestOut(BaseModel):
+    """Response from ``GET /projects/{id}/intervention-digest``.
+
+    Per-project digest of AI-generated interventions so the
+    dashboard's "what should I change next?" tile can render
+    a single payload without fanning out to the intervention
+    generator.
+
+    * ``intervention_count`` — total non-empty items.
+    * ``difficulty_breakdown`` /
+      ``priority_breakdown`` /
+      ``category_breakdown`` — ``{bucket: count}`` so the
+      tile can render small stacked bars.
+    * ``quick_win_count`` — count of items with ``LOW``
+      difficulty + ``priority_score > 0.70``.
+    * ``top_interventions`` — capped (5) list sorted by
+      ``priority_score`` DESC.
+    * ``generated_at`` — ISO timestamp of when the
+      underlying interventions were generated; ``None``
+      when there's no record.
+    * ``stale`` — ``True`` when the recommendations are
+      older than :data:`STALE_AFTER_DAYS` days (or when
+      no timestamp is found).
+    * ``narrative`` — one paragraph string the dashboard
+      renders as plain text.
+    * ``key_signals`` — ``{label, value, severity,
+      display}`` dicts for the dashboard tiles.
+    """
+
+    intervention_count: int = 0
+    difficulty_breakdown: dict[str, int] = {}
+    priority_breakdown: dict[str, int] = {}
+    category_breakdown: dict[str, int] = {}
+    quick_win_count: int = 0
+    top_interventions: list[dict] = []
+    generated_at: str | None = None
+    stale: bool = True
+    narrative: str = ""
+    key_signals: list[dict] = []
