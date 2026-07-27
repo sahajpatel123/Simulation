@@ -2145,6 +2145,14 @@ def generate_interventions(
     project.status = "INTERVENTIONS_READY"
     db.commit()
 
+    # Bust the cached intervention-digest so the next GET
+    # reflects the freshly-generated set rather than
+    # waiting out the 5-min TTL.
+    cache_invalidate(
+        namespace=_INTERVENTION_DIGEST_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+
     return InterventionOut(
         project_id=project_id,
         interventions=interventions,
