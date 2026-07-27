@@ -1561,6 +1561,10 @@ def extract_assumptions(
         namespace=_LATEST_SNAPSHOT_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
+    cache_invalidate(
+        namespace=_STATUS_BANNER_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
 
     return AssumptionListResponse(
         project_id=project_id,
@@ -1922,6 +1926,10 @@ def run_premortem(
     )
     cache_invalidate(
         namespace=_LATEST_SNAPSHOT_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_STATUS_BANNER_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
@@ -2302,6 +2310,10 @@ def generate_interventions(
     )
     cache_invalidate(
         namespace=_LATEST_SNAPSHOT_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_STATUS_BANNER_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
@@ -4338,6 +4350,15 @@ def get_status_banner(
 
     project = get_owned_project(db, current_user.id, project_id)
 
+    # Cache hit - short-circuit the 3 cheap queries.
+    cached = cache_get_json(
+        namespace=_STATUS_BANNER_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return StatusBannerOut(**cached)
+
     # Latest completed sim.
     latest_completed_sim = (
         db.query(Simulation)
@@ -4410,5 +4431,12 @@ def get_status_banner(
         days_since_latest_assumption_extraction=(
             days_since_latest_assumption_extraction
         ),
+    )
+    cache_set_json(
+        namespace=_STATUS_BANNER_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_STATUS_BANNER_CACHE_TTL_S,
     )
     return StatusBannerOut(**payload)

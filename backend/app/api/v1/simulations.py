@@ -20,6 +20,7 @@ from app.api.v1.projects import (
     _PROJECT_EXPORT_CACHE_NAMESPACE,
     _PROJECT_HEALTH_CACHE_NAMESPACE,
     _STALE_CHECK_CACHE_NAMESPACE,
+    _STATUS_BANNER_CACHE_NAMESPACE,
 )
 from app.api.v1.users import (
     _USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
@@ -361,6 +362,10 @@ def create_simulation(
     )
     cache_invalidate(
         namespace=_USER_QUICK_STATS_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_STATUS_BANNER_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
