@@ -214,6 +214,11 @@ _ADOPTION_MILESTONES_CACHE_NAMESPACE: str = (
     "project-adoption-milestones"
 )
 
+# Status banner - one-liner project health string.
+# 60s TTL: 3 cheap queries in the route.
+_STATUS_BANNER_CACHE_TTL_S: int = 60
+_STATUS_BANNER_CACHE_NAMESPACE: str = "project-status-banner"
+
 # Project export (full bundle: brief + assumptions +
 # sims + decisions + outcomes + premortem + interventions).
 # Read-rare (manual export / handoff), but each query is
