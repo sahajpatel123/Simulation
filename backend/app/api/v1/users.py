@@ -299,6 +299,13 @@ _USER_RECENT_OUTCOMES_CACHE_NAMESPACE: str = (
     "user-recent-outcomes"
 )
 
+# Recent decisions - "what did you decide recently?"
+# tile. 60s TTL: 1 query in the route.
+_USER_RECENT_DECISIONS_CACHE_TTL_S: int = 60
+_USER_RECENT_DECISIONS_CACHE_NAMESPACE: str = (
+    "user-recent-decisions"
+)
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
