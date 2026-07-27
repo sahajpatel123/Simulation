@@ -67,6 +67,7 @@ from app.schemas.project import (
     InterventionDigestOut,
     NextBestActionOut,
     NextBestActionSource,
+    PremortemDigestOut,
     ProjectCreate,
     ProjectDuplicateIn,
     ProjectDuplicateOut,
@@ -127,6 +128,7 @@ from app.simulation.intervention_digest import (
     build_intervention_digest,
 )
 from app.simulation.next_best_action import build_next_best_action
+from app.simulation.premortem_digest import build_premortem_digest
 from app.simulation.project_health import build_project_health
 from app.tasks.simulation_tasks import run_full_simulation
 from app.tasks.stress_test_tasks import run_assumption_stress_test
@@ -173,6 +175,12 @@ _INTERVENTION_DIGEST_CACHE_NAMESPACE: str = "project-intervention-digest"
 # significant project event; short TTL is fine.
 _PROJECT_HEALTH_CACHE_TTL_S: int = 60
 _PROJECT_HEALTH_CACHE_NAMESPACE: str = "project-health"
+
+# Premortem digest ("what could go wrong?"). 5-min TTL:
+# premortem is generated once per project and rarely
+# regenerated.
+_PREMORTEM_DIGEST_CACHE_TTL_S: int = 300
+_PREMORTEM_DIGEST_CACHE_NAMESPACE: str = "project-premortem-digest"
 
 _SOFTWARE_PRODUCT_TYPES: frozenset[ProductType] = frozenset(
     {
@@ -3605,3 +3613,51 @@ def get_project_health(
         ttl_seconds=_PROJECT_HEALTH_CACHE_TTL_S,
     )
     return ProjectHealthOut(**payload)
+
+
+@router.get(
+    "/{project_id}/premortem-digest",
+    response_model=PremortemDigestOut,
+    summary=(
+        "Per-project premortem digest - composes "
+        "project.premortem_json into a one-shot 'what "
+        "could go wrong?' payload"
+    ),
+    # Read-only composition of project.premortem_json.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_premortem_digest(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PremortemDigestOut:
+    """Per-project premortem digest.
+
+    Composes a single payload covering the severity
+    breakdown, top failure modes (impact DESC), and a
+    founder-readable narrative + key_signals. Avoids
+    fanning out to /premortem + client-side aggregation
+    for the dashboard's 'what could go wrong?' tile.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+
+    # Cache hit → short-circuit.
+    cached = cache_get_json(
+        namespace=_PREMORTEM_DIGEST_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return PremortemDigestOut(**cached)
+
+    payload = build_premortem_digest(
+        premortem_data=getattr(project, "premortem_json", None),
+    )
+    cache_set_json(
+        namespace=_PREMORTEM_DIGEST_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_PREMORTEM_DIGEST_CACHE_TTL_S,
+    )
+    return PremortemDigestOut(**payload)

@@ -371,3 +371,29 @@ class ProjectHealthOut(BaseModel):
     score_breakdown: dict[str, int] = {}
     narrative: str = ""
     key_signals: list[dict] = []
+
+
+class PremortemDigestOut(BaseModel):
+    """Response from ``GET /projects/{id}/premortem-digest``.
+
+    Per-project digest of the AI-generated premortem
+    analysis (``project.premortem_json``) so the dashboard
+    can render a "what could go wrong?" tile without
+    fanning out to the generator.
+
+    * ``premortem_count`` — total non-empty failure modes.
+    * ``severity_breakdown`` — ``{CRITICAL/HIGH/...: count}``
+      so the tile can render a small stacked bar.
+    * ``top_failure_modes`` — capped (5) list sorted by
+      ``impact`` DESC — the most fatal first.
+    * ``narrative`` — one paragraph string the dashboard
+      renders as plain text.
+    * ``key_signals`` — ``{label, value, severity,
+      display}`` dicts for the dashboard tiles.
+    """
+
+    premortem_count: int = 0
+    severity_breakdown: dict[str, int] = {}
+    top_failure_modes: list[dict] = []
+    narrative: str = ""
+    key_signals: list[dict] = []
