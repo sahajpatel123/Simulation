@@ -1527,7 +1527,10 @@ def extract_assumptions(
     # user's assumption set is regenerated. Also bust the
     # project-level stale-check (latest assumption
     # created_at changes).
-    from app.api.v1.users import _USER_COVERAGE_GAPS_CACHE_NAMESPACE
+    from app.api.v1.users import (
+    _USER_COVERAGE_GAPS_CACHE_NAMESPACE,
+    _USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
+)
     cache_invalidate(
         namespace=_USER_COVERAGE_GAPS_CACHE_NAMESPACE,
         user_id=current_user.id,
@@ -1893,6 +1896,10 @@ def run_premortem(
     )
     cache_invalidate(
         namespace=_STALE_CHECK_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 
@@ -2265,6 +2272,10 @@ def generate_interventions(
     )
     cache_invalidate(
         namespace=_STALE_CHECK_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 

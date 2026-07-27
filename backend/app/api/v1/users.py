@@ -96,6 +96,14 @@ _USER_USAGE_BY_WEEK_CACHE_NAMESPACE: str = (
     "user-usage-by-week"
 )
 
+# Projects by status - status pie-chart data. 60s TTL:
+# status only changes on a few project-mutating routes
+# (create / premortem / interventions / clear-archive).
+_USER_PROJECTS_BY_STATUS_CACHE_TTL_S: int = 60
+_USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE: str = (
+    "user-projects-by-status"
+)
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -144,6 +152,10 @@ def clear_archive(
     )
     cache_invalidate(
         namespace=_USER_USAGE_BY_WEEK_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     return MessageResponse(message=f"Cleared {deleted} dossiers from your archive")
@@ -1757,6 +1769,15 @@ def get_projects_by_status(
     """
     from sqlalchemy import func as _sqlfunc
 
+    # Cache hit - short-circuit the GROUP BY.
+    cached = cache_get_json(
+        namespace=_USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return ProjectsByStatusOut(**cached)
+
     rows = (
         db.query(Project.status, _sqlfunc.count(Project.id))
         .filter(Project.user_id == current_user.id)
@@ -1765,5 +1786,12 @@ def get_projects_by_status(
     )
     payload = build_projects_by_status(
         status_counts=[(r[0], r[1]) for r in rows],
+    )
+    cache_set_json(
+        namespace=_USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_PROJECTS_BY_STATUS_CACHE_TTL_S,
     )
     return ProjectsByStatusOut(**payload)
