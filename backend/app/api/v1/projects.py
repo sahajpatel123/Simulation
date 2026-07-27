@@ -1435,6 +1435,14 @@ def extract_assumptions(
 
     hidden_count = sum(1 for a in saved if a.is_hidden)
 
+    # Bust the cached assumption-digest so the next GET
+    # reflects the re-extracted set rather than waiting
+    # out the 5-min TTL.
+    cache_invalidate(
+        namespace=_ASSUMPTION_DIGEST_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+
     return AssumptionListResponse(
         project_id=project_id,
         assumptions=[AssumptionOut.model_validate(a) for a in saved],
