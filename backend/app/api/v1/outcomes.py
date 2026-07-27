@@ -46,6 +46,11 @@ from app.simulation.outcomes_digest_v2 import (
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/projects", tags=["outcomes"])
 
+# Outcomes digest cache — single source of truth so
+# future rename propagates to every invalidation site.
+# 120s TTL matches the digest's internal cache.
+_OUTCOMES_DIGEST_CACHE_NAMESPACE: str = "project-outcomes-digest"
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 PENALTY_RATES = {
@@ -331,13 +336,18 @@ def submit_outcome_feedback(
     # outcome immediately (the calibration verdict is
     # exactly what drives priority-3 of the next-action
     # priority chain; the outcome_submitted event also
-    # belongs on the timeline).
+    # belongs on the timeline; the new outcome is also
+    # a direct input to the outcomes-digest).
     cache_invalidate(
         namespace=_NEXT_ACTION_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
         namespace=_ACTIVITY_FEED_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_OUTCOMES_DIGEST_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
 
@@ -446,14 +456,18 @@ def record_outcome(
         cal_score,
     )
     # Bust the cached per-project next-action + the
-    # activity feed so the dashboard reflects the new
-    # outcome immediately.
+    # activity feed + the outcomes digest so the
+    # dashboard reflects the new outcome immediately.
     cache_invalidate(
         namespace=_NEXT_ACTION_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
         namespace=_ACTIVITY_FEED_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_OUTCOMES_DIGEST_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     return _hydrate_record(outcome)
@@ -560,6 +574,14 @@ def delete_outcome(
     db.delete(outcome)
     db.commit()
 
+    # Bust the per-project outcomes-digest so the deleted
+    # outcome disappears from MAE / bias / trend numbers
+    # immediately rather than waiting out the 120s TTL.
+    cache_invalidate(
+        namespace=_OUTCOMES_DIGEST_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+
 
 @router.get(
     "/{project_id}/outcomes-digest",
@@ -595,7 +617,7 @@ def get_outcomes_digest(
 
     # Cache hit → short-circuit the four queries.
     cached = cache_get_json(
-        namespace="project-outcomes-digest",
+        namespace=_OUTCOMES_DIGEST_CACHE_NAMESPACE,
         params={"project_id": project_id},
         user_id=current_user.id,
     )
@@ -663,7 +685,7 @@ def get_outcomes_digest(
         calibration_health=calibration_health,
     )
     cache_set_json(
-        namespace="project-outcomes-digest",
+        namespace=_OUTCOMES_DIGEST_CACHE_NAMESPACE,
         params={"project_id": project_id},
         user_id=current_user.id,
         value=payload,
