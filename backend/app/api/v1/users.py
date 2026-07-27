@@ -255,6 +255,13 @@ _USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE: str = (
     "user-projects-needing-attention"
 )
 
+# Sim failure rate - system-reliability widget.
+# 60s TTL: 2 cheap COUNTs in the route.
+_USER_SIM_FAILURE_RATE_CACHE_TTL_S: int = 60
+_USER_SIM_FAILURE_RATE_CACHE_NAMESPACE: str = (
+    "user-sim-failure-rate"
+)
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -3626,6 +3633,15 @@ def get_sim_failure_rate(
         return SimFailureRateOut(
             narrative="No projects on file yet.",
         )
+
+    # Cache hit - short-circuit the 2 COUNTs.
+    cached = cache_get_json(
+        namespace=_USER_SIM_FAILURE_RATE_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return SimFailureRateOut(**cached)
 
     total_simulations = (
         db.query(Simulation)
