@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy import text
 
 from app.api.v1 import api_router
@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.core.database import engine, init_extensions
 from app.core.errors import TheCeeError, generic_error_handler, thecee_error_handler
 from app.core.logging_config import configure_logging
+from app.core.metrics import metrics
 from app.core.redis_client import get_redis_client
 from app.core.timing_middleware import TimingMiddleware
 from app.worker import celery_app as _celery_app
@@ -141,6 +142,9 @@ def _service_health() -> tuple[dict[str, object], int]:
     try:
         inspector = _celery_app.control.inspect(timeout=2.0)
         active_workers = inspector.ping() or {}
+        # Mirror the count into the Prometheus gauge so /metrics and /health
+        # stay in agreement without a second inspector round-trip.
+        metrics.set_celery_workers_online(len(active_workers))
         report["services"]["celery"] = {
             "status": "healthy" if active_workers else "degraded",
             "workers_online": len(active_workers),
@@ -196,3 +200,43 @@ async def root():
 async def health():
     payload, status_code = _service_health()
     return JSONResponse(content=payload, status_code=status_code)
+
+
+# Prometheus text format requires the exact content type below — including
+# the version param — otherwise some scrapers reject the payload.
+_PROM_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
+
+
+@app.get(
+    "/metrics",
+    tags=["system"],
+    summary="Prometheus metrics endpoint",
+    responses={200: {"description": "Metrics in Prometheus text exposition format", "content": {"text/plain": {}}}},
+)
+async def prometheus_metrics() -> Response:
+    # Refresh the worker gauge right before render so the snapshot reflects
+    # current liveness. This is cheap (a 2s timeout ping) and gives a
+    # useful "workers_online" view for the SRE dashboard.
+    try:
+        inspector = _celery_app.control.inspect(timeout=2.0)
+        active = inspector.ping() or {}
+        metrics.set_celery_workers_online(len(active))
+    except Exception:
+        # Don't fail the scrape just because Celery is unreachable.
+        pass
+
+    # Refresh the DB pool gauge from the SQLAlchemy engine. ``pool`` is the
+    # connection pool; ``checkedout`` is the in-use count. SQLAlchemy
+    # exposes this on every supported DBAPI; guard for missing attrs.
+    try:
+        pool = engine.pool
+        checked_out = getattr(pool, "checkedout", None)
+        if callable(checked_out):
+            checked_out = checked_out()
+        if checked_out is not None:
+            metrics.set_db_pool_checked_out(int(checked_out))
+    except Exception:
+        pass
+
+    body = metrics.render()
+    return Response(content=body, media_type="text/plain", headers={"Content-Type": _PROM_CONTENT_TYPE})

@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
+from app.core.metrics import metrics
 from app.core.tier_enforcement import enforce_simulation_limit, increment_simulation_count
 from app.core.websocket import sync_broadcast
 from app.models.assumption import Assumption
@@ -60,6 +61,7 @@ def _utcnow() -> datetime:
 
 def _mark_failed(db: Session, sim: Simulation, exc: Exception) -> None:
     msg = str(exc)[:500]
+    metrics.sim_failed()
     sync_broadcast(sim.id, "FAILED", "Error", 0, extra={"error": msg})
     try:
         db.execute(
@@ -290,6 +292,11 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         sim.status = "RUNNING"
         sim.task_id = self.request.id
         sim.updated_at = _utcnow()
+        # Stash the wall-clock start so completion/failure can record a duration.
+        # Stored on the instance only — not committed — so a retry gets a fresh
+        # measurement rather than the original start.
+        self._metrics_start = time.monotonic()
+        metrics.sim_started()
         self.db.commit()
 
         self.update_state(state="PROGRESS", meta={"stage": "Loading project data", "pct": 5})
@@ -459,6 +466,13 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         sim.results_json = results_dict
         sim.confidence_score = float(agg_result.confidence_score) / 100.0
         sim.updated_at = _utcnow()
+
+        # Record end-to-end wall-clock duration for the metrics histogram.
+        # ``_metrics_start`` is set right after the status flips to RUNNING;
+        # fall back to a zero observation if a subclass path didn't set it.
+        start = getattr(self, "_metrics_start", None)
+        duration = time.monotonic() - start if start is not None else 0.0
+        metrics.sim_completed(duration_seconds=duration)
 
         project.status = "SIMULATION_COMPLETE"
         project.updated_at = _utcnow()

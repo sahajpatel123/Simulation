@@ -154,6 +154,12 @@ def claude_call_with_fallback(
         text = ""
         if resp.choices:
             text = (resp.choices[0].message.content or "").strip()
+        # Record the call BEFORE returning so failed/timeout branches get
+        # their own separate ``failure`` counter below — this branch is
+        # the happy path only.
+        from app.core.metrics import metrics
+
+        metrics.claude_call(model=grok_model, task=fallback_key)
         return {"content": text, "error": None}
     except APITimeoutError:
         logger.warning("Grok timeout on %s (model=%s)", fallback_key, grok_model)
