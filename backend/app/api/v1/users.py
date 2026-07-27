@@ -84,6 +84,14 @@ _USER_PROJECTS_SUMMARY_CACHE_NAMESPACE: str = (
     "user-projects-summary"
 )
 
+# Usage by week - 12-week rolling history. 60s TTL: the
+# chart refreshes often but each week's counts only
+# update when a new sim/decision/outcome lands.
+_USER_USAGE_BY_WEEK_CACHE_TTL_S: int = 60
+_USER_USAGE_BY_WEEK_CACHE_NAMESPACE: str = (
+    "user-usage-by-week"
+)
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -128,6 +136,10 @@ def clear_archive(
     )
     cache_invalidate(
         namespace=_USER_PROJECTS_SUMMARY_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_USAGE_BY_WEEK_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     return MessageResponse(message=f"Cleared {deleted} dossiers from your archive")
@@ -1596,6 +1608,15 @@ def get_usage_by_week(
     )
     from sqlalchemy import func as _sqlfunc
 
+    # Cache hit - short-circuit the 3 GROUP BY queries.
+    cached = cache_get_json(
+        namespace=_USER_USAGE_BY_WEEK_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return UsageByWeekOut(**cached)
+
     today = datetime.now(timezone.utc).date()
     # Week starts: weeks 11, 10, ..., 0 (oldest first).
     week_starts: list = []
@@ -1699,4 +1720,11 @@ def get_usage_by_week(
         for ws in week_starts
     ]
     payload = build_usage_by_week(week_buckets)
+    cache_set_json(
+        namespace=_USER_USAGE_BY_WEEK_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_USAGE_BY_WEEK_CACHE_TTL_S,
+    )
     return UsageByWeekOut(**payload)
