@@ -212,6 +212,14 @@ _USER_OUTCOME_RATE_CACHE_NAMESPACE: str = (
     "user-outcome-rate"
 )
 
+# Decision-to-outcome delay - closes the loop on the
+# decision->outcome chain. 60s TTL: 2 cheap queries in
+# the route.
+_USER_DECISION_TO_OUTCOME_DELAY_CACHE_TTL_S: int = 60
+_USER_DECISION_TO_OUTCOME_DELAY_CACHE_NAMESPACE: str = (
+    "user-decision-to-outcome-delay"
+)
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -308,6 +316,10 @@ def clear_archive(
     )
     cache_invalidate(
         namespace=_USER_OUTCOME_RATE_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_DECISION_TO_OUTCOME_DELAY_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     # Coverage gaps + notifications depend on the user's
@@ -2970,6 +2982,15 @@ def get_decision_to_outcome_delay(
     if not owned_project_ids:
         return DecisionToOutcomeDelayOut()
 
+    # Cache hit - short-circuit the 2 queries.
+    cached = cache_get_json(
+        namespace=_USER_DECISION_TO_OUTCOME_DELAY_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return DecisionToOutcomeDelayOut(**cached)
+
     # Decisions per project (ascending) and outcomes per
     # project (ascending). For each decision, find the
     # next outcome on the same project that's strictly
@@ -3024,5 +3045,12 @@ def get_decision_to_outcome_delay(
 
     payload = build_decision_to_outcome_delay(
         decision_outcome_pairs=pairs,
+    )
+    cache_set_json(
+        namespace=_USER_DECISION_TO_OUTCOME_DELAY_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_DECISION_TO_OUTCOME_DELAY_CACHE_TTL_S,
     )
     return DecisionToOutcomeDelayOut(**payload)
