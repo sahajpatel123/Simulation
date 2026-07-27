@@ -108,6 +108,35 @@ class Settings(BaseSettings):
             )
         return self
 
+    @model_validator(mode="after")
+    def _require_https_frontend_in_production(self) -> "Settings":
+        """Fail closed when production is configured with an
+        HTTP frontend URL.
+
+        Without this guard, a deployment that forgets to set
+        ``FRONTEND_URL`` would inherit the dev default
+        (``http://localhost:3000``) — and the CORS layer would
+        accept requests from ``localhost`` over HTTP against
+        the production API. A misconfigured deploy should
+        hard-fail at startup, not silently accept the dev
+        fallback.
+        """
+        if self.ENVIRONMENT.lower() != "production":
+            return self
+        url = self.FRONTEND_URL.strip()
+        # Empty string also fails closed — the cors_allowed_origins
+        # helper returns [] for empty, which is "no origin allowed"
+        # (fail-closed) but a missing env var is almost always a
+        # deploy bug, so we surface it loudly here instead.
+        if not url or not url.lower().startswith("https://"):
+            raise ValueError(
+                "FRONTEND_URL must be an https:// URL in production "
+                f"(got {url!r}). Set the env var to the deployed "
+                "frontend origin — the dev default http://localhost:3000 "
+                "is not safe for production."
+            )
+        return self
+
     def cors_allowed_origins(self) -> list[str]:
         defaults = ["http://localhost:3000", "http://localhost:3001"]
         frontend = self.FRONTEND_URL.strip()
