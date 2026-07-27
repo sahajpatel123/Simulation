@@ -286,3 +286,29 @@ class TagTaxonomyOut(BaseModel):
     narrative: str = ""
     key_signals: list[dict] = []
 
+
+class MostActiveProjectOut(BaseModel):
+    """Response from ``GET /me/most-active-project``.
+
+    Single "where should I focus?" recommendation: the
+    project with the most total activity (sims + decisions
+    + outcomes) in the last 7 days.
+
+    * ``has_activity`` - ``True`` when at least one project
+      had >= 1 action in the window.
+    * ``project_id`` / ``project_title`` - the winning
+      project (or ``None``).
+    * ``total_actions_7d`` - count of (sim + decision +
+      outcome) for the winner.
+    * ``narrative`` - one paragraph string the dashboard
+      renders as plain text.
+    * ``key_signals`` - ``{label, value, severity, display}``.
+    """
+
+    has_activity: bool = False
+    project_id: int | None = None
+    project_title: str | None = None
+    total_actions_7d: int = 0
+    narrative: str = ""
+    key_signals: list[dict] = []
+

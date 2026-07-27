@@ -24,6 +24,7 @@ from app.schemas.user import (
     AccountHealthOut,
     CoverageGapsOut,
     DigestSnapshotOut,
+    MostActiveProjectOut,
     NotificationsOut,
     ProjectsByStatusOut,
     ProjectsSummaryOut,
@@ -39,6 +40,9 @@ from app.simulation.calibration_health import (
 from app.simulation.coverage_gaps import build_coverage_gaps
 from app.simulation.digest_snapshot import build_digest_snapshot
 from app.simulation.intervention_digest import build_intervention_digest
+from app.simulation.most_active_project import (
+    build_most_active_project,
+)
 from app.simulation.notifications import build_notifications
 from app.simulation.premortem_digest import build_premortem_digest
 from app.simulation.projects_by_status import (
@@ -1871,3 +1875,112 @@ def get_tag_taxonomy(
         ttl_seconds=_USER_TAG_TAXONOMY_CACHE_TTL_S,
     )
     return TagTaxonomyOut(**payload)
+
+
+@router.get(
+    "/me/most-active-project",
+    response_model=MostActiveProjectOut,
+    summary=(
+        "Per-user most-active project in the last 7 days - "
+        "the project with the most sim + decision + outcome "
+        "activity, surfaced as a 'focus here next' "
+        "recommendation"
+    ),
+    # Read-only; bounded.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_most_active_project(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MostActiveProjectOut:
+    """Most-active project.
+
+    For each owned project, sums sims + decisions +
+    outcomes in the last 7 days and returns the project
+    with the highest total. Useful for the dashboard's
+    'where should I focus?' tile.
+    """
+    from sqlalchemy import func as _sqlfunc
+
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+    if not owned_project_ids:
+        return MostActiveProjectOut(
+            narrative="No projects on file yet.",
+        )
+
+    # Sim count per project (last 7d).
+    sim_counts_rows = (
+        db.query(
+            Simulation.project_id,
+            _sqlfunc.count(Simulation.id).label("sim_count"),
+        )
+        .filter(
+            Simulation.project_id.in_(owned_project_ids),
+            Simulation.created_at >= seven_days_ago,
+        )
+        .group_by(Simulation.project_id)
+        .all()
+    )
+    decision_counts_rows = (
+        db.query(
+            Decision.project_id,
+            _sqlfunc.count(Decision.id).label("decision_count"),
+        )
+        .filter(
+            Decision.project_id.in_(owned_project_ids),
+            Decision.created_at >= seven_days_ago,
+        )
+        .group_by(Decision.project_id)
+        .all()
+    )
+    outcome_counts_rows = (
+        db.query(
+            Outcome.project_id,
+            _sqlfunc.count(Outcome.id).label("outcome_count"),
+        )
+        .filter(
+            Outcome.project_id.in_(owned_project_ids),
+            Outcome.created_at >= seven_days_ago,
+        )
+        .group_by(Outcome.project_id)
+        .all()
+    )
+
+    sim_by_pid = {r.project_id: r.sim_count for r in sim_counts_rows}
+    dec_by_pid = {
+        r.project_id: r.decision_count
+        for r in decision_counts_rows
+    }
+    out_by_pid = {
+        r.project_id: r.outcome_count
+        for r in outcome_counts_rows
+    }
+
+    # Project titles.
+    project_rows = (
+        db.query(Project.id, Project.title)
+        .filter(Project.id.in_(owned_project_ids))
+        .all()
+    )
+    title_by_pid = {r.id: r.title for r in project_rows}
+
+    # 5-tuple per project: (id, title, sim, dec, out).
+    activity = [
+        (
+            pid,
+            title_by_pid.get(pid, ""),
+            sim_by_pid.get(pid, 0),
+            dec_by_pid.get(pid, 0),
+            out_by_pid.get(pid, 0),
+        )
+        for pid in owned_project_ids
+    ]
+    payload = build_most_active_project(project_activity=activity)
+    return MostActiveProjectOut(**payload)
