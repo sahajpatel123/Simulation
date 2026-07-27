@@ -126,6 +126,12 @@ _USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE: str = (
     "user-most-active-project"
 )
 
+# Quick stats - minimal one-liner for mobile widgets.
+# 60s TTL: 4 cheap COUNTs in the route, but the dashboard
+# sidebar refreshes often, so cache + bust.
+_USER_QUICK_STATS_CACHE_TTL_S: int = 60
+_USER_QUICK_STATS_CACHE_NAMESPACE: str = "user-quick-stats"
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -1059,8 +1065,17 @@ def get_weekly_digest(
     # ---- Calibration health for the rolling 7d window ----------
     calibration_health: dict | None = None
     if owned_project_ids:
+        # Select Simulation.id so we can dedupe by sim id (not
+        # by object identity on created_at — the previous
+        # ``id(r.created_at)`` key silently failed when two
+        # sims shared a created_at second or when SQLAlchemy
+        # reused the datetime instance across rows).
+        # ORDER BY Simulation.id ASC, Outcome.created_at DESC
+        # so the newest outcome per sim is the first row we
+        # encounter — the dedup below keeps that row.
         cal_rows = (
             db.query(
+                Simulation.id,
                 Simulation.created_at,
                 Outcome.predicted_conversion_rate,
                 Outcome.actual_conversion_rate,
@@ -1074,17 +1089,21 @@ def get_weekly_digest(
                 Simulation.status == "COMPLETED",
                 Simulation.created_at >= seven_days_ago,
             )
-            .order_by(Simulation.created_at.asc())
+            .order_by(
+                Simulation.id.asc(),
+                Outcome.created_at.desc(),
+            )
+            .limit(200)
             .all()
         )
-        # Dedupe per sim by id (rough coarse key).
+        # Dedupe per Simulation.id — first row per id wins
+        # (newest outcome per the ORDER BY above).
         seen: set[int] = set()
         deduped: list[tuple] = []
         for r in cal_rows:
-            sid = id(r.created_at)
-            if sid in seen:
+            if r.id in seen:
                 continue
-            seen.add(sid)
+            seen.add(r.id)
             deduped.append(
                 (
                     r.created_at,
@@ -1235,8 +1254,17 @@ def get_digest_snapshot(
     mae: float | None = None
     critical_signal_count = 0
     if owned_project_ids:
+        # Select Simulation.id so we can dedupe by sim id (not
+        # by object identity on created_at — the previous
+        # ``id(r.created_at)`` key silently failed when two
+        # sims shared a created_at second or when SQLAlchemy
+        # reused the datetime instance across rows).
+        # ORDER BY Simulation.id ASC, Outcome.created_at DESC
+        # so the newest outcome per sim is the first row we
+        # encounter — the dedup below keeps that row.
         health_rows = (
             db.query(
+                Simulation.id,
                 Simulation.created_at,
                 Outcome.predicted_conversion_rate,
                 Outcome.actual_conversion_rate,
@@ -1249,17 +1277,19 @@ def get_digest_snapshot(
                 Simulation.project_id.in_(owned_project_ids),
                 Simulation.status == "COMPLETED",
             )
-            .order_by(Simulation.created_at.desc())
-            .limit(50)
+            .order_by(
+                Simulation.id.asc(),
+                Outcome.created_at.desc(),
+            )
+            .limit(200)
             .all()
         )
         seen: set[int] = set()
         deduped: list[tuple] = []
         for r in health_rows:
-            sid = id(r.created_at)
-            if sid in seen:
+            if r.id in seen:
                 continue
-            seen.add(sid)
+            seen.add(r.id)
             deduped.append(
                 (r.created_at,
                  r.predicted_conversion_rate,
