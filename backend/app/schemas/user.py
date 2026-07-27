@@ -215,3 +215,29 @@ class ProjectsSummaryOut(BaseModel):
     narrative: str = ""
     key_signals: list[dict] = []
 
+
+class UsageByWeekOut(BaseModel):
+    """Response from ``GET /me/usage-by-week``.
+
+    Weekly volume history for the last 12 weeks so the
+    dashboard's 'usage over time' chart can render a
+    single payload.
+
+    * ``week_count`` - total weeks returned (capped at 12).
+    * ``weeks`` - capped list of
+      ``{week_start, sim_count, decision_count, outcome_count}``.
+    * ``sim_total`` / ``decision_total`` / ``outcome_total``
+      - portfolio rollups.
+    * ``narrative`` - one paragraph string the dashboard
+      renders as plain text.
+    * ``key_signals`` - ``{label, value, severity, display}``.
+    """
+
+    week_count: int = 0
+    sim_total: int = 0
+    decision_total: int = 0
+    outcome_total: int = 0
+    weeks: list[dict] = []
+    narrative: str = ""
+    key_signals: list[dict] = []
+

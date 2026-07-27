@@ -26,6 +26,7 @@ from app.schemas.user import (
     DigestSnapshotOut,
     NotificationsOut,
     ProjectsSummaryOut,
+    UsageByWeekOut,
     UserDashboardOut,
     WeeklyDigestOut,
 )
@@ -39,6 +40,7 @@ from app.simulation.intervention_digest import build_intervention_digest
 from app.simulation.notifications import build_notifications
 from app.simulation.premortem_digest import build_premortem_digest
 from app.simulation.projects_summary import build_projects_summary
+from app.simulation.usage_by_week import build_usage_by_week
 from app.simulation.user_dashboard import (
     build_user_dashboard,
 )
@@ -1565,3 +1567,136 @@ def get_projects_summary(
         ttl_seconds=_USER_PROJECTS_SUMMARY_CACHE_TTL_S,
     )
     return ProjectsSummaryOut(**payload)
+
+
+@router.get(
+    "/me/usage-by-week",
+    response_model=UsageByWeekOut,
+    summary=(
+        "Weekly volume history - per-week sim / decision / "
+        "outcome counts for the last 12 weeks so the "
+        "dashboard can render a usage-over-time chart"
+    ),
+    # Read-only; bounded by MAX_WEEKS.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_usage_by_week(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UsageByWeekOut:
+    """Weekly usage history.
+
+    Builds 12 week-buckets (oldest first) over the last 12
+    calendar weeks and counts sims / decisions / outcomes
+    per week. Output is suitable for a usage-over-time
+    bar chart on the dashboard.
+    """
+    from app.simulation.usage_by_week import (
+        MAX_WEEKS as _UBW_MAX,
+    )
+    from sqlalchemy import func as _sqlfunc
+
+    today = datetime.now(timezone.utc).date()
+    # Week starts: weeks 11, 10, ..., 0 (oldest first).
+    week_starts: list = []
+    for w in range(_UBW_MAX - 1, -1, -1):
+        ref = today - timedelta(days=today.weekday(), weeks=w)
+        week_starts.append(ref)
+
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+    if not owned_project_ids:
+        return UsageByWeekOut(
+            weeks=[
+                {
+                    "week_start": ws.isoformat(),
+                    "sim_count": 0,
+                    "decision_count": 0,
+                    "outcome_count": 0,
+                }
+                for ws in week_starts
+            ],
+        )
+
+    earliest = datetime.combine(
+        week_starts[0], datetime.min.time(),
+        tzinfo=timezone.utc,
+    )
+
+    # Per-week sim + outcome counts in a single batch via
+    # GROUP BY on the date_trunc('week', ...).
+    raw_sim_rows = (
+        db.query(
+            _sqlfunc.date_trunc(
+                "week", Simulation.created_at,
+            ).label("week_start"),
+            _sqlfunc.count(Simulation.id).label("sim_count"),
+        )
+        .filter(
+            Simulation.project_id.in_(owned_project_ids),
+            Simulation.created_at >= earliest,
+        )
+        .group_by("week_start")
+        .all()
+    )
+    raw_outcome_rows = (
+        db.query(
+            _sqlfunc.date_trunc(
+                "week", Outcome.created_at,
+            ).label("week_start"),
+            _sqlfunc.count(Outcome.id).label("outcome_count"),
+        )
+        .filter(
+            Outcome.project_id.in_(owned_project_ids),
+            Outcome.created_at >= earliest,
+        )
+        .group_by("week_start")
+        .all()
+    )
+    raw_decision_rows = (
+        db.query(
+            _sqlfunc.date_trunc(
+                "week", Decision.created_at,
+            ).label("week_start"),
+            _sqlfunc.count(Decision.id).label("decision_count"),
+        )
+        .filter(
+            Decision.project_id.in_(owned_project_ids),
+            Decision.created_at >= earliest,
+        )
+        .group_by("week_start")
+        .all()
+    )
+
+    sim_by_week = {
+        r.week_start.date().isoformat(): r.sim_count
+        for r in raw_sim_rows
+    }
+    decision_by_week = {
+        r.week_start.date().isoformat(): r.decision_count
+        for r in raw_decision_rows
+    }
+    outcome_by_week = {
+        r.week_start.date().isoformat(): r.outcome_count
+        for r in raw_outcome_rows
+    }
+
+    week_buckets = [
+        {
+            "week_start": ws.isoformat(),
+            "sim_count": sim_by_week.get(ws.isoformat(), 0),
+            "decision_count": (
+                decision_by_week.get(ws.isoformat(), 0)
+            ),
+            "outcome_count": outcome_by_week.get(
+                ws.isoformat(), 0,
+            ),
+        }
+        for ws in week_starts
+    ]
+    payload = build_usage_by_week(week_buckets)
+    return UsageByWeekOut(**payload)
