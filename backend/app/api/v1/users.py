@@ -171,6 +171,14 @@ _USER_RUNS_THIS_MONTH_CACHE_NAMESPACE: str = (
     "user-runs-this-month"
 )
 
+# Decision velocity - "how fast do you decide?" tile.
+# 60s TTL: 2 cheap queries in the route, but the
+# dashboard speed widget refreshes often.
+_USER_DECISION_VELOCITY_CACHE_TTL_S: int = 60
+_USER_DECISION_VELOCITY_CACHE_NAMESPACE: str = (
+    "user-decision-velocity"
+)
+
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
 
@@ -2576,6 +2584,15 @@ def get_decision_velocity(
     if not owned_project_ids:
         return DecisionVelocityOut()
 
+    # Cache hit - short-circuit the 2 queries.
+    cached = cache_get_json(
+        namespace=_USER_DECISION_VELOCITY_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return DecisionVelocityOut(**cached)
+
     # Latest completed sim per project.
     sim_rows = (
         db.query(
@@ -2617,4 +2634,11 @@ def get_decision_velocity(
             pairs.append((sim_dt, dec_dt))
 
     payload = build_decision_velocity(sim_decision_pairs=pairs)
+    cache_set_json(
+        namespace=_USER_DECISION_VELOCITY_CACHE_NAMESPACE,
+        params={"user_id": current_user.id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_USER_DECISION_VELOCITY_CACHE_TTL_S,
+    )
     return DecisionVelocityOut(**payload)
