@@ -76,6 +76,7 @@ from app.schemas.project import (
     ProjectOut,
     ProjectPatch,
     ProjectSearchListResponse,
+    RecommendationsDigestOut,
     ProjectTagBulkDeleteOut,
     ProjectTagRenameIn,
     ProjectTagRenameOut,
@@ -130,6 +131,9 @@ from app.simulation.intervention_digest import (
 from app.simulation.next_best_action import build_next_best_action
 from app.simulation.premortem_digest import build_premortem_digest
 from app.simulation.project_health import build_project_health
+from app.simulation.recommendations_digest import (
+    build_recommendations_digest,
+)
 from app.tasks.simulation_tasks import run_full_simulation
 from app.tasks.stress_test_tasks import run_assumption_stress_test
 
@@ -181,6 +185,14 @@ _PROJECT_HEALTH_CACHE_NAMESPACE: str = "project-health"
 # regenerated.
 _PREMORTEM_DIGEST_CACHE_TTL_S: int = 300
 _PREMORTEM_DIGEST_CACHE_NAMESPACE: str = "project-premortem-digest"
+
+# Recommendations digest - composed from premortem +
+# intervention digests. 5-min TTL (both source digests
+# are cached similarly).
+_RECOMMENDATIONS_DIGEST_CACHE_TTL_S: int = 300
+_RECOMMENDATIONS_DIGEST_CACHE_NAMESPACE: str = (
+    "project-recommendations-digest"
+)
 
 _SOFTWARE_PRODUCT_TYPES: frozenset[ProductType] = frozenset(
     {
@@ -3669,3 +3681,59 @@ def get_premortem_digest(
         ttl_seconds=_PREMORTEM_DIGEST_CACHE_TTL_S,
     )
     return PremortemDigestOut(**payload)
+
+
+@router.get(
+    "/{project_id}/recommendations-digest",
+    response_model=RecommendationsDigestOut,
+    summary=(
+        "Per-project recommendations digest - composed "
+        "from premortem top failure modes + intervention "
+        "top recommendations into a single ranked payload"
+    ),
+    # Read-only composition; bounded.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_recommendations_digest(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RecommendationsDigestOut:
+    """Per-project recommendations digest.
+
+    Composes the premortem top failure modes and the
+    intervention top recommendations into one ranked,
+    capped payload so the dashboard's recommendations
+    tile can render one paragraph + key signals.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+
+    # Cache hit - short-circuit both source digests.
+    cached = cache_get_json(
+        namespace=_RECOMMENDATIONS_DIGEST_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return RecommendationsDigestOut(**cached)
+
+    premortem_payload = build_premortem_digest(
+        premortem_data=getattr(project, "premortem_json", None),
+    )
+    intervention_payload = build_intervention_digest(
+        interventions_data=getattr(
+            project, "interventions_json", None,
+        ),
+    )
+    payload = build_recommendations_digest(
+        premortem_digest=premortem_payload,
+        intervention_digest=intervention_payload,
+    )
+    cache_set_json(
+        namespace=_RECOMMENDATIONS_DIGEST_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_RECOMMENDATIONS_DIGEST_CACHE_TTL_S,
+    )
+    return RecommendationsDigestOut(**payload)

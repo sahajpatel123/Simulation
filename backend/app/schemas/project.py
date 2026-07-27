@@ -397,3 +397,33 @@ class PremortemDigestOut(BaseModel):
     top_failure_modes: list[dict] = []
     narrative: str = ""
     key_signals: list[dict] = []
+
+
+class RecommendationsDigestOut(BaseModel):
+    """Response from ``GET /projects/{id}/recommendations-digest``.
+
+    Per-project composition of premortem + intervention
+    recommendations so the dashboard's "what does TheCee
+    recommend?" tile renders one payload without fanning
+    out to /premortem-digest and /intervention-digest.
+
+    * ``recommendation_count`` — total top recommendations
+      (capped at 8 by MAX_TOP).
+    * ``critical_failure_count`` — CRITICAL items in the
+      premortem top list.
+    * ``quick_win_count`` — LOW-difficulty + priority
+      score > 0.70 items in the intervention top list.
+    * ``top_recommendations`` — capped list sorted by
+      ``max(impact_score, priority_score)`` DESC.
+    * ``narrative`` — one paragraph string the dashboard
+      renders as plain text.
+    * ``key_signals`` — ``{label, value, severity,
+      display}`` dicts for the dashboard tiles.
+    """
+
+    recommendation_count: int = 0
+    critical_failure_count: int = 0
+    quick_win_count: int = 0
+    top_recommendations: list[dict] = []
+    narrative: str = ""
+    key_signals: list[dict] = []
