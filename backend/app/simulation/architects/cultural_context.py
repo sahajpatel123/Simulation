@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from app.simulation.architects.base import ArchitectOutput, BaseArchitect, DomainReport
 from app.simulation.clusters.definitions import ClusterDefinition
+from app.simulation.clusters.registry import ClusterRegistry
 
 
 # Keyword groups detected from assumption text. These are the cultural
@@ -54,6 +55,18 @@ def _is_tier2(geo: str) -> bool:
     return g == "tier2" or g.startswith("tier2_")
 
 
+def _env_geo_tier(geo: str) -> str:
+    """Normalise env geography to 'metro' | 'tier2' | 'tier3' | 'all'."""
+    g = (geo or "").lower()
+    if "tier3" in g or "rural" in g:
+        return "tier3"
+    if "tier2" in g:
+        return "tier2"
+    if "metro" in g or "tier1" in g:
+        return "metro"
+    return "all"
+
+
 class CulturalContextArchitect(BaseArchitect):
     """
     Evaluates how well a product fits the cultural context of a cluster.
@@ -84,6 +97,18 @@ class CulturalContextArchitect(BaseArchitect):
         geo = cluster.demographic_profile.get("geography", "metro")
         tier3 = _is_tier3(geo)
         tier2 = _is_tier2(geo)
+
+        # Product-target geography vs. cluster geography: if the cluster is
+        # not in the product's target market, cultural fit is materially lower.
+        env_geo = _env_geo_tier(str(env_params.get("geography", "")))
+        cluster_geo_token = "tier3" if tier3 else "tier2" if tier2 else "metro"
+        if env_geo == "all":
+            geo_target_alignment = 0.78
+        elif env_geo == cluster_geo_token:
+            geo_target_alignment = 0.95
+        else:
+            geo_target_alignment = 0.35
+        geo_target_alignment = round(max(0.05, min(0.99, geo_target_alignment)), 4)
 
         cid = cluster.cluster_id or ""
         family_oriented = any(
@@ -130,10 +155,11 @@ class CulturalContextArchitect(BaseArchitect):
         # ── 4. Cultural alignment (composite) ───────────────────────────
         cultural_alignment = max(
             0.05, min(0.99,
-                0.45 * local_brand_trust
-                + 0.25 * language_score
-                + 0.20 * (1.0 - max(0.0, 0.6 - social))
-                + 0.10 * (0.8 if has_lang_support else 0.5)
+                (0.45 * local_brand_trust
+                 + 0.25 * language_score
+                 + 0.20 * (1.0 - max(0.0, 0.6 - social))
+                 + 0.10 * (0.8 if has_lang_support else 0.5))
+                * (0.65 + 0.35 * geo_target_alignment)
             ),
         )
         cultural_alignment = round(cultural_alignment, 4)
@@ -166,6 +192,7 @@ class CulturalContextArchitect(BaseArchitect):
             * max(0.50, cultural_alignment)
             * max(0.60, 1.0 - 0.25 * religious_risk)
             * (1.10 if has_festival else 1.0)
+            * (0.75 + 0.30 * geo_target_alignment)
         )
         overall = round(max(0.10, min(1.80, overall)), 4)
 
@@ -176,6 +203,7 @@ class CulturalContextArchitect(BaseArchitect):
             "seasonal_relevance_score":     seasonal_score,
             "local_brand_trust":            local_brand_trust,
             "religious_sensitivity_risk":   religious_risk,
+            "geo_target_alignment":         geo_target_alignment,
             "overall_cultural_correction":  overall,
         }
 
@@ -248,36 +276,76 @@ class CulturalContextArchitect(BaseArchitect):
                 severity="INFO",
             )
 
+        registry = ClusterRegistry()
+        total_weight = (
+            sum(c.population_weight for c in registry.all_clusters()) or 1.0
+        )
+
         lang_gap    = [o for o in outputs if o.flags.get("language_barrier_detected")]
         family_gate = [o for o in outputs if o.flags.get("family_gatekeeper_risk")]
         religious   = [o for o in outputs if o.flags.get("religious_sensitivity_concern")]
         misaligned  = [o for o in outputs if o.flags.get("cultural_misalignment")]
+        seasonal    = [o for o in outputs if o.flags.get("festival_timing_mismatch")]
 
         affected = list({
-            o.cluster_id for o in lang_gap + family_gate + religious + misaligned
+            o.cluster_id
+            for o in lang_gap + family_gate + religious + misaligned + seasonal
         })
+
+        affected_weight = 0.0
+        for cid in affected:
+            c = registry.get_cluster(cid)
+            if c:
+                affected_weight += c.population_weight
+        population_fraction = round(affected_weight / total_weight, 4)
 
         primary = (
             f"{len(lang_gap)} clusters face language barrier; "
             f"{len(family_gate)} have family gatekeeper risk; "
-            f"{len(religious)} have religious sensitivity concerns"
+            f"{len(religious)} have religious sensitivity concerns; "
+            f"{len(seasonal)} have festival-timing mismatch"
         )
+
+        # Branch the recommendation on the dominant issue bucket so the
+        # DomainReport surfaces a concrete next action instead of a generic
+        # summary. Stable tiebreak order: language > family > religious >
+        # seasonal (sorted by count desc; equal counts preserve listed order).
+        issue_buckets: list[tuple[int, str, str]] = [
+            (len(lang_gap), "language",
+             "Add Hindi and regional language UI; consider voice-first "
+             "onboarding for tier-2/3 clusters with low literacy"),
+            (len(family_gate), "family",
+             "Design for family/collective purchase decisions; expect longer "
+             "decision cycles and consider household-sharing features"),
+            (len(religious), "religious",
+             "Validate product against vegetarian, halal, and Jain "
+             "requirements; review imagery and copy for cultural/religious "
+             "sensitivity"),
+            (len(seasonal), "seasonal",
+             "Align launch with Diwali, wedding, or harvest seasons; run "
+             "festival-themed seasonal campaigns"),
+        ]
+        issue_buckets.sort(key=lambda b: b[0], reverse=True)
+        if issue_buckets[0][0] > 0:
+            recommended_action = issue_buckets[0][2]
+        else:
+            recommended_action = (
+                "No dominant cultural blockers detected; maintain current "
+                "cultural-fit strategy"
+            )
 
         return DomainReport(
             architect_name=self.name,
             primary_finding=primary,
             affected_cluster_ids=affected,
-            population_fraction=round(len(affected) * 0.04, 3),
+            population_fraction=population_fraction,
             conversion_impact=round(
                 len(lang_gap) * 0.04
                 + len(family_gate) * 0.03
-                + len(religious) * 0.05,
-                3,
+                + len(religious) * 0.05
+                + len(seasonal) * 0.02,
+                4,
             ),
-            recommended_action=(
-                "Add regional language UI, design for family/collective "
-                "decision-making, and validate cultural/religious sensitivities "
-                "before launch"
-            ),
+            recommended_action=recommended_action,
             severity="WARNING" if (lang_gap or family_gate or religious) else "INFO",
         )
