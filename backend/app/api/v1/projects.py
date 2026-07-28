@@ -111,7 +111,10 @@ from app.simulation.simulation_trend import (
     build_simulation_trend as _build_simulation_trend,
 )
 from app.api.v1.common import get_owned_project
-from app.api.v1.users import _USER_TAG_TAXONOMY_CACHE_NAMESPACE
+from app.api.v1.users import (
+    _USER_INSIGHTS_CACHE_NAMESPACE,
+    _USER_TAG_TAXONOMY_CACHE_NAMESPACE,
+)
 from app.core.utils import extract_json_from_markdown
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.competitive_software import CompetitiveSoftwareAnalyser
@@ -961,6 +964,13 @@ def archive_project(
     db.add(project)
     db.commit()
     db.refresh(project)
+    # /me/insights (executive summary) reflects the user's
+    # active project count + status mix. Archive flips
+    # the project's is_archived → active count drops.
+    cache_invalidate(
+        namespace=_USER_INSIGHTS_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
     return ProjectOut.model_validate(project)
 
 
@@ -981,6 +991,13 @@ def unarchive_project(
     db.add(project)
     db.commit()
     db.refresh(project)
+    # /me/insights reflects active project count + status.
+    # Unarchive flips the project's is_archived → active
+    # count goes up.
+    cache_invalidate(
+        namespace=_USER_INSIGHTS_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
     return ProjectOut.model_validate(project)
 
 
@@ -1125,6 +1142,13 @@ def duplicate_project(
         new_project.id,
         current_user.id,
         simulations_copied,
+    )
+    # /me/insights reflects active project count + recent
+    # activity. duplicate_project just added a new project,
+    # so the cached summary would otherwise be stale.
+    cache_invalidate(
+        namespace=_USER_INSIGHTS_CACHE_NAMESPACE,
+        user_id=current_user.id,
     )
     return ProjectDuplicateOut(
         project=ProjectOut.model_validate(new_project),
