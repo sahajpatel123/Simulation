@@ -30,6 +30,7 @@ from app.api.v1.users import (
     _USER_RECENT_DECISIONS_CACHE_NAMESPACE,
     _USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
     _USER_PROJECTS_SUMMARY_CACHE_NAMESPACE,
+    _USER_RUNS_PER_WEEK_CACHE_NAMESPACE,
     _USER_QUICK_STATS_CACHE_NAMESPACE,
     _USER_USAGE_BY_WEEK_CACHE_NAMESPACE,
     _USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
@@ -166,6 +167,10 @@ def create_decision_comparison(
         user_id=current_user.id,
     )
     cache_invalidate(
+        namespace=_USER_RUNS_PER_WEEK_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
         namespace=_ACTIVITY_FEED_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
@@ -247,6 +252,10 @@ def create_decision_comparison(
     )
     cache_invalidate(
         namespace=_USER_DECISION_VELOCITY_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_USER_RUNS_PER_WEEK_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
