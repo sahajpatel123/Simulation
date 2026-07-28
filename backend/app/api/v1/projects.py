@@ -911,14 +911,15 @@ def patch_project(
             logger.warning("precis refresh on dossier rename failed: %s", exc)
         project.precis_title_fingerprint = _title_fingerprint(project.title)
 
-        # /me/dashboard, /me/projects-by-status,
-        # /me/projects-needing-attention, /me/most-active-project,
-        # /me/last-touched-project, /me/portfolio-health-snapshot
-        # all show the project title. A title change
-        # leaves them stale for up to each tile's TTL.
-        # duplicate_project, archive_project, unarchive_project
-        # have their own unconditional invalidations (this
-        # block is title-change-specific).
+    # /me/dashboard, /me/projects-by-status,
+    # /me/projects-needing-attention, /me/most-active-project,
+    # /me/last-touched-project, /me/portfolio-health-snapshot
+    # all reflect either the project title (on title change)
+    # or the per-project health score (on description change,
+    # because the per-project health endpoint reads the
+    # current description). Either field change leaves them
+    # stale for up to each tile's TTL.
+    if title_changed or payload.description is not None:
         from app.api.v1.users import (
             _USER_DASHBOARD_CACHE_NAMESPACE,
             _USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
