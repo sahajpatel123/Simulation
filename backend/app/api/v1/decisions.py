@@ -158,6 +158,13 @@ def create_decision_comparison(
         namespace=_USER_RECENT_DECISIONS_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
+    # /me/decision-velocity is the avg gap from sim
+    # completion to first decision per project. A new
+    # decision mutates that stat. Same staleness risk.
+    cache_invalidate(
+        namespace=_USER_DECISION_VELOCITY_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
     cache_invalidate(
         namespace=_ACTIVITY_FEED_CACHE_NAMESPACE,
         user_id=current_user.id,
