@@ -911,6 +911,32 @@ def patch_project(
             logger.warning("precis refresh on dossier rename failed: %s", exc)
         project.precis_title_fingerprint = _title_fingerprint(project.title)
 
+        # /me/dashboard, /me/projects-by-status,
+        # /me/projects-needing-attention, /me/most-active-project,
+        # /me/last-touched-project, /me/portfolio-health-snapshot
+        # all show the project title. A title change
+        # leaves them stale for up to each tile's TTL.
+        # duplicate_project, archive_project, unarchive_project
+        # have their own unconditional invalidations (this
+        # block is title-change-specific).
+        from app.api.v1.users import (
+            _USER_DASHBOARD_CACHE_NAMESPACE,
+            _USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
+            _USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
+            _USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
+            _USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
+            _USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
+        )
+        for _ns in (
+            _USER_DASHBOARD_CACHE_NAMESPACE,
+            _USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
+            _USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
+            _USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
+            _USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
+            _USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
+        ):
+            cache_invalidate(namespace=_ns, user_id=current_user.id)
+
     db.add(project)
     db.commit()
     db.refresh(project)
