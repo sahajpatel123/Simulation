@@ -111,6 +111,7 @@ from app.simulation.simulation_trend import (
     build_simulation_trend as _build_simulation_trend,
 )
 from app.api.v1.common import get_owned_project
+from app.api.v1.users import _USER_TAG_TAXONOMY_CACHE_NAMESPACE
 from app.core.utils import extract_json_from_markdown
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.competitive_software import CompetitiveSoftwareAnalyser
@@ -690,6 +691,12 @@ def put_project_tags(
     db.add(project)
     db.commit()
     db.refresh(project)
+    # /me/tag-taxonomy buckets by tag name + project count.
+    # The set of tags + per-tag counts just changed.
+    cache_invalidate(
+        namespace=_USER_TAG_TAXONOMY_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
     return ProjectTagsOut(id=project.id, tags=list(project.tags or []))
 
 
@@ -721,6 +728,13 @@ def delete_project_tag(
         db.add(project)
         db.commit()
         db.refresh(project)
+        # /me/tag-taxonomy buckets by tag name + project
+        # count. The set of tags + per-tag counts just
+        # changed (target tag no longer on this project).
+        cache_invalidate(
+            namespace=_USER_TAG_TAXONOMY_CACHE_NAMESPACE,
+            user_id=current_user.id,
+        )
     return ProjectTagsOut(id=project.id, tags=list(project.tags or []))
 
 
