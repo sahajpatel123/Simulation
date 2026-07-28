@@ -234,3 +234,111 @@ def test_generate_report_aggregates_across_real_clusters():
     # The tier3 cluster should appear in the affected list when flagged
     if outputs[1].flags["language_barrier_detected"]:
         assert "tier3_first_time_app_user" in rep.affected_cluster_ids
+
+
+# ── Polish iteration: env geography integration ─────────────────────
+
+
+def test_geo_target_alignment_metric_present():
+    arch = CulturalContextArchitect()
+    cluster = _get_cluster("metro_power_professional")
+    out = arch.compute(
+        cluster=cluster, agent_profile={}, assumptions=[], env_params={},
+    )
+    assert "geo_target_alignment" in out.metrics
+    assert 0.0 <= out.metrics["geo_target_alignment"] <= 1.0
+
+
+def test_env_geo_mismatch_reduces_cultural_alignment():
+    arch = CulturalContextArchitect()
+    cluster = _get_cluster("metro_power_professional")
+    base = arch.compute(
+        cluster=cluster, agent_profile={}, assumptions=[], env_params={},
+    )
+    mismatch = arch.compute(
+        cluster=cluster,
+        agent_profile={},
+        assumptions=[],
+        env_params={"geography": "TIER3_RURAL"},
+    )
+    assert (
+        mismatch.metrics["cultural_alignment_score"]
+        < base.metrics["cultural_alignment_score"]
+    )
+    assert (
+        mismatch.metrics["geo_target_alignment"]
+        < base.metrics["geo_target_alignment"]
+    )
+
+
+def test_env_geo_match_preserves_alignment():
+    arch = CulturalContextArchitect()
+    cluster = _get_cluster("metro_power_professional")
+    base = arch.compute(
+        cluster=cluster, agent_profile={}, assumptions=[], env_params={},
+    )
+    match = arch.compute(
+        cluster=cluster,
+        agent_profile={},
+        assumptions=[],
+        env_params={"geography": "METRO"},
+    )
+    assert (
+        match.metrics["cultural_alignment_score"]
+        > base.metrics["cultural_alignment_score"]
+    )
+    assert (
+        match.metrics["geo_target_alignment"]
+        > base.metrics["geo_target_alignment"]
+    )
+
+
+# ── Polish iteration: registry-weighted reporting ───────────────────
+
+
+def test_generate_report_uses_real_population_weights():
+    arch = CulturalContextArchitect()
+    cluster = _get_cluster("tier3_first_time_app_user")
+    outputs = [arch.compute(
+        cluster=cluster,
+        agent_profile={},
+        assumptions=[{"text": "Hindi regional language support"}],
+        env_params={},
+    )]
+    rep = arch.generate_report(outputs)
+    registry = ClusterRegistry()
+    total_weight = sum(c.population_weight for c in registry.all_clusters())
+    expected = round(cluster.population_weight / total_weight, 4)
+    assert rep.population_fraction == expected
+    # Must not silently fall back to the old flat 0.04-per-cluster heuristic
+    assert rep.population_fraction != 0.04
+
+
+def test_generate_report_recommendation_branches_on_language_barrier():
+    arch = CulturalContextArchitect()
+    cluster = _get_cluster("tier3_first_time_app_user")
+    outputs = [arch.compute(
+        cluster=cluster,
+        agent_profile={},
+        assumptions=[],
+        env_params={},
+    )]
+    rep = arch.generate_report(outputs)
+    rec = rep.recommended_action.lower()
+    assert "hindi" in rec or "regional language" in rec
+
+
+def test_generate_report_recommendation_branches_on_religious_sensitivity():
+    arch = CulturalContextArchitect()
+    cluster = _get_cluster("metro_power_professional")
+    outputs = [arch.compute(
+        cluster=cluster,
+        agent_profile={},
+        assumptions=[
+            {"text": "Halal certified vegetarian Hindu-aligned product"}
+        ],
+        env_params={},
+    )]
+    rep = arch.generate_report(outputs)
+    rec = rep.recommended_action.lower()
+    assert "vegetarian" in rec or "halal" in rec
