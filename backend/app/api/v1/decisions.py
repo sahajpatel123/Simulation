@@ -26,6 +26,9 @@ from app.api.v1.users import (
     _USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
     _USER_NOTIFICATIONS_CACHE_NAMESPACE,
     _USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
+    _USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
+    _USER_RECENT_DECISIONS_CACHE_NAMESPACE,
+    _USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
     _USER_PROJECTS_SUMMARY_CACHE_NAMESPACE,
     _USER_QUICK_STATS_CACHE_NAMESPACE,
     _USER_USAGE_BY_WEEK_CACHE_NAMESPACE,
@@ -145,6 +148,14 @@ def create_decision_comparison(
     )
     cache_invalidate(
         namespace=_NEXT_ACTION_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    # /me/recent-decisions is the user's most-recent
+    # decisions list — a new decision mutates it. Bust
+    # so the next GET sees the new row instead of waiting
+    # out the TTL.
+    cache_invalidate(
+        namespace=_USER_RECENT_DECISIONS_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
