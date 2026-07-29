@@ -643,3 +643,28 @@ class ProjectsNeedingAttentionOut(BaseModel):
     projects: list[dict] = []
     narrative: str = ""
     key_signals: list[dict] = []
+
+
+class AccountHealthOut(BaseModel):
+    """Response from ``GET /me/account-health``."""
+
+    health_score: int = 0
+    verdict: str = "NEEDS_ATTENTION"
+    score_breakdown: dict[str, int] = {}
+    narrative: str = ""
+    key_signals: list[dict] = []
+
+
+class CoverageGapsOut(BaseModel):
+    """Response from ``GET /me/coverage-gaps``."""
+
+    covered_categories: list[str] = []
+    missing_categories: list[str] = []
+    sensitivity_breakdown: dict[str, int] = {}
+    covered_cluster_count: int = 0
+    missing_architect_count: int = 0
+    total_assumption_count: int = 0
+    narrative: str = ""
+    key_signals: list[dict] = []
+
+

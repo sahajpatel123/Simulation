@@ -22,6 +22,14 @@ from app.models.simulation import Simulation
 from app.models.user import User
 from app.schemas.audit_log import AuditLogListOut, AuditLogOut
 from app.schemas.auth import MessageResponse
+from app.schemas.project import (
+    MostActiveWeekdayOut,
+    OldestOpenItemOut,
+    RecentDecisionsOut,
+    RecentOutcomesOut,
+    RunsPerWeekOut,
+    SimFailureRateOut,
+)
 from app.schemas.user import (
     AccountHealthOut,
     CoverageGapsOut,

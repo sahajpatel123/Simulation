@@ -15,3 +15,10 @@ class ProductType(str, Enum):
     IOT_HARDWARE        = "iot_hardware"
     WEARABLE            = "wearable"
     B2B_HARDWARE        = "b2b_hardware"
+    # Product types referenced by cluster product_affinities that were
+    # missing from the enum — adding them so clusters route correctly.
+    CONSUMER_APP        = "consumer_app"
+    DIRECT_TO_CONSUMER  = "d2c"
+    B2B_MARKETPLACE     = "b2b_marketplace"
+    PRODUCTIVITY_TOOL   = "productivity_tool"
+    SMART_HOME          = "smart_home"

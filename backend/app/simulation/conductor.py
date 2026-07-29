@@ -61,6 +61,25 @@ PRODUCT_TYPE_KEYWORDS: dict[ProductType, list[str]] = {
         "b2b hardware", "b2b", "enterprise hardware", "pos device", "pos ", "kiosk",
         "ruggedized", "rugged", "fleet device", "retail fleet",
     ],
+    ProductType.CONSUMER_APP: [
+        "consumer app", "mobile app", "consumer application", "app",
+    ],
+    ProductType.DIRECT_TO_CONSUMER: [
+        "d2c", "direct to consumer", "direct-to-consumer", "d2c brand",
+        "direct sales", "own brand",
+    ],
+    ProductType.B2B_MARKETPLACE: [
+        "b2b marketplace", "business marketplace", "b2b platform",
+        "procurement platform", "supply chain marketplace",
+    ],
+    ProductType.PRODUCTIVITY_TOOL: [
+        "productivity tool", "productivity", "productivity software",
+        "time-saving", "efficiency tool", "workflow",
+    ],
+    ProductType.SMART_HOME: [
+        "smart home", "smart-home", "home automation", "connected home",
+        "smart device", "iot hub",
+    ],
 }
 
 _HARDWARE_PRIORITY: tuple[ProductType, ...] = (

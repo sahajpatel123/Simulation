@@ -723,3 +723,19 @@ class RecentDecisionsOut(BaseModel):
     decision_count: int = 0
     narrative: str = ""
     key_signals: list[dict] = []
+
+
+class InterventionDigestOut(BaseModel):
+    """Response from ``GET /projects/{id}/intervention-digest``."""
+
+    intervention_count: int = 0
+    difficulty_breakdown: dict[str, int] = {}
+    priority_breakdown: dict[str, int] = {}
+    category_breakdown: dict[str, int] = {}
+    quick_win_count: int = 0
+    top_interventions: list[dict] = []
+    generated_at: str | None = None
+    stale: bool = False
+    narrative: str = ""
+    key_signals: list[dict] = []
+

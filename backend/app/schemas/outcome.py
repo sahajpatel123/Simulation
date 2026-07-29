@@ -161,4 +161,8 @@ class OutcomesDigestOut(BaseModel):
     key_signals: list[dict] = []
 
 
+OutcomeDigestOut = OutcomesDigestOut
+
+
+
 
