@@ -75,6 +75,7 @@ from app.schemas.simulation import (
     PortfolioTrendOut,
     ProjectPortfolioRollupOut,
     SimDiffOut,
+    SimulationAnomaliesOut,
     SimulationBatchStatusOut,
     SimulationCreate,
     SimulationResultOut,
@@ -95,6 +96,7 @@ from app.schemas.cohort_retention import CohortRetentionOut
 from app.schemas.sensitivity import SensitivityOut
 from app.schemas.what_if import WhatIfOut, WhatIfRequest
 from app.simulation.agent_hierarchy import AgentHierarchyRouter
+from app.simulation.anomaly_detector import detect_simulation_anomalies
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.cluster_opportunity import build_cluster_opportunity_matrix
 from app.simulation.cluster_drill_down import (
@@ -3994,3 +3996,75 @@ def get_agent_routing_registry(
         cost_summary=cost_summary,
         clusters=clusters_out,
     )
+
+
+_SIMULATION_ANOMALIES_CACHE_NAMESPACE = "simulation_anomalies"
+_SIMULATION_ANOMALIES_CACHE_TTL_S = 60
+
+
+@router.get(
+    "/{simulation_id}/anomalies",
+    response_model=SimulationAnomaliesOut,
+    summary="Statistical anomalies and stage drop-off spikes for a simulation",
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_simulation_anomalies(
+    simulation_id: int,
+    outlier_z_threshold: float = Query(
+        2.0, ge=1.0, le=5.0, description="Z-score threshold for cluster outliers"
+    ),
+    dropoff_spike_threshold: float = Query(
+        0.75, ge=0.1, le=1.0, description="Stage drop-off rate cutoff"
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SimulationAnomaliesOut:
+    """Detect statistical anomalies, funnel stage drop-off spikes, and cluster outliers.
+
+    Analyzes a completed simulation's conversion funnel and cluster breakdown
+    to flag bottlenecks, severe drop-offs, and unexpected metric deviations.
+    """
+    sim = (
+        db.query(Simulation)
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(
+            Simulation.id == simulation_id,
+            Project.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not sim:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Simulation not found",
+        )
+
+    cache_params = {
+        "simulation_id": simulation_id,
+        "outlier_z_threshold": outlier_z_threshold,
+        "dropoff_spike_threshold": dropoff_spike_threshold,
+    }
+    cached = cache_get_json(
+        namespace=_SIMULATION_ANOMALIES_CACHE_NAMESPACE,
+        params=cache_params,
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return SimulationAnomaliesOut(**cached)
+
+    results_json = sim.results_json or {}
+    payload = detect_simulation_anomalies(
+        results_json=results_json,
+        outlier_z_threshold=outlier_z_threshold,
+        dropoff_spike_threshold=dropoff_spike_threshold,
+    )
+
+    cache_set_json(
+        namespace=_SIMULATION_ANOMALIES_CACHE_NAMESPACE,
+        params=cache_params,
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_SIMULATION_ANOMALIES_CACHE_TTL_S,
+    )
+    return SimulationAnomaliesOut(**payload)
+

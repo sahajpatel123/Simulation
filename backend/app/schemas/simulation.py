@@ -927,3 +927,17 @@ class SimulationResultOut(BaseModel):
     user_blindspots: list[dict[str, Any]] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
+
+
+class SimulationAnomaliesOut(BaseModel):
+    """Response from ``GET /simulations/{simulation_id}/anomalies``."""
+
+    anomaly_score: float = 0.0
+    status: str = "NORMAL"
+    anomalies_count: int = 0
+    anomalies: list[dict] = []
+    stage_spikes: list[dict] = []
+    cluster_outliers: list[dict] = []
+    narrative: str = ""
+    key_signals: list[dict] = []
+
