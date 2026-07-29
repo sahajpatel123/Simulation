@@ -739,3 +739,16 @@ class InterventionDigestOut(BaseModel):
     narrative: str = ""
     key_signals: list[dict] = []
 
+
+class ClusterCohortDriftOut(BaseModel):
+    """Response from ``GET /projects/{id}/cohort-drift``."""
+
+    clusters_analyzed: int = 0
+    overall_drift_score: float = 0.0
+    stability_classification: str = "STABLE"
+    drift_by_cluster: dict[str, dict] = {}
+    top_drifting_clusters: list[dict] = []
+    narrative: str = ""
+    key_signals: list[dict] = []
+
+

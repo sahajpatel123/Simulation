@@ -61,6 +61,7 @@ from app.schemas.project import (
     AdoptionMilestonesOut,
     BriefAssistRequest,
     BriefSave,
+    ClusterCohortDriftOut,
     ConvergenceCheckOut,
     InterventionDigestOut,
     LatestSnapshotOut,
@@ -135,6 +136,9 @@ from app.simulation.adoption_milestones import (
 from app.simulation.assumption_digest import build_assumption_digest
 from app.simulation.confidence_explainer import (
     build_confidence_explainer,
+)
+from app.simulation.cluster_cohort_drift import (
+    compute_cluster_cohort_drift,
 )
 from app.simulation.convergence_check import build_convergence_check
 from app.simulation.intervention_digest import (
@@ -4709,3 +4713,92 @@ def _safe_float(value):
     if isinstance(value, (int, float)):
         return float(value)
     return None
+
+
+_COHORT_DRIFT_CACHE_NAMESPACE = "project_cohort_drift"
+_COHORT_DRIFT_CACHE_TTL_S = 60
+
+
+@router.get(
+    "/{project_id}/cohort-drift",
+    response_model=ClusterCohortDriftOut,
+    summary="Consumer cohort conversion drift across simulation runs",
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_cluster_cohort_drift(
+    project_id: int,
+    baseline_sim_id: int | None = Query(
+        None, description="Optional baseline simulation ID"
+    ),
+    latest_sim_id: int | None = Query(
+        None, description="Optional comparison simulation ID"
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ClusterCohortDriftOut:
+    """Analyze consumer cluster conversion drift for a project.
+
+    Compares conversion rates across consumer archetypes between two
+    simulation runs (defaults to oldest vs newest completed simulation).
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+
+    cache_params = {
+        "project_id": project_id,
+        "baseline_sim_id": baseline_sim_id,
+        "latest_sim_id": latest_sim_id,
+    }
+    cached = cache_get_json(
+        namespace=_COHORT_DRIFT_CACHE_NAMESPACE,
+        params=cache_params,
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return ClusterCohortDriftOut(**cached)
+
+    completed_sims = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.id.asc())
+        .all()
+    )
+
+    baseline_json = {}
+    latest_json = {}
+
+    if completed_sims:
+        sim_map = {s.id: s for s in completed_sims}
+
+        base_sim = (
+            sim_map.get(baseline_sim_id)
+            if baseline_sim_id
+            else completed_sims[0]
+        )
+        latest_sim = (
+            sim_map.get(latest_sim_id)
+            if latest_sim_id
+            else completed_sims[-1]
+        )
+
+        if base_sim:
+            baseline_json = base_sim.results_json or {}
+        if latest_sim:
+            latest_json = latest_sim.results_json or {}
+
+    payload = compute_cluster_cohort_drift(
+        baseline_results=baseline_json,
+        latest_results=latest_json,
+    )
+
+    cache_set_json(
+        namespace=_COHORT_DRIFT_CACHE_NAMESPACE,
+        params=cache_params,
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_COHORT_DRIFT_CACHE_TTL_S,
+    )
+    return ClusterCohortDriftOut(**payload)
+
