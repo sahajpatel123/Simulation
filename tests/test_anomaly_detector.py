@@ -15,6 +15,7 @@ def test_detect_simulation_anomalies_empty():
     assert res["anomalies"] == []
     assert res["stage_spikes"] == []
     assert res["cluster_outliers"] == []
+    assert res["recommendations"] == []
 
 
 def test_detect_simulation_anomalies_clean():
@@ -37,16 +38,17 @@ def test_detect_simulation_anomalies_clean():
     assert res["anomaly_score"] == 0.0
     assert res["status"] == "NORMAL"
     assert res["anomalies_count"] == 0
+    assert res["recommendations"] == []
 
 
 def test_detect_simulation_anomalies_stage_dropoff_spike():
     results = {
         "stage_conversions": {
-            "ARRIVE": 1.0,
-            "BROWSE": 0.9,
-            "CONSIDER": 0.1,  # 88.8% dropoff spike from BROWSE to CONSIDER
-            "DECIDE": 0.08,
-            "PURCHASE": 0.05,
+            "arrive": 1.0,
+            "browse": 0.9,
+            "consider": 0.1,  # 88.8% dropoff spike from BROWSE to CONSIDER
+            "decide": 0.08,
+            "purchase": 0.05,
         }
     }
     res = detect_simulation_anomalies(results)
@@ -57,6 +59,8 @@ def test_detect_simulation_anomalies_stage_dropoff_spike():
     assert spike["stage_to"] == "CONSIDER"
     assert spike["severity"] == SIGNAL_CRITICAL
     assert res["status"] in ("WATCH", "CRITICAL")
+    assert len(res["recommendations"]) >= 1
+    assert "BROWSE -> CONSIDER" in res["recommendations"][0]["target"]
 
 
 def test_detect_simulation_anomalies_cluster_outliers():
@@ -73,3 +77,4 @@ def test_detect_simulation_anomalies_cluster_outliers():
     res = detect_simulation_anomalies(results, outlier_z_threshold=1.8)
     assert len(res["cluster_outliers"]) >= 1
     assert res["anomaly_score"] > 0.0
+    assert len(res["recommendations"]) >= 1

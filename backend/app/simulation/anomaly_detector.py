@@ -9,6 +9,8 @@ SIGNAL_OK = "ok"
 SIGNAL_WATCH = "watch"
 SIGNAL_CRITICAL = "critical"
 
+DEFAULT_STAGES = ["ARRIVE", "BROWSE", "CONSIDER", "DECIDE", "PURCHASE"]
+
 
 def _safe_float(val: Any, default: float = 0.0) -> float:
     if val is None:
@@ -37,47 +39,64 @@ def detect_simulation_anomalies(
 
     Returns:
         Dict containing anomaly_score, status, detected_anomalies list, stage_spikes,
-        cluster_outliers, narrative, and key_signals.
+        cluster_outliers, recommendations, narrative, and key_signals.
     """
     results_json = results_json or {}
 
     anomalies: list[dict[str, Any]] = []
     stage_spikes: list[dict[str, Any]] = []
     cluster_outliers: list[dict[str, Any]] = []
+    recommendations: list[dict[str, Any]] = []
 
     anomaly_penalty = 0.0
 
-    # 1. Funnel Stage Drop-off Spikes
+    # 1. Funnel Stage Drop-off Spikes (supports string & dict stage_conversions)
     stage_conversions = results_json.get("stage_conversions") or {}
     if not isinstance(stage_conversions, dict):
         stage_conversions = {}
 
-    stages = ["ARRIVE", "BROWSE", "CONSIDER", "DECIDE", "PURCHASE"]
-    for i in range(len(stages) - 1):
-        curr_stage = stages[i]
-        next_stage = stages[i + 1]
+    # Case-insensitive normalized stage lookups
+    normalized_conversions: dict[str, float] = {}
+    for k, v in stage_conversions.items():
+        if isinstance(k, str):
+            normalized_conversions[k.upper()] = _safe_float(v)
 
-        curr_val = _safe_float(stage_conversions.get(curr_stage))
-        next_val = _safe_float(stage_conversions.get(next_stage))
+    # Determine applicable stages sequence
+    present_stages = [s for s in DEFAULT_STAGES if s in normalized_conversions]
+    stages_to_evaluate = present_stages if len(present_stages) >= 2 else DEFAULT_STAGES
+
+    for i in range(len(stages_to_evaluate) - 1):
+        curr_stage = stages_to_evaluate[i]
+        next_stage = stages_to_evaluate[i + 1]
+
+        curr_val = normalized_conversions.get(curr_stage, 0.0)
+        next_val = normalized_conversions.get(next_stage, 0.0)
 
         if curr_val > 0:
             dropoff_rate = max(0.0, (curr_val - next_val) / curr_val)
             if dropoff_rate >= dropoff_spike_threshold:
+                severity = SIGNAL_CRITICAL if dropoff_rate >= 0.85 else SIGNAL_WATCH
                 spike_item = {
                     "stage_from": curr_stage,
                     "stage_to": next_stage,
                     "dropoff_rate": round(dropoff_rate, 4),
                     "curr_conversion": round(curr_val, 4),
                     "next_conversion": round(next_val, 4),
-                    "severity": SIGNAL_CRITICAL if dropoff_rate >= 0.85 else SIGNAL_WATCH,
+                    "severity": severity,
                 }
                 stage_spikes.append(spike_item)
                 anomalies.append({
                     "type": "STAGE_DROPOFF_SPIKE",
                     "description": f"Severe drop-off of {dropoff_rate:.1%} between {curr_stage} and {next_stage}.",
-                    "severity": spike_item["severity"],
+                    "severity": severity,
                 })
                 anomaly_penalty += 25.0 if dropoff_rate >= 0.85 else 15.0
+
+                recommendations.append({
+                    "target": f"{curr_stage} -> {next_stage}",
+                    "action": f"Optimize landing messaging and trust signals to reduce severe {dropoff_rate:.1%} drop-off between {curr_stage} and {next_stage}.",
+                    "priority": "HIGH" if severity == SIGNAL_CRITICAL else "MEDIUM",
+                })
 
     # 2. Cluster Conversion Rate Outliers (Z-Score)
     cluster_breakdown = results_json.get("cluster_breakdown") or {}
@@ -100,20 +119,34 @@ def detect_simulation_anomalies(
             for cid, rate in rates:
                 z_score = (rate - mean_val) / std_dev
                 if abs(z_score) >= outlier_z_threshold:
+                    severity = SIGNAL_WATCH if z_score > 0 else SIGNAL_CRITICAL
                     outlier_item = {
                         "cluster_id": cid,
                         "conversion_rate": round(rate, 4),
                         "z_score": round(z_score, 2),
                         "deviation_direction": "HIGH" if z_score > 0 else "LOW",
-                        "severity": SIGNAL_WATCH if z_score > 0 else SIGNAL_CRITICAL,
+                        "severity": severity,
                     }
                     cluster_outliers.append(outlier_item)
                     anomalies.append({
                         "type": "CLUSTER_CONVERSION_OUTLIER",
                         "description": f"Cluster '{cid}' conversion ({rate:.1%}) deviates by {z_score:+.2f} std dev from mean.",
-                        "severity": outlier_item["severity"],
+                        "severity": severity,
                     })
                     anomaly_penalty += 15.0 if z_score < 0 else 5.0
+
+                    if z_score < 0:
+                        recommendations.append({
+                            "target": f"Cluster '{cid}'",
+                            "action": f"Investigate specific friction or pricing mismatch for low-performing cluster '{cid}' ({rate:.1%} vs average {mean_val:.1%}).",
+                            "priority": "HIGH",
+                        })
+                    else:
+                        recommendations.append({
+                            "target": f"Cluster '{cid}'",
+                            "action": f"Analyze high conversion drivers in top-performing cluster '{cid}' ({rate:.1%} vs average {mean_val:.1%}) to scale segment acquisition.",
+                            "priority": "MEDIUM",
+                        })
 
     # 3. Overall Anomaly Score & Status
     anomaly_score = min(ANOMALY_SCORE_CAP, round(anomaly_penalty, 2))
@@ -128,7 +161,7 @@ def detect_simulation_anomalies(
         status = "NORMAL"
         overall_severity = SIGNAL_OK
 
-    # 4. Human-Readable Narrative
+    # 4. Human-Readable & Markdown Diagnostic Narrative
     sentences: list[str] = []
     if not anomalies:
         sentences.append("No statistical anomalies or abnormal drop-off spikes detected in simulation results.")
@@ -165,6 +198,12 @@ def detect_simulation_anomalies(
             "severity": SIGNAL_CRITICAL if stage_spikes else SIGNAL_OK,
             "display": f"{len(stage_spikes)} Stage Drop-off Spike(s)",
         },
+        {
+            "label": "recommendations_count",
+            "value": len(recommendations),
+            "severity": SIGNAL_WATCH if recommendations else SIGNAL_OK,
+            "display": f"{len(recommendations)} Recommendation(s)",
+        },
     ]
 
     return {
@@ -174,6 +213,7 @@ def detect_simulation_anomalies(
         "anomalies": anomalies,
         "stage_spikes": stage_spikes,
         "cluster_outliers": cluster_outliers,
+        "recommendations": recommendations,
         "narrative": narrative,
         "key_signals": key_signals,
     }
@@ -185,4 +225,5 @@ __all__ = [
     "SIGNAL_OK",
     "SIGNAL_WATCH",
     "SIGNAL_CRITICAL",
+    "DEFAULT_STAGES",
 ]

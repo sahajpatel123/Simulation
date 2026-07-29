@@ -938,6 +938,8 @@ class SimulationAnomaliesOut(BaseModel):
     anomalies: list[dict] = []
     stage_spikes: list[dict] = []
     cluster_outliers: list[dict] = []
+    recommendations: list[dict] = []
     narrative: str = ""
     key_signals: list[dict] = []
+
 
