@@ -943,3 +943,16 @@ class SimulationAnomaliesOut(BaseModel):
     key_signals: list[dict] = []
 
 
+class SimulationSensitivityMatrixOut(BaseModel):
+    """Response from ``GET /simulations/{simulation_id}/sensitivity-matrix``."""
+
+    overall_elasticity_score: float = 0.0
+    baseline_conversion: float = 0.0
+    leverage_traits: list[str] = []
+    trait_sensitivities: list[dict] = []
+    risk_matrix: list[dict] = []
+    recommendations: list[dict] = []
+    narrative: str = ""
+
+
+

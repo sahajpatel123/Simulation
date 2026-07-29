@@ -76,6 +76,7 @@ from app.schemas.simulation import (
     ProjectPortfolioRollupOut,
     SimDiffOut,
     SimulationAnomaliesOut,
+    SimulationSensitivityMatrixOut,
     SimulationBatchStatusOut,
     SimulationCreate,
     SimulationResultOut,
@@ -97,6 +98,7 @@ from app.schemas.sensitivity import SensitivityOut
 from app.schemas.what_if import WhatIfOut, WhatIfRequest
 from app.simulation.agent_hierarchy import AgentHierarchyRouter
 from app.simulation.anomaly_detector import detect_simulation_anomalies
+from app.simulation.sensitivity_matrix import compute_simulation_sensitivity_matrix
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.cluster_opportunity import build_cluster_opportunity_matrix
 from app.simulation.cluster_drill_down import (
@@ -4067,4 +4069,71 @@ def get_simulation_anomalies(
         ttl_seconds=_SIMULATION_ANOMALIES_CACHE_TTL_S,
     )
     return SimulationAnomaliesOut(**payload)
+
+
+_SIMULATION_SENSITIVITY_CACHE_NAMESPACE = "simulation_sensitivity_matrix"
+_SIMULATION_SENSITIVITY_CACHE_TTL_S = 60
+
+
+@router.get(
+    "/{simulation_id}/sensitivity-matrix",
+    response_model=SimulationSensitivityMatrixOut,
+    summary="Trait sensitivity and elasticity matrix for a simulation",
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_simulation_sensitivity_matrix(
+    simulation_id: int,
+    delta_step: float = Query(
+        0.1, ge=0.01, le=0.5, description="Perturbation step for elasticity computation"
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SimulationSensitivityMatrixOut:
+    """Compute sensitivity and elasticity matrix across cluster traits.
+
+    Evaluates how variations in consumer cluster traits (price sensitivity, trust,
+    digital literacy, etc.) impact final conversion rates.
+    """
+    sim = (
+        db.query(Simulation)
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(
+            Simulation.id == simulation_id,
+            Project.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not sim:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Simulation not found",
+        )
+
+    cache_params = {
+        "simulation_id": simulation_id,
+        "delta_step": delta_step,
+    }
+    cached = cache_get_json(
+        namespace=_SIMULATION_SENSITIVITY_CACHE_NAMESPACE,
+        params=cache_params,
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return SimulationSensitivityMatrixOut(**cached)
+
+    results_json = sim.results_json or {}
+    payload = compute_simulation_sensitivity_matrix(
+        results_json=results_json,
+        delta_step=delta_step,
+    )
+
+    cache_set_json(
+        namespace=_SIMULATION_SENSITIVITY_CACHE_NAMESPACE,
+        params=cache_params,
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_SIMULATION_SENSITIVITY_CACHE_TTL_S,
+    )
+    return SimulationSensitivityMatrixOut(**payload)
+
 
