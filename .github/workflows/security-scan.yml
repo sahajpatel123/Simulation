@@ -27,7 +27,7 @@ jobs:
     name: bandit (Python security)
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    continue-on-error: true
+    continue-on-error: false
 
     steps:
       - name: Checkout
