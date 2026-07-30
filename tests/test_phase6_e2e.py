@@ -123,6 +123,7 @@ def test_conductor_result_fields():
     assert len(result.domain_reports) > 0
     assert len(result.architect_accountability) > 0
     assert result.product_type == ProductType.SAAS
+    assert len(result.cluster_funnel_dropoffs) == 52
 
 # ── T3: ACCOUNTABILITY CORRECTNESS ──
 

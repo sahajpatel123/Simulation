@@ -17,6 +17,7 @@ from app.simulation.cluster_reweighting import ClusterReweightingEngine
 from app.simulation.cognitive_state import CognitiveStateMutator
 from app.simulation.clusters.definitions import ClusterDefinition
 from app.simulation.clusters.registry import ClusterRegistry
+from app.simulation.markov import MarkovBehaviourModel
 from app.simulation.product_type import ProductType
 
 
@@ -269,6 +270,7 @@ class ConductorResult:
     cluster_breakdown:              dict[str, float]
     architect_accountability:       dict[str, float]
     per_cluster_matrices:           dict[str, dict[tuple[str, str], float]]
+    cluster_funnel_dropoffs:        dict[str, dict[str, float]] = None  # type: ignore
     signal_quality:                 float = 0.0
 
 
@@ -544,6 +546,18 @@ class Conductor:
             cluster_results, cluster_weights, all_clusters
         )
 
+        cluster_funnel_dropoffs: dict[str, dict[str, float]] = {}
+        markov_model = MarkovBehaviourModel()
+
+        for cluster in all_clusters:
+            cluster_outputs = cluster_results.get(cluster.cluster_id, {})
+            ct_matrix = markov_model.build_for_cluster(
+                cluster=cluster,
+                architect_outputs=cluster_outputs,
+                env_params=env_params,
+            )
+            cluster_funnel_dropoffs[cluster.cluster_id] = ct_matrix.funnel_dropoffs
+
         result = ConductorResult(
             product_type=product_type,
             cluster_results=cluster_results,
@@ -552,6 +566,7 @@ class Conductor:
             cluster_breakdown=cluster_breakdown,
             architect_accountability=architect_accountability,
             per_cluster_matrices=per_cluster_matrices,
+            cluster_funnel_dropoffs=cluster_funnel_dropoffs,
             signal_quality=sq,
         )
 
