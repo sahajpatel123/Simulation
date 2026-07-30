@@ -501,3 +501,28 @@ class _StubArchitectOutput:
 
     def transition_overrides(self, output: Any) -> dict[tuple[str, str], float]:
         return {("BROWSE", "CONSIDER"): 0.95}
+
+
+def test_build_for_cluster_computes_funnel_dropoffs() -> None:
+    from app.simulation.markov import ClusterTransitionMatrix, MarkovBehaviourModel
+
+    class _StubCluster:
+        cluster_id = "metro_power_professional"
+
+    model = MarkovBehaviourModel()
+    result = model.build_for_cluster(
+        cluster=_StubCluster(),  # type: ignore[arg-type]
+        architect_outputs={"PricingArchitect": _StubArchitectOutput()},
+        env_params=_env(),
+        seed=42,
+    )
+    assert isinstance(result.funnel_dropoffs, dict)
+    assert "ARRIVE_TO_BROWSE_DROPOFF" in result.funnel_dropoffs
+    assert "BROWSE_TO_CONSIDER_DROPOFF" in result.funnel_dropoffs
+    assert "CONSIDER_TO_DECIDE_DROPOFF" in result.funnel_dropoffs
+    assert "DECIDE_TO_PURCHASE_DROPOFF" in result.funnel_dropoffs
+
+    # Dropoff + transition probability = 1.0
+    p_browse = result.matrix[0, 1]
+    assert math.isclose(result.funnel_dropoffs["ARRIVE_TO_BROWSE_DROPOFF"], round(1.0 - p_browse, 4))
+

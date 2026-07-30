@@ -19,6 +19,7 @@ class ClusterTransitionMatrix:
     matrix: np.ndarray
     architect_inputs_used: dict[str, float]
     conversion_estimate: float
+    funnel_dropoffs: dict[str, float] = None  # type: ignore
 
 # ================================================================
 # STATE DEFINITIONS
@@ -304,18 +305,25 @@ class MarkovBehaviourModel:
             else:
                 matrix[i][idx["ABANDON"]] = 1.0
 
-        conversion = (
-            matrix[idx["ARRIVE"]][idx["BROWSE"]]
-            * matrix[idx["BROWSE"]][idx["CONSIDER"]]
-            * matrix[idx["CONSIDER"]][idx["DECIDE"]]
-            * matrix[idx["DECIDE"]][idx["PURCHASE"]]
-        )
+        p_browse = float(matrix[idx["ARRIVE"]][idx["BROWSE"]])
+        p_consider = float(matrix[idx["BROWSE"]][idx["CONSIDER"]])
+        p_decide = float(matrix[idx["CONSIDER"]][idx["DECIDE"]])
+        p_purchase = float(matrix[idx["DECIDE"]][idx["PURCHASE"]])
+
+        conversion = p_browse * p_consider * p_decide * p_purchase
+        funnel_dropoffs = {
+            "ARRIVE_TO_BROWSE_DROPOFF": round(1.0 - p_browse, 4),
+            "BROWSE_TO_CONSIDER_DROPOFF": round(1.0 - p_consider, 4),
+            "CONSIDER_TO_DECIDE_DROPOFF": round(1.0 - p_decide, 4),
+            "DECIDE_TO_PURCHASE_DROPOFF": round(1.0 - p_purchase, 4),
+        }
 
         return ClusterTransitionMatrix(
             cluster_id=cluster.cluster_id,
             matrix=matrix,
             architect_inputs_used=inputs_used,
             conversion_estimate=round(float(conversion), 4),
+            funnel_dropoffs=funnel_dropoffs,
         )
 
     @classmethod
