@@ -195,7 +195,7 @@ def build_weekly_digest(
         sentences.append(
             f"{quick_wins_total} quick win(s) ready to act on."
         )
-    if outcome_count_week and sim_count_week:
+    if sim_count_week and completed_sim_count_week:
         completion_rate = (
             completed_sim_count_week / sim_count_week
         ) if sim_count_week else 0.0

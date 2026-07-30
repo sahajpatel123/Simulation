@@ -5,7 +5,7 @@ from app.simulation.product_type import ProductType
 
 
 def test_product_type_has_ten_members() -> None:
-    assert len(ProductType) == 10
+    assert len(ProductType) == 15
 
 
 def test_product_type_string_values() -> None:

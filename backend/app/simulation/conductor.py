@@ -62,7 +62,7 @@ PRODUCT_TYPE_KEYWORDS: dict[ProductType, list[str]] = {
         "ruggedized", "rugged", "fleet device", "retail fleet",
     ],
     ProductType.CONSUMER_APP: [
-        "consumer app", "mobile app", "consumer application", "app",
+        "consumer application", "consumer app",
     ],
     ProductType.DIRECT_TO_CONSUMER: [
         "d2c", "direct to consumer", "direct-to-consumer", "d2c brand",
@@ -168,6 +168,41 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "DistributionChannelArchitect", "AftersalesLifecycleArchitect",
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
         "AssumptionCascadeArchitect",
+    ],
+    ProductType.CONSUMER_APP: [
+        "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
+        "TrustArchitect", "PricingArchitect", "OnboardingArchitect",
+        "FeatureAdoptionArchitect", "RetentionArchitect", "ViralityArchitect",
+        "MacroeconomicArchitect", "DemographicInteractionArchitect",
+        "AssumptionCascadeArchitect",
+    ],
+    ProductType.DIRECT_TO_CONSUMER: [
+        "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
+        "TrustArchitect", "PricingArchitect", "PurchaseDecisionArchitect",
+        "RetentionArchitect", "ViralityArchitect", "MacroeconomicArchitect",
+        "DemographicInteractionArchitect", "AssumptionCascadeArchitect",
+    ],
+    ProductType.B2B_MARKETPLACE: [
+        "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
+        "TrustArchitect", "PricingArchitect", "OnboardingArchitect",
+        "RetentionArchitect", "SupportFrictionArchitect", "ViralityArchitect",
+        "MacroeconomicArchitect", "DemographicInteractionArchitect",
+        "AssumptionCascadeArchitect",
+    ],
+    ProductType.PRODUCTIVITY_TOOL: [
+        "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
+        "TrustArchitect", "PricingArchitect", "OnboardingArchitect",
+        "FeatureAdoptionArchitect", "RetentionArchitect", "ViralityArchitect",
+        "MacroeconomicArchitect", "DemographicInteractionArchitect",
+        "AssumptionCascadeArchitect",
+    ],
+    ProductType.SMART_HOME: [
+        "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
+        "TrustArchitect", "PurchaseDecisionArchitect",
+        "PerformanceThresholdArchitect", "SetupFirstUseArchitect",
+        "EcosystemCompatibilityArchitect", "DistributionChannelArchitect",
+        "AftersalesLifecycleArchitect", "MacroeconomicArchitect",
+        "DemographicInteractionArchitect", "AssumptionCascadeArchitect",
     ],
 }
 
