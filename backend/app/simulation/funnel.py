@@ -373,6 +373,59 @@ class FunnelExecutionEngine:
         )
 
 
+def generate_funnel_description(
+    stage_metrics: list[StageMetrics],
+    conversion_rate: float,
+) -> str:
+    """Generate a human-readable description of funnel performance.
+
+    Provides a narrative summary of where users drop off and
+    the overall conversion health.
+
+    Args:
+        stage_metrics: List of StageMetrics per funnel stage.
+        conversion_rate: Overall conversion rate (0-1).
+
+    Returns:
+        A human-readable string describing funnel bottlenecks.
+    """
+    if not stage_metrics or len(stage_metrics) < 4:
+        return "Funnel data unavailable."
+
+    # Find the stage with highest dropoff (excluding PURCHASE and ABANDON)
+    dropoff_stages = [sm for sm in stage_metrics if sm.state not in ("PURCHASE", "ABANDON", "RETURN") and sm.drop_off_rate > 0]
+
+    if not dropoff_stages:
+        return "Funnel performing well - minimal dropoffs detected."
+
+    worst_stage = max(dropoff_stages, key=lambda sm: sm.drop_off_rate)
+
+    # Generate description based on worst stage
+    stage_descriptions = {
+        "ARRIVE": "arrival to browse",
+        "BROWSE": "browse to consideration",
+        "CONSIDER": "consideration to decision",
+        "DECIDE": "decision to purchase",
+    }
+
+    stage_key = worst_stage.state
+    description = stage_descriptions.get(stage_key, stage_key.lower())
+
+    dropoff_pct = worst_stage.drop_off_rate * 100
+
+    if conversion_rate >= 0.10:
+        health = "healthy"
+    elif conversion_rate >= 0.05:
+        health = "moderate"
+    else:
+        health = "poor"
+
+    return (
+        f"Funnel is {health} ({conversion_rate:.1%} conversion). "
+        f"Primary leak: {dropoff_pct:.0f}% drop-off at {description} stage."
+    )
+
+
 if __name__ == "__main__":
     from app.simulation.profiles import AgentProfileGenerator
 
