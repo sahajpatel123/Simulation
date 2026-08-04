@@ -128,6 +128,7 @@ class WeeklyDigestOut(BaseModel):
     quick_wins_total: int = 0
     critical_failure_modes_total: int = 0
     top_dropoff_stage: str | None = None
+    funnel_dropoff_rates: dict[str, float] = {}
     narrative: str = ""
     key_signals: list[dict] = []
 

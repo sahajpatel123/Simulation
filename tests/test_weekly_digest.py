@@ -165,3 +165,34 @@ def test_digest_top_dropoff_stage_included_in_narrative_and_signals() -> None:
 
     out = WeeklyDigestOut(**payload)
     assert out.top_dropoff_stage == "CONSIDER_TO_DECIDE_DROPOFF"
+
+
+def test_digest_funnel_dropoff_rates_passed_through() -> None:
+    from app.schemas.user import WeeklyDigestOut
+    from app.simulation.weekly_digest import build_weekly_digest
+
+    dropoff_rates = {
+        "CONSIDER_TO_DECIDE_DROPOFF": 0.55,
+        "BROWSE_TO_CONSIDER_DROPOFF": 0.42,
+    }
+    payload = build_weekly_digest(
+        sim_count_week=5,
+        top_dropoff_stage="CONSIDER_TO_DECIDE_DROPOFF",
+        funnel_dropoff_rates=dropoff_rates,
+    )
+    assert payload["funnel_dropoff_rates"] == dropoff_rates
+    assert payload["top_dropoff_stage"] == "CONSIDER_TO_DECIDE_DROPOFF"
+
+    out = WeeklyDigestOut(**payload)
+    assert out.funnel_dropoff_rates == dropoff_rates
+
+
+def test_digest_funnel_dropoff_rates_default_empty() -> None:
+    from app.schemas.user import WeeklyDigestOut
+    from app.simulation.weekly_digest import build_weekly_digest
+
+    payload = build_weekly_digest(sim_count_week=1)
+    assert payload["funnel_dropoff_rates"] == {}
+
+    out = WeeklyDigestOut(**payload)
+    assert out.funnel_dropoff_rates == {}

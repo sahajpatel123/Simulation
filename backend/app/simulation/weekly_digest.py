@@ -62,6 +62,7 @@ def build_weekly_digest(
     quick_wins_total: int = 0,
     critical_failure_modes_total: int = 0,
     top_dropoff_stage: str | None = None,
+    funnel_dropoff_rates: dict[str, float] | None = None,
 ) -> dict:
     """Compose the per-user weekly digest.
 
@@ -82,6 +83,12 @@ def build_weekly_digest(
         critical_failure_modes_total: total CRITICAL
             premortem failure modes across projects at
             snapshot time.
+        top_dropoff_stage: the stage with the highest
+            dropoff rate across recent simulations
+            (e.g., "CONSIDER_TO_DECIDE_DROPOFF").
+        funnel_dropoff_rates: per-stage dropoff rates as
+            a dict mapping stage names to rates (e.g.,
+            {"CONSIDER_TO_DECIDE_DROPOFF": 0.55}).
 
     Returns:
         Dict matching the output shape described in the
@@ -98,6 +105,7 @@ def build_weekly_digest(
         critical_failure_modes_total,
     )
     cal = calibration_health or {}
+    funnel_dropoff_rates = funnel_dropoff_rates or {}
 
     # ---- Key signals -----------------------------------------------
     key_signals: list[dict] = []
@@ -227,6 +235,7 @@ def build_weekly_digest(
             critical_failure_modes_total
         ),
         "top_dropoff_stage": top_dropoff_stage,
+        "funnel_dropoff_rates": funnel_dropoff_rates,
         "narrative": narrative,
         "key_signals": key_signals,
     }
