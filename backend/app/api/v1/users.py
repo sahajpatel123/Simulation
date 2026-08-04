@@ -2003,8 +2003,14 @@ def get_projects_summary(
         .all()
     )
     latest_sim_by_project: dict[int, object] = {}
+    latest_sim_top_dropoff: dict[int, str] = {}
     for r in latest_sim_rows:
         latest_sim_by_project[r.project_id] = r
+        # Extract top dropoff stage from sim results
+        if hasattr(r, 'results_json') and r.results_json:
+            top_dropoff = (r.results_json or {}).get("worst_drop_off_stage")
+            if top_dropoff:
+                latest_sim_top_dropoff[r.project_id] = top_dropoff
 
     summaries: list[dict] = []
     for p in project_rows:
@@ -2021,12 +2027,35 @@ def get_projects_summary(
             "latest_sim_created_at": (
                 ls.created_at if ls else None
             ),
+            "top_dropoff_stage": latest_sim_top_dropoff.get(p.id),
             "sim_count": sim_counts.get(p.id, 0),
             "decision_count": decision_counts.get(p.id, 0),
             "outcome_count": outcome_counts.get(p.id, 0),
         })
 
-    payload = build_projects_summary(summaries)
+    # Compute portfolio health score from completed sims
+    # Average conversion rate across completed simulations
+    portfolio_health_score: float | None = None
+    if owned_project_ids:
+        completed_sim_rates = (
+            db.query(Simulation.predicted_conversion_rate)
+            .filter(
+                Simulation.project_id.in_(owned_project_ids),
+                Simulation.status == "COMPLETED",
+            )
+            .all()
+        )
+        rates = [r[0] for r in completed_sim_rates if r[0] is not None]
+        if rates:
+            # Health score: 0-100 based on average conversion
+            # Higher conversion = higher health score
+            avg_conv = sum(rates) / len(rates)
+            portfolio_health_score = round(avg_conv * 100, 1)
+
+    payload = build_projects_summary(
+        summaries,
+        portfolio_health_score=portfolio_health_score,
+    )
     cache_set_json(
         namespace=_USER_PROJECTS_SUMMARY_CACHE_NAMESPACE,
         params={"user_id": current_user.id},

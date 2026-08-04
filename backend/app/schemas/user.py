@@ -197,6 +197,8 @@ class ProjectsSummaryOut(BaseModel):
     sim_count_total: int = 0
     decision_count_total: int = 0
     outcome_count_total: int = 0
+    portfolio_health_score: float = 0.0
+    needs_attention_count: int = 0
     narrative: str = ""
     key_signals: list[dict] = []
 
