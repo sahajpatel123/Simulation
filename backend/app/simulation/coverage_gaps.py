@@ -51,7 +51,6 @@ STANDARD_CATEGORIES: frozenset[str] = frozenset({
     "Pricing.Cost",
     "Retention",
     "Support",
-    "Pricing.Cost",
     "Competitive",
 })
 
