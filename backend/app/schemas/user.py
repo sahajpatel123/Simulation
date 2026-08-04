@@ -53,23 +53,6 @@ class UserDashboardOut(BaseModel):
     key_signals: list[dict] = []
 
 
-    health_score: int = 0
-    verdict: str = "AT_RISK"
-    score_breakdown: dict[str, int] = {}
-    narrative: str = ""
-    key_signals: list[dict] = []
-
-
-    covered_categories: list[str] = []
-    missing_categories: list[str] = []
-    sensitivity_breakdown: dict[str, int] = {}
-    covered_cluster_count: int = 0
-    missing_architect_count: int = 0
-    total_assumption_count: int = 0
-    narrative: str = ""
-    key_signals: list[dict] = []
-
-
 class NotificationOut(BaseModel):
     """One inbox notification."""
 
@@ -144,6 +127,7 @@ class WeeklyDigestOut(BaseModel):
     calibration_health: dict | None = None
     quick_wins_total: int = 0
     critical_failure_modes_total: int = 0
+    top_dropoff_stage: str | None = None
     narrative: str = ""
     key_signals: list[dict] = []
 
