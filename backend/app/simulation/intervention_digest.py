@@ -26,6 +26,7 @@ Output shape
       "priority_breakdown": {"LOW": n, "MEDIUM": n, "HIGH": n},
       "category_breakdown": {"pricing": n, ...},
       "quick_win_count": int,
+      "quick_wins_by_category": {"pricing": 2, "trust": 1, ...},  # new
       "top_interventions": list[dict],   # capped
       "generated_at": str | None,
       "stale": bool,
@@ -200,6 +201,17 @@ def build_intervention_digest(
     generated_at = interventions_data.get("generated_at")
     stale = _format_stale_flag(generated_at, now)
 
+    # ---- Quick wins breakdown by category -----------------------------
+    quick_wins_by_category: dict[str, int] = {}
+    quick_win_items: list[dict] = [
+        i for i in enriched if _is_quick_win(i)
+    ]
+    for qwi in quick_win_items:
+        cat = qwi.get("category") or "Other"
+        quick_wins_by_category[cat] = (
+            quick_wins_by_category.get(cat, 0) + 1
+        )
+
     # ---- Key signals ------------------------------------------------
     key_signals: list[dict] = []
     key_signals.append({
@@ -271,6 +283,7 @@ def build_intervention_digest(
         "priority_breakdown": priority_breakdown,
         "category_breakdown": category_breakdown,
         "quick_win_count": quick_win_count,
+        "quick_wins_by_category": quick_wins_by_category,
         "top_interventions": top_interventions,
         "generated_at": _iso(generated_at),
         "stale": stale,

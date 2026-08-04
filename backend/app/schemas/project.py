@@ -733,9 +733,10 @@ class InterventionDigestOut(BaseModel):
     priority_breakdown: dict[str, int] = {}
     category_breakdown: dict[str, int] = {}
     quick_win_count: int = 0
+    quick_wins_by_category: dict[str, int] = {}
     top_interventions: list[dict] = []
     generated_at: str | None = None
-    stale: bool = False
+    stale: bool = True  # No interventions = stale by default
     narrative: str = ""
     key_signals: list[dict] = []
 
