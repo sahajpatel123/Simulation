@@ -1434,6 +1434,7 @@ def get_weekly_digest(
     # aggregation). We surface the one with the highest dropoff
     # rate as the primary bottleneck indicator.
     top_dropoff_stage: str | None = None
+    funnel_dropoff_rates: dict[str, float] = {}
     if owned_project_ids:
         # Get completed sims from the last 7 days with their results
         recent_sims = (
@@ -1457,6 +1458,24 @@ def get_weekly_digest(
         if worst_sim and worst_sim[0]:
             results = worst_sim[0] or {}
             top_dropoff_stage = results.get("worst_drop_off_stage")
+            # Extract per-stage dropoff rates
+            stage_aggs = results.get("stage_aggregations", [])
+            for agg in stage_aggs:
+                stage = agg.get("state")
+                dropoff = agg.get("mean_drop_off_rate")
+                if stage and dropoff is not None:
+                    # Convert stage name to transition key
+                    if stage == "ARRIVE":
+                        key = "ARRIVE_TO_BROWSE_DROPOFF"
+                    elif stage == "BROWSE":
+                        key = "BROWSE_TO_CONSIDER_DROPOFF"
+                    elif stage == "CONSIDER":
+                        key = "CONSIDER_TO_DECIDE_DROPOFF"
+                    elif stage == "DECIDE":
+                        key = "DECIDE_TO_PURCHASE_DROPOFF"
+                    else:
+                        continue
+                    funnel_dropoff_rates[key] = round(dropoff, 4)
 
     payload = build_weekly_digest(
         sim_count_week=sim_count_week,
@@ -1467,6 +1486,7 @@ def get_weekly_digest(
         quick_wins_total=quick_wins_total,
         critical_failure_modes_total=critical_failure_modes_total,
         top_dropoff_stage=top_dropoff_stage,
+        funnel_dropoff_rates=funnel_dropoff_rates,
     )
     cache_set_json(
         namespace=_USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
@@ -1808,8 +1828,9 @@ def get_digest_snapshot(
             .count()
         )
 
-    # Top dropoff stage - compute from worst-performing recent sim
+    # Top dropoff stage and funnel rates - compute from worst-performing recent sim
     top_dropoff_stage: str | None = None
+    funnel_dropoff_rates: dict[str, float] = {}
     if owned_project_ids:
         recent_sims = (
             db.query(
@@ -1830,9 +1851,25 @@ def get_digest_snapshot(
                 key=lambda r: r.predicted_conversion_rate or 0,
             )
             if worst_sim and worst_sim[0]:
-                top_dropoff_stage = (worst_sim[0] or {}).get(
-                    "worst_drop_off_stage"
-                )
+                results = worst_sim[0] or {}
+                top_dropoff_stage = results.get("worst_drop_off_stage")
+                # Extract per-stage dropoff rates
+                stage_aggs = results.get("stage_aggregations", [])
+                for agg in stage_aggs:
+                    stage = agg.get("state")
+                    dropoff = agg.get("mean_drop_off_rate")
+                    if stage and dropoff is not None:
+                        if stage == "ARRIVE":
+                            key = "ARRIVE_TO_BROWSE_DROPOFF"
+                        elif stage == "BROWSE":
+                            key = "BROWSE_TO_CONSIDER_DROPOFF"
+                        elif stage == "CONSIDER":
+                            key = "CONSIDER_TO_DECIDE_DROPOFF"
+                        elif stage == "DECIDE":
+                            key = "DECIDE_TO_PURCHASE_DROPOFF"
+                        else:
+                            continue
+                        funnel_dropoff_rates[key] = round(dropoff, 4)
 
     weekly_digest = build_weekly_digest(
         sim_count_week=sim_count_week,
@@ -1840,6 +1877,7 @@ def get_digest_snapshot(
         outcome_count_week=outcome_count_week,
         completed_sim_count_week=completed_sim_count_week,
         top_dropoff_stage=top_dropoff_stage,
+        funnel_dropoff_rates=funnel_dropoff_rates,
     )
 
     payload = build_digest_snapshot(
