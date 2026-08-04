@@ -446,14 +446,6 @@ def clear_archive(
         user_id=current_user.id,
     )
     cache_invalidate(
-        namespace=_USER_INSIGHTS_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
         namespace=_USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
@@ -1436,6 +1428,36 @@ def get_weekly_digest(
                     "CRITICAL", 0,
                 )
 
+    # ---- Top dropoff stage across recent simulations -------------
+    # Extract the worst dropoff stage from each completed sim's
+    # results_json (worst_drop_off_stage is computed during
+    # aggregation). We surface the one with the highest dropoff
+    # rate as the primary bottleneck indicator.
+    top_dropoff_stage: str | None = None
+    if owned_project_ids:
+        # Get completed sims from the last 7 days with their results
+        recent_sims = (
+            db.query(
+                Simulation.results_json,
+                Simulation.predicted_conversion_rate,
+            )
+            .filter(
+                Simulation.project_id.in_(owned_project_ids),
+                Simulation.status == "COMPLETED",
+                Simulation.created_at >= seven_days_ago,
+            )
+            .all()
+        )
+        # Find the sim with the worst conversion (indicates highest dropoff)
+        worst_sim = max(
+            recent_sims,
+            key=lambda r: r.predicted_conversion_rate or 0,
+            default=None,
+        )
+        if worst_sim and worst_sim[0]:
+            results = worst_sim[0] or {}
+            top_dropoff_stage = results.get("worst_drop_off_stage")
+
     payload = build_weekly_digest(
         sim_count_week=sim_count_week,
         decision_count_week=decision_count_week,
@@ -1444,6 +1466,7 @@ def get_weekly_digest(
         calibration_health=calibration_health,
         quick_wins_total=quick_wins_total,
         critical_failure_modes_total=critical_failure_modes_total,
+        top_dropoff_stage=top_dropoff_stage,
     )
     cache_set_json(
         namespace=_USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
@@ -1784,11 +1807,39 @@ def get_digest_snapshot(
             )
             .count()
         )
+
+    # Top dropoff stage - compute from worst-performing recent sim
+    top_dropoff_stage: str | None = None
+    if owned_project_ids:
+        recent_sims = (
+            db.query(
+                Simulation.results_json,
+                Simulation.predicted_conversion_rate,
+            )
+            .filter(
+                Simulation.project_id.in_(owned_project_ids),
+                Simulation.status == "COMPLETED",
+                Simulation.created_at >= seven_days_ago,
+            )
+            .all()
+        )
+        if recent_sims:
+            # Get the sim with the slowest conversion (highest dropoff)
+            worst_sim = max(
+                recent_sims,
+                key=lambda r: r.predicted_conversion_rate or 0,
+            )
+            if worst_sim and worst_sim[0]:
+                top_dropoff_stage = (worst_sim[0] or {}).get(
+                    "worst_drop_off_stage"
+                )
+
     weekly_digest = build_weekly_digest(
         sim_count_week=sim_count_week,
         decision_count_week=decision_count_week,
         outcome_count_week=outcome_count_week,
         completed_sim_count_week=completed_sim_count_week,
+        top_dropoff_stage=top_dropoff_stage,
     )
 
     payload = build_digest_snapshot(
@@ -2627,7 +2678,6 @@ def get_last_touched_project(
     ]
     if not owned_project_ids:
         return LastTouchedProjectOut()
-        return LastTouchedProjectOut(**cached)
 
     # Latest sim per project.
     sim_rows = (
