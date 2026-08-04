@@ -61,6 +61,7 @@ def build_weekly_digest(
     calibration_health: dict | None = None,
     quick_wins_total: int = 0,
     critical_failure_modes_total: int = 0,
+    top_dropoff_stage: str | None = None,
 ) -> dict:
     """Compose the per-user weekly digest.
 
@@ -160,6 +161,13 @@ def build_weekly_digest(
                 f"to act on"
             ),
         })
+    if top_dropoff_stage:
+        key_signals.append({
+            "label": "top_dropoff_stage",
+            "value": top_dropoff_stage,
+            "severity": SIGNAL_WATCH,
+            "display": f"Highest funnel drop-off bottleneck: {top_dropoff_stage}",
+        })
 
     # ---- Narrative -------------------------------------------------
     sentences: list[str] = []
@@ -204,6 +212,8 @@ def build_weekly_digest(
                 f"{int(completion_rate * 100)}% of this week's "
                 f"sims reached COMPLETED status."
             )
+    if top_dropoff_stage:
+        sentences.append(f"Top conversion bottleneck stage: {top_dropoff_stage}.")
     narrative = " ".join(sentences)
 
     return {
@@ -216,6 +226,7 @@ def build_weekly_digest(
         "critical_failure_modes_total": (
             critical_failure_modes_total
         ),
+        "top_dropoff_stage": top_dropoff_stage,
         "narrative": narrative,
         "key_signals": key_signals,
     }

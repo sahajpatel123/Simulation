@@ -148,3 +148,20 @@ def test_digest_schema_default_shape() -> None:
     assert out.outcome_count_week == 0
     assert out.calibration_health is None
     assert out.quick_wins_total == 0
+    assert out.top_dropoff_stage is None
+
+
+def test_digest_top_dropoff_stage_included_in_narrative_and_signals() -> None:
+    from app.schemas.user import WeeklyDigestOut
+    from app.simulation.weekly_digest import build_weekly_digest
+
+    payload = build_weekly_digest(
+        sim_count_week=5,
+        top_dropoff_stage="CONSIDER_TO_DECIDE_DROPOFF",
+    )
+    assert payload["top_dropoff_stage"] == "CONSIDER_TO_DECIDE_DROPOFF"
+    assert "CONSIDER_TO_DECIDE_DROPOFF" in payload["narrative"]
+    assert any(s["label"] == "top_dropoff_stage" for s in payload["key_signals"])
+
+    out = WeeklyDigestOut(**payload)
+    assert out.top_dropoff_stage == "CONSIDER_TO_DECIDE_DROPOFF"
