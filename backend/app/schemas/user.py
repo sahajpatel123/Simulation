@@ -346,6 +346,10 @@ class PortfolioHealthSnapshotOut(BaseModel):
       (no rounding).
     * ``lowest_project_score`` - min score across the
       portfolio (or ``None`` when empty).
+    * ``health_trend`` - ``IMPROVING`` / ``DECLINING`` /
+      ``STABLE`` / ``None`` (when no previous score).
+    * ``improvement_opportunities`` - list of
+      prioritized action items.
     * ``narrative`` - one paragraph string.
     * ``key_signals`` - ``{label, value, severity,
       display}``.
@@ -356,6 +360,8 @@ class PortfolioHealthSnapshotOut(BaseModel):
     verdict: str = "AT_RISK"
     average_score: float = 0.0
     lowest_project_score: int | None = None
+    health_trend: str | None = None
+    improvement_opportunities: list[str] = []
     narrative: str = ""
     key_signals: list[dict] = []
 

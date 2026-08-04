@@ -2693,6 +2693,31 @@ def get_portfolio_health_snapshot(
     payload = build_portfolio_health_snapshot(
         project_health_payloads=payloads,
     )
+
+    # Get previous average score for trend detection
+    previous_score = None
+    if current_user.id:
+        try:
+            from sqlalchemy import text
+            prev_row = db.execute(text("""
+                SELECT average_score
+                FROM user_simulation_accuracy_history
+                WHERE user_id = :uid
+                ORDER BY created_at DESC
+                LIMIT 1 OFFSET 1
+            """), {"uid": current_user.id}).fetchone()
+            if prev_row and prev_row[0] is not None:
+                previous_score = float(prev_row[0]) * 100  # Convert to 0-100 scale
+        except Exception:
+            pass
+
+    if previous_score is not None:
+        # Recompute with trend info
+        payload = build_portfolio_health_snapshot(
+            project_health_payloads=payloads,
+            previous_average_score=previous_score,
+        )
+
     cache_set_json(
         namespace=_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
         params={"user_id": current_user.id},
