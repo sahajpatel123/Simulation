@@ -85,6 +85,7 @@ class WhatIfOut(BaseModel):
     conversion_delta_pct: float = 0.0
     base_revenue_per_1000: float = 0.0
     projected_revenue_per_1000: float = 0.0
+    projection_confidence: float = 0.5  # 0.0-1.0 confidence in the projection
     stage_impacts: list[StageImpact] = Field(default_factory=list)
     recommendations: list[WhatIfRecommendation] = Field(default_factory=list)
     assumptions_applied: list[WhatIfAssumption] = Field(default_factory=list)

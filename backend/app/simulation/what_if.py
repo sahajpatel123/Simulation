@@ -580,6 +580,21 @@ def build_what_if_scenario(
         for a in new_assump_dicts
     ]
 
+    # Compute projection confidence (0.0-1.0)
+    # Based on: assumption count, sensitivity, base conversion quality
+    confidence_boost = 0.0
+    if len(new_assump_dicts) >= 2:
+        confidence_boost += 0.15
+    if sensitivity_score > 0.7:
+        confidence_boost += 0.15
+    if base_cr >= 0.05:  # Reasonable base conversion
+        confidence_boost += 0.10
+    elif base_cr < 0.01:
+        confidence_boost -= 0.10  # Low base = less reliable projection
+    if abs(sensitivity_score - 0.5) > 0.2:  # Moderately confident sensitivity
+        confidence_boost += 0.05
+    projection_confidence = max(0.1, min(0.9, 0.5 + confidence_boost))
+
     return WhatIfOut(
         simulation_id=simulation_id,
         project_id=project_id,
@@ -590,6 +605,7 @@ def build_what_if_scenario(
         conversion_delta_pct=delta_pct,
         base_revenue_per_1000=base_revenue,
         projected_revenue_per_1000=projected_revenue,
+        projection_confidence=round(projection_confidence, 3),
         stage_impacts=impacts,
         recommendations=recommendations,
         assumptions_applied=assumptions_applied,
