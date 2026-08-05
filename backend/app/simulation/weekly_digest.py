@@ -63,6 +63,7 @@ def build_weekly_digest(
     critical_failure_modes_total: int = 0,
     top_dropoff_stage: str | None = None,
     funnel_dropoff_rates: dict[str, float] | None = None,
+    cluster_breakdown: dict[str, float] | None = None,
 ) -> dict:
     """Compose the per-user weekly digest.
 
@@ -89,6 +90,9 @@ def build_weekly_digest(
         funnel_dropoff_rates: per-stage dropoff rates as
             a dict mapping stage names to rates (e.g.,
             {"CONSIDER_TO_DECIDE_DROPOFF": 0.55}).
+        cluster_breakdown: per-cluster conversion rates
+            as {"cluster_id": rate, ...}. Used to identify
+            the best-performing cluster.
 
     Returns:
         Dict matching the output shape described in the
@@ -222,6 +226,26 @@ def build_weekly_digest(
             )
     if top_dropoff_stage:
         sentences.append(f"Top conversion bottleneck stage: {top_dropoff_stage}.")
+
+    # ---- Top performing cluster ------------------------------------
+    top_cluster_id: str | None = None
+    top_cluster_conv: float = 0.0
+    if cluster_breakdown:
+        top_cluster_result = max(
+            cluster_breakdown.items(),
+            key=lambda kv: kv[1] or 0.0,
+            default=(None, 0.0),
+        )
+        top_cluster_id, top_cluster_conv = top_cluster_result
+
+    if top_cluster_id:
+        # Try to get a human-readable cluster name
+        cluster_name = top_cluster_id
+        sentences.append(
+            f"Top performing cluster: {cluster_name} "
+            f"({top_cluster_conv:.1%} conversion)."
+        )
+
     narrative = " ".join(sentences)
 
     return {
@@ -236,6 +260,8 @@ def build_weekly_digest(
         ),
         "top_dropoff_stage": top_dropoff_stage,
         "funnel_dropoff_rates": funnel_dropoff_rates,
+        "top_cluster_id": top_cluster_id,
+        "top_cluster_conversion": top_cluster_conv,
         "narrative": narrative,
         "key_signals": key_signals,
     }

@@ -129,6 +129,8 @@ class WeeklyDigestOut(BaseModel):
     critical_failure_modes_total: int = 0
     top_dropoff_stage: str | None = None
     funnel_dropoff_rates: dict[str, float] = {}
+    top_cluster_id: str | None = None
+    top_cluster_conversion: float = 0.0
     narrative: str = ""
     key_signals: list[dict] = []
 
