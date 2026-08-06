@@ -4348,7 +4348,9 @@ def get_activation_funnel(
       * ranked activation levers by the share of the covered market they
         touch, plus risk flags and actionable recommendations
 
-    Pure post-hoc analytics — no Celery, no LLM, no DB writes. Returns
+    Pure post-hoc analytics — no Celery, no LLM, no DB writes. Onboarding
+    metrics are recomputed from the project's visible assumptions so
+    complexity signals from the brief shape the read. Returns
     ``INSUFFICIENT_DATA`` for product types whose conductor stack does not
     model first-run onboarding (hardware, d2c, ...).
     """
@@ -4386,6 +4388,27 @@ def get_activation_funnel(
         price_sensitivity = float(environment.price_sensitivity or 0.5)
         market_maturity = float(environment.market_maturity or 0.3)
 
+    # The project's visible assumptions shape OnboardingArchitect's
+    # complexity signal; feed them through so the recomputed read matches
+    # the actual run instead of defaulting to neutral complexity.
+    assumptions = (
+        db.query(Assumption)
+        .filter(Assumption.project_id == sim.project_id, Assumption.is_hidden.is_(False))
+        .all()
+    )
+    assumption_dicts = [
+        {
+            "text": assumption.text,
+            "sensitivity": str(assumption.sensitivity or "MEDIUM"),
+            "impact_score": float(
+                assumption.impact_score
+                if assumption.impact_score is not None
+                else 5.0
+            ),
+        }
+        for assumption in assumptions
+    ]
+
     product_type_name = str(
         (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
     )
@@ -4393,6 +4416,9 @@ def get_activation_funnel(
         product_type = ProductType(product_type_name)
     except ValueError:
         product_type = ProductType.SAAS
+    # Keep the read consistent with the stack actually recomputed below:
+    # an unknown persisted value falls back to the SAAS stack and read.
+    product_type_name = product_type.value
 
     # Recompute the deterministic architect stack for this product type so
     # per-cluster onboarding metrics are available even though regular
@@ -4406,7 +4432,7 @@ def get_activation_funnel(
             "price_sensitivity": price_sensitivity,
             "market_maturity": market_maturity,
         },
-        assumptions=[],
+        assumptions=assumption_dicts,
         product_type=product_type,
     )
     conductor_results = {

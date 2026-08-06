@@ -33,6 +33,9 @@ product types whose conductor stack does not run ``OnboardingArchitect``
 No DB / I/O — verifiable without FastAPI or PostgreSQL. The route layer
 supplies ``results``, ``conductor_results`` (per-cluster architect
 metrics) and ``cluster_registry``; all arithmetic is deterministic.
+Metrics missing from a malformed/partial payload use conservative
+defaults (6-minute time-to-value tolerance, 18-step disclosure limit) so
+a missing field never manufactures a blocker, lever, or flag.
 """
 from __future__ import annotations
 
@@ -109,6 +112,13 @@ VERDICT_RISK_COMPLETION: float = 0.65
 VERDICT_RISK_WEAK_SHARE: float = 0.35
 VERDICT_RISK_EMPTY_BOUNCE: float = 0.40
 VERDICT_RISK_MOBILE_GAP_SHARE: float = 0.15
+
+# Conservative defaults for metrics missing from a malformed/partial
+# payload. An unknown time-to-value tolerance is treated as the modeled
+# midpoint; an unknown disclosure limit as the maximum modeled value, so
+# neither field invents an impatience flag or a lever opportunity.
+TTFV_NEUTRAL_DEFAULT: float = 6.0
+DISCLOSURE_NEUTRAL_DEFAULT: float = 18.0
 
 # Lever opportunity predicates and labels.
 LEVER_COMPLETION_OPPORTUNITY: float = 0.65
@@ -199,7 +209,13 @@ def _blocker_scores(metrics: dict[str, Any]) -> dict[str, float]:
     permission = _clamp(
         _safe_float(metrics.get("permission_timing_sensitivity"))
     )
-    ttfv = max(0.0, _safe_float(metrics.get("time_to_first_value_tolerance"), 6.0))
+    ttfv = max(
+        0.0,
+        _safe_float(
+            metrics.get("time_to_first_value_tolerance"),
+            TTFV_NEUTRAL_DEFAULT,
+        ),
+    )
     time_value = _clamp(max(0.0, 1.0 - ttfv / 10.0))
     return {
         BLOCKER_COMPLETION: round(1.0 - completion, 4),
@@ -337,7 +353,10 @@ def build_activation_funnel(
         )
         disclosure = max(
             0.0,
-            _safe_float(metrics.get("progressive_disclosure_limit")),
+            _safe_float(
+                metrics.get("progressive_disclosure_limit"),
+                DISCLOSURE_NEUTRAL_DEFAULT,
+            ),
         )
         mobile = _clamp(_safe_float(metrics.get("mobile_completion_penalty")))
         permission = _clamp(
@@ -358,7 +377,13 @@ def build_activation_funnel(
         id_friction = _clamp(
             _safe_float(metrics.get("identity_verification_friction"))
         )
-        ttfv = max(0.0, _safe_float(metrics.get("time_to_first_value_tolerance")))
+        ttfv = max(
+            0.0,
+            _safe_float(
+                metrics.get("time_to_first_value_tolerance"),
+                TTFV_NEUTRAL_DEFAULT,
+            ),
+        )
 
         blocker, blocker_score = _primary_blocker(_blocker_scores(metrics))
         covered_weight += weight

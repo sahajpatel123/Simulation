@@ -38,7 +38,13 @@ def _real_conductor_result() -> object:
 class _StubConductor:
     """Route-level stand-in that reuses the cached real conductor result."""
 
+    last_run: dict | None = None
+
     def run(self, agents, env_params, assumptions, product_type=None, **kwargs):
+        type(self).last_run = {
+            "assumptions": list(assumptions or []),
+            "product_type": product_type,
+        }
         return _real_conductor_result()
 
 
@@ -47,6 +53,19 @@ class _FakeEnvironment:
         self.average_order_value = 999.0
         self.price_sensitivity = 0.5
         self.market_maturity = 0.3
+
+
+class _FakeAssumption:
+    def __init__(
+        self,
+        text: str,
+        *,
+        sensitivity: str = "MEDIUM",
+        impact_score: float = 5.0,
+    ) -> None:
+        self.text = text
+        self.sensitivity = sensitivity
+        self.impact_score = impact_score
 
 
 class _FakeSimulation:
@@ -91,10 +110,14 @@ class _FakeQuery:
     def first(self):
         return self.items[0] if self.items else None
 
+    def all(self):
+        return list(self.items)
+
 
 class _FakeSession:
-    def __init__(self, sim: object = None) -> None:
+    def __init__(self, sim: object = None, assumptions: list | None = None) -> None:
         self.sim = sim
+        self.assumptions = assumptions
 
     def query(self, model, *args, **kwargs):
         name = getattr(model, "__name__", "")
@@ -102,6 +125,8 @@ class _FakeSession:
             return _FakeQuery([self.sim] if self.sim is not None else [])
         if name == "Environment":
             return _FakeQuery([_FakeEnvironment()])
+        if name == "Assumption":
+            return _FakeQuery(self.assumptions or [])
         return _FakeQuery([])
 
 
@@ -203,3 +228,39 @@ def test_missing_simulation_raises_404(
     with pytest.raises(HTTPException) as exc:
         _call_route(session=session, monkeypatch=monkeypatch)
     assert exc.value.status_code == 404
+
+
+def test_route_feeds_project_assumptions_into_conductor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = _FakeSession(
+        _FakeSimulation(),
+        assumptions=[
+            _FakeAssumption("The product is complex and multi-step"),
+        ],
+    )
+
+    _call_route(session=session, monkeypatch=monkeypatch)
+
+    run = _StubConductor.last_run
+    assert run is not None
+    assert any("complex and multi-step" in a["text"] for a in run["assumptions"])
+    assert run["product_type"].value == "saas"
+
+
+def test_unknown_product_type_falls_back_to_saas_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = _FakeSession(
+        _FakeSimulation(
+            results={
+                "population_weighted_conversion": 0.04,
+                "product_type_detected": "quantum_gadget",
+            }
+        )
+    )
+
+    out = _call_route(session=session, monkeypatch=monkeypatch)
+
+    assert out.product_type == "saas"
+    assert out.verdict != "INSUFFICIENT_DATA"

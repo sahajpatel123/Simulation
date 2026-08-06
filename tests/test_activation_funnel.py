@@ -257,6 +257,39 @@ def test_malformed_metric_values_do_not_crash() -> None:
     assert out.cluster_profiles[0].primary_blocker in BLOCKER_ORDER
 
 
+def test_missing_time_to_value_uses_neutral_default_consistently() -> None:
+    metrics = _onboarding_metrics()
+    del metrics["time_to_first_value_tolerance"]
+    out = _build(specs={"a": metrics}, weights={"a": 1.0})
+
+    assert out.cluster_profiles[0].time_to_first_value_tolerance == 6.0
+    assert out.time_to_first_value_minutes == 6.0
+    assert "time_to_value_impatience" not in out.flags
+    assert not any("tolerance is only" in r for r in out.recommendations)
+
+
+def test_explicit_short_time_to_value_still_flags_impatience() -> None:
+    out = _build(
+        specs={"a": _onboarding_metrics(ttfv=2.0)},
+        weights={"a": 1.0},
+    )
+
+    assert out.cluster_profiles[0].time_to_first_value_tolerance == 2.0
+    assert "time_to_value_impatience" in out.flags
+
+
+def test_missing_disclosure_limit_does_not_fabricate_lever_opportunity() -> None:
+    metrics = _onboarding_metrics()
+    del metrics["progressive_disclosure_limit"]
+    out = _build(specs={"a": metrics}, weights={"a": 1.0})
+
+    assert out.cluster_profiles[0].progressive_disclosure_limit == 18.0
+    disclosure_lever = next(
+        lever for lever in out.levers if lever.key == "progressive_disclosure"
+    )
+    assert disclosure_lever.opportunity_share == 0.0
+
+
 def test_levers_ranked_and_opportunity_shares_are_population_weighted() -> None:
     out = _build(
         specs={
