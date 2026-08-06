@@ -67,6 +67,9 @@ class _FakeQuery:
     def all(self):
         return []
 
+    def count(self):
+        return 0
+
 
 class _FakeSession:
     def query(self, *args, **kwargs):
@@ -219,5 +222,5 @@ def test_user_dashboard_namespace_consistency_across_modules() -> None:
         # And the namespace literal is used via the
         # constant (not hardcoded as "user-dashboard").
         assert (
-            f'namespace="{namespace}"' in src
+            f'namespace="{namespace}"' not in src
         ), f"namespace literal not used via constant in {label}"

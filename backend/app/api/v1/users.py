@@ -689,12 +689,16 @@ def get_my_dashboard(
     month_start = datetime.now(timezone.utc).replace(
         day=1, hour=0, minute=0, second=0, microsecond=0,
     )
+    owned_project_ids = [
+        pid for (pid,) in
+        db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
     monthly_sim_used = (
         db.query(Simulation)
         .filter(
-            Simulation.project_id.in_(
-                db.query(Project.id).filter(Project.user_id == current_user.id)
-            ),
+            Simulation.project_id.in_(owned_project_ids),
             Simulation.created_at >= month_start,
         )
         .count()
@@ -714,12 +718,6 @@ def get_my_dashboard(
         .filter(Project.user_id == current_user.id)
         .count()
     )
-    owned_project_ids = [
-        pid for (pid,) in
-        db.query(Project.id)
-        .filter(Project.user_id == current_user.id)
-        .all()
-    ]
     if owned_project_ids:
         simulation_count = (
             db.query(Simulation)
