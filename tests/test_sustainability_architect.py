@@ -262,3 +262,150 @@ def test_registered_in_conductor_and_calibration():
     for stack in ARCHITECT_STACKS.values():
         assert "SustainabilityArchitect" in stack
     assert "SustainabilityArchitect" in ALL_ARCHITECT_NAMES
+
+
+# ── Hardening: malformed inputs and keyword variants ─────────────────
+
+
+def test_esg_affinity_handles_malformed_trait_values():
+    arch = SustainabilityArchitect()
+    cluster = _get_cluster("metro_power_professional")
+    out = arch.compute(
+        cluster=cluster,
+        agent_profile={
+            "income_level": "high",          # non-numeric
+            "price_sensitivity": None,       # missing / null
+            "social_orientation": 3.0,       # out of range
+        },
+        assumptions=_CLAIM_WITH_EVIDENCE,
+        env_params={},
+    )
+    assert 0.0 <= out.metrics["esg_affinity"] <= 1.0
+    assert 0.0 <= out.metrics["green_premium_tolerance"] <= 1.0
+    assert out.metrics["premium_friction"] >= 0.0
+
+
+def test_compute_handles_non_dict_and_missing_assumptions():
+    arch = SustainabilityArchitect()
+    cluster = _get_cluster("metro_power_professional")
+    # Plain strings (not dicts) and None entries must not crash detection.
+    out = arch.compute(
+        cluster=cluster,
+        agent_profile={},
+        assumptions=["Our packaging is plastic free", None],
+        env_params={},
+    )
+    assert out.flags["sustainability_positioned"] is True
+    # A falsy assumptions value (None / empty) must behave neutrally.
+    neutral = arch.compute(
+        cluster=cluster,
+        agent_profile={},
+        assumptions=None,
+        env_params={},
+    )
+    assert neutral.metrics["sustainability_signal"] == 0.0
+    assert arch.transition_overrides(neutral) == {}
+
+
+def test_hyphen_and_space_keyword_variants_both_detected():
+    arch = SustainabilityArchitect()
+    cluster = _get_cluster("metro_power_professional")
+    for text in (
+        "plastic-free packaging",
+        "plastic free packaging",
+        "energy-efficient appliances",
+        "energy efficient appliances",
+        "zero-waste refills",
+        "zero waste refills",
+        "women-owned supplier",
+        "women owned supplier",
+        "ethically sourced cotton",
+        "ethically-sourced cotton",
+    ):
+        out = arch.compute(
+            cluster=cluster,
+            agent_profile={},
+            assumptions=[{"text": text}],
+            env_params={},
+        )
+        assert out.flags["sustainability_positioned"] is True, text
+
+
+def test_sustainability_weight_is_clamped():
+    arch = SustainabilityArchitect()
+    cluster = _get_cluster("metro_power_professional")
+    at_cap = arch.compute(
+        cluster=cluster,
+        agent_profile={},
+        assumptions=_CLAIM_WITH_EVIDENCE,
+        env_params={"sustainability_weight": 2.0},
+    )
+    over_cap = arch.compute(
+        cluster=cluster,
+        agent_profile={},
+        assumptions=_CLAIM_WITH_EVIDENCE,
+        env_params={"sustainability_weight": 5.0},
+    )
+    disabled = arch.compute(
+        cluster=cluster,
+        agent_profile={},
+        assumptions=_CLAIM_WITH_EVIDENCE,
+        env_params={"sustainability_weight": -1.0},
+    )
+    assert over_cap.metrics["conversion_lift"] == at_cap.metrics["conversion_lift"]
+    assert disabled.metrics["conversion_lift"] == 0.0
+
+
+def test_critical_severity_when_greenwash_and_premium_friction_overlap():
+    arch = SustainabilityArchitect()
+    cluster = _get_cluster("metro_power_professional")
+    out = arch.compute(
+        cluster=cluster,
+        agent_profile={
+            "price_sensitivity": 0.95,
+            "income_level": 0.05,
+        },
+        assumptions=_CLAIM_WITHOUT_EVIDENCE,  # vague claim → greenwash risk
+        env_params={},
+    )
+    assert out.flags["greenwashing_risk"] is True
+    assert out.flags["premium_friction"] is True
+    assert out.severity == "CRITICAL"
+
+
+def test_low_esg_reach_flag_for_weak_affinity_clusters():
+    arch = SustainabilityArchitect()
+    cluster = _get_cluster("metro_power_professional")
+    out = arch.compute(
+        cluster=cluster,
+        agent_profile={
+            "social_orientation": 0.0,
+            "motivation": 0.0,
+            "digital_literacy": 0.0,
+            "trust": 0.0,
+            "income_level": 0.0,
+        },
+        assumptions=_CLAIM_WITH_EVIDENCE,
+        env_params={},
+    )
+    assert out.flags["low_esg_reach"] is True
+    assert out.severity == "WARNING"
+
+
+def test_transition_overrides_tolerate_garbage_metrics():
+    arch = SustainabilityArchitect()
+    out = ArchitectOutput(
+        architect_name="SustainabilityArchitect",
+        cluster_id="metro_power_professional",
+        metrics={
+            "sustainability_signal": "0.5",   # string, not float
+            "esg_affinity": None,             # null value
+            "premium_friction": "garbage",
+        },
+        flags={},
+        narrative_findings=[],
+        severity="INFO",
+    )
+    overrides = arch.transition_overrides(out)
+    assert ("CONSIDER", "DECIDE") in overrides
+    assert 0.40 <= overrides[("CONSIDER", "DECIDE")] <= 1.30

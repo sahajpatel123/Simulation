@@ -43,23 +43,27 @@ from app.simulation.clusters.registry import ClusterRegistry
 
 # ── Keyword groups ────────────────────────────────────────────────────
 # Word-boundary matching (not substring) avoids false positives like
-# "organic growth" (matches "organic") or "greenhouse" (matches "green").
+# "greenhouse" (matches "green") or "community manager" (matches "community").
+# Hyphenated compounds carry both hyphenated and space-separated variants so
+# "plastic-free" and "plastic free" are detected identically.
 
 _ENV_KEYWORDS: tuple[str, ...] = (
     "eco", "eco-friendly", "environmentally friendly", "sustainable",
     "sustainability", "recycled", "recyclable", "biodegradable",
     "compostable", "carbon-neutral", "carbon neutral", "carbon footprint",
-    "zero-waste", "plastic-free", "renewable", "green", "emission",
-    "energy-efficient", "upcycled", "plant-based", "cruelty-free",
-    "low-impact", "climate",
+    "zero-waste", "zero waste", "plastic-free", "plastic free", "renewable",
+    "green", "emission", "energy-efficient", "energy efficient", "upcycled",
+    "plant-based", "plant based", "cruelty-free", "cruelty free",
+    "low-impact", "low impact", "climate",
 )
 
 _SOCIAL_KEYWORDS: tuple[str, ...] = (
     "fair trade", "fair-trade", "ethical", "ethically sourced",
-    "fair wages", "fair wage", "worker-owned", "community",
+    "ethically-sourced", "fair wages", "fair wage", "worker-owned",
+    "worker owned", "community",
     "b-corp", "b corp", "charity", "donation", "giveback",
     "local sourcing", "artisan", "handmade", "women-owned",
-    "minority-owned", "inclusive",
+    "women owned", "minority-owned", "minority owned", "inclusive",
 )
 
 _EVIDENCE_KEYWORDS: tuple[str, ...] = (
@@ -86,8 +90,13 @@ _CREDIBILITY_WITHOUT_EVIDENCE: float = 0.25
 
 def _has_keyword(assumptions: list[dict[str, Any]], keywords: tuple[str, ...]) -> bool:
     """True when any assumption text mentions any keyword (word-boundary)."""
+    if not assumptions:
+        return False
     for assumption in assumptions:
-        text = str(assumption.get("text", assumption.get("assumption", ""))).lower()
+        if isinstance(assumption, dict):
+            text = str(assumption.get("text", assumption.get("assumption", ""))).lower()
+        else:
+            text = str(assumption).lower()
         for keyword in keywords:
             if re.search(rf"\b{re.escape(keyword)}\b", text):
                 return True
@@ -113,6 +122,17 @@ def _safe_weight(value: Any, default: float = 1.0) -> float:
     if not math.isfinite(parsed):
         return default
     return max(0.0, min(2.0, parsed))
+
+
+def _safe_metric(value: Any, default: float) -> float:
+    """Parse a metric value, falling back to ``default`` on garbage input."""
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(parsed):
+        return default
+    return parsed
 
 
 class SustainabilityArchitect(BaseArchitect):
@@ -159,7 +179,7 @@ class SustainabilityArchitect(BaseArchitect):
 
         esg_affinity = round(
             max(0.0, min(1.0, sum(
-                _AFFINITY_WEIGHTS[k] * traits.get(k, 0.5)
+                _AFFINITY_WEIGHTS[k] * _trait(traits, k)
                 for k in _AFFINITY_WEIGHTS
             ))),
             4,
@@ -244,11 +264,11 @@ class SustainabilityArchitect(BaseArchitect):
         self,
         output: ArchitectOutput,
     ) -> dict[tuple[str, str], float]:
-        if float(output.metrics.get("sustainability_signal", 0.0)) <= 0.0:
+        if _safe_metric(output.metrics.get("sustainability_signal"), 0.0) <= 0.0:
             return {}
 
-        affinity = float(output.metrics.get("esg_affinity", 0.5))
-        friction = float(output.metrics.get("premium_friction", 0.0))
+        affinity = _safe_metric(output.metrics.get("esg_affinity"), 0.5)
+        friction = _safe_metric(output.metrics.get("premium_friction"), 0.0)
         return {
             ("CONSIDER", "DECIDE"): round(
                 max(0.40, min(1.30, 0.92 + 0.28 * affinity - 0.18 * friction)),
@@ -277,7 +297,7 @@ class SustainabilityArchitect(BaseArchitect):
             sum(c.population_weight for c in registry.all_clusters()) or 1.0
         )
 
-        positioned = [o for o in outputs if float(o.metrics.get("sustainability_signal", 0.0)) > 0.0]
+        positioned = [o for o in outputs if _safe_metric(o.metrics.get("sustainability_signal"), 0.0) > 0.0]
         greenwash = [o for o in outputs if o.flags.get("greenwashing_risk")]
         friction = [o for o in outputs if o.flags.get("premium_friction")]
         low_reach = [o for o in outputs if o.flags.get("low_esg_reach")]
@@ -315,8 +335,8 @@ class SustainabilityArchitect(BaseArchitect):
             cluster = registry.get_cluster(output.cluster_id)
             weight = cluster.population_weight if cluster else 0.0
             positioned_weight += weight
-            weighted_lift += weight * float(output.metrics.get("conversion_lift", 0.0))
-            weighted_affinity += weight * float(output.metrics.get("esg_affinity", 0.0))
+            weighted_lift += weight * _safe_metric(output.metrics.get("conversion_lift"), 0.0)
+            weighted_affinity += weight * _safe_metric(output.metrics.get("esg_affinity"), 0.0)
         positioned_weight = positioned_weight or 1.0
         conversion_impact = round(weighted_lift / positioned_weight, 4)
         avg_affinity = round(weighted_affinity / positioned_weight, 4)
