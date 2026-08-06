@@ -5,6 +5,7 @@ Tests for the market-sizing helper
 from __future__ import annotations
 
 import json
+import math
 from typing import Any
 
 import pytest
@@ -177,3 +178,98 @@ def test_defaults_are_sane() -> None:
     assert out["som_customers"] == 125_000
     assert CONVERSION_BENCHMARK == 0.05
     assert REACHABLE_MIN_CONVERSION == 0.001
+
+
+def test_mean_conversion_rate_fallback_without_breakdown() -> None:
+    """Real results without cluster_breakdown still get a projection."""
+    out = build_market_sizing(
+        {
+            "mean_conversion_rate": 0.04,
+            "total_agents": 10000,
+            "product_type_detected": "saas",
+        },
+        market_size=1_000_000,
+        target_market_fraction=0.5,
+        average_order_value=100,
+    )
+    assert out["overall_conversion"] == 0.04
+    assert out["reachable_fraction"] == 1.0
+    assert out["sam_customers"] == 500_000
+    assert out["som_customers"] == 20_000
+    assert out["annual_revenue"] == 2_000_000
+    assert out["meta"]["conversion_source"] == "mean_conversion_rate"
+    signals = _signals_by_key(out)
+    assert signals["cluster_breakdown"]["level"] == SIGNAL_WATCH
+    assert signals["conversion"]["level"] == SIGNAL_WATCH
+
+
+def test_raw_funnel_fallback() -> None:
+    """raw_funnel supplies both conversion and agent count."""
+    out = build_market_sizing(
+        {
+            "raw_funnel": {
+                "conversion_rate": 0.03,
+                "total_agents": 5000,
+            }
+        },
+        market_size=1_000_000,
+        target_market_fraction=1.0,
+        average_order_value=50,
+    )
+    assert out["overall_conversion"] == 0.03
+    assert out["total_agents"] == 5000
+    assert out["som_customers"] == 30_000
+    assert out["meta"]["conversion_source"] == "raw_funnel"
+
+
+def test_dict_of_dict_cluster_breakdown() -> None:
+    """Cluster entries shaped as dicts (conversion_rate) are parsed."""
+    out = build_market_sizing(
+        {
+            "population_weighted_conversion": 0.05,
+            "cluster_breakdown": {
+                "a": {"conversion_rate": 0.08, "weight": 0.5},
+                "b": {"conversion_rate": 0.02, "weight": 0.5},
+            },
+        },
+        market_size=1_000_000,
+        target_market_fraction=1.0,
+    )
+    assert out["reachable_fraction"] == 1.0
+    assert out["som_customers"] == 50_000
+    assert out["top_segments"][0]["cluster_id"] == "a"
+    assert out["meta"]["conversion_source"] == "population_weighted_conversion"
+
+
+def test_non_finite_inputs_are_safe() -> None:
+    """NaN/inf values never poison the projection math."""
+    out = build_market_sizing(
+        {
+            "population_weighted_conversion": float("nan"),
+            "total_agents": float("inf"),
+            "cluster_breakdown": {
+                "a": float("nan"),
+                "b": float("inf"),
+            },
+        },
+        cluster_registry={
+            "a": {"name": "A", "population_weight": float("nan")},
+            "b": {"name": "B", "population_weight": 0.5},
+        },
+        market_size=1_000_000,
+        target_market_fraction=1.0,
+        average_order_value=100,
+    )
+    assert out["overall_conversion"] == 0.0
+    assert out["total_agents"] == 0
+    assert out["top_segments"] == []
+    assert math.isfinite(out["reachable_fraction"])
+    assert math.isfinite(out["annual_revenue"])
+    assert all(math.isfinite(s["population_weight"]) for s in out["top_segments"])
+
+
+def test_list_results_yield_zero_state() -> None:
+    out = build_market_sizing(["not", "a", "dict"])
+    assert out["overall_conversion"] == 0.0
+    assert out["som_customers"] == 0
+    assert out["meta"]["conversion_source"] == "none"

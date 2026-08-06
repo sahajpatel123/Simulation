@@ -25,6 +25,7 @@ uniform weighting so the numbers still come out sensible.
 from __future__ import annotations
 
 import json as _json
+import math
 from datetime import datetime, timezone
 from typing import Any
 
@@ -61,20 +62,21 @@ SIGNAL_CRITICAL: str = "critical"
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
-    if value is None:
+    if value is None or isinstance(value, bool):
         return default
     try:
-        return float(value)
+        parsed = float(value)
     except (TypeError, ValueError):
         return default
+    return parsed if math.isfinite(parsed) else default
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
-    if value is None:
+    if value is None or isinstance(value, bool):
         return default
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
@@ -137,7 +139,7 @@ def _build_signals(
     """Compose the traffic-light signals for the digest."""
     signals: list[MarketSizingSignal] = []
 
-    if not has_cluster_data or overall_conversion <= 0:
+    if overall_conversion <= 0:
         signals.append(
             MarketSizingSignal(
                 key="conversion",
@@ -146,6 +148,19 @@ def _build_signals(
                 message=(
                     "No usable conversion data in this simulation "
                     "— re-run before trusting the projection."
+                ),
+            )
+        )
+    elif not has_cluster_data:
+        signals.append(
+            MarketSizingSignal(
+                key="conversion",
+                label="Conversion",
+                level=SIGNAL_WATCH,
+                message=(
+                    f"Conversion of {overall_conversion:.2%} comes from "
+                    "the overall rate — no cluster breakdown is stored "
+                    "for this run."
                 ),
             )
         )
@@ -185,6 +200,19 @@ def _build_signals(
                     f"Conversion of {overall_conversion:.2%} is "
                     "very low — fix core product friction before "
                     "projecting revenue."
+                ),
+            )
+        )
+
+    if not has_cluster_data and overall_conversion > 0:
+        signals.append(
+            MarketSizingSignal(
+                key="cluster_breakdown",
+                label="Cluster data",
+                level=SIGNAL_WATCH,
+                message=(
+                    "No cluster breakdown in the results — reachability "
+                    "assumed at 100% and SOM uses the overall conversion."
                 ),
             )
         )
@@ -239,9 +267,10 @@ def build_market_sizing(
     Args:
         results: simulation ``results_json`` (dict or JSON
             string). Expected keys: ``population_weighted_conversion``
-            / ``conversion_rate``, ``cluster_breakdown``
-            (cluster id -> rate or dict), ``total_agents``,
-            ``product_type_detected``, ``primary_failure_domain``.
+            / ``mean_conversion_rate`` / ``conversion_rate`` /
+            ``raw_funnel``, ``cluster_breakdown`` (cluster id ->
+            rate or dict), ``total_agents``, ``product_type_detected``,
+            ``primary_failure_domain``.
         market_size: TAM the founder wants to reason about.
         target_market_fraction: share of the reachable market
             inside the launch segment / geography.
@@ -275,21 +304,31 @@ def build_market_sizing(
         0.0, _safe_float(purchase_frequency_per_year),
     )
 
-    overall_conversion = max(
-        0.0,
-        min(
-            1.0,
-            _safe_float(
-                data.get(
-                    "population_weighted_conversion",
-                    data.get("conversion_rate"),
-                )
-            ),
-        ),
+    raw_funnel = data.get("raw_funnel")
+    if not isinstance(raw_funnel, dict):
+        raw_funnel = {}
+
+    # Conversion precedence: conductor PWC -> aggregated mean ->
+    # legacy top-level rate -> raw funnel rate. The weighted rate
+    # derived from cluster_breakdown below is the final fallback.
+    conversion_value = _safe_float(
+        data.get("population_weighted_conversion")
     )
-    total_agents = max(
-        0, _safe_int(data.get("total_agents")),
-    )
+    conversion_source = "population_weighted_conversion"
+    if conversion_value <= 0:
+        conversion_value = _safe_float(data.get("mean_conversion_rate"))
+        conversion_source = "mean_conversion_rate"
+    if conversion_value <= 0:
+        conversion_value = _safe_float(data.get("conversion_rate"))
+        conversion_source = "conversion_rate"
+    if conversion_value <= 0:
+        conversion_value = _safe_float(raw_funnel.get("conversion_rate"))
+        conversion_source = "raw_funnel"
+
+    overall_conversion = max(0.0, min(1.0, conversion_value))
+    total_agents = max(0, _safe_int(data.get("total_agents")))
+    if total_agents <= 0:
+        total_agents = max(0, _safe_int(raw_funnel.get("total_agents")))
     product_type = str(data.get("product_type_detected") or "")
     failure_domain = str(data.get("primary_failure_domain") or "unknown")
 
@@ -321,11 +360,15 @@ def build_market_sizing(
             entries.append((cid, rate, weight))
 
     has_cluster_data = bool(entries)
-    reachable_fraction = (
-        max(0.0, min(1.0, reachable_weight / total_weight))
-        if total_weight > 0
-        else 0.0
-    )
+    if total_weight > 0:
+        reachable_fraction = max(
+            0.0, min(1.0, reachable_weight / total_weight)
+        )
+    else:
+        # No cluster breakdown to measure reachability from — assume the
+        # whole target market is reachable and let the overall conversion
+        # rate size SOM, rather than collapsing the projection to zero.
+        reachable_fraction = 1.0
     weighted_conversion = (
         weighted_conversion_sum / total_weight
         if total_weight > 0
@@ -333,6 +376,11 @@ def build_market_sizing(
     )
     if overall_conversion <= 0:
         overall_conversion = max(0.0, min(1.0, weighted_conversion))
+        conversion_source = (
+            "cluster_weighted"
+            if overall_conversion > 0
+            else "none"
+        )
 
     # ---- TAM / SAM / SOM ------------------------------------------
     tam_customers = effective_market_size
@@ -378,10 +426,26 @@ def build_market_sizing(
     )
 
     if not has_cluster_data:
-        narrative = (
-            "No cluster breakdown in the simulation results — "
-            "run a full simulation to get a market projection."
-        )
+        if overall_conversion > 0:
+            narrative = (
+                "No cluster breakdown in the results — reachability "
+                f"assumed at 100%. At {overall_conversion:.2%} overall "
+                f"conversion, a {tam_customers:,}-person TAM projects a "
+                f"{som_customers:,}-customer obtainable market."
+            )
+            if annual_revenue > 0:
+                narrative += (
+                    f" At {effective_aov:.2f} AOV x "
+                    f"{effective_frequency:g} purchase(s)/year, that "
+                    f"projects ${annual_revenue:,.0f} annual revenue "
+                    f"(${revenue_per_1000_visitors:,.0f} per 1,000 "
+                    "visitors)."
+                )
+        else:
+            narrative = (
+                "No cluster breakdown in the simulation results — "
+                "run a full simulation to get a market projection."
+            )
     else:
         sentences = [
             (
@@ -441,6 +505,7 @@ def build_market_sizing(
             "reachable_min_conversion": REACHABLE_MIN_CONVERSION,
             "cluster_count": len(breakdown),
             "target_market_fraction": effective_fraction,
+            "conversion_source": conversion_source,
         },
     }
     return MarketSizingOut(**payload).model_dump()

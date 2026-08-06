@@ -103,7 +103,14 @@ from app.simulation.sensitivity_matrix import compute_simulation_sensitivity_mat
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.cluster_opportunity import build_cluster_opportunity_matrix
 from app.simulation.market_sizing import (
+    DEFAULT_AVERAGE_ORDER_VALUE,
     DEFAULT_MARKET_SIZE,
+    DEFAULT_PURCHASE_FREQUENCY_PER_YEAR,
+    DEFAULT_TARGET_MARKET_FRACTION,
+    MAX_MARKET_SIZE,
+    MAX_TARGET_MARKET_FRACTION,
+    MIN_MARKET_SIZE,
+    MIN_TARGET_MARKET_FRACTION,
     build_market_sizing,
 )
 from app.simulation.cluster_drill_down import (
@@ -4152,23 +4159,23 @@ def get_market_sizing(
     simulation_id: int,
     market_size: int = Query(
         DEFAULT_MARKET_SIZE,
-        ge=1,
-        le=10_000_000_000,
+        ge=MIN_MARKET_SIZE,
+        le=MAX_MARKET_SIZE,
         description="Total addressable market (people) to reason about",
     ),
     target_market_fraction: float = Query(
-        0.25,
-        ge=0.01,
-        le=1.0,
+        DEFAULT_TARGET_MARKET_FRACTION,
+        ge=MIN_TARGET_MARKET_FRACTION,
+        le=MAX_TARGET_MARKET_FRACTION,
         description="Share of the reachable market in the launch segment",
     ),
     average_order_value: float = Query(
-        0.0,
+        DEFAULT_AVERAGE_ORDER_VALUE,
         ge=0,
         description="Revenue per converted customer (set 0 to skip revenue)",
     ),
     purchase_frequency_per_year: float = Query(
-        1.0,
+        DEFAULT_PURCHASE_FREQUENCY_PER_YEAR,
         ge=0,
         description="Purchases per customer per year",
     ),
