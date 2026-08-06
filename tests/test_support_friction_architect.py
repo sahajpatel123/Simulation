@@ -161,6 +161,65 @@ def test_self_serve_capped_at_090() -> None:
     assert out.metrics["self_serve_resolution_rate"] <= 0.90
 
 
+def test_assumption_knowledge_base_raises_self_serve() -> None:
+    """Knowledge-base phrases in the brief raise self-serve resolution
+    even when agent_profile carries no explicit signal."""
+    from app.simulation.architects.support_friction import SupportFrictionArchitect
+
+    architect = SupportFrictionArchitect()
+    baseline = architect.compute(
+        cluster=_cluster(literacy=0.8),
+        agent_profile={}, assumptions=[], env_params={},
+    )
+    with_kb = architect.compute(
+        cluster=_cluster(literacy=0.8),
+        agent_profile={},
+        assumptions=[{"text": "We ship a knowledge base with a help center and FAQs"}],
+        env_params={},
+    )
+    assert with_kb.metrics["self_serve_resolution_rate"] > baseline.metrics["self_serve_resolution_rate"]
+
+
+def test_assumption_no_support_lowers_self_serve_and_docs() -> None:
+    """Explicit no-support phrasing in the brief is treated as no KB:
+    self-serve stays at the baseline rate and docs perception turns
+    negative."""
+    from app.simulation.architects.support_friction import SupportFrictionArchitect
+
+    architect = SupportFrictionArchitect()
+    baseline = architect.compute(
+        cluster=_cluster(literacy=0.8),
+        agent_profile={}, assumptions=[], env_params={},
+    )
+    no_kb = architect.compute(
+        cluster=_cluster(literacy=0.8),
+        agent_profile={},
+        assumptions=[{"text": "We have no documentation or support team yet"}],
+        env_params={},
+    )
+    assert no_kb.metrics["self_serve_resolution_rate"] == baseline.metrics["self_serve_resolution_rate"]
+    assert no_kb.metrics["documentation_quality_perception_effect"] < 0.0
+
+
+def test_explicit_kb_signal_overrides_assumptions() -> None:
+    """agent_profile.has_knowledge_base always wins over brief phrasing."""
+    from app.simulation.architects.support_friction import SupportFrictionArchitect
+
+    architect = SupportFrictionArchitect()
+    no_kb_explicit = architect.compute(
+        cluster=_cluster(literacy=0.8),
+        agent_profile={"has_knowledge_base": False},
+        assumptions=[{"text": "We have a comprehensive knowledge base"}],
+        env_params={},
+    )
+    no_kb_plain = architect.compute(
+        cluster=_cluster(literacy=0.8),
+        agent_profile={"has_knowledge_base": False},
+        assumptions=[], env_params={},
+    )
+    assert no_kb_explicit.metrics == no_kb_plain.metrics
+
+
 # ---------------------------------------------------------------------------
 # response_time_tolerance_hours
 # ---------------------------------------------------------------------------
@@ -327,8 +386,8 @@ def test_escalation_email_default_for_mid_literacy() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_doc_perception_zero_when_no_kb_default_and_literacy_low() -> None:
-    """has_knowledge_base missing → defaults to True; literacy 0 → 0 effect."""
+def test_doc_perception_zero_for_low_literacy_without_kb() -> None:
+    """No KB signal and literacy 0 → docs effect is 0 (0 × negative mult)."""
     from app.simulation.architects.support_friction import SupportFrictionArchitect
 
     out = SupportFrictionArchitect().compute(
@@ -339,7 +398,7 @@ def test_doc_perception_zero_when_no_kb_default_and_literacy_low() -> None:
 
 
 def test_doc_perception_negative_when_no_kb_and_literacy_high() -> None:
-    """has_knowledge_base=False → doc_mult=-0.25 → doc_effect < 0."""
+    """No KB signal (profile False or absent) → doc_mult=-0.25 → doc_effect < 0."""
     from app.simulation.architects.support_friction import SupportFrictionArchitect
 
     out = SupportFrictionArchitect().compute(
@@ -349,6 +408,12 @@ def test_doc_perception_negative_when_no_kb_and_literacy_high() -> None:
     )
     # literacy * 0.3 * (-0.25) = -0.06
     assert out.metrics["documentation_quality_perception_effect"] < 0.0
+
+    absent = SupportFrictionArchitect().compute(
+        cluster=_cluster(literacy=0.8),
+        agent_profile={}, assumptions=[], env_params={},
+    )
+    assert absent.metrics["documentation_quality_perception_effect"] == out.metrics["documentation_quality_perception_effect"]
 
 
 # ---------------------------------------------------------------------------
@@ -378,6 +443,46 @@ def test_severity_info_with_normal_ticket_rate() -> None:
     )
     assert out.metrics["support_ticket_likelihood"] <= 0.35
     assert out.severity == "INFO"
+
+
+def test_complexity_assumptions_raise_ticket_rate() -> None:
+    """Complexity phrases in the brief raise the ticket multiplier; simple
+    phrasing lowers it."""
+    from app.simulation.architects.support_friction import SupportFrictionArchitect
+
+    architect = SupportFrictionArchitect()
+    complex_brief = architect.compute(
+        cluster=_cluster(literacy=0.5),
+        agent_profile={"onboarding_completion_rate": 0.5},
+        assumptions=[{"text": "The product is complex with many features and multi-step setup"}],
+        env_params={},
+    )
+    simple_brief = architect.compute(
+        cluster=_cluster(literacy=0.5),
+        agent_profile={"onboarding_completion_rate": 0.5},
+        assumptions=[{"text": "A simple one-feature tool that is easy to use"}],
+        env_params={},
+    )
+    assert complex_brief.metrics["support_ticket_likelihood"] > simple_brief.metrics["support_ticket_likelihood"]
+
+
+def test_explicit_complexity_overrides_assumptions() -> None:
+    """agent_profile.product_complexity always wins over brief phrasing."""
+    from app.simulation.architects.support_friction import SupportFrictionArchitect
+
+    architect = SupportFrictionArchitect()
+    explicit = architect.compute(
+        cluster=_cluster(literacy=0.5),
+        agent_profile={"onboarding_completion_rate": 0.5, "product_complexity": 0.1},
+        assumptions=[{"text": "The product is complex with many features"}],
+        env_params={},
+    )
+    plain = architect.compute(
+        cluster=_cluster(literacy=0.5),
+        agent_profile={"onboarding_completion_rate": 0.5, "product_complexity": 0.1},
+        assumptions=[], env_params={},
+    )
+    assert explicit.metrics == plain.metrics
 
 
 # ---------------------------------------------------------------------------

@@ -377,3 +377,76 @@ def test_meta_surface() -> None:
     assert out.meta["thresholds"]["tier_low_index"] == 0.30
     assert out.meta["thresholds"]["verdict_high_index"] == 0.50
     assert "primary_driver_score" in out.meta
+
+
+def test_assumptions_shape_support_friction_read_end_to_end() -> None:
+    """Knowledge-base / no-support phrasing in the brief changes the
+    conductor's SupportFrictionArchitect metrics and therefore the read:
+    a docs gap must surface without docs, and must disappear with them."""
+    from app.simulation.clusters.registry import ClusterRegistry
+    from app.simulation.conductor import Conductor
+    from app.simulation.product_type import ProductType
+
+    conductor = Conductor()
+
+    def read_with(assumptions: list[dict]) -> SupportFrictionOut:
+        result = conductor.run(
+            agents=[],
+            env_params={
+                "average_order_value": 999.0,
+                "price_sensitivity": 0.5,
+                "market_maturity": 0.3,
+            },
+            assumptions=assumptions,
+            product_type=ProductType.SAAS,
+        )
+        conductor_results = {
+            cid: {
+                name: {"metrics": output.metrics, "flags": output.flags}
+                for name, output in arch_outputs.items()
+            }
+            for cid, arch_outputs in result.cluster_results.items()
+        }
+        registry = [
+            {
+                "cluster_id": cluster.cluster_id,
+                "name": cluster.name,
+                "population_weight": cluster.population_weight,
+            }
+            for cluster in ClusterRegistry().all_clusters()
+        ]
+        return build_support_friction(
+            {},
+            simulation_id=7,
+            project_id=10,
+            status="COMPLETED",
+            signal_quality=0.62,
+            conductor_results=conductor_results,
+            cluster_registry=registry,
+            product_type="saas",
+        )
+
+    with_docs = read_with(
+        [
+            {
+                "text": "We maintain a comprehensive knowledge base, "
+                        "help center, and FAQs for self-service.",
+                "sensitivity": "MEDIUM",
+                "impact_score": 5.0,
+            }
+        ]
+    )
+    no_docs = read_with(
+        [
+            {
+                "text": "We have no documentation or support team yet.",
+                "sensitivity": "MEDIUM",
+                "impact_score": 5.0,
+            }
+        ]
+    )
+
+    assert no_docs.weighted_documentation_effect < with_docs.weighted_documentation_effect
+    assert "documentation_gap" in no_docs.flags
+    assert "documentation_gap" not in with_docs.flags
+    assert no_docs.friction_index > with_docs.friction_index

@@ -1,12 +1,18 @@
 """
 SupportFrictionArchitect — models post-purchase support load and churn risk.
 
+Assumption-aware: complexity and knowledge-base signals in the brief
+shape ticket likelihood, self-serve resolution and documentation
+perception. Explicit ``agent_profile`` values (``product_complexity``,
+``has_knowledge_base``) always win over assumption text.
+
 No transition_overrides — feeds post-purchase churn modelling only.
 No LLM, no DB, no randomness.
 """
 from __future__ import annotations
 
 from app.simulation.architects.base import ArchitectOutput, BaseArchitect, DomainReport
+from app.simulation.architects.utils import contains_word, extract_complexity
 from app.simulation.clusters.definitions import ClusterDefinition
 
 
@@ -17,6 +23,22 @@ SUPPORTED_PRODUCT_TYPES: list[str] = [
     "iot_hardware", "wearable", "b2b_hardware",
     "consumer_app", "d2c", "b2b_marketplace",
     "productivity_tool", "smart_home",
+]
+
+# Phrases that tell the founder's brief whether a knowledge base /
+# self-serve support surface exists. Absent-phrases are checked first so
+# "no documentation" never matches the positive "documentation" token.
+KB_PRESENT_PHRASES: list[str] = [
+    "knowledge base", "knowledge_base", "help center", "help centre",
+    "self-serve", "self serve", "faq", "help docs", "documentation",
+    "docs", "onboarding guide", "support portal", "support team",
+    "customer support", "chat support",
+]
+KB_ABSENT_PHRASES: list[str] = [
+    "no knowledge base", "no knowledge_base", "no help center",
+    "no help centre", "no documentation", "no docs", "no faq",
+    "no support", "no self-serve", "no self serve", "no help",
+    "no support team", "no customer support", "no chat support",
 ]
 
 
@@ -47,8 +69,19 @@ class SupportFrictionArchitect(BaseArchitect):
         trust      = t["trust"]
 
         # ── Upstream context ──────────────────────────────────────────────
-        complexity  = agent_profile.get("product_complexity", 0.5)
+        # Explicit profile signals win; otherwise infer from the brief.
+        try:
+            complexity = float(agent_profile["product_complexity"])
+        except (KeyError, TypeError, ValueError):
+            complexity = extract_complexity(assumptions)
         onboard_cr  = agent_profile.get("onboarding_completion_rate", 0.65)
+        if "has_knowledge_base" in agent_profile:
+            has_knowledge_base = bool(agent_profile["has_knowledge_base"])
+        else:
+            has_knowledge_base = (
+                not contains_word(assumptions, KB_ABSENT_PHRASES)
+                and contains_word(assumptions, KB_PRESENT_PHRASES)
+            )
 
         # ── Core metrics ──────────────────────────────────────────────────
         ticket_rate = min(0.70, (
@@ -56,7 +89,7 @@ class SupportFrictionArchitect(BaseArchitect):
             + (1 - onboard_cr) * 0.4 * (1.6 if complexity > 0.6 else 0.7)
         ))
 
-        kb_factor  = 1.3 if agent_profile.get("has_knowledge_base", False) else 0.5
+        kb_factor  = 1.3 if has_knowledge_base else 0.5
         self_serve = min(0.90, literacy * 0.7 * kb_factor)
 
         if income > 0.7:
@@ -85,7 +118,7 @@ class SupportFrictionArchitect(BaseArchitect):
         else:
             escalation = "email"
 
-        doc_mult = 1.0 if agent_profile.get("has_knowledge_base", True) else -0.25
+        doc_mult = 1.0 if has_knowledge_base else -0.25
         doc_effect = literacy * 0.3 * doc_mult
 
         severity = "WARNING" if ticket_rate > 0.35 else "INFO"
