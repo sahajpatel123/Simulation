@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import fcntl
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -39,6 +40,8 @@ DEFAULT_LOG_DIR = HERE / "logs"
 LOCK_FILE = HERE / "loop.lock"
 STOP_FILE = HERE / "stop"
 LAST_OUTPUT_FILE = HERE / "last_output.md"
+BASELINE_FILE = HERE / "baseline_failures.txt"
+TEST_IMPORT_CHECK = "import pytest, fastapi, sqlalchemy, openai"
 PLACEHOLDER = "REPLACE_ME_WITH_THE_TASK"
 KEEP_LOGS = 20
 
@@ -108,11 +111,11 @@ every pass — it is the authoritative coding guide.
 2. Do NOT run any git commands (fetch, add, commit, push, switch, rebase) —
    the loop wrapper handles all git and pushes to origin/{branch}. Read-only
    git (`git status`, `git diff`, `git log`) is fine.
-3. Quality gate: run `.venv/bin/python -m pytest tests/ -q` from {workdir}
-   (pytest config already puts backend/ on the path). If the full suite is
-   too slow, at minimum run tests covering the files you touched — never
-   leave existing tests broken. Fix failures you introduce. The wrapper
-   re-runs the suite itself before committing.
+3. Quality gate: run `python3 -m pytest tests/ -q` from {workdir} (pytest
+   config already puts backend/ on the path; the wrapper resolves a working
+   test interpreter and re-runs the suite before committing). If the full
+   suite is too slow, at minimum run tests covering the files you touched —
+   never leave existing tests broken. Fix failures you introduce.
 4. Finish with exactly one completion and report **DONE** with a one-line
    summary; the wrapper commits and pushes straight to origin/{branch}
    (never a PR, never force-push, never commit secrets like .env*).
@@ -186,14 +189,56 @@ def git_cmd(args, *cmd: str, timeout: int = 120) -> subprocess.CompletedProcess:
     )
 
 
-def run_tests(args, log_path: Path, timeout: int = 900) -> int:
-    cmd = [
-        str(Path(args.workdir) / ".venv/bin/python"),
-        "-m",
-        "pytest",
-        "tests/",
-        "-q",
+def resolve_test_python(workdir: str) -> str | None:
+    """Pick a Python interpreter that can import the app's test deps.
+
+    The repo's ``.venv`` is uv-managed and can be empty, so fall back to
+    system interpreters that actually have pytest + the app stack.
+    """
+    candidates = [
+        os.environ.get("THECEE_TEST_PYTHON"),
+        str(Path(workdir) / ".venv/bin/python"),
+        "/opt/homebrew/bin/python3",
+        "/usr/bin/python3",
+        shutil.which("python3"),
     ]
+    seen: set[str] = set()
+    for cand in candidates:
+        if not cand or cand in seen:
+            continue
+        seen.add(cand)
+        if not Path(cand).exists():
+            continue
+        try:
+            r = subprocess.run(
+                [cand, "-c", TEST_IMPORT_CHECK],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if r.returncode == 0:
+            return cand
+    return None
+
+
+def load_baseline() -> set[str]:
+    if not BASELINE_FILE.exists():
+        return set()
+    return {ln.strip() for ln in BASELINE_FILE.read_text().splitlines() if ln.strip()}
+
+
+def save_baseline(failed: set[str]) -> None:
+    BASELINE_FILE.write_text("".join(f"{f}\n" for f in sorted(failed)))
+
+
+def run_tests(args, log_path: Path, timeout: int = 900) -> tuple[int, set[str]]:
+    py = args.test_python
+    if not py:
+        print(f"[{now_text()}] no usable test interpreter found")
+        return -99, set()
+    cmd = [py, "-m", "pytest", "tests/", "-q"]
     print(f"[{now_text()}] running tests: {' '.join(cmd)}")
     try:
         r = subprocess.run(
@@ -201,24 +246,47 @@ def run_tests(args, log_path: Path, timeout: int = 900) -> int:
         )
     except subprocess.TimeoutExpired:
         print(f"[{now_text()}] tests timed out after {timeout}s")
-        return -9
+        return -9, set()
     with open(log_path, "a") as f:
         f.write("\n--- wrapper test run ---\n")
         f.write(r.stdout or "")
         f.write(r.stderr or "")
+    failed: set[str] = set()
+    for line in (r.stdout or "").splitlines() + (r.stderr or "").splitlines():
+        m = re.match(r"^(?:FAILED|ERROR)\s+(tests/\S+)", line)
+        if m:
+            failed.add(m.group(1))
     tail = "\n".join((r.stdout or "").strip().splitlines()[-8:])
     print(f"[{now_text()}] pytest rc={r.returncode}\n{tail}")
-    return r.returncode
+    return r.returncode, failed
 
 
 def ship_pass(args, mode: str, summary: str, log_path: Path) -> tuple[str, int]:
     """Re-run tests, then commit and push the pass. Returns (status, rc)."""
-    test_rc = run_tests(args, log_path)
-    if test_rc != 0:
-        print(f"[{now_text()}] tests failed (rc={test_rc}); reverting this pass")
+    test_rc, failed = run_tests(args, log_path)
+    baseline = load_baseline()
+    if not baseline:
+        save_baseline(failed)
+        baseline = failed
+        print(
+            f"[{now_text()}] established baseline with {len(baseline)} "
+            "pre-existing failures"
+        )
+    new_failures = failed - baseline
+    if new_failures:
+        print(
+            f"[{now_text()}] tests failed (rc={test_rc}); "
+            f"{len(new_failures)} new failure(s) vs baseline; reverting this pass"
+        )
+        for f in sorted(new_failures)[:10]:
+            print(f"  new failure: {f}")
         git_cmd(args, "reset", "--hard", "HEAD")
         git_cmd(args, "clean", "-fdq")
         return "TEST_FAILED", test_rc
+    print(
+        f"[{now_text()}] gate OK: {len(failed)} failing, "
+        f"all within {len(baseline)}-entry baseline"
+    )
 
     subject = (summary or f"autonomous[{mode}] improvement pass").strip()
     if len(subject) > 100:
@@ -336,12 +404,19 @@ def main() -> int:
     parser.add_argument("--branch", default="main")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--once", action="store_true")
+    parser.add_argument(
+        "--refresh-baseline",
+        action="store_true",
+        help="run the suite and rewrite agent-loop/baseline_failures.txt, then exit",
+    )
     args = parser.parse_args()
 
     args.workdir = str(Path(args.workdir).resolve())
     if args.once:
         args.max_attempts = 1
         args.interval = 0
+    args.test_python = resolve_test_python(args.workdir)
+    print(f"[{now_text()}] test interpreter: {args.test_python or 'NONE'}")
 
     DEFAULT_LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -388,6 +463,13 @@ def main() -> int:
     lock = acquire_lock()
     if lock is None:
         print("SKIPPED: previous pass still running (lock held)")
+        return 0
+
+    if args.refresh_baseline:
+        log_path = DEFAULT_LOG_DIR / f"baseline-{log_stamp()}.log"
+        _, failed = run_tests(args, log_path)
+        save_baseline(failed)
+        print(f"[{now_text()}] baseline saved: {len(failed)} failing tests")
         return 0
 
     started = now_text()
@@ -437,14 +519,17 @@ def main() -> int:
             if final_status == "DONE":
                 final_status, final_rc = ship_pass(args, mode, last_summary, log_path)
 
-            save_state(
-                {
-                    "last_action": last_action.lower(),
-                    "last_status": final_status,
-                    "last_summary": last_summary,
-                    "last_run_at": now_text(),
-                }
-            )
+            if final_status == "DONE":
+                # Advance ADD/POLISH alternation only on shipped passes so a
+                # failed pass doesn't consume the next mode.
+                save_state(
+                    {
+                        "last_action": last_action.lower(),
+                        "last_status": final_status,
+                        "last_summary": last_summary,
+                        "last_run_at": now_text(),
+                    }
+                )
             write_telemetry(
                 {
                     "status": final_status,

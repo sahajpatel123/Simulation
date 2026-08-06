@@ -45,6 +45,7 @@ agent-loop/state.json
 agent-loop/loop.lock
 agent-loop/last_output.md
 agent-loop/stop
+agent-loop/baseline_failures.txt
 agent-loop/logs/
 
 # vercel

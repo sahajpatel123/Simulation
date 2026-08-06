@@ -49,6 +49,12 @@ removed; `install.sh` re-arms the launchd job).
 - Dirty worktree = pass skipped; the loop never touches your uncommitted work.
 - The wrapper runs the full test suite itself and reverts a pass that breaks
   tests, so broken code never reaches `main`.
+- The test gate is **baseline-aware**: the suite may contain pre-existing
+  failures from the local environment (e.g., no Redis server, stale test
+  expectations). The runner records them in `agent-loop/baseline_failures.txt`
+  (gitignored) and only reverts a pass that introduces **new** failures.
+  Refresh the baseline after intentional test changes with
+  `agent-loop/run_loop.py --refresh-baseline`.
 - The runner never edits `agent-loop/task.md`, state, or telemetry; the agent
   prompt forbids touching `.env*` and forbids destructive changes.
 - Pushes are straight to `main`; force-push and PRs are forbidden by prompt.

@@ -35,6 +35,7 @@ def _reload_app_with_env(env: str, monkeypatch=None):
     new_settings = cfg.Settings(
         DATABASE_URL="postgresql://x",
         ENVIRONMENT=env,
+        FRONTEND_URL="https://app.thecee.example",
         SECRET_KEY="production-test-secret-with-32-plus-chars",
     )
     with patch.object(cfg, "settings", new_settings):

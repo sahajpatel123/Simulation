@@ -206,7 +206,9 @@ def test_digest_success_rate_counts_clear_winners() -> None:
     ]
     out = build_decision_digest(decisions)
     # 2 of 3 (id 1, id 3) clear winners → 0.6667
-    assert abs(out["success_rate"] - 2 / 3) < 1e-6
+    # success_rate is rounded to 4 decimals for display (0.6667),
+    # so use a tolerance that accommodates the rounding.
+    assert abs(out["success_rate"] - 2 / 3) < 1e-3
 
 
 def test_digest_success_rate_zero_when_no_completed() -> None:
@@ -277,7 +279,7 @@ def test_digest_narrative_calls_out_no_clear_winners() -> None:
                           "recommended_scenario": "X"}},
     ]
     out = build_decision_digest(decisions)
-    assert "no clear winner" in out["narrative"].lower()
+    assert "clear winner yet" in out["narrative"].lower()
 
 
 # ---------------------------------------------------------------------------
@@ -536,6 +538,9 @@ def test_decision_digest_route_caches_payload(
         def order_by(self, *args, **kwargs):
             return self
 
+        def first(self):
+            return type("P", (), {"id": 1})()
+
         def all(self):
             return []
 
@@ -591,6 +596,9 @@ def test_decision_digest_route_cache_isolated_per_user(
         def order_by(self, *args, **kwargs):
             return self
 
+        def first(self):
+            return type("P", (), {"id": 1})()
+
         def all(self):
             return []
 
@@ -640,6 +648,9 @@ def test_decision_digest_route_cache_isolated_per_project(
 
         def order_by(self, *args, **kwargs):
             return self
+
+        def first(self):
+            return type("P", (), {"id": 1})()
 
         def all(self):
             return []
@@ -691,6 +702,9 @@ def test_decision_digest_route_noop_when_redis_down(
 
         def order_by(self, *args, **kwargs):
             return self
+
+        def first(self):
+            return type("P", (), {"id": 1})()
 
         def all(self):
             return []

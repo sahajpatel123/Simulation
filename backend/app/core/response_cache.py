@@ -46,7 +46,7 @@ import json
 import logging
 from typing import Any
 
-from app.core.redis_client import get_redis_client
+from app.core import redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ def cache_get_json(
 ) -> dict[str, Any] | None:
     """Read a cached JSON payload. Returns ``None`` on miss
     or on any Redis error (logged at warning level)."""
-    client = get_redis_client()
+    client = redis_client.get_redis_client()
     if client is None:
         return None
     key = _build_key(namespace, params, user_id)
@@ -114,7 +114,7 @@ def cache_set_json(
 ) -> None:
     """Write a JSON payload with TTL. Silently no-ops on
     Redis failure so callers don't need to wrap."""
-    client = get_redis_client()
+    client = redis_client.get_redis_client()
     if client is None:
         return
     key = _build_key(namespace, params, user_id)
@@ -139,7 +139,7 @@ def cache_invalidate(
     namespace are purged. When ``None``, ALL users for the
     namespace are purged via a pattern delete.
     """
-    client = get_redis_client()
+    client = redis_client.get_redis_client()
     if client is None:
         return 0
     if user_id is None:
