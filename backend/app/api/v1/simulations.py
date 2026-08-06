@@ -109,6 +109,7 @@ from app.schemas.ecosystem_compatibility import EcosystemCompatibilityOut
 from app.schemas.setup_friction import SetupFrictionOut
 from app.schemas.after_sales import AfterSalesOut
 from app.schemas.launch_checklist import LaunchChecklistOut
+from app.schemas.founder_brief import FounderBriefOut
 from app.schemas.retention_churn import RetentionChurnOut
 from app.schemas.distribution_channels import DistributionChannelsOut
 from app.schemas.market_timing import MarketTimingOut
@@ -147,6 +148,7 @@ from app.simulation.ecosystem_compatibility import build_ecosystem_compatibility
 from app.simulation.setup_friction import build_setup_friction
 from app.simulation.after_sales_read import build_after_sales_read
 from app.simulation.launch_checklist import build_launch_checklist
+from app.simulation.founder_brief import build_founder_brief
 from app.simulation.retention_churn_read import build_retention_churn
 from app.simulation.distribution_channels import build_distribution_channels
 from app.simulation.market_timing_read import build_market_timing
@@ -6744,4 +6746,112 @@ def get_launch_checklist(
         visible_assumption_count=len(assumptions),
         product_type=product_type_name,
         cluster_registry=registry,
+    )
+
+
+@router.get(
+    "/{simulation_id}/founder-brief",
+    response_model=FounderBriefOut,
+    summary=(
+        "Founder brief: one digest of trust score, launch readiness, "
+        "conversion, market sizing and top recommendations"
+    ),
+    responses=_JSON_200,
+)
+def get_founder_brief(
+    simulation_id: int,
+    market_size: int = Query(
+        DEFAULT_MARKET_SIZE,
+        ge=MIN_MARKET_SIZE,
+        le=MAX_MARKET_SIZE,
+        description="Total addressable market (people) to reason about",
+    ),
+    target_market_fraction: float = Query(
+        DEFAULT_TARGET_MARKET_FRACTION,
+        ge=MIN_TARGET_MARKET_FRACTION,
+        le=MAX_TARGET_MARKET_FRACTION,
+        description="Share of the reachable market in the launch segment",
+    ),
+    average_order_value: float = Query(
+        DEFAULT_AVERAGE_ORDER_VALUE,
+        ge=0,
+        description="Revenue per converted customer (set 0 to skip revenue)",
+    ),
+    purchase_frequency_per_year: float = Query(
+        DEFAULT_PURCHASE_FREQUENCY_PER_YEAR,
+        ge=0,
+        description="Purchases per customer per year",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FounderBriefOut:
+    """
+    Founder-facing digest for a completed simulation.
+
+    Combines the deterministic quality gate, launch checklist and
+    market-sizing projection into one read: headline conversion, trust
+    score, readiness score, TAM/SAM/SOM, annual revenue and the top
+    recommendations across the underlying reads. Pure post-hoc
+    analytics — no Celery, no LLM, no DB writes.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — founder brief requires "
+                "completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    assumptions = (
+        db.query(Assumption)
+        .filter(Assumption.project_id == sim.project_id, Assumption.is_hidden.is_(False))
+        .all()
+    )
+
+    product_type_name = str(
+        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
+    )
+    try:
+        product_type = ProductType(product_type_name)
+    except ValueError:
+        product_type = ProductType.SAAS
+    product_type_name = product_type.value
+
+    registry = [
+        {
+            "cluster_id": cluster.cluster_id,
+            "name": cluster.name,
+            "population_weight": cluster.population_weight,
+        }
+        for cluster in _clusters_map.values()
+    ]
+
+    return build_founder_brief(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        signal_quality=float(sim.signal_quality)
+        if sim.signal_quality is not None
+        else None,
+        visible_assumption_count=len(assumptions),
+        product_type=product_type_name,
+        cluster_registry=registry,
+        market_size=market_size,
+        target_market_fraction=target_market_fraction,
+        average_order_value=average_order_value,
+        purchase_frequency_per_year=purchase_frequency_per_year,
     )
