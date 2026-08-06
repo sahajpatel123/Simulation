@@ -2,14 +2,17 @@
 """Autonomous Codex Loop — one bounded completion per pass, forever.
 
 Designed to be launched by launchd every 5 minutes (see
-com.arena.codex-loop.plist in this directory). Each invocation:
+com.thecee.autonomous-loop.plist in this directory). Each invocation:
 
 1. Takes a single lock so passes never overlap.
-2. Reads the standing mission (task.md) and the previous action (state.json).
-3. Runs `codex exec` once with an ADD or POLISH loop-mode prompt.
-4. Classifies the result (DONE / BLOCKED / STOPPED-NO-PROGRESS / FAILED).
-5. Retries up to --max-attempts with --interval backoff.
-6. Writes telemetry to <repo>/.agent_loop_telemetry.json and logs/.
+2. Skips if the worktree has uncommitted changes (never touches user WIP).
+3. Fetches and rebases onto origin/{branch}.
+4. Reads the standing mission (task.md) and the previous action (state.json).
+5. Runs `codex exec` once with an ADD or POLISH loop-mode prompt.
+6. Classifies the result (DONE / BLOCKED / STOPPED-NO-PROGRESS / FAILED).
+7. On DONE: re-runs the test suite, then commits and pushes to origin/{branch}.
+8. Retries up to --max-attempts with --interval backoff.
+9. Writes telemetry to <repo>/.agent_loop_telemetry.json and logs/.
 
 Stop the loop: create agent-loop/stop (or `launchctl unload` the plist).
 """
@@ -68,13 +71,14 @@ def phase_hint(mode: str) -> str:
     if mode == "ADD":
         return (
             "Previous pass was POLISH. ADD one new feature / capability that best "
-            "improves this project. One feature only, fully implemented, tested, "
-            "committed, and pushed."
+            "improves this project. One feature only, fully implemented and tested; "
+            "report DONE and the wrapper will commit and push."
         )
     return (
         "Previous pass was ADD. POLISH the feature that was added then: fix bugs, "
         "harden edge cases, add tests/docs/validation, or improve performance/UX. "
-        "Do NOT add a new feature this pass."
+        "Do NOT add a new feature this pass. Report DONE when complete; the wrapper "
+        "commits and pushes."
     )
 
 
@@ -101,23 +105,17 @@ every pass — it is the authoritative coding guide.
 ## Hard rules
 1. Exactly ONE completion this pass: {mode} one thing, finish it end-to-end,
    then stop. Do not chain multiple unrelated features or refactors.
-2. Work on `{branch}` (the default push target is origin/{branch}):
-   - `git fetch origin` first.
-   - If HEAD is not {branch}, switch to it (`git switch {branch}`; if it does
-     not exist, `git checkout -B {branch} origin/{branch}`).
-   - If there are uncommitted changes, commit them first with a descriptive
-     message. Never delete, revert, or overwrite existing work.
-   - Never open a PR. Push straight to origin/{branch}.
-3. Quality gate before pushing: make the checks pass
-   (`cd {workdir} && uv run pytest tests/ -q`; pytest config already puts
-   backend/ on the path). If the full suite is too slow, at minimum run tests
-   covering the files you touched plus the core fast suite — never push code
-   that breaks existing tests. Fix failures you introduce.
-4. Commit and push is COMPULSORY every pass:
-   `git add -A && git commit -m "<conventional message>" && git push origin {branch}`.
-   Never force-push. Never commit secrets (.env*, keys, tokens). If auth or
-   network blocks the push, retry once, then report BLOCKED with the exact
-   error.
+2. Do NOT run any git commands (fetch, add, commit, push, switch, rebase) —
+   the loop wrapper handles all git and pushes to origin/{branch}. Read-only
+   git (`git status`, `git diff`, `git log`) is fine.
+3. Quality gate: run `.venv/bin/python -m pytest tests/ -q` from {workdir}
+   (pytest config already puts backend/ on the path). If the full suite is
+   too slow, at minimum run tests covering the files you touched — never
+   leave existing tests broken. Fix failures you introduce. The wrapper
+   re-runs the suite itself before committing.
+4. Finish with exactly one completion and report **DONE** with a one-line
+   summary; the wrapper commits and pushes straight to origin/{branch}
+   (never a PR, never force-push, never commit secrets like .env*).
 5. Follow AGENTS.md coding rules: typed Python, Pydantic schemas, SQLAlchemy
    ORM / named-parameter SQL only, schema changes in migrate_and_start.py,
    imports at module top, no pip installs inside the Dockerfile.
@@ -174,6 +172,70 @@ def extract_summary(text: str) -> str:
 def extract_action(text: str, fallback: str) -> str:
     m = re.search(r"ACTION\s*[:=]\s*(ADD|POLISH)", text, re.I)
     return m.group(1).upper() if m else fallback
+
+
+def git_cmd(args, *cmd: str, timeout: int = 120) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", *cmd],
+        cwd=args.workdir,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+
+
+def run_tests(args, log_path: Path, timeout: int = 900) -> int:
+    cmd = [
+        str(Path(args.workdir) / ".venv/bin/python"),
+        "-m",
+        "pytest",
+        "tests/",
+        "-q",
+    ]
+    print(f"[{now_text()}] running tests: {' '.join(cmd)}")
+    try:
+        r = subprocess.run(
+            cmd, cwd=args.workdir, capture_output=True, text=True, timeout=timeout
+        )
+    except subprocess.TimeoutExpired:
+        print(f"[{now_text()}] tests timed out after {timeout}s")
+        return -9
+    with open(log_path, "a") as f:
+        f.write("\n--- wrapper test run ---\n")
+        f.write(r.stdout or "")
+        f.write(r.stderr or "")
+    tail = "\n".join((r.stdout or "").strip().splitlines()[-8:])
+    print(f"[{now_text()}] pytest rc={r.returncode}\n{tail}")
+    return r.returncode
+
+
+def ship_pass(args, mode: str, summary: str, log_path: Path) -> tuple[str, int]:
+    """Re-run tests, then commit and push the pass. Returns (status, rc)."""
+    test_rc = run_tests(args, log_path)
+    if test_rc != 0:
+        print(f"[{now_text()}] tests failed (rc={test_rc}); reverting this pass")
+        git_cmd(args, "reset", "--hard", "HEAD")
+        git_cmd(args, "clean", "-fdq")
+        return "TEST_FAILED", test_rc
+
+    subject = (summary or f"autonomous[{mode}] improvement pass").strip()
+    if len(subject) > 100:
+        subject = subject[:97] + "..."
+    body = f"Mode: {mode}\n\n{summary or 'Autonomous improvement pass.'}\n\nPass log: {log_path.name}"
+
+    git_cmd(args, "add", "-A")
+    c = git_cmd(args, "commit", "-m", subject, "-m", body)
+    if c.returncode != 0:
+        print(f"[{now_text()}] commit failed: {(c.stderr or '').strip()}")
+        return "COMMIT_FAILED", c.returncode
+
+    p = git_cmd(args, "push", "origin", args.branch, timeout=180)
+    if p.returncode != 0:
+        print(f"[{now_text()}] push failed: {(p.stderr or '').strip()}")
+        return "PUSH_FAILED", p.returncode
+
+    print(f"[{now_text()}] shipped [{mode}]: {subject}")
+    return "DONE", 0
 
 
 def run_pass(args, prompt: str, log_path: Path, timeout: int):
@@ -334,6 +396,29 @@ def main() -> int:
     attempt = 0
 
     try:
+        # Never touch a dirty worktree — the user's uncommitted work wins.
+        st = git_cmd(args, "status", "--porcelain")
+        if st.returncode != 0 or st.stdout.strip():
+            write_telemetry(
+                {
+                    "status": "SKIPPED_DIRTY",
+                    "mode": mode,
+                    "start_time": started,
+                    "end_time": now_text(),
+                    "next_scheduled_run": now_text(),
+                    "executed_task": "Worktree had uncommitted changes; pass skipped.",
+                }
+            )
+            print(
+                f"[{now_text()}] SKIPPED_DIRTY: uncommitted changes present; "
+                "leaving them untouched"
+            )
+            return 0
+
+        print(f"[{now_text()}] worktree clean; syncing origin/{args.branch}")
+        git_cmd(args, "fetch", "origin", args.branch, timeout=180)
+        git_cmd(args, "pull", "--rebase", "origin", args.branch, timeout=180)
+
         while attempt < args.max_attempts:
             attempt += 1
             log_path = DEFAULT_LOG_DIR / f"run-{log_stamp()}-attempt{attempt}.log"
@@ -347,17 +432,20 @@ def main() -> int:
                 last_summary = extract_summary(out_text)
             last_action = extract_action(out_text, mode)
 
+            if final_status == "DONE":
+                final_status, final_rc = ship_pass(args, mode, last_summary, log_path)
+
             save_state(
                 {
                     "last_action": last_action.lower(),
-                    "last_status": status,
+                    "last_status": final_status,
                     "last_summary": last_summary,
                     "last_run_at": now_text(),
                 }
             )
             write_telemetry(
                 {
-                    "status": status,
+                    "status": final_status,
                     "mode": mode,
                     "start_time": started,
                     "end_time": now_text(),
@@ -365,18 +453,18 @@ def main() -> int:
                     "executed_task": last_summary or f"{mode} pass (attempt {attempt})",
                     "attempts": attempt,
                     "last_attempt": {
-                        "status": status,
-                        "exit_code": rc,
+                        "status": final_status,
+                        "exit_code": final_rc,
                         "log": str(log_path.relative_to(REPO)),
                     },
                 }
             )
             shutil.copyfile(log_path, DEFAULT_LOG_DIR / "latest.log")
 
-            if status in ("DONE", "BLOCKED"):
+            if final_status in ("DONE", "BLOCKED"):
                 break
             if attempt < args.max_attempts:
-                print(f"[{now_text()}] {status}; retry in {args.interval}s")
+                print(f"[{now_text()}] {final_status}; retry in {args.interval}s")
                 time.sleep(args.interval)
 
         prune_logs()

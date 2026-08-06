@@ -7,14 +7,18 @@ pass runs and does exactly **one** thing:
   observability, API ergonomics, docs, tests).
 - **POLISH** passes improve the last feature or the weakest existing area.
 
-Each pass is executed by the Codex CLI (`codex exec`), is required to pass the
-test suite, and **must commit + push to `origin/main`** — no PRs, ever.
+Each pass is executed by the Codex CLI (`codex exec`) inside a sandbox; the
+launchd runner then re-runs the test suite, commits, and pushes to
+`origin/main` — no PRs, ever. (Git writes live in the runner, outside the
+model's sandbox, so a bad model turn can never push broken code.)
 
 ## How it runs
 
 - `agent-loop/run_loop.py` — one bounded pass per invocation: locks against
-  overlap, alternates ADD/POLISH via `state.json`, runs `codex exec` with the
-  mission from `task.md`, retries once, writes telemetry to
+  overlap, skips when the worktree is dirty (never touches your uncommitted
+  work), syncs `origin/main`, alternates ADD/POLISH via `state.json`, runs
+  `codex exec` with the mission from `task.md`, re-runs the test suite,
+  commits + pushes, retries once, and writes telemetry to
   `.agent_loop_telemetry.json` and logs to `agent-loop/logs/`.
 - `com.thecee.autonomous-loop.plist` — launchd job: `StartInterval` 300 s,
   `RunAtLoad` (first pass starts immediately).
@@ -37,6 +41,9 @@ removed; `install.sh` re-arms the launchd job).
 
 - Lock file prevents overlapping passes (launchd fires every 5 min; a pass may
   take longer — the next invocation just skips while the lock is held).
+- Dirty worktree = pass skipped; the loop never touches your uncommitted work.
+- The wrapper runs the full test suite itself and reverts a pass that breaks
+  tests, so broken code never reaches `main`.
 - The runner never edits `agent-loop/task.md`, state, or telemetry; the agent
   prompt forbids touching `.env*` and forbids destructive changes.
 - Pushes are straight to `main`; force-push and PRs are forbidden by prompt.

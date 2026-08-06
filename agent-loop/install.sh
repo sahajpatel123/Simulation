@@ -14,6 +14,12 @@ cp "$PLIST_SRC" "$PLIST_DEST"
 
 # Stop any previous instance, then load fresh (RunAtLoad kicks the first pass now).
 launchctl bootout "gui/$UID_NUM/$PLIST_NAME" 2>/dev/null || true
+# Wait for the old instance to fully exit before bootstrapping a fresh one,
+# otherwise the lingering termination can kill the newly started job.
+for _ in {1..20}; do
+  launchctl print "gui/$UID_NUM/$PLIST_NAME" >/dev/null 2>&1 || break
+  sleep 0.5
+done
 launchctl bootstrap "gui/$UID_NUM" "$PLIST_DEST"
 launchctl enable "gui/$UID_NUM/$PLIST_NAME" 2>/dev/null || true
 
