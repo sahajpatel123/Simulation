@@ -18,7 +18,13 @@ class EcosystemCompatibilityArchitect(BaseArchitect):
 
     @property
     def product_types(self) -> list[str]:
-        return ["consumer_hardware", "health_hardware", "iot_hardware", "wearable"]
+        return [
+            "consumer_hardware",
+            "health_hardware",
+            "iot_hardware",
+            "smart_home",
+            "wearable",
+        ]
 
     def compute(
         self,
@@ -61,7 +67,7 @@ class EcosystemCompatibilityArchitect(BaseArchitect):
 
         smart_home_req = (
             min(0.80, income * 0.4 + literacy * 0.35)
-            if product_type == "iot_hardware" else
+            if product_type in ("iot_hardware", "smart_home") else
             min(0.40, income * 0.2)
         )
         smart_home_req *= (1.3 if matter_support else 0.6)
@@ -87,13 +93,20 @@ class EcosystemCompatibilityArchitect(BaseArchitect):
         )
 
         api_interest = (
-            min(0.80, literacy * 0.5 * (1.8 if product_type == "iot_hardware" else 0.7))
+            min(
+                0.80,
+                literacy * 0.5 * (
+                    1.8 if product_type in ("iot_hardware", "smart_home") else 0.7
+                ),
+            )
             if has_api else 0.05
         )
 
         household_sharing = min(0.80,
             family_ori * 0.5 * (
-                1.6 if product_type in ["iot_hardware", "consumer_hardware"] else 0.4
+                1.6 if product_type in [
+                    "iot_hardware", "consumer_hardware", "smart_home",
+                ] else 0.4
             )
         )
 
@@ -107,7 +120,11 @@ class EcosystemCompatibilityArchitect(BaseArchitect):
             min(0.40, income * 0.2)
         )
 
-        compatibility_gate = smart_home_req if product_type == "iot_hardware" else platform_lock
+        compatibility_gate = (
+            smart_home_req
+            if product_type in ("iot_hardware", "smart_home")
+            else platform_lock
+        )
         severity = "WARNING" if subscription_resentment > 0.60 else "INFO"
 
         return ArchitectOutput(
