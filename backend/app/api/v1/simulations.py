@@ -98,6 +98,7 @@ from app.schemas.agent_routing import (
 )
 from app.schemas.cohort_retention import CohortRetentionOut
 from app.schemas.sensitivity import SensitivityOut
+from app.schemas.simulation_quality import SimulationQualityOut
 from app.schemas.unit_economics import UnitEconomicsOut
 from app.schemas.validation_experiment import ValidationExperimentPlanOut
 from app.schemas.validation_roi import ValidationRoiOut
@@ -188,6 +189,7 @@ from app.simulation.scored_assumption import (
 )
 from app.simulation.scenario_stress import ScenarioStressAnalyzer
 from app.simulation.sensitivity_analysis import build_sensitivity_analysis
+from app.simulation.simulation_quality import build_simulation_quality
 from app.simulation.sim_batch import (
     parse_id_list,
     parse_since,
@@ -4171,6 +4173,61 @@ def get_validation_experiment_plan(
         current_user=current_user,
     )
     return build_validation_experiment_plan(roi)
+
+
+@router.get(
+    "/{simulation_id}/quality",
+    response_model=SimulationQualityOut,
+    summary="Simulation quality gate: trust score, cluster coverage and data-integrity checks",
+    responses=_JSON_200,
+)
+def get_simulation_quality(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SimulationQualityOut:
+    """
+    Deterministic quality gate over a completed simulation's results.
+
+    Surfaces a 0..1 trust score with a PASS / REVIEW / FAIL verdict backed
+    by per-check detail: headline-conversion bounds, agent-count sanity,
+    cluster coverage against the 52-cluster registry, per-cluster rate
+    bounds, headline-vs-weighted-blend consistency, funnel sanity, domain
+    findings presence and NaN/Inf freedom. Founders see whether the numbers
+    are safe to act on; developers get early warning of pipeline regressions.
+
+    Pure post-hoc analysis — no Celery dispatch, no LLM calls.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — quality analysis requires "
+                "completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    return build_simulation_quality(
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        base_results=sim.results_json,
+        status=sim.status,
+        signal_quality=float(sim.signal_quality)
+        if sim.signal_quality is not None
+        else None,
+    )
 
 
 @router.get(
