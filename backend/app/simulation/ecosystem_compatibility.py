@@ -46,10 +46,12 @@ No DB / I/O — verifiable without FastAPI or PostgreSQL. The route layer
 supplies ``results``, ``conductor_results`` (per-cluster architect
 metrics) and ``cluster_registry``; all arithmetic is deterministic.
 Metrics missing from a malformed/partial payload use neutral defaults
-(lock-in acceptance 0.60, smart-home requirement 0.30, subscription
+(lock-in acceptance 0.60, smart-home requirement 0.25, subscription
 resentment 0.25, cloud tolerance 0.55, API interest 0.20, cross-device
-0.50, household sharing 0.40, voice expectation 0.25, gate 0.50) so a
-missing field never manufactures a LOCKED tier or an extreme blocker.
+0.50, household sharing 0.35, voice expectation 0.25, gate 0.50) so a
+missing field never manufactures a LOCKED tier, an extreme blocker, or
+a false lever/flag. Every default sits strictly on the "no friction"
+side of the lever and flag thresholds below.
 """
 from __future__ import annotations
 
@@ -129,14 +131,19 @@ WEIGHT_VOICE: float = 0.15
 
 # Neutral defaults for metrics missing from a malformed/partial payload.
 # They lean middle-of-road so a missing field neither manufactures a
-# LOCKED tier nor hides a real blocker present in other metrics.
+# LOCKED tier, a false lever/flag, nor hides a real blocker present in
+# other metrics. Each default stays strictly below (or above, for
+# tolerance-style metrics) the corresponding lever/flag trigger:
+# smart_home_req 0.25 < 0.30 lever/flag, household_sharing 0.35 < 0.40
+# lever, cloud_tolerance 0.55 > 0.45 trigger, api_interest 0.20 < 0.25,
+# voice 0.25 < 0.30, subscription 0.25 < 0.50, lockin 0.60 > 0.45.
 DEFAULT_LOCKIN_ACCEPTANCE: float = 0.60
-DEFAULT_SMART_HOME_REQUIREMENT: float = 0.30
+DEFAULT_SMART_HOME_REQUIREMENT: float = 0.25
 DEFAULT_SUBSCRIPTION_RESENTMENT: float = 0.25
 DEFAULT_CLOUD_TOLERANCE: float = 0.55
 DEFAULT_API_INTEREST: float = 0.20
 DEFAULT_CROSS_DEVICE: float = 0.50
-DEFAULT_HOUSEHOLD_SHARING: float = 0.40
+DEFAULT_HOUSEHOLD_SHARING: float = 0.35
 DEFAULT_VOICE_EXPECTATION: float = 0.25
 DEFAULT_GATE: float = 0.50
 

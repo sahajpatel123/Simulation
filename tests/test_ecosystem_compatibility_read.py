@@ -16,6 +16,7 @@ from app.schemas.ecosystem_compatibility import (
     EcosystemCompatibilityOut,
     LEVER_API,
     LEVER_HOUSEHOLD,
+    LEVER_MATTER,
     LEVER_PRIVACY,
     LEVER_SUBSCRIPTION,
     LEVER_VOICE,
@@ -297,17 +298,37 @@ def test_missing_metrics_use_neutral_defaults() -> None:
 
     profile = out.cluster_profiles[0]
     assert profile.platform_lockin_acceptance == 0.9
-    assert profile.smart_home_compatibility_requirement == 0.3
+    assert profile.smart_home_compatibility_requirement == 0.25
     assert profile.subscription_hardware_resentment == 0.25
     assert profile.cloud_storage_tolerance == 0.55
     assert profile.developer_api_interest == 0.2
     assert profile.cross_device_interoperability == 0.5
-    assert profile.household_sharing_behaviour == 0.4
+    assert profile.household_sharing_behaviour == 0.35
     assert profile.voice_assistant_expectation == 0.25
     assert profile.ecosystem_compatibility_gate == 0.5
-    assert profile.compatibility_index == 0.7375
+    assert profile.compatibility_index == 0.7475
     assert profile.compatibility_tier == TIER_PARTIAL
     assert out.verdict == VERDICT_WORKABLE
+
+
+def test_partial_metrics_do_not_manufacture_levers_or_flags() -> None:
+    """A payload missing most fields must stay friction-neutral: the
+    neutral defaults sit below every lever/flag trigger, so the read
+    never invents a smart-home gate market, a Matter lever, or a
+    household-design lever from absent data."""
+    out = _build(
+        specs={"a": {"platform_lockin_acceptance": 0.90}},
+        weights={"a": 1.0},
+        product_type="consumer_hardware",
+    )
+
+    assert out.flags == []
+    lever_shares = {lever.key: lever.opportunity_share for lever in out.levers}
+    assert lever_shares[LEVER_MATTER] == 0.0
+    assert lever_shares[LEVER_HOUSEHOLD] == 0.0
+    assert all(share == 0.0 for share in lever_shares.values())
+    assert out.weighted_smart_home_requirement == 0.25
+    assert out.weighted_household_sharing == 0.35
 
 
 def test_malformed_results_are_tolerated() -> None:
