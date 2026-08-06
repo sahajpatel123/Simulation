@@ -28,6 +28,7 @@ ALL_ARCHITECT_NAMES = [
     "DistributionChannelArchitect",
     "AftersalesLifecycleArchitect",
     "HealthSafetyHardwareArchitect",
+    "SustainabilityArchitect",
 ]
 
 

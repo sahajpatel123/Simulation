@@ -215,7 +215,7 @@ def test_intervention_prompt_placeholders():
 # ── T7: CALIBRATION ENGINE ──
 
 def test_calibration_architect_count():
-    assert len(ALL_ARCHITECT_NAMES) == 20
+    assert len(ALL_ARCHITECT_NAMES) == 21
 
 def test_calibration_trend_improving():
     from unittest.mock import MagicMock

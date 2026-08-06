@@ -94,6 +94,7 @@ _HARDWARE_PRIORITY: tuple[ProductType, ...] = (
 ARCHITECT_STACKS: dict[ProductType, list[str]] = {
     ProductType.SAAS: [
         "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
+        "SustainabilityArchitect",
         "TrustArchitect", "PricingArchitect", "OnboardingArchitect",
         "FeatureAdoptionArchitect", "RetentionArchitect",
         "SupportFrictionArchitect", "ViralityArchitect",
@@ -102,6 +103,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
     ],
     ProductType.MARKETPLACE: [
         "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
+        "SustainabilityArchitect",
         "TrustArchitect", "PricingArchitect", "OnboardingArchitect",
         "RetentionArchitect", "SupportFrictionArchitect", "ViralityArchitect",
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
@@ -109,6 +111,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
     ],
     ProductType.MOBILE_APP: [
         "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
+        "SustainabilityArchitect",
         "TrustArchitect", "PricingArchitect", "OnboardingArchitect",
         "FeatureAdoptionArchitect", "RetentionArchitect", "ViralityArchitect",
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
@@ -116,6 +119,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
     ],
     ProductType.DEVELOPER_TOOL: [
         "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
+        "SustainabilityArchitect",
         "TrustArchitect", "PricingArchitect", "OnboardingArchitect",
         "FeatureAdoptionArchitect", "RetentionArchitect", "ViralityArchitect",
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
@@ -123,6 +127,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
     ],
     ProductType.ENTERPRISE_SOFTWARE: [
         "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
+        "SustainabilityArchitect",
         "TrustArchitect", "PricingArchitect", "OnboardingArchitect",
         "FeatureAdoptionArchitect", "RetentionArchitect",
         "SupportFrictionArchitect", "MacroeconomicArchitect",
@@ -130,6 +135,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
     ],
     ProductType.CONSUMER_HARDWARE: [
         "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
+        "SustainabilityArchitect",
         "TrustArchitect", "PurchaseDecisionArchitect", "PhysicalSensoryArchitect",
         "PerformanceThresholdArchitect", "SetupFirstUseArchitect",
         "EcosystemCompatibilityArchitect", "DistributionChannelArchitect",
@@ -139,6 +145,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
     ],
     ProductType.HEALTH_HARDWARE: [
         "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
+        "SustainabilityArchitect",
         "TrustArchitect", "HealthSafetyHardwareArchitect",
         "PurchaseDecisionArchitect", "PhysicalSensoryArchitect",
         "PerformanceThresholdArchitect", "SetupFirstUseArchitect",
@@ -148,6 +155,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
     ],
     ProductType.IOT_HARDWARE: [
         "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
+        "SustainabilityArchitect",
         "TrustArchitect", "PurchaseDecisionArchitect",
         "PerformanceThresholdArchitect", "SetupFirstUseArchitect",
         "EcosystemCompatibilityArchitect", "DistributionChannelArchitect",
@@ -156,6 +164,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
     ],
     ProductType.WEARABLE: [
         "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
+        "SustainabilityArchitect",
         "TrustArchitect", "PurchaseDecisionArchitect", "PhysicalSensoryArchitect",
         "PerformanceThresholdArchitect", "SetupFirstUseArchitect",
         "EcosystemCompatibilityArchitect", "DistributionChannelArchitect",
@@ -164,6 +173,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
     ],
     ProductType.B2B_HARDWARE: [
         "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
+        "SustainabilityArchitect",
         "TrustArchitect", "PurchaseDecisionArchitect",
         "PerformanceThresholdArchitect", "SetupFirstUseArchitect",
         "DistributionChannelArchitect", "AftersalesLifecycleArchitect",
@@ -172,6 +182,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
     ],
     ProductType.CONSUMER_APP: [
         "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
+        "SustainabilityArchitect",
         "TrustArchitect", "PricingArchitect", "OnboardingArchitect",
         "FeatureAdoptionArchitect", "RetentionArchitect", "ViralityArchitect",
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
@@ -179,12 +190,14 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
     ],
     ProductType.DIRECT_TO_CONSUMER: [
         "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
+        "SustainabilityArchitect",
         "TrustArchitect", "PricingArchitect", "PurchaseDecisionArchitect",
         "RetentionArchitect", "ViralityArchitect", "MacroeconomicArchitect",
         "DemographicInteractionArchitect", "AssumptionCascadeArchitect",
     ],
     ProductType.B2B_MARKETPLACE: [
         "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
+        "SustainabilityArchitect",
         "TrustArchitect", "PricingArchitect", "OnboardingArchitect",
         "RetentionArchitect", "SupportFrictionArchitect", "ViralityArchitect",
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
@@ -192,6 +205,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
     ],
     ProductType.PRODUCTIVITY_TOOL: [
         "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
+        "SustainabilityArchitect",
         "TrustArchitect", "PricingArchitect", "OnboardingArchitect",
         "FeatureAdoptionArchitect", "RetentionArchitect", "ViralityArchitect",
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
@@ -199,6 +213,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
     ],
     ProductType.SMART_HOME: [
         "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
+        "SustainabilityArchitect",
         "TrustArchitect", "PurchaseDecisionArchitect",
         "PerformanceThresholdArchitect", "SetupFirstUseArchitect",
         "EcosystemCompatibilityArchitect", "DistributionChannelArchitect",
@@ -301,6 +316,7 @@ def _build_architect_registry() -> dict[str, Any]:
     from app.simulation.architects.retention import RetentionArchitect
     from app.simulation.architects.setup_first_use import SetupFirstUseArchitect
     from app.simulation.architects.support_friction import SupportFrictionArchitect
+    from app.simulation.architects.sustainability import SustainabilityArchitect
     from app.simulation.architects.trust import TrustArchitect
     from app.simulation.architects.virality import ViralityArchitect
 
@@ -308,6 +324,7 @@ def _build_architect_registry() -> dict[str, Any]:
         "MarketTimingArchitect":           MarketTimingArchitect(),
         "CompetitiveDynamicsArchitect":    CompetitiveDynamicsArchitect(),
         "CulturalContextArchitect":       CulturalContextArchitect(),
+        "SustainabilityArchitect":        SustainabilityArchitect(),
         "TrustArchitect":                  TrustArchitect(),
         "PricingArchitect":                PricingArchitect(),
         "OnboardingArchitect":             OnboardingArchitect(),
