@@ -287,7 +287,11 @@ def build_sensitivity_analysis(
                 "No assumptions found for this project. Add assumptions to enable sensitivity analysis."
             ],
             product_type_detected=str(data.get("product_type_detected") or ""),
-            signal_quality=_safe_float(data.get("signal_quality")),
+            signal_quality=(
+                _safe_float(data.get("signal_quality"))
+                if data.get("signal_quality") is not None
+                else None
+            ),
             meta={
                 "generated_at": datetime.now(timezone.utc).isoformat(),
                 "impact_levels": IMPACT_LEVELS,
@@ -451,7 +455,11 @@ def build_sensitivity_analysis(
         assumptions=results,
         recommendations=recommendations[:8],
         product_type_detected=str(data.get("product_type_detected") or ""),
-        signal_quality=_safe_float(data.get("signal_quality")) if data.get("signal_quality") else None,
+        signal_quality=(
+            _safe_float(data.get("signal_quality"))
+            if data.get("signal_quality") is not None
+            else None
+        ),
         meta={
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "impact_levels": IMPACT_LEVELS,

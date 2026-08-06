@@ -71,37 +71,55 @@ _CONFIDENCE_RANK: dict[ClaimConfidence, int] = {
 }
 
 
+def _parse_confidence(raw: Any) -> ClaimConfidence | None:
+    """Parse a persisted claim_confidence value into the enum (or ``None``)."""
+    if isinstance(raw, ClaimConfidence):
+        return raw
+    if raw is None or not str(raw).strip():
+        return None
+    try:
+        return ClaimConfidence(str(raw).strip().upper().replace(" ", "_"))
+    except ValueError:
+        return None
+
+
 def _assumption_meta(existing_assumptions: list[Any]) -> dict[str, dict[str, Any]]:
-    """Map assumption text -> extra metadata (category, explicit confidence)."""
+    """Map assumption text -> merged metadata (category, explicit confidence).
+
+    The same claim text can appear multiple times (re-extracted by another
+    architect, or a user-updated copy). Metadata is merged per text: the first
+    non-empty category wins and the strongest explicit ``claim_confidence``
+    wins, so a persisted override is never silently dropped.
+    """
     meta: dict[str, dict[str, Any]] = {}
     for a in existing_assumptions or []:
         if isinstance(a, dict):
             text = str(a.get("text", a.get("assumption", "")))
-            entry = {
-                "category": str(a.get("category", "")),
-                "claim_confidence": a.get("claim_confidence"),
-            }
+            category = str(a.get("category", ""))
+            raw_confidence = a.get("claim_confidence")
         else:
             text = str(getattr(a, "text", ""))
-            entry = {
-                "category": str(getattr(a, "category", "") or ""),
-                "claim_confidence": getattr(a, "claim_confidence", None),
-            }
-        if text and text not in meta:
-            meta[text] = entry
+            category = str(getattr(a, "category", "") or "")
+            raw_confidence = getattr(a, "claim_confidence", None)
+        if not text:
+            continue
+        entry = meta.setdefault(text, {"category": "", "claim_confidence": None})
+        if not entry["category"] and category:
+            entry["category"] = category
+        parsed = _parse_confidence(raw_confidence)
+        if parsed is not None:
+            current = entry["claim_confidence"]
+            if current is None or _CONFIDENCE_RANK[parsed] > _CONFIDENCE_RANK[current]:
+                entry["claim_confidence"] = parsed
     return meta
 
 
 def _resolve_confidence(text: str, extra_raw: Any) -> tuple[ClaimConfidence, float]:
     """Combine the text heuristic with an optional explicit claim_confidence."""
     confidence = classify_confidence(text)
-    if extra_raw is not None and str(extra_raw).strip():
-        try:
-            parsed = ClaimConfidence(str(extra_raw).strip().upper().replace(" ", "_"))
-        except ValueError:
-            parsed = None
-        if parsed is not None and _CONFIDENCE_RANK[parsed] > _CONFIDENCE_RANK[confidence]:
-            confidence = parsed
+    parsed = _parse_confidence(extra_raw)
+    if parsed is not None and _CONFIDENCE_RANK[parsed] > _CONFIDENCE_RANK[confidence]:
+        confidence = parsed
     return confidence, CONFIDENCE_MULTIPLIERS[confidence]
 
 
@@ -141,9 +159,14 @@ def _build_recommendation(
             f"{expected_swing:.1%} possible swing. Track early-user feedback; "
             "no dedicated test needed yet."
         )
+    if confidence_tier in VALIDATED_TIERS:
+        return (
+            f"LOW VALUE: '{snippet}' is already {confidence_tier} with minimal "
+            "conversion impact. Safe to leave as-is."
+        )
     return (
-        f"LOW VALUE: '{snippet}' is already {confidence_tier} and/or has minimal "
-        "conversion impact. Safe to leave as-is."
+        f"LOW VALUE: '{snippet}' has minimal conversion impact. Safe to leave "
+        "as-is even though it is not yet validated."
     )
 
 

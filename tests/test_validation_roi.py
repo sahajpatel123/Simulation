@@ -10,6 +10,9 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+from pydantic import ValidationError
+
 from app.schemas.validation_roi import (
     VALID_ROI_TIERS,
     AssumptionValidationRoi,
@@ -310,3 +313,106 @@ class TestBuildValidationRoi:
         results = {**BASE_RESULTS, "signal_quality": 0.73}
         out = _build(results=results)
         assert out.signal_quality == 0.73
+
+    def test_zero_signal_quality_from_results_is_preserved(self) -> None:
+        results = {**BASE_RESULTS, "signal_quality": 0.0}
+        out = _build(results=results)
+        assert out.signal_quality == 0.0
+
+    def test_zero_signal_quality_not_overridden_by_route_fallback(self) -> None:
+        results = {**BASE_RESULTS, "signal_quality": 0.0}
+        out = _build(results=results, signal_quality=0.62)
+        assert out.signal_quality == 0.0
+
+    def test_zero_assumptions_falls_back_to_route_signal_quality(self) -> None:
+        out = _build([], signal_quality=0.62)
+        assert out.signal_quality == 0.62
+
+
+class TestDuplicateAssumptionMeta:
+    def test_stronger_explicit_confidence_wins_across_duplicates(self) -> None:
+        text = "We believe users will pay 999 rupees per month"
+        assumptions = [
+            {
+                "text": text,
+                "sensitivity": "CRITICAL",
+                "impact_score": 9.0,
+                "category": "PricingArchitect",
+            },
+            {
+                "text": text,
+                "sensitivity": "CRITICAL",
+                "impact_score": 9.0,
+                "category": "",
+                "claim_confidence": "VALIDATED_INTERNAL",
+            },
+        ]
+        out = _build(assumptions)
+        rows = [r for r in out.assumptions if r.assumption_text == text]
+        assert len(rows) == 2
+        assert all(r.confidence_tier == "VALIDATED_INTERNAL" for r in rows)
+        assert all(r.confidence_score == 0.75 for r in rows)
+        assert all(r.validation_roi == round(r.sensitivity_score * 0.25, 4) for r in rows)
+
+    def test_category_kept_from_first_non_empty(self) -> None:
+        text = "We believe users will pay 999 rupees per month"
+        assumptions = [
+            {
+                "text": text,
+                "sensitivity": "CRITICAL",
+                "impact_score": 9.0,
+                "category": "PricingArchitect",
+            },
+            {
+                "text": text,
+                "sensitivity": "CRITICAL",
+                "impact_score": 9.0,
+                "category": "MarketSizeArchitect",
+            },
+        ]
+        out = _build(assumptions)
+        rows = [r for r in out.assumptions if r.assumption_text == text]
+        assert all(r.category == "PricingArchitect" for r in rows)
+
+
+class TestLowValueWording:
+    def test_low_value_validated_mentions_validation(self) -> None:
+        out = _build()
+        row = _by_text(
+            out, "Market research shows strong market demand for this solution"
+        )
+        assert row.roi_tier == ROI_TIER_LOW_VALUE
+        assert row.confidence_tier == "VALIDATED_EXTERNAL"
+        assert "already" in row.recommendation
+
+    def test_low_value_unvalidated_does_not_claim_validated(self) -> None:
+        assumptions = [
+            {
+                "text": "We believe users will love the design",
+                "sensitivity": "LOW",
+                "impact_score": 1.0,
+                "category": "ProductValueArchitect",
+            }
+        ]
+        out = _build(assumptions)
+        row = out.assumptions[0]
+        assert row.roi_tier == ROI_TIER_LOW_VALUE
+        assert row.confidence_tier == "ASPIRATIONAL"
+        assert "already" not in row.recommendation
+        assert "not yet validated" in row.recommendation
+
+
+class TestSchemaValidation:
+    def test_roi_tier_literal_rejects_invalid(self) -> None:
+        with pytest.raises(ValidationError):
+            AssumptionValidationRoi(roi_tier="NOT_A_TIER")
+
+    def test_confidence_tier_literal_rejects_invalid(self) -> None:
+        with pytest.raises(ValidationError):
+            AssumptionValidationRoi(confidence_tier="MAYBE")
+
+    def test_score_range_enforced(self) -> None:
+        with pytest.raises(ValidationError):
+            AssumptionValidationRoi(validation_roi=1.5)
+        with pytest.raises(ValidationError):
+            AssumptionValidationRoi(sensitivity_score=-0.1)
