@@ -121,6 +121,8 @@ every pass — it is the authoritative coding guide.
    imports at module top, no pip installs inside the Dockerfile.
 6. Stay scoped: one completion, no unrelated churn. Do not edit
    agent-loop/task.md, the runner's state/telemetry files, or .env* files.
+7. Work directly in this session — do NOT spawn sub-agents, delegate, or
+   fork sessions. One model, one change, finished end-to-end by you.
 
 ## Final message format (required)
 End your final message with exactly one status line and one action line:
