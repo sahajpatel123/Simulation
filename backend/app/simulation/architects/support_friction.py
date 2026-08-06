@@ -10,6 +10,16 @@ from app.simulation.architects.base import ArchitectOutput, BaseArchitect, Domai
 from app.simulation.clusters.definitions import ClusterDefinition
 
 
+SUPPORTED_PRODUCT_TYPES: list[str] = [
+    "saas", "marketplace", "mobile_app",
+    "developer_tool", "enterprise_software",
+    "consumer_hardware", "health_hardware",
+    "iot_hardware", "wearable", "b2b_hardware",
+    "consumer_app", "d2c", "b2b_marketplace",
+    "productivity_tool", "smart_home",
+]
+
+
 class SupportFrictionArchitect(BaseArchitect):
 
     @property
@@ -18,7 +28,9 @@ class SupportFrictionArchitect(BaseArchitect):
 
     @property
     def product_types(self) -> list[str]:
-        return self.ALL_PRODUCT_TYPES
+        # Every product category has a post-purchase support surface, so
+        # the architect activates for all 15 product types.
+        return SUPPORTED_PRODUCT_TYPES
 
     def compute(
         self,
