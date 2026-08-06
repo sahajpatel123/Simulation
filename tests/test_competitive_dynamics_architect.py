@@ -73,10 +73,12 @@ def test_competitive_dynamics_name_constant() -> None:
 
 def test_competitive_dynamics_product_types_is_all() -> None:
     from app.simulation.architects.competitive_dynamics import CompetitiveDynamicsArchitect
-    from app.simulation.architects.base import BaseArchitect
 
     pt = CompetitiveDynamicsArchitect().product_types
-    assert set(pt) == set(BaseArchitect.ALL_PRODUCT_TYPES)
+    # Empty list is the BaseArchitect contract for "applies to all
+    # product types"; the conductor stack includes this architect for
+    # every product type.
+    assert pt == []
 
 
 # ---------------------------------------------------------------------------

@@ -201,6 +201,25 @@ def test_hardware_product_type_is_supported(
     assert out.meta["product_type_supported"] is True
 
 
+def test_newer_product_types_are_supported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for product_type in ("smart_home", "consumer_app", "d2c"):
+        session = _FakeSession(
+            _FakeSimulation(
+                results={
+                    "population_weighted_conversion": 0.04,
+                    "product_type_detected": product_type,
+                }
+            )
+        )
+        out = _call_route(session=session, monkeypatch=monkeypatch)
+
+        assert out.product_type == product_type
+        assert out.verdict != "INSUFFICIENT_DATA"
+        assert out.meta["product_type_supported"] is True
+
+
 def test_unknown_product_type_falls_back_to_saas(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -20,7 +20,12 @@ class CompetitiveDynamicsArchitect(BaseArchitect):
 
     @property
     def product_types(self) -> list[str]:
-        return self.ALL_PRODUCT_TYPES
+        # Empty list = applies to all product types (BaseArchitect
+        # contract). Every conductor stack includes this architect, so a
+        # narrower list would silently drop it from newer product types
+        # (consumer_app, d2c, b2b_marketplace, productivity_tool,
+        # smart_home) and break reads that depend on its metrics.
+        return []
 
     def compute(
         self,

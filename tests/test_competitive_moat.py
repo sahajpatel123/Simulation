@@ -21,10 +21,17 @@ from app.schemas.competitive_moat import (
     VERDICT_WEAK,
     CompetitiveMoatOut,
 )
+from app.simulation.architects.competitive_dynamics import (
+    CompetitiveDynamicsArchitect,
+)
 from app.simulation.competitive_moat import (
+    COMPETITIVE_MOAT_PRODUCT_TYPES,
     LEVER_ORDER,
     build_competitive_moat,
 )
+from app.simulation.clusters.registry import ClusterRegistry
+from app.simulation.conductor import ARCHITECT_STACKS, Conductor
+from app.simulation.product_type import ProductType
 
 
 def _registry(clusters: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -440,3 +447,106 @@ def test_product_type_from_results_fallback() -> None:
     assert out.product_type == "iot_hardware"
     assert out.verdict != VERDICT_INSUFFICIENT
     assert out.meta["levers_available"][LEVER_DISTRIBUTION] is True
+
+
+def test_all_product_types_are_supported() -> None:
+    for product_type in sorted(COMPETITIVE_MOAT_PRODUCT_TYPES):
+        out = _build(
+            specs={"a": _metrics()},
+            weights={"a": 1.0},
+            product_type=product_type,
+        )
+
+        assert out.verdict != VERDICT_INSUFFICIENT
+        assert out.meta["product_type_supported"] is True
+        assert out.product_type == product_type
+        assert out.meta["levers_available"][LEVER_FEATURE_PARITY] is True
+
+
+def test_unsupported_product_type_returns_insufficient() -> None:
+    out = build_competitive_moat(
+        {"product_type_detected": "hovercraft"},
+        simulation_id=7,
+        project_id=10,
+        status="COMPLETED",
+        conductor_results=_conductor({"a": _metrics()}),
+        cluster_registry=_registry(
+            [
+                {
+                    "cluster_id": "a",
+                    "name": "A",
+                    "population_weight": 1.0,
+                }
+            ]
+        ),
+        product_type="hovercraft",
+    )
+
+    assert out.verdict == VERDICT_INSUFFICIENT
+    assert out.meta["product_type_supported"] is False
+    assert out.cluster_profiles == []
+    assert any("not modeled" in r.lower() for r in out.recommendations)
+
+
+def test_supported_set_matches_conductor_activation() -> None:
+    """Every advertised product type must actually run the moat's core
+    architect, or the read would claim support and return no data.
+    """
+    arch = CompetitiveDynamicsArchitect()
+    activated = {
+        pt.value
+        for pt, stack in ARCHITECT_STACKS.items()
+        if "CompetitiveDynamicsArchitect" in stack
+        and (pt.value in arch.product_types or len(arch.product_types) == 0)
+    }
+
+    assert activated == {pt.value for pt in ProductType}
+    assert COMPETITIVE_MOAT_PRODUCT_TYPES == activated
+
+
+def test_real_conductor_runs_moat_metrics_for_newer_product_types() -> None:
+    """End-to-end guard: the newer enum product types used to return
+    INSUFFICIENT_DATA because CompetitiveDynamicsArchitect never ran in
+    their conductor stack.
+    """
+    conductor = Conductor()
+    registry = [
+        {
+            "cluster_id": cluster.cluster_id,
+            "name": cluster.name,
+            "population_weight": cluster.population_weight,
+        }
+        for cluster in ClusterRegistry().all_clusters()
+    ]
+
+    for product_type in (ProductType.SMART_HOME, ProductType.CONSUMER_APP):
+        result = conductor.run(
+            agents=[],
+            env_params={},
+            assumptions=[],
+            product_type=product_type,
+        )
+        first = next(iter(result.cluster_results.values()))
+        assert "CompetitiveDynamicsArchitect" in first
+
+        conductor_results = {
+            cid: {
+                name: {"metrics": output.metrics, "flags": output.flags}
+                for name, output in arch_outputs.items()
+            }
+            for cid, arch_outputs in result.cluster_results.items()
+        }
+        out = build_competitive_moat(
+            {"product_type_detected": product_type.value},
+            simulation_id=7,
+            project_id=10,
+            status="COMPLETED",
+            conductor_results=conductor_results,
+            cluster_registry=registry,
+            product_type=product_type.value,
+        )
+
+        assert out.verdict != VERDICT_INSUFFICIENT
+        assert out.meta["product_type_supported"] is True
+        assert out.meta["covered_clusters"] == 52
+        assert out.meta["levers_available"][LEVER_FEATURE_PARITY] is True

@@ -65,6 +65,7 @@ from app.schemas.competitive_moat import (
     VERDICT_STRONG,
     VERDICT_WEAK,
 )
+from app.simulation.product_type import ProductType
 
 # Ordered lever keys — used for tie-breaking and market aggregation so
 # the output is stable regardless of dict ordering.
@@ -124,6 +125,14 @@ DEFAULT_DISPLACEMENT_DAYS: float = 45.0
 
 MIN_DISPLACEMENT_DAYS: int = 1
 MAX_DISPLACEMENT_DAYS: int = 365
+
+# Product types this read supports: every type whose conductor stack runs
+# CompetitiveDynamicsArchitect. Derived from the canonical enum so newly
+# added types are covered automatically; drift-guard tests lock the set
+# to actual conductor activation.
+COMPETITIVE_MOAT_PRODUCT_TYPES: frozenset[str] = frozenset(
+    pt.value for pt in ProductType
+)
 
 # Per-cluster flag groups surfaced on the profile (architect -> flags).
 ARCHITECT_FLAG_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -400,6 +409,7 @@ def build_competitive_moat(
     product_type_name = str(
         product_type or payload.get("product_type_detected", "saas") or "saas"
     ).lower()
+    supported = product_type_name in COMPETITIVE_MOAT_PRODUCT_TYPES
     registry: list[dict[str, Any]] = cluster_registry or []
 
     rows: list[dict[str, Any]] = []
@@ -493,7 +503,7 @@ def build_competitive_moat(
         "total_clusters": len(registry),
         "covered_clusters": len(rows),
         "covered_weight": round(covered_weight, 4),
-        "product_type_supported": True,
+        "product_type_supported": supported,
         "levers_available": {key: False for key in LEVER_ORDER},
         "weighted_competitor_loyalty": 0.0,
         "free_competitor_share": 0.0,
@@ -510,6 +520,24 @@ def build_competitive_moat(
             "free_competitor_share": FREE_COMPETITOR_SHARE,
         },
     }
+
+    if not supported:
+        return CompetitiveMoatOut(
+            simulation_id=simulation_id,
+            project_id=project_id,
+            status=status,
+            product_type=product_type_name,
+            verdict=VERDICT_INSUFFICIENT,
+            recommendations=[
+                (
+                    f"Competitive moat is not modeled for "
+                    f"{product_type_name} — this read requires "
+                    "CompetitiveDynamicsArchitect metrics, which are only "
+                    "produced for the supported product types."
+                )
+            ],
+            meta=meta,
+        )
 
     if not rows or covered_weight <= 0.0:
         return CompetitiveMoatOut(
@@ -749,6 +777,7 @@ def build_competitive_moat(
 
 
 __all__ = [
+    "COMPETITIVE_MOAT_PRODUCT_TYPES",
     "LEVER_ORDER",
     "LEVER_WEIGHTS",
     "TIER_MODERATE_INDEX",
