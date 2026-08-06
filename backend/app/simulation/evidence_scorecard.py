@@ -60,10 +60,16 @@ _TIER_RANK: dict[str, int] = {
 
 
 def derive_confidence(result: str) -> ClaimConfidence | None:
-    """Map an experiment result to the confidence tier it implies."""
-    if result == EVIDENCE_RESULT_PASS:
+    """Map an experiment result to the confidence tier it implies.
+
+    Comparison is case/whitespace-insensitive so legacy rows that stored
+    ``"pass"`` or ``" FAIL "`` still count as decisive evidence instead of
+    silently falling through to the INCONCLUSIVE path.
+    """
+    normalized = str(result or "").strip().upper()
+    if normalized == EVIDENCE_RESULT_PASS:
         return ClaimConfidence.VALIDATED_INTERNAL
-    if result == EVIDENCE_RESULT_FAIL:
+    if normalized == EVIDENCE_RESULT_FAIL:
         return ClaimConfidence.ASPIRATIONAL
     return None
 
@@ -81,18 +87,22 @@ def _effective_confidence(before_tier: str, result: str) -> tuple[str, float]:
     derived = derive_confidence(result)
     if derived is None:
         return before_tier, CONFIDENCE_MULTIPLIERS[ClaimConfidence(before_tier)]
-    if result == EVIDENCE_RESULT_PASS and _tier_rank(before_tier) > _tier_rank(
-        derived.value
-    ):
+    if derived == ClaimConfidence.VALIDATED_INTERNAL and _tier_rank(
+        before_tier
+    ) > _tier_rank(derived.value):
         return before_tier, CONFIDENCE_MULTIPLIERS[ClaimConfidence(before_tier)]
     return derived.value, CONFIDENCE_MULTIPLIERS[derived]
 
 
+def _as_utc(value: Any) -> datetime:
+    """Coerce a timestamp to an aware UTC datetime for safe comparison."""
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    return datetime.min.replace(tzinfo=timezone.utc)
+
+
 def _evidence_sort_key(row: Any) -> tuple[Any, int]:
-    created = getattr(row, "created_at", None)
-    if created is None:
-        created = datetime.min.replace(tzinfo=timezone.utc)
-    return (created, int(getattr(row, "id", 0) or 0))
+    return (_as_utc(getattr(row, "created_at", None)), int(getattr(row, "id", 0) or 0))
 
 
 def _method_label(method: str) -> str:
@@ -122,7 +132,7 @@ def evidence_to_out(row: Any, assumption_text: str) -> EvidenceOut:
 
 def _latest_decisive(history: list[EvidenceOut]) -> EvidenceOut | None:
     for row in history:  # already most-recent first
-        if row.result in DECISIVE_RESULTS:
+        if str(row.result or "").strip().upper() in DECISIVE_RESULTS:
             return row
     return None
 
@@ -134,7 +144,8 @@ def _recommendation(
     derived: ClaimConfidence | None,
     before_roi: float | None,
     after_roi: float | None,
-    after_tier: str | None,
+    after_tier: str | None = None,
+    after_roi_tier: str | None = None,
 ) -> str:
     if decisive is None:
         if most_recent is not None:
@@ -149,17 +160,38 @@ def _recommendation(
             "validation-experiment plan to run a concrete first test."
         )
     method = _method_label(decisive.method).lower() or "experiment"
-    if decisive.result == EVIDENCE_RESULT_PASS and derived is not None:
+    if derived == ClaimConfidence.VALIDATED_INTERNAL:
+        if before_roi is not None and after_roi is not None and after_roi < before_roi:
+            return (
+                f"PASS: '{snippet}' was confirmed by a {method} — confidence is now "
+                f"{after_tier or derived.value}, and validation-ROI fell from "
+                f"{before_roi:.3f} to {after_roi:.3f}."
+            )
+        if before_roi is not None and after_roi is not None:
+            # Stronger evidence already existed — the tier (and ROI) did not move.
+            return (
+                f"PASS: '{snippet}' was confirmed again by a {method} — confidence "
+                f"stays {after_tier or derived.value} (already backed by stronger "
+                f"evidence), so validation-ROI is unchanged at {before_roi:.3f}."
+            )
         return (
-            f"PASS: '{snippet}' was confirmed by a {method} — confidence is now "
-            f"{derived.value}, and validation-ROI fell from {before_roi:.3f} to "
-            f"{after_roi:.3f}."
+            f"PASS: '{snippet}' was confirmed by a {method} — recorded as "
+            f"{derived.value} evidence."
         )
-    if decisive.result == EVIDENCE_RESULT_FAIL:
+    if derived == ClaimConfidence.ASPIRATIONAL:
+        if before_roi is not None and after_roi is not None and after_roi > before_roi:
+            return (
+                f"FAIL: '{snippet}' was contradicted by a {method} — treat it as "
+                "ASPIRATIONAL and rework or replace it before building"
+                + (
+                    f" (de-risking priority rose to {after_roi_tier})."
+                    if after_roi_tier
+                    else "."
+                )
+            )
         return (
             f"FAIL: '{snippet}' was contradicted by a {method} — treat it as "
-            "ASPIRATIONAL and rework or replace it before building"
-            + (f" (de-risking priority rose to {after_tier})." if after_tier else ".")
+            "ASPIRATIONAL and rework or replace it before building."
         )
     return (
         f"INCONCLUSIVE: the latest {method} did not settle '{snippet}' — rerun "
@@ -268,6 +300,7 @@ def build_assumption_scorecard(
             derived,
             before_roi,
             after_roi,
+            after_tier,
             after_roi_tier,
         ),
         history=history,

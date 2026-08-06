@@ -249,3 +249,62 @@ class TestScorecardHistoryOrder:
             ]
         )
         assert [e.id for e in out.history] == [11, 10]
+
+    def test_naive_and_aware_timestamps_sort_safely(self) -> None:
+        naive = _evidence(eid=12, result=EVIDENCE_RESULT_PASS, day=2)
+        naive.created_at = datetime(2026, 1, 2)  # naive — legacy DB row shape
+        aware_later = _evidence(eid=13, result=EVIDENCE_RESULT_INCONCLUSIVE, day=6)
+        out = _build(evidence=[naive, aware_later])
+        assert [e.id for e in out.history] == [13, 12]
+
+
+class TestResultNormalization:
+    def test_lowercase_legacy_result_is_still_decisive(self) -> None:
+        out = _build(
+            evidence=[_evidence(eid=14, result="pass", day=4)],
+        )
+        assert out.derived_confidence == "VALIDATED_INTERNAL"
+        assert out.confidence_after == "VALIDATED_INTERNAL"
+        assert out.validation_roi_after is not None
+        assert out.validation_roi_before is not None
+        assert out.validation_roi_after < out.validation_roi_before
+        assert "PASS" in out.recommendation
+
+    def test_whitespace_padded_fail_is_still_decisive(self) -> None:
+        ab_test = "We ran an A/B test and pricing converts well"
+        out = _build(
+            assumption=_assumption(ab_test),
+            evidence=[_evidence(eid=15, result=" FAIL ", day=4, metric=0.01)],
+        )
+        assert out.derived_confidence == "ASPIRATIONAL"
+        assert out.confidence_after == "ASPIRATIONAL"
+        assert out.validation_roi_after is not None
+        assert out.validation_roi_before is not None
+        assert out.validation_roi_after > out.validation_roi_before
+        assert "FAIL" in out.recommendation
+
+
+class TestScorecardRecommendationAccuracy:
+    def test_pass_on_external_evidence_reports_stable_confidence(self) -> None:
+        market = "Market research shows strong market demand for this solution"
+        out = _build(
+            assumption=_assumption(market),
+            evidence=[_evidence(eid=16, result=EVIDENCE_RESULT_PASS)],
+        )
+        assert out.confidence_before == "VALIDATED_EXTERNAL"
+        assert out.confidence_after == "VALIDATED_EXTERNAL"
+        assert out.validation_roi_after == out.validation_roi_before
+        assert "stays VALIDATED_EXTERNAL" in out.recommendation
+        assert "fell" not in out.recommendation
+
+    def test_fail_on_aspirational_claim_does_not_claim_priority_rose(self) -> None:
+        # "We believe..." heuristically starts ASPIRATIONAL, so a FAIL changes
+        # nothing — the recommendation must not claim the priority rose.
+        out = _build(
+            evidence=[_evidence(eid=17, result=EVIDENCE_RESULT_FAIL, metric=0.01)],
+        )
+        assert out.confidence_before == "ASPIRATIONAL"
+        assert out.confidence_after == "ASPIRATIONAL"
+        assert out.validation_roi_after == out.validation_roi_before
+        assert "FAIL" in out.recommendation
+        assert "rose" not in out.recommendation
