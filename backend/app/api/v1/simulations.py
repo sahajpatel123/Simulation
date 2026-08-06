@@ -104,6 +104,7 @@ from app.schemas.activation_funnel import ActivationFunnelOut
 from app.schemas.virality_growth import ViralityGrowthOut
 from app.schemas.trust_barriers import TrustBarriersOut
 from app.schemas.support_friction import SupportFrictionOut
+from app.schemas.cultural_fit import CulturalFitOut
 from app.schemas.retention_churn import RetentionChurnOut
 from app.schemas.distribution_channels import DistributionChannelsOut
 from app.schemas.market_timing import MarketTimingOut
@@ -137,6 +138,7 @@ from app.simulation.activation_funnel import build_activation_funnel
 from app.simulation.virality_growth import build_virality_growth
 from app.simulation.trust_barriers import build_trust_barriers
 from app.simulation.support_friction import build_support_friction
+from app.simulation.cultural_fit import build_cultural_fit
 from app.simulation.retention_churn_read import build_retention_churn
 from app.simulation.distribution_channels import build_distribution_channels
 from app.simulation.market_timing_read import build_market_timing
@@ -5063,6 +5065,151 @@ def get_support_friction(
     ]
 
     return build_support_friction(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        signal_quality=float(sim.signal_quality)
+        if sim.signal_quality is not None
+        else None,
+        conductor_results=conductor_results,
+        cluster_registry=registry,
+        product_type=product_type_name,
+    )
+
+
+@router.get(
+    "/{simulation_id}/cultural-fit",
+    response_model=CulturalFitOut,
+    summary=(
+        "Cultural fit: population-weighted adoption readiness, "
+        "per-cluster cultural barriers, and localization levers"
+    ),
+    responses=_JSON_200,
+)
+def get_cultural_fit(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CulturalFitOut:
+    """
+    Deterministic cultural-fit read from a completed run's
+    ``CulturalContextArchitect`` metrics:
+
+      * population-weighted fit index (language accessibility, cultural
+        alignment, family-gatekeeper pressure, religious-sensitivity
+        risk, seasonal relevance, geo-target alignment)
+      * per-cluster fit tiers (STRONG / MODERATE / WEAK / MISALIGNED)
+      * per-cluster primary cultural barrier with a market-level
+        barrier distribution
+      * ranked localization levers by the share of the covered market
+        they touch, plus risk flags and actionable recommendations
+
+    Pure post-hoc analytics — no Celery, no LLM, no DB writes. Cultural
+    metrics are recomputed from the project's visible assumptions so
+    language / festival / religious signals from the brief shape the
+    read. Works for all product types because CulturalContextArchitect
+    runs in every conductor stack.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — cultural-fit analysis "
+                "requires completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    environment = (
+        db.query(Environment)
+        .filter(Environment.id == sim.environment_id)
+        .first()
+    )
+    aov = 999.0
+    price_sensitivity = 0.5
+    market_maturity = 0.3
+    if environment:
+        aov = float(environment.average_order_value or 999.0)
+        price_sensitivity = float(environment.price_sensitivity or 0.5)
+        market_maturity = float(environment.market_maturity or 0.3)
+
+    # The project's visible assumptions shape CulturalContextArchitect's
+    # language / festival / religious signals; feed them through so the
+    # recomputed read matches the actual run instead of defaulting to
+    # neutral signals.
+    assumptions = (
+        db.query(Assumption)
+        .filter(Assumption.project_id == sim.project_id, Assumption.is_hidden.is_(False))
+        .all()
+    )
+    assumption_dicts = [
+        {
+            "text": assumption.text,
+            "sensitivity": str(assumption.sensitivity or "MEDIUM"),
+            "impact_score": float(
+                assumption.impact_score
+                if assumption.impact_score is not None
+                else 5.0
+            ),
+        }
+        for assumption in assumptions
+    ]
+
+    product_type_name = str(
+        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
+    )
+    try:
+        product_type = ProductType(product_type_name)
+    except ValueError:
+        product_type = ProductType.SAAS
+    # Keep the read consistent with the stack actually recomputed below:
+    # an unknown persisted value falls back to the SAAS stack and read.
+    product_type_name = product_type.value
+
+    # Recompute the deterministic architect stack for this product type so
+    # per-cluster cultural metrics are available even though regular
+    # simulation runs only persist aggregate results. No DB writes are
+    # performed (no session passed to run()).
+    conductor = Conductor()
+    cond_result = conductor.run(
+        agents=[],
+        env_params={
+            "average_order_value": aov,
+            "price_sensitivity": price_sensitivity,
+            "market_maturity": market_maturity,
+        },
+        assumptions=assumption_dicts,
+        product_type=product_type,
+    )
+    conductor_results = {
+        cid: {
+            name: {"metrics": output.metrics, "flags": output.flags}
+            for name, output in arch_outputs.items()
+        }
+        for cid, arch_outputs in cond_result.cluster_results.items()
+    }
+    registry = [
+        {
+            "cluster_id": cluster.cluster_id,
+            "name": cluster.name,
+            "population_weight": cluster.population_weight,
+        }
+        for cluster in _clusters_map.values()
+    ]
+
+    return build_cultural_fit(
         sim.results_json,
         simulation_id=sim.id,
         project_id=sim.project_id,
