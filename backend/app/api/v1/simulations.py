@@ -46,6 +46,7 @@ from app.api.v1.projects import (
 )
 from app.core.rate_limiter import rate_limit
 from app.core.tier_enforcement import enforce_simulation_limit
+from app.core.progress_bridge import progress_bridge
 from app.models.assumption import Assumption
 from app.models.environment import Environment
 from app.models.outcome import Outcome
@@ -3398,6 +3399,7 @@ def websocket_info():
 
     return {
         "active_connections": ws_manager.connection_count,
+        "live_progress": progress_bridge.is_running(),
         "protocol": "ws",
         "endpoint": "/api/v1/ws/simulation/{simulation_id} — auth: first JSON frame {\"type\":\"auth\",\"access_token\":\"<jwt>\"}",
     }

@@ -93,10 +93,13 @@ Long-running work (simulations, stress tests) runs in Celery workers.
 The API enqueues with `.delay()`, returns a task ID, and the frontend polls
 `/simulations/{id}/progress` or listens on the WebSocket.
 
-**Important:** `sync_broadcast()` in `app/core/websocket.py` can only push
-WebSocket messages to clients connected to the *same process*. In production
-the API and worker are separate processes, so `sync_broadcast` from a Celery
-task is a no-op. Polling is the reliable path.
+**Important:** `sync_broadcast()` in `app/core/websocket.py` publishes
+progress payloads to a Redis pub/sub channel (`thecee:simulation-progress`);
+the API process's `ProgressBridge` subscriber (started in the app lifespan)
+fans them out to connected WebSocket clients — so live progress works even
+though the Celery worker runs in a separate process. When Redis is
+unavailable it falls back to in-process delivery only (same-process dev),
+so polling `/simulations/{id}/progress` remains the reliable fallback path.
 
 ### 6. Migrations (`migrate_and_start.py`)
 

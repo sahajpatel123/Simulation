@@ -14,6 +14,7 @@ from app.core.database import engine, init_extensions
 from app.core.errors import TheCeeError, generic_error_handler, thecee_error_handler
 from app.core.logging_config import configure_logging
 from app.core.metrics import metrics
+from app.core.progress_bridge import progress_bridge
 from app.core.redis_client import get_redis_client
 from app.core.timing_middleware import TimingMiddleware
 from app.core.audit_middleware import AuditLogMiddleware
@@ -34,6 +35,10 @@ async def lifespan(app: FastAPI):
     configure_logging()
     init_extensions()
     logger.info("TheCee backend running — pgvector enabled")
+    # Live progress relay: subscribes this process to the Redis progress
+    # channel so WebSocket clients receive Celery-task progress even though
+    # the worker runs in a separate process. No-op-safe when Redis is down.
+    await progress_bridge.ensure_running()
 
     from app.simulation.clusters.registry import ClusterRegistry
     from app.core.database import SessionLocal
@@ -47,6 +52,7 @@ async def lifespan(app: FastAPI):
         db.close()
 
     yield
+    await progress_bridge.stop()
     logger.info("TheCee backend shutting down")
 
 

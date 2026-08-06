@@ -8,7 +8,34 @@ from typing import Any
 
 from fastapi import WebSocket
 
+from app.core.progress_bridge import progress_bridge
+
 logger = logging.getLogger(__name__)
+
+
+def _build_progress_payload(
+    simulation_id: int,
+    status: str,
+    stage: str,
+    pct: int,
+    agents_processed: int = 0,
+    agents_total: int = 0,
+    extra: dict | None = None,
+) -> dict[str, Any]:
+    """Single source of truth for the progress message shape."""
+    payload: dict[str, Any] = {
+        "type": "progress",
+        "simulation_id": simulation_id,
+        "status": status,
+        "stage": stage,
+        "pct": pct,
+        "agents_processed": agents_processed,
+        "agents_total": agents_total,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
+    if extra:
+        payload.update(extra)
+    return payload
 
 
 class ConnectionManager:
@@ -63,18 +90,15 @@ class ConnectionManager:
         agents_total: int = 0,
         extra: dict | None = None,
     ) -> None:
-        payload: dict[str, Any] = {
-            "type": "progress",
-            "simulation_id": simulation_id,
-            "status": status,
-            "stage": stage,
-            "pct": pct,
-            "agents_processed": agents_processed,
-            "agents_total": agents_total,
-            "ts": datetime.now(timezone.utc).isoformat(),
-        }
-        if extra:
-            payload.update(extra)
+        payload = _build_progress_payload(
+            simulation_id=simulation_id,
+            status=status,
+            stage=stage,
+            pct=pct,
+            agents_processed=agents_processed,
+            agents_total=agents_total,
+            extra=extra,
+        )
         await self.send_update(simulation_id, payload)
 
     def is_connected(self, simulation_id: int) -> bool:
@@ -88,35 +112,16 @@ class ConnectionManager:
 ws_manager = ConnectionManager()
 
 
-def sync_broadcast(
-    simulation_id: int,
-    status: str,
-    stage: str,
-    pct: int,
-    agents_processed: int = 0,
-    agents_total: int = 0,
-    extra: dict | None = None,
-) -> None:
-    """
-    Synchronous bridge for Celery tasks.
-    """
+def _deliver_locally(payload: dict[str, Any]) -> None:
+    """Legacy in-process delivery for the no-Redis / same-process case."""
+    simulation_id = int(payload["simulation_id"])
     if not ws_manager.is_connected(simulation_id):
         return
     loop: asyncio.AbstractEventLoop | None = None
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        loop.run_until_complete(
-            ws_manager.broadcast_progress(
-                simulation_id=simulation_id,
-                status=status,
-                stage=stage,
-                pct=pct,
-                agents_processed=agents_processed,
-                agents_total=agents_total,
-                extra=extra,
-            )
-        )
+        loop.run_until_complete(ws_manager.send_update(simulation_id, payload))
     except Exception as exc:
         logger.warning(f"[WS] sync_broadcast failed simulation_id={simulation_id}: {exc}")
     finally:
@@ -131,3 +136,36 @@ def sync_broadcast(
         if loop is not None:
             loop.close()
 
+
+def sync_broadcast(
+    simulation_id: int,
+    status: str,
+    stage: str,
+    pct: int,
+    agents_processed: int = 0,
+    agents_total: int = 0,
+    extra: dict | None = None,
+) -> None:
+    """
+    Synchronous bridge for Celery tasks.
+
+    Publishes the payload to Redis so the API process's ``ProgressBridge``
+    subscriber can relay it to connected WebSocket clients (production:
+    worker and API are separate processes). When Redis is unavailable or no
+    subscriber is active in this process, falls back to direct in-process
+    delivery for local-dev setups.
+    """
+    payload = _build_progress_payload(
+        simulation_id=simulation_id,
+        status=status,
+        stage=stage,
+        pct=pct,
+        agents_processed=agents_processed,
+        agents_total=agents_total,
+        extra=extra,
+    )
+    published = progress_bridge.publish_sync(payload)
+    if not (published and progress_bridge.is_running()):
+        # No active Redis subscriber in this process: keep the legacy
+        # same-process path (also covers the no-Redis dev setup).
+        _deliver_locally(payload)

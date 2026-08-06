@@ -9,6 +9,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.deps import user_from_access_sub
+from app.core.progress_bridge import progress_bridge
 from app.core.security import decode_token
 from app.core.websocket import ws_manager
 from app.models.project import Project
@@ -120,6 +121,10 @@ async def websocket_simulation_progress(
         return
 
     await ws_manager.connect(websocket, simulation_id, skip_accept=True)
+    # Ensure this process can receive progress published by Celery workers
+    # (restarts the subscriber after a Redis outage without a full app
+    # restart). Safe to call repeatedly.
+    await progress_bridge.ensure_running()
 
     try:
         while True:
