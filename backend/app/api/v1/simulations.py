@@ -4026,6 +4026,19 @@ def get_simulation_anomalies(
     Analyzes a completed simulation's conversion funnel and cluster breakdown
     to flag bottlenecks, severe drop-offs, and unexpected metric deviations.
     """
+    cache_params = {
+        "simulation_id": simulation_id,
+        "outlier_z_threshold": outlier_z_threshold,
+        "dropoff_spike_threshold": dropoff_spike_threshold,
+    }
+    cached = cache_get_json(
+        namespace=_SIMULATION_ANOMALIES_CACHE_NAMESPACE,
+        params=cache_params,
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return SimulationAnomaliesOut(**cached)
+
     sim = (
         db.query(Simulation)
         .join(Project, Simulation.project_id == Project.id)
@@ -4040,19 +4053,6 @@ def get_simulation_anomalies(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Simulation not found",
         )
-
-    cache_params = {
-        "simulation_id": simulation_id,
-        "outlier_z_threshold": outlier_z_threshold,
-        "dropoff_spike_threshold": dropoff_spike_threshold,
-    }
-    cached = cache_get_json(
-        namespace=_SIMULATION_ANOMALIES_CACHE_NAMESPACE,
-        params=cache_params,
-        user_id=current_user.id,
-    )
-    if cached is not None:
-        return SimulationAnomaliesOut(**cached)
 
     results_json = sim.results_json or {}
     payload = detect_simulation_anomalies(
@@ -4094,6 +4094,18 @@ def get_simulation_sensitivity_matrix(
     Evaluates how variations in consumer cluster traits (price sensitivity, trust,
     digital literacy, etc.) impact final conversion rates.
     """
+    cache_params = {
+        "simulation_id": simulation_id,
+        "delta_step": delta_step,
+    }
+    cached = cache_get_json(
+        namespace=_SIMULATION_SENSITIVITY_CACHE_NAMESPACE,
+        params=cache_params,
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return SimulationSensitivityMatrixOut(**cached)
+
     sim = (
         db.query(Simulation)
         .join(Project, Simulation.project_id == Project.id)
@@ -4109,18 +4121,6 @@ def get_simulation_sensitivity_matrix(
             detail="Simulation not found",
         )
 
-    cache_params = {
-        "simulation_id": simulation_id,
-        "delta_step": delta_step,
-    }
-    cached = cache_get_json(
-        namespace=_SIMULATION_SENSITIVITY_CACHE_NAMESPACE,
-        params=cache_params,
-        user_id=current_user.id,
-    )
-    if cached is not None:
-        return SimulationSensitivityMatrixOut(**cached)
-
     results_json = sim.results_json or {}
     payload = compute_simulation_sensitivity_matrix(
         results_json=results_json,
@@ -4135,5 +4135,4 @@ def get_simulation_sensitivity_matrix(
         ttl_seconds=_SIMULATION_SENSITIVITY_CACHE_TTL_S,
     )
     return SimulationSensitivityMatrixOut(**payload)
-
 
