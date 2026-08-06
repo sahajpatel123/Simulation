@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
@@ -41,6 +42,7 @@ from app.api.v1.projects import (
     _CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
 )
 from app.models.outcome import Outcome
+from app.models.outcome_tracker import OutcomeTracker
 from app.models.project import Project
 from app.models.simulation import Simulation
 from app.models.user import User
@@ -52,6 +54,11 @@ from app.schemas.outcome import (
     OutcomeRecord,
     VarianceReport,
 )
+from app.schemas.outcome_tracker import (
+    OutcomeTrackerCreate,
+    OutcomeTrackerPoint,
+    OutcomeTrackerTimelineOut,
+)
 from app.simulation.architect_accuracy_bridge import (
     bridge_architect_accuracy,
 )
@@ -60,6 +67,9 @@ from app.simulation.architect_leaderboard import (
 )
 from app.simulation.calibration_health import (
     build_calibration_health,
+)
+from app.simulation.outcome_tracker_read import (
+    build_outcome_tracker_timeline,
 )
 from app.simulation.outcomes_digest_v2 import (
     build_outcomes_digest,
@@ -183,6 +193,41 @@ def _predicted_from_results(results: dict) -> float:
         or results.get("conversion_rate")
         or results.get("population_weighted_conversion")
         or 0
+    )
+
+
+def _predicted_revenue_from_results(results: dict) -> float | None:
+    """Best-effort predicted revenue from a completed results payload."""
+    for key in (
+        "mean_revenue",
+        "revenue_projection",
+        "projected_revenue",
+        "annual_revenue_projection",
+    ):
+        raw = results.get(key)
+        if raw is None:
+            continue
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if value > 0:
+            return value
+    return None
+
+
+def _hydrate_tracker_point(row: OutcomeTracker) -> OutcomeTrackerPoint:
+    return OutcomeTrackerPoint(
+        id=row.id,
+        project_id=row.project_id,
+        simulation_id=row.simulation_id,
+        recorded_at=row.recorded_at,
+        actual_conversion_rate=row.actual_conversion_rate,
+        actual_revenue=row.actual_revenue,
+        predicted_conversion_rate=row.predicted_conversion_rate,
+        predicted_revenue=row.predicted_revenue,
+        variance=row.variance,
+        notes=row.notes,
     )
 
 
@@ -529,6 +574,108 @@ def submit_outcome_feedback(
             )
         ),
     }
+
+
+@router.post(
+    "/{project_id}/outcome-tracker",
+    response_model=OutcomeTrackerPoint,
+    status_code=status.HTTP_201_CREATED,
+    summary="Log a lightweight conversion-tracking checkpoint",
+    # DB write — cap path-spam at 30/min/IP for the same reason as the
+    # simulations POST limit.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def log_outcome_tracker_point(
+    project_id: int,
+    payload: OutcomeTrackerCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> OutcomeTrackerPoint:
+    """Persist a conversion/revenue checkpoint for a project over time.
+
+    Unlike the structured launch-outcome flow, this endpoint is meant for
+    repeated lightweight checkpoints (week 1, week 4, etc.). Predicted values
+    are auto-filled from the project's latest completed simulation unless a
+    specific ``simulation_id`` is supplied.
+    """
+    get_owned_project(db, current_user.id, project_id)
+
+    sim: Simulation | None = None
+    if payload.simulation_id is not None:
+        sim = (
+            db.query(Simulation)
+            .filter(
+                Simulation.id == payload.simulation_id,
+                Simulation.project_id == project_id,
+            )
+            .first()
+        )
+        if not sim:
+            raise HTTPException(status_code=404, detail="Simulation not found")
+    else:
+        sim = (
+            db.query(Simulation)
+            .filter(
+                Simulation.project_id == project_id,
+                Simulation.status == "COMPLETED",
+            )
+            .order_by(Simulation.created_at.desc())
+            .first()
+        )
+
+    pred_conv: float | None = None
+    pred_rev: float | None = None
+    sim_id: int | None = None
+    if sim is not None and sim.results_json:
+        pred_conv = _predicted_from_results(sim.results_json)
+        pred_rev = _predicted_revenue_from_results(sim.results_json)
+        sim_id = sim.id
+
+    variance = None
+    if payload.actual_conversion_rate is not None:
+        variance = _variance_pct(payload.actual_conversion_rate, pred_conv)
+
+    row = OutcomeTracker(
+        project_id=project_id,
+        simulation_id=sim_id,
+        actual_conversion_rate=payload.actual_conversion_rate,
+        actual_revenue=payload.actual_revenue,
+        predicted_conversion_rate=pred_conv,
+        predicted_revenue=pred_rev,
+        variance=variance,
+        notes=payload.notes,
+        recorded_at=payload.recorded_at or datetime.now(timezone.utc),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _hydrate_tracker_point(row)
+
+
+@router.get(
+    "/{project_id}/outcome-tracker",
+    response_model=OutcomeTrackerTimelineOut,
+    summary="List conversion-tracking checkpoints for a project",
+)
+def get_outcome_tracker_timeline(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> OutcomeTrackerTimelineOut:
+    """Return the full tracking timeline plus derived calibration summary."""
+    get_owned_project(db, current_user.id, project_id)
+
+    rows = (
+        db.query(OutcomeTracker)
+        .filter(OutcomeTracker.project_id == project_id)
+        .order_by(OutcomeTracker.recorded_at.asc())
+        .all()
+    )
+    payload = build_outcome_tracker_timeline(
+        [r.__dict__ for r in rows],
+        project_id=project_id,
+    )
+    return OutcomeTrackerTimelineOut(**payload)
 
 
 @router.post(
