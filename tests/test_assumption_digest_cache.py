@@ -68,7 +68,19 @@ class _FakeQuery:
 
 class _FakeSession:
     def query(self, *args, **kwargs):
+        if args and getattr(args[0], "__name__", "") == "Project":
+            return _FakeProjectQuery()
         return _FakeQuery()
+
+
+class _FakeProjectQuery:
+    """Project ownership query returns a valid project row."""
+
+    def filter(self, *args, **kwargs):
+        return self
+
+    def first(self):
+        return type("P", (), {"id": 1, "user_id": 42})()
 
 
 def _call_route(current_user_id: int = 42, project_id: int = 1):
@@ -196,4 +208,4 @@ def test_assumption_digest_namespace_consistency() -> None:
     src = inspect.getsource(proj_mod)
     # The read path and the invalidation in
     # extract_assumptions must both use the constant.
-    assert src.count(f"namespace={namespace}") >= 2
+    assert src.count("namespace=_ASSUMPTION_DIGEST_CACHE_NAMESPACE") >= 2

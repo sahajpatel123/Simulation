@@ -72,7 +72,19 @@ class _FakeQuery:
 
 class _FakeSession:
     def query(self, *args, **kwargs):
+        if args and getattr(args[0], "__name__", "") == "Project":
+            return _FakeProjectQuery()
         return _FakeQuery()
+
+
+class _FakeProjectQuery:
+    """Project ownership query returns a valid project row."""
+
+    def filter(self, *args, **kwargs):
+        return self
+
+    def first(self):
+        return type("P", (), {"id": 1, "user_id": 42})()
 
 
 def _call_route(current_user_id: int = 42, project_id: int = 1):
@@ -209,6 +221,6 @@ def test_activity_feed_namespace_consistency() -> None:
         (src_decisions, "decisions.py (POST decisions)"),
         (src_outcomes, "outcomes.py (POST outcomes)"),
     ):
-        assert f"namespace={namespace}" in src, (
+        assert "namespace=_ACTIVITY_FEED_CACHE_NAMESPACE" in src, (
             f"namespace mismatch in {label}"
         )

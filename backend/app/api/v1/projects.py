@@ -3659,7 +3659,6 @@ def get_convergence_check(
             Simulation.id,
             Simulation.created_at,
             Simulation.status,
-            Simulation.predicted_conversion_rate,
             Simulation.results_json,
         )
         .filter(
@@ -3676,7 +3675,9 @@ def get_convergence_check(
             "created_at": r.created_at,
             "status": r.status,
             "predicted_conversion_rate": (
-                r.predicted_conversion_rate
+                (r.results_json or {}).get("predicted_conversion_rate")
+                if isinstance(r.results_json, dict)
+                else None
             ),
             "results_json": r.results_json,
         }
@@ -4801,4 +4802,3 @@ def get_cluster_cohort_drift(
         ttl_seconds=_COHORT_DRIFT_CACHE_TTL_S,
     )
     return ClusterCohortDriftOut(**payload)
-

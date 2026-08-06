@@ -67,7 +67,19 @@ class _FakeQuery:
 
 class _FakeSession:
     def query(self, *args, **kwargs):
+        if args and getattr(args[0], "__name__", "") == "Project":
+            return _FakeProjectQuery()
         return _FakeQuery()
+
+
+class _FakeProjectQuery:
+    """Project ownership query returns a valid project row."""
+
+    def filter(self, *args, **kwargs):
+        return self
+
+    def first(self):
+        return type("P", (), {"id": 1, "user_id": 42})()
 
 
 def _call_route(current_user_id: int = 42, project_id: int = 1):
@@ -190,7 +202,7 @@ def test_convergence_namespace_consistency() -> None:
 
     # Read path: must reference the constant.
     src_projects = inspect.getsource(proj_mod)
-    assert f"namespace={namespace}" in src_projects
+    assert "namespace=_CONVERGENCE_CHECK_CACHE_NAMESPACE" in src_projects
 
     # Invalidation path: must also reference the constant
     # (the simulation task imports from projects.py).
@@ -200,7 +212,7 @@ def test_convergence_namespace_consistency() -> None:
             fromlist=["*"],
         ),
     )
-    assert namespace in src_tasks
+    assert "_CONVERGENCE_CHECK_CACHE_NAMESPACE" in src_tasks
 
 
 def test_convergence_namespace_constant_export() -> None:

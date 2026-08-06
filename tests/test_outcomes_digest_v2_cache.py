@@ -53,6 +53,9 @@ class _FakeQuery:
     def order_by(self, *args, **kwargs):
         return self
 
+    def outerjoin(self, *args, **kwargs):
+        return self
+
     def limit(self, *_):
         return self
 
@@ -68,7 +71,19 @@ class _FakeQuery:
 
 class _FakeSession:
     def query(self, *args, **kwargs):
+        if args and getattr(args[0], "__name__", "") == "Project":
+            return _FakeProjectQuery()
         return _FakeQuery()
+
+
+class _FakeProjectQuery:
+    """Project ownership query returns a valid project row."""
+
+    def filter(self, *args, **kwargs):
+        return self
+
+    def first(self):
+        return type("P", (), {"id": 1, "user_id": 42})()
 
 
 def _call_route(current_user_id: int = 42, project_id: int = 1):
@@ -196,4 +211,4 @@ def test_outcomes_digest_namespace_consistency() -> None:
     src = inspect.getsource(out_mod)
     # Read path + 3 invalidation sites (POST outcome-feedback,
     # POST outcomes, DELETE outcomes) must all use the constant.
-    assert src.count(f"namespace={namespace}") >= 4
+    assert src.count("namespace=_OUTCOMES_DIGEST_CACHE_NAMESPACE") >= 4
