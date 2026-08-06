@@ -76,8 +76,10 @@ def test_virality_architect_product_types_subset() -> None:
     assert "saas" in pt
     assert "marketplace" in pt
     assert "mobile_app" in pt
-    # Not enterprise / developer_tool / hardware subset varies.
-    for must_not in ("enterprise_software", "developer_tool"):
+    assert "developer_tool" in pt
+    assert "d2c" in pt
+    # Enterprise / hardware-stack product types without word-of-mouth modeling.
+    for must_not in ("enterprise_software", "iot_hardware", "wearable", "smart_home"):
         assert must_not not in pt
 
 

@@ -150,6 +150,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "PurchaseDecisionArchitect", "PhysicalSensoryArchitect",
         "PerformanceThresholdArchitect", "SetupFirstUseArchitect",
         "EcosystemCompatibilityArchitect", "AftersalesLifecycleArchitect",
+        "ViralityArchitect",
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
         "AssumptionCascadeArchitect",
     ],

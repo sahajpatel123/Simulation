@@ -20,7 +20,8 @@ class ViralityArchitect(BaseArchitect):
     def product_types(self) -> list[str]:
         return [
             "saas", "marketplace", "mobile_app",
-            "consumer_hardware", "health_hardware",
+            "developer_tool", "consumer_hardware", "health_hardware",
+            "consumer_app", "d2c", "b2b_marketplace", "productivity_tool",
         ]
 
     def compute(

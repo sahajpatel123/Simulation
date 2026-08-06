@@ -26,6 +26,9 @@ from app.simulation.virality_growth import (
     VIRALITY_PRODUCT_TYPES,
     build_virality_growth,
 )
+from app.simulation.architects.virality import ViralityArchitect
+from app.simulation.conductor import ARCHITECT_STACKS
+from app.simulation.product_type import ProductType
 
 
 def _registry(clusters: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -302,6 +305,17 @@ def test_supported_product_types_include_virality_stacks() -> None:
     assert "enterprise_software" not in VIRALITY_PRODUCT_TYPES
     assert "iot_hardware" not in VIRALITY_PRODUCT_TYPES
     assert "wearable" not in VIRALITY_PRODUCT_TYPES
+
+
+def test_supported_set_matches_conductor_activation() -> None:
+    """Every advertised product type must actually run ViralityArchitect."""
+    activated = {
+        pt.value
+        for pt, stack in ARCHITECT_STACKS.items()
+        if "ViralityArchitect" in stack
+        and pt.value in ViralityArchitect().product_types
+    }
+    assert VIRALITY_PRODUCT_TYPES == activated
 
 
 def test_blocker_order_is_stable_and_complete() -> None:
