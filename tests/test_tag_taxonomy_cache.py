@@ -58,6 +58,9 @@ class _FakeQuery:
     def scalar(self):
         return None
 
+    def fetchall(self):
+        return []
+
     def all(self):
         return []
 
@@ -181,4 +184,7 @@ def test_tag_taxonomy_namespace_in_route_only():
     # Read path uses cache_get_json + cache_set_json,
     # write path uses cache_invalidate. >= 3 source
     # references to the constant.
-    assert src.count(f"namespace={namespace}") >= 3
+    assert (
+        src.count("namespace=_USER_TAG_TAXONOMY_CACHE_NAMESPACE")
+        >= 3
+    )

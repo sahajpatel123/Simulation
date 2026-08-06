@@ -72,6 +72,12 @@ class _FakeSession:
     def query(self, *args, **kwargs):
         return _FakeQuery()
 
+    def execute(self, *args, **kwargs):
+        return type("R", (), {
+            "fetchall": lambda self=0: [],
+            "scalar": lambda self=0: 0,
+        })()
+
 
 class _FakeUser:
     def __init__(self) -> None:
@@ -202,7 +208,7 @@ def test_notifications_namespace_consistency_across_modules() -> None:
             f"imported in {label}"
         )
         assert (
-            f'namespace="{namespace}"' in s
+            f'namespace="{namespace}"' not in s
         ), (
             f"namespace literal not used via constant "
             f"in {label}"

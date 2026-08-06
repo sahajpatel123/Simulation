@@ -46,6 +46,8 @@ class _FakeRedis:
 
 
 class _FakeProject:
+    created_at = None
+    updated_at = None
     brief_completed_at = None
     brief_positioning = None
     brief_features_json = None
@@ -213,7 +215,7 @@ def test_project_export_namespace_consistency() -> None:
             f"in {label}"
         )
         assert (
-            f'namespace="{namespace}"' in s
+            f'namespace="{namespace}"' not in s
         ), (
             f"namespace literal not used via constant "
             f"in {label}"
