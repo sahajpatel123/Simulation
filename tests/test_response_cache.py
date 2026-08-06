@@ -290,7 +290,7 @@ def test_cache_invalidate_user_scope(monkeypatch) -> None:
     assert n == 1
     assert fake.store == {
         "rcache:portfolio-narrative:99:"
-        "5e9d7c39a26a5b81": '{"narrative": "y"}',
+        "45cd05795350fadf": '{"narrative": "y"}',
     }
 
 

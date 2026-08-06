@@ -17,13 +17,10 @@ if "razorpay" not in sys.modules:
 
 
 def _patch_redis(monkeypatch, fake) -> None:
-    from app.core import redis_client, response_cache
+    from app.core import redis_client
 
     monkeypatch.setattr(
         redis_client, "get_redis_client", lambda: fake,
-    )
-    monkeypatch.setattr(
-        response_cache, "get_redis_client", lambda: fake,
     )
 
 

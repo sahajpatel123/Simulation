@@ -51,12 +51,28 @@ from app.core import redis_client
 logger = logging.getLogger(__name__)
 
 
+def _normalise(value: Any) -> Any:
+    """Recursively canonicalise a param value so equivalent
+    dicts/lists hash identically regardless of ordering."""
+    if isinstance(value, dict):
+        return {k: _normalise(v) for k, v in sorted(value.items())}
+    if isinstance(value, list):
+        return sorted(
+            (_normalise(v) for v in value),
+            key=lambda v: json.dumps(v, sort_keys=True, default=str),
+        )
+    return value
+
+
 def _stable_hash(payload: dict[str, Any]) -> str:
     """Deterministic short hash so two equivalent param
     dicts (e.g. ``{"ids": [1, 2]}`` vs ``{"ids": [2, 1]}``)
     collapse to the same cache key."""
     serialised = json.dumps(
-        payload, sort_keys=True, default=str, separators=(",", ":")
+        _normalise(payload),
+        sort_keys=True,
+        default=str,
+        separators=(",", ":"),
     )
     return hashlib.sha256(serialised.encode("utf-8")).hexdigest()[:16]
 

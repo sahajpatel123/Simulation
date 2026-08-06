@@ -13,13 +13,10 @@ if "razorpay" not in sys.modules:
 
 
 def _patch_redis(monkeypatch, fake) -> None:
-    from app.core import redis_client, response_cache
+    from app.core import redis_client
 
     monkeypatch.setattr(
         redis_client, "get_redis_client", lambda: fake,
-    )
-    monkeypatch.setattr(
-        response_cache, "get_redis_client", lambda: fake,
     )
 
 
@@ -126,10 +123,9 @@ def test_simulation_anomalies_cache_isolated_per_sim(monkeypatch) -> None:
 
 
 def test_simulation_anomalies_noop_when_redis_down(monkeypatch) -> None:
-    from app.core import redis_client, response_cache
+    from app.core import redis_client
 
     monkeypatch.setattr(redis_client, "get_redis_client", lambda: None)
-    monkeypatch.setattr(response_cache, "get_redis_client", lambda: None)
 
     for _ in range(2):
         out = _call_route()
