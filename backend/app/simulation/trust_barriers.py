@@ -32,6 +32,13 @@ Unlike virality and activation reads, this read has no product-type
 gate: ``TrustArchitect`` runs in every conductor stack, so all 15
 product types are supported.
 
+The covered market is the population weight of clusters with usable
+metrics and a positive population share; zero-weight clusters are
+excluded from profiles, flags and lever shares. ``meta`` also carries a
+``primary_barrier_score`` (0..1, population-weighted severity of each
+cluster's weakest objection) so a ``LOW_BARRIER`` verdict with a
+residual tie-break objection is not mistaken for a real trust barrier.
+
 No DB / I/O — verifiable without FastAPI or PostgreSQL. The route layer
 supplies ``results``, ``conductor_results`` (per-cluster architect
 metrics) and ``cluster_registry``; all arithmetic is deterministic.
@@ -397,6 +404,11 @@ def build_trust_barriers(
         if not cid:
             continue
         weight = max(0.0, _safe_float(entry.get("population_weight")))
+        # A cluster with zero (or negative) population share represents no
+        # covered consumers: keep it out of profiles, covered counts, flags
+        # and lever shares so the read stays a true covered-market view.
+        if weight <= 0.0:
+            continue
         metrics = _trust_metrics(conductor_results, cid)
         if not metrics:
             continue
@@ -496,6 +508,7 @@ def build_trust_barriers(
         "total_clusters": len(registry),
         "covered_clusters": len(rows),
         "covered_weight": round(covered_weight, 4),
+        "primary_barrier_score": 0.0,
         "product_type_supported": True,
         "thresholds": {
             "tier_low_index": TIER_LOW_INDEX,
@@ -581,6 +594,12 @@ def build_trust_barriers(
         if barrier_distribution[key] > primary_barrier_share:
             primary_barrier = key
             primary_barrier_share = barrier_distribution[key]
+    # Market-level severity of the attributed objection: population-weighted
+    # average of each cluster's weakest-objection score (0 = no objection,
+    # 1 = extreme). Surfaced in meta so a LOW_BARRIER read can be
+    # distinguished from a genuinely objection-free one.
+    primary_barrier_score = _weighted_average(rows, "barrier_score")
+    meta["primary_barrier_score"] = round(primary_barrier_score, 4)
 
     flags: list[str] = []
     if any(row["tier"] == TIER_CRITICAL for row in rows):
@@ -680,10 +699,21 @@ def build_trust_barriers(
             "covered market CRITICAL) — treat trust as the top "
             "conversion blocker before pricing or features."
         )
-    recommendations.append(
-        f"Primary trust barrier: {BARRIER_LABELS[primary_barrier]} "
-        f"(affects {_fmt_pct(primary_barrier_share)} of the covered market)."
-    )
+    if verdict == VERDICT_LOW_BARRIER:
+        # A healthy market still has a weakest objection by construction;
+        # report it as a residual watch-item instead of claiming a barrier
+        # "affects" consumers who already trust the product.
+        recommendations.append(
+            f"Trust barriers are minor — the strongest residual objection "
+            f"is {BARRIER_LABELS[primary_barrier]} at "
+            f"{primary_barrier_score:.2f} of 1.0; no urgent action needed."
+        )
+    else:
+        recommendations.append(
+            f"Primary trust barrier: {BARRIER_LABELS[primary_barrier]} "
+            f"(severity {primary_barrier_score:.2f}, affects "
+            f"{_fmt_pct(primary_barrier_share)} of the covered market)."
+        )
     if brand_avg < FLAG_BRAND_THRESHOLD:
         recommendations.append(
             f"Brand-deficit multiplier is only {_fmt_pct(brand_avg)} — "

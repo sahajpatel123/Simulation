@@ -4,6 +4,7 @@ Tests for the pure trust-barriers builder
 """
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from app.schemas.trust_barriers import (
@@ -350,6 +351,112 @@ def test_registry_entries_without_metrics_are_skipped() -> None:
     assert out.meta["covered_clusters"] == 1
     assert out.meta["covered_weight"] == 0.5
     assert len(out.cluster_profiles) == 1
+
+
+def test_zero_weight_clusters_are_excluded_from_covered_market() -> None:
+    """A zero-population cluster must not leak into profiles, flags or
+    covered-market counts even when its metrics are terrible."""
+    out = _build(
+        specs={
+            "a": _trust_metrics(
+                brand=0.95, spf=0.95, security=0.05, decay=0.05,
+            ),
+            "b": _trust_metrics(
+                brand=0.10, spf=0.10, security=0.40, decay=0.40,
+            ),
+        },
+        weights={"a": 1.0, "b": 0.0},
+    )
+
+    assert out.meta["total_clusters"] == 2
+    assert out.meta["covered_clusters"] == 1
+    assert out.meta["covered_weight"] == 1.0
+    assert len(out.cluster_profiles) == 1
+    assert out.cluster_profiles[0].cluster_id == "a"
+    assert out.critical_share == 0.0
+    assert "critical_trust_clusters" not in out.flags
+    assert out.verdict == VERDICT_LOW_BARRIER
+
+
+def test_perfect_trust_market_reports_minor_residual_objection() -> None:
+    """A zero-objection market must not be told a barrier affects it."""
+    out = _build(
+        specs={
+            "a": _trust_metrics(
+                brand=1.0, spf=1.0, security=0.0, decay=0.0,
+                recovery=0.0, community=0.5, threshold=0.0,
+            ),
+        },
+        weights={"a": 1.0},
+    )
+
+    assert out.verdict == VERDICT_LOW_BARRIER
+    assert out.trust_index == 1.0
+    assert out.meta["primary_barrier_score"] == 0.0
+    assert not any("affects 100%" in r for r in out.recommendations)
+    assert any("residual objection" in r for r in out.recommendations)
+
+
+def test_meta_reports_primary_barrier_severity() -> None:
+    out = _build(
+        specs={
+            "a": _trust_metrics(
+                brand=0.30, spf=0.90, security=0.05, recovery=10.0,
+                community=0.40,
+            ),
+            "b": _trust_metrics(
+                brand=0.90, spf=0.90, security=0.05, recovery=10.0,
+                community=0.40,
+            ),
+        },
+        weights={"a": 0.5, "b": 0.5},
+    )
+
+    # a's primary objection is brand deficit 0.70; b's is recovery 10/45.
+    assert 0.4 < out.meta["primary_barrier_score"] < 0.5
+    assert any("severity" in r for r in out.recommendations)
+
+
+def test_nan_and_infinite_metrics_fall_back_to_neutral_defaults() -> None:
+    out = _build(
+        specs={
+            "a": {
+                "brand_deficit_multiplier": float("nan"),
+                "social_proof_met_fraction": float("inf"),
+                "security_concern_intensity": -float("inf"),
+                "trust_recovery_days": float("nan"),
+            },
+            "b": {
+                "brand_deficit_multiplier": float("nan"),
+                "social_proof_met_fraction": float("inf"),
+                "security_concern_intensity": -float("inf"),
+                "trust_recovery_days": float("nan"),
+            },
+        },
+        weights={"a": 0.5, "b": 0.5},
+    )
+
+    assert out.weighted_brand_deficit_multiplier == 0.70
+    assert out.weighted_social_proof_met_fraction == 0.60
+    assert out.weighted_security_concern_intensity == 0.10
+    assert out.weighted_trust_recovery_days == 21.0
+    assert out.verdict == VERDICT_HIGH
+
+
+def test_json_string_results_are_supported() -> None:
+    out = build_trust_barriers(
+        json.dumps({"product_type_detected": "D2C"}),
+        simulation_id=7,
+        project_id=10,
+        conductor_results=_conductor({"a": _trust_metrics()}),
+        cluster_registry=_registry(
+            [{"cluster_id": "a", "name": "A", "population_weight": 1.0}]
+        ),
+        product_type="",
+    )
+
+    assert out.product_type == "d2c"
+    assert out.verdict != VERDICT_INSUFFICIENT
 
 
 def test_barrier_order_is_exported_and_complete() -> None:
