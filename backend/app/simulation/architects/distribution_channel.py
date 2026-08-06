@@ -26,6 +26,7 @@ class DistributionChannelArchitect(BaseArchitect):
         return [
             "consumer_hardware", "health_hardware",
             "iot_hardware", "wearable", "b2b_hardware",
+            "smart_home",
         ]
 
     def compute(

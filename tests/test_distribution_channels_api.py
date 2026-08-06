@@ -35,6 +35,22 @@ def _real_conductor_result() -> object:
     )
 
 
+@functools.lru_cache(maxsize=1)
+def _real_smart_home_conductor_result() -> object:
+    """Real smart_home conductor run — proves the advertised type activates."""
+    conductor = _RealConductor()
+    return conductor.run(
+        agents=[],
+        env_params={
+            "average_order_value": 999.0,
+            "price_sensitivity": 0.5,
+            "market_maturity": 0.3,
+        },
+        assumptions=[],
+        product_type=ProductType.SMART_HOME,
+    )
+
+
 class _StubConductor:
     """Route-level stand-in that reuses the cached real conductor result."""
 
@@ -45,6 +61,8 @@ class _StubConductor:
             "assumptions": list(assumptions or []),
             "product_type": product_type,
         }
+        if product_type is not None and product_type.value == "smart_home":
+            return _real_smart_home_conductor_result()
         return _real_conductor_result()
 
 
@@ -207,6 +225,28 @@ def test_health_hardware_is_supported(
     assert out.product_type == "health_hardware"
     assert out.meta["product_type_supported"] is True
     assert out.verdict != "INSUFFICIENT_DATA"
+
+
+def test_smart_home_is_supported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = _FakeSession(
+        _FakeSimulation(
+            results={
+                "population_weighted_conversion": 0.04,
+                "product_type_detected": "smart_home",
+            }
+        )
+    )
+    out = _call_route(session=session, monkeypatch=monkeypatch)
+
+    assert out.product_type == "smart_home"
+    assert out.meta["product_type_supported"] is True
+    assert out.meta["covered_clusters"] == out.meta["total_clusters"]
+    assert out.verdict != "INSUFFICIENT_DATA"
+    run = _StubConductor.last_run
+    assert run is not None
+    assert run["product_type"].value == "smart_home"
 
 
 def test_failed_simulation_raises_422(

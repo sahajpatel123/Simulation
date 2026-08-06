@@ -27,8 +27,8 @@ from app.simulation.distribution_channels import (
     DISTRIBUTION_PRODUCT_TYPES,
     build_distribution_channels,
 )
+from app.simulation.architects.distribution_channel import DistributionChannelArchitect
 from app.simulation.conductor import ARCHITECT_STACKS
-from app.simulation.product_type import ProductType
 
 
 def _registry(clusters: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -309,10 +309,28 @@ def test_kill_shot_flag_surfaces_recommendation() -> None:
     assert any("cannot reliably access" in r for r in out.recommendations)
 
 
-def test_all_distribution_product_types_run_architect_in_conductor_stack() -> None:
-    for product_type_name in DISTRIBUTION_PRODUCT_TYPES:
-        stack = ARCHITECT_STACKS[ProductType(product_type_name)]
-        assert "DistributionChannelArchitect" in stack
+def test_supported_product_types_cover_distribution_stacks() -> None:
+    assert {
+        "consumer_hardware",
+        "health_hardware",
+        "iot_hardware",
+        "wearable",
+        "b2b_hardware",
+        "smart_home",
+    } <= DISTRIBUTION_PRODUCT_TYPES
+    assert "saas" not in DISTRIBUTION_PRODUCT_TYPES
+    assert "consumer_app" not in DISTRIBUTION_PRODUCT_TYPES
+
+
+def test_supported_set_matches_conductor_activation() -> None:
+    """Every advertised product type must actually run DistributionChannelArchitect."""
+    activated = {
+        pt.value
+        for pt, stack in ARCHITECT_STACKS.items()
+        if "DistributionChannelArchitect" in stack
+        and pt.value in DistributionChannelArchitect().product_types
+    }
+    assert DISTRIBUTION_PRODUCT_TYPES == activated
 
 
 def test_valid_enums_cover_output_values() -> None:
