@@ -313,6 +313,42 @@ def run_migrations():
                 conn.rollback()
         print("✅ Learning system FK indexes ready")
 
+        # Step 93: assumption evidence log — founder-run validation experiments.
+        # Feeds the de-risking scorecard (confidence upgrades / downgrades
+        # that flow back into validation-ROI).
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS assumption_evidence (
+                    id SERIAL PRIMARY KEY,
+                    project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
+                    assumption_id INTEGER REFERENCES assumptions(id) ON DELETE CASCADE NOT NULL,
+                    method VARCHAR(50) NOT NULL,
+                    result VARCHAR(20) NOT NULL,
+                    observed_metric FLOAT,
+                    notes VARCHAR(500),
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                );
+            """))
+            conn.commit()
+            print("✅ assumption_evidence ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ assumption_evidence skip: {e}")
+
+        try:
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_assumption_evidence_project_assumption "
+                    "ON assumption_evidence (project_id, assumption_id);"
+                )
+            )
+            conn.commit()
+            print("✅ ix_assumption_evidence_project_assumption ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ assumption_evidence index skip: {e}")
+
         try:
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS user_claim_accuracy_profiles (

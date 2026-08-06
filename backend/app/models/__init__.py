@@ -16,6 +16,7 @@ from app.models.ui_simulation_session import UISimulationSession
 from app.models.ui_simulation_run import UISimulationRun
 from app.models.project_hardware import Hardware3DModel, HardwareProduct
 from app.models.audit_log import ApiAuditLog
+from app.models.assumption_evidence import AssumptionEvidence
 
 __all__ = [
     "Base",
@@ -40,4 +41,5 @@ __all__ = [
     "HardwareProduct",
     "Hardware3DModel",
     "ApiAuditLog",
+    "AssumptionEvidence",
 ]
