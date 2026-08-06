@@ -11,4 +11,5 @@ if [[ -f "$HOME/.zshrc" ]]; then
   fi
 fi
 export PATH="/Users/sahajpatel/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-exec /opt/homebrew/bin/python3 /Users/sahajpatel/Code/thecee/agent-loop/run_loop.py "$@"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] loop pass starting (env loaded)"
+exec /opt/homebrew/bin/python3 -u /Users/sahajpatel/Code/thecee/agent-loop/run_loop.py "$@"
