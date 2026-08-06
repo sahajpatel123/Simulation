@@ -73,7 +73,9 @@ from app.schemas.retention_churn import (
     VERDICT_WEAK,
 )
 
-# Product types whose conductor stack runs RetentionArchitect.
+# Product types whose conductor stack runs RetentionArchitect. Keep in
+# sync with RetentionArchitect.product_types — tests assert the two sets
+# match conductor activation exactly.
 RETENTION_PRODUCT_TYPES: frozenset[str] = frozenset(
     {
         "saas",

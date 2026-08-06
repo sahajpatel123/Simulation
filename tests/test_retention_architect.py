@@ -73,9 +73,18 @@ def test_retention_architect_product_types_subset() -> None:
     from app.simulation.architects.retention import RetentionArchitect
 
     pt = RetentionArchitect().product_types
-    # Same software subset as OnboardingArchitect (no hardware).
+    # Software types only (no hardware).
     for p in pt:
         assert "hardware" not in p.lower()
+    # The four consumer / productivity software types whose stacks include
+    # RetentionArchitect must actually activate it.
+    for must_include in (
+        "consumer_app",
+        "d2c",
+        "b2b_marketplace",
+        "productivity_tool",
+    ):
+        assert must_include in pt
 
 
 # ---------------------------------------------------------------------------

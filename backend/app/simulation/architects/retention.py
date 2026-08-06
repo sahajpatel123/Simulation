@@ -22,6 +22,8 @@ class RetentionArchitect(BaseArchitect):
         return [
             "saas", "marketplace", "mobile_app",
             "developer_tool", "enterprise_software",
+            "consumer_app", "d2c", "b2b_marketplace",
+            "productivity_tool",
         ]
 
     def compute(

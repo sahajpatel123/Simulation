@@ -30,6 +30,9 @@ from app.simulation.retention_churn_read import (
     RETENTION_PRODUCT_TYPES,
     build_retention_churn,
 )
+from app.simulation.architects.retention import RetentionArchitect
+from app.simulation.conductor import ARCHITECT_STACKS
+from app.simulation.product_type import ProductType
 
 
 def _registry(clusters: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -398,3 +401,14 @@ def test_supported_product_types_cover_retention_stacks() -> None:
     assert "saas" in RETENTION_PRODUCT_TYPES
     assert "d2c" in RETENTION_PRODUCT_TYPES
     assert "iot_hardware" not in RETENTION_PRODUCT_TYPES
+
+
+def test_supported_set_matches_conductor_activation() -> None:
+    """Every advertised product type must actually run RetentionArchitect."""
+    activated = {
+        pt.value
+        for pt, stack in ARCHITECT_STACKS.items()
+        if "RetentionArchitect" in stack
+        and pt.value in RetentionArchitect().product_types
+    }
+    assert RETENTION_PRODUCT_TYPES == activated
