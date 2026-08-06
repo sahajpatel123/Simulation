@@ -75,6 +75,9 @@ class _FakeSession:
     def query(self, *args, **kwargs):
         return _FakeQuery()
 
+    def execute(self, *args, **kwargs):
+        return type("R", (), {"scalar": lambda self=0: 0})()
+
 
 class _FakeUser:
     def __init__(self) -> None:
