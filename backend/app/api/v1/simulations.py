@@ -108,6 +108,7 @@ from app.schemas.cultural_fit import CulturalFitOut
 from app.schemas.ecosystem_compatibility import EcosystemCompatibilityOut
 from app.schemas.setup_friction import SetupFrictionOut
 from app.schemas.after_sales import AfterSalesOut
+from app.schemas.launch_checklist import LaunchChecklistOut
 from app.schemas.retention_churn import RetentionChurnOut
 from app.schemas.distribution_channels import DistributionChannelsOut
 from app.schemas.market_timing import MarketTimingOut
@@ -145,6 +146,7 @@ from app.simulation.cultural_fit import build_cultural_fit
 from app.simulation.ecosystem_compatibility import build_ecosystem_compatibility
 from app.simulation.setup_friction import build_setup_friction
 from app.simulation.after_sales_read import build_after_sales_read
+from app.simulation.launch_checklist import build_launch_checklist
 from app.simulation.retention_churn_read import build_retention_churn
 from app.simulation.distribution_channels import build_distribution_channels
 from app.simulation.market_timing_read import build_market_timing
@@ -6660,4 +6662,86 @@ def get_after_sales(
         conductor_results=conductor_results,
         cluster_registry=registry,
         product_type=product_type_name,
+    )
+
+
+@router.get(
+    "/{simulation_id}/launch-checklist",
+    response_model=LaunchChecklistOut,
+    summary=(
+        "Launch readiness checklist: deterministic score over persisted "
+        "results, signal quality, coverage and assumptions"
+    ),
+    responses=_JSON_200,
+)
+def get_launch_checklist(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> LaunchChecklistOut:
+    """
+    Deterministic launch-readiness checklist from a completed run.
+
+    Surfaces a 0..1 ``readiness_score`` with a READY / NEEDS_WORK /
+    NOT_READY verdict over the run's persisted payload: results present,
+    headline conversion bounds, cluster coverage, signal quality, visible
+    assumptions, funnel sanity and domain findings. Pure post-hoc
+    analytics — no Celery, no LLM, no DB writes.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — launch checklist requires "
+                "completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    assumptions = (
+        db.query(Assumption)
+        .filter(Assumption.project_id == sim.project_id, Assumption.is_hidden.is_(False))
+        .all()
+    )
+
+    product_type_name = str(
+        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
+    )
+    try:
+        product_type = ProductType(product_type_name)
+    except ValueError:
+        product_type = ProductType.SAAS
+    product_type_name = product_type.value
+
+    registry = [
+        {
+            "cluster_id": cluster.cluster_id,
+            "name": cluster.name,
+            "population_weight": cluster.population_weight,
+        }
+        for cluster in _clusters_map.values()
+    ]
+
+    return build_launch_checklist(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        signal_quality=float(sim.signal_quality)
+        if sim.signal_quality is not None
+        else None,
+        visible_assumption_count=len(assumptions),
+        product_type=product_type_name,
+        cluster_registry=registry,
     )
