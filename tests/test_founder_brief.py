@@ -76,6 +76,8 @@ def test_brief_bundles_quality_readiness_and_market() -> None:
     assert out.tam_customers == 1_000_000
     assert out.top_recommendations
     assert out.meta["readiness_items"] >= 6
+    assert out.meta["readiness_coverage"] is not None
+    assert out.meta["quality_verdict"] in {"PASS", "REVIEW", "FAIL"}
 
 
 def test_brief_reflects_low_signal_and_missing_assumptions() -> None:

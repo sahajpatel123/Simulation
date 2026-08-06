@@ -146,8 +146,10 @@ def build_founder_brief(
         meta={
             "quality_checks": quality.summary.total_checks,
             "quality_trust_score": quality.trust_score,
+            "quality_verdict": quality.verdict,
             "readiness_items": readiness.summary.total_items,
             "readiness_score": readiness.readiness_score,
+            "readiness_coverage": readiness.meta.get("coverage"),
             "market_som_customers": market.som_customers,
             "market_annual_revenue": round(market.annual_revenue, 2),
         },
