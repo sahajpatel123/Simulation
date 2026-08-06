@@ -100,6 +100,7 @@ from app.schemas.cohort_retention import CohortRetentionOut
 from app.schemas.sensitivity import SensitivityOut
 from app.schemas.pricing_optimization import PricingOptimizationOut
 from app.schemas.feature_prioritization import FeaturePrioritizationOut
+from app.schemas.activation_funnel import ActivationFunnelOut
 from app.schemas.simulation_quality import SimulationQualityOut
 from app.schemas.unit_economics import UnitEconomicsOut
 from app.schemas.validation_experiment import ValidationExperimentPlanOut
@@ -125,6 +126,7 @@ from app.simulation.market_sizing import (
 )
 from app.simulation.pricing_optimization import build_pricing_optimization
 from app.simulation.feature_prioritization import build_feature_prioritization
+from app.simulation.activation_funnel import build_activation_funnel
 from app.simulation.product_type import ProductType
 from app.simulation.unit_economics import build_unit_economics
 from app.simulation.validation_roi import build_validation_roi
@@ -4316,6 +4318,124 @@ def get_feature_prioritization(
         cluster_registry=registry,
         product_type=product_type_name,
         brief_features=brief_features,
+    )
+
+
+@router.get(
+    "/{simulation_id}/activation-funnel",
+    response_model=ActivationFunnelOut,
+    summary=(
+        "Activation funnel: first-run completion, blockers, and "
+        "highest-impact activation levers"
+    ),
+    responses=_JSON_200,
+)
+def get_activation_funnel(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ActivationFunnelOut:
+    """
+    Deterministic activation-funnel read from a completed run's
+    ``OnboardingArchitect`` metrics:
+
+      * population-weighted activation rate, time-to-first-value tolerance,
+        empty-state bounce, and friction aggregates
+      * per-cluster activation tiers (STRONG / MODERATE / WEAK / CRITICAL)
+      * per-cluster primary activation blocker (completion, empty state,
+        identity verification, mandatory profile, mobile gap, permission
+        timing, time-to-value) with a market-level blocker distribution
+      * ranked activation levers by the share of the covered market they
+        touch, plus risk flags and actionable recommendations
+
+    Pure post-hoc analytics — no Celery, no LLM, no DB writes. Returns
+    ``INSUFFICIENT_DATA`` for product types whose conductor stack does not
+    model first-run onboarding (hardware, d2c, ...).
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — activation-funnel analysis "
+                "requires completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    environment = (
+        db.query(Environment)
+        .filter(Environment.id == sim.environment_id)
+        .first()
+    )
+    aov = 999.0
+    price_sensitivity = 0.5
+    market_maturity = 0.3
+    if environment:
+        aov = float(environment.average_order_value or 999.0)
+        price_sensitivity = float(environment.price_sensitivity or 0.5)
+        market_maturity = float(environment.market_maturity or 0.3)
+
+    product_type_name = str(
+        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
+    )
+    try:
+        product_type = ProductType(product_type_name)
+    except ValueError:
+        product_type = ProductType.SAAS
+
+    # Recompute the deterministic architect stack for this product type so
+    # per-cluster onboarding metrics are available even though regular
+    # simulation runs only persist aggregate results. No DB writes are
+    # performed (no session passed to run()).
+    conductor = Conductor()
+    cond_result = conductor.run(
+        agents=[],
+        env_params={
+            "average_order_value": aov,
+            "price_sensitivity": price_sensitivity,
+            "market_maturity": market_maturity,
+        },
+        assumptions=[],
+        product_type=product_type,
+    )
+    conductor_results = {
+        cid: {
+            name: {"metrics": output.metrics, "flags": output.flags}
+            for name, output in arch_outputs.items()
+        }
+        for cid, arch_outputs in cond_result.cluster_results.items()
+    }
+    registry = [
+        {
+            "cluster_id": cluster.cluster_id,
+            "name": cluster.name,
+            "population_weight": cluster.population_weight,
+        }
+        for cluster in _clusters_map.values()
+    ]
+
+    return build_activation_funnel(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        signal_quality=float(sim.signal_quality)
+        if sim.signal_quality is not None
+        else None,
+        conductor_results=conductor_results,
+        cluster_registry=registry,
+        product_type=product_type_name,
     )
 
 
