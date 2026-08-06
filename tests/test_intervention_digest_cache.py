@@ -206,4 +206,7 @@ def test_intervention_digest_namespace_consistency() -> None:
     # cache_set_json(...); invalidation uses
     # cache_invalidate(...). All three must reference the
     # constant — at minimum 2 (read+setex).
-    assert src.count(f"namespace={namespace}") >= 2
+    assert (
+        src.count("namespace=_INTERVENTION_DIGEST_CACHE_NAMESPACE")
+        >= 2
+    )

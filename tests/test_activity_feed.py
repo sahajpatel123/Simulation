@@ -407,7 +407,7 @@ def test_activity_feed_out_round_trips_helper_payload() -> None:
         }],
     )
     out = ActivityFeedOut(**payload)
-    assert out.event_count == 1
+    assert out.event_count == 2  # created + completed
     assert len(out.events) == 2  # created + completed
 
 

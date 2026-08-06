@@ -34,7 +34,9 @@ def test_export_empty_input() -> None:
     assert out["exported_at"] != ""
     assert out["schema_version"] == 1
     assert out["project_meta"] == {}
-    assert out["brief"] == {}
+    # Brief always carries the stable default shape.
+    assert out["brief"]["positioning"] == ""
+    assert out["brief"]["features"] == []
     assert out["assumptions"] == []
     assert out["simulations"] == []
     assert out["decisions"] == []

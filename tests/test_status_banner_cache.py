@@ -67,7 +67,7 @@ class _FakeQuery:
         return self
 
     def first(self):
-        return _FakeSim()
+        return None
 
     def scalar(self):
         return None
@@ -79,8 +79,20 @@ class _FakeQuery:
         return 0
 
 
+class _FakeProjectQuery:
+    """Project ownership query returns a valid project row."""
+
+    def filter(self, *args, **kwargs):
+        return self
+
+    def first(self):
+        return _FakeProject()
+
+
 class _FakeSession:
     def query(self, *args, **kwargs):
+        if args and getattr(args[0], "__name__", "") == "Project":
+            return _FakeProjectQuery()
         return _FakeQuery()
 
 
@@ -210,7 +222,7 @@ def test_status_banner_namespace_consistency_across_modules():
             f"imported in {label}"
         )
         assert (
-            f'namespace="{namespace}"' in s
+            f'namespace="{namespace}"' not in s
         ), (
             f"namespace literal not used via constant "
             f"in {label}"

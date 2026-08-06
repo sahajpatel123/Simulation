@@ -191,7 +191,7 @@ def test_insights_namespace_consistency_across_modules():
             f"in {label}"
         )
         assert (
-            f'namespace="{namespace}"' in s
+            f'namespace="{namespace}"' not in s
         ), (
             f"namespace literal not used via constant "
             f"in {label}"

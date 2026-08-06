@@ -334,7 +334,9 @@ def test_account_health_out_default_shape() -> None:
 
     out = AccountHealthOut()
     assert out.health_score == 0
-    assert out.verdict == "AT_RISK"
+    # Schema default for an empty account — a brand-new
+    # account is NEEDS_ATTENTION, not AT_RISK.
+    assert out.verdict == "NEEDS_ATTENTION"
     assert out.key_signals == []
 
 

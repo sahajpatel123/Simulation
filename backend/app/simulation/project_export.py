@@ -93,7 +93,7 @@ def build_project_export(
 
     # ---- Project meta -----------------------------------------------
     project_meta = {}
-    if isinstance(project_row, dict):
+    if isinstance(project_row, dict) and project_row:
         project_meta = {
             "id": project_row.get("id"),
             "title": project_row.get("title"),
@@ -105,16 +105,18 @@ def build_project_export(
         }
 
     # ---- Brief -----------------------------------------------------
-    brief_out: dict = {}
-    if isinstance(brief_dict, dict):
-        brief_out = {
-            "positioning": brief_dict.get("positioning") or "",
-            "features": brief_dict.get("features") or [],
-            "hook": brief_dict.get("hook") or "",
-            "completed_at": _iso(
-                brief_dict.get("completed_at"),
-            ),
-        }
+    # Always emit the stable brief shape so downstream
+    # consumers can rely on the keys even when the project
+    # has no brief row yet.
+    brief_source = brief_dict if isinstance(brief_dict, dict) else {}
+    brief_out: dict = {
+        "positioning": brief_source.get("positioning") or "",
+        "features": brief_source.get("features") or [],
+        "hook": brief_source.get("hook") or "",
+        "completed_at": _iso(
+            brief_source.get("completed_at"),
+        ),
+    }
 
     # ---- Assumptions ------------------------------------------------
     assumptions_out = []

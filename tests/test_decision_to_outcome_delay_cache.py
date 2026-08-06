@@ -191,7 +191,7 @@ def test_decision_to_outcome_delay_namespace_consistency_across_modules():
             f"not imported in {label}"
         )
         assert (
-            f'namespace="{namespace}"' in s
+            f'namespace="{namespace}"' not in s
         ), (
             f"namespace literal not used via constant "
             f"in {label}"

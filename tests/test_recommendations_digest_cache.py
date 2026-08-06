@@ -207,4 +207,7 @@ def test_recommendations_digest_namespace_consistency() -> None:
     # Read path uses cache_get_json(...); write path uses
     # cache_set_json(...); 2 invalidation sites use
     # cache_invalidate(...). At minimum 3 references.
-    assert src.count(f"namespace={namespace}") >= 3
+    assert (
+        src.count("namespace=_RECOMMENDATIONS_DIGEST_CACHE_NAMESPACE")
+        >= 3
+    )

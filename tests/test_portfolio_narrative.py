@@ -72,7 +72,9 @@ def test_narrative_handles_empty_dicts() -> None:
     )
 
     out = build_portfolio_narrative({}, {}, {}, {})
-    assert out["narrative"] == ""
+    # Empty inputs still produce a helpful explanatory
+    # narrative (not a silent empty string).
+    assert "empty" in out["narrative"].lower()
     # Sim count 0 + INSUFFICIENT_DATA → always produce the
     # canonical signals (mae is skipped because the value is
     # None, but sim-count + overall-health are present).

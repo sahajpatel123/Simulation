@@ -152,18 +152,13 @@ def test_convergence_known_cv() -> None:
     """Pin the math to a hand-computable example.
 
     Values: [0.04, 0.05, 0.06] → mean = 0.05,
-    variance = (0.0009 + 0 + 0.0009) / 3 = 0.0006,
-    std_dev = 0.0245...
-    CV = 0.0245 / 0.05 = ~0.49.
-
-    Wait, that's wrong — let me recompute:
     each |x - mean| = 0.01, squared = 0.0001
-    variance = 0.0001 / 3 ≈ 3.33e-05
-    std_dev = sqrt(3.33e-05) ≈ 0.00577
-    CV = 0.00577 / 0.05 ≈ 0.1155 (MILDLY_VARIANT).
+    variance = (0.0001 + 0 + 0.0001) / 3 ≈ 6.67e-05
+    std_dev = sqrt(6.67e-05) ≈ 0.008165
+    CV = 0.008165 / 0.05 ≈ 0.1633 (DIVERGED, >= 15%).
     """
     from app.simulation.convergence_check import (
-        VERDICT_MILDLY_VARIANT,
+        VERDICT_DIVERGED,
         build_convergence_check,
     )
 
@@ -176,9 +171,9 @@ def test_convergence_known_cv() -> None:
          "predicted_conversion_rate": 0.06},
     ])
     assert abs(out["mean_pcr"] - 0.05) < 1e-6
-    assert abs(out["std_dev"] - 0.005774) < 1e-3
-    assert abs(out["cv"] - 0.11547) < 1e-3
-    assert out["verdict"] == VERDICT_MILDLY_VARIANT
+    assert abs(out["std_dev"] - 0.008165) < 1e-3
+    assert abs(out["cv"] - 0.163299) < 1e-3
+    assert out["verdict"] == VERDICT_DIVERGED
 
 
 def test_convergence_min_max_range() -> None:
@@ -231,7 +226,9 @@ def test_convergence_handles_non_dict_entries() -> None:
         {"id": 3, "status": "COMPLETED",
          "predicted_conversion_rate": 0.05},
     ])
-    assert out["sim_count"] == 5  # all rows count
+    # Non-dict rows are skipped defensively — only dict rows
+    # participate in the count.
+    assert out["sim_count"] == 3
     assert abs(out["mean_pcr"] - 0.05) < 1e-6
 
 

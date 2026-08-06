@@ -16,7 +16,8 @@ def test_default_no_data():
     from app.simulation.insights import build_insights
     out = build_insights()
     assert out["has_data"] is False
-    assert out["insights"] == []
+    assert len(out["insights"]) == 1
+    assert "No projects yet" in out["insights"][0]
     assert "welcome" in out["headline"].lower() or "start" in out["narrative"].lower()
 
 

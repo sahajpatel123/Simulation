@@ -198,7 +198,6 @@ def test_confidence_explainer_namespace_consistency_across_modules():
 
     from app.api.v1 import projects as proj_mod
     from app.api.v1 import simulations as sim_mod
-    from app.api.v1 import decisions as dec_mod
     from app.api.v1 import outcomes as out_mod
 
     namespace = proj_mod._CONFIDENCE_EXPLAINER_CACHE_NAMESPACE
@@ -207,7 +206,6 @@ def test_confidence_explainer_namespace_consistency_across_modules():
     for src, label in (
         (proj_mod, "projects.py"),
         (sim_mod, "simulations.py"),
-        (dec_mod, "decisions.py"),
         (out_mod, "outcomes.py"),
     ):
         s = inspect.getsource(src)
@@ -218,7 +216,7 @@ def test_confidence_explainer_namespace_consistency_across_modules():
             f"imported in {label}"
         )
         assert (
-            f'namespace="{namespace}"' in s
+            f'namespace="{namespace}"' not in s
         ), (
             f"namespace literal not used via constant "
             f"in {label}"

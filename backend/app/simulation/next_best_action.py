@@ -139,12 +139,23 @@ def build_next_best_action(
         }
 
     # ---- Priority 2: oldest pending decision ----------------------
+    # Pick the decision with the earliest created_at so the
+    # founder tackles the item that has been waiting longest.
+    # ISO-8601 strings compare lexicographically, so a raw
+    # string comparison is safe for the API's timestamps;
+    # rows missing a timestamp sort last (kept as fallback).
     oldest_pending = None
     if pending_decisions:
         for d in pending_decisions:
-            if isinstance(d, dict):
+            if not isinstance(d, dict):
+                continue
+            if oldest_pending is None:
                 oldest_pending = d
-                break
+                continue
+            d_ts = d.get("created_at")
+            best_ts = oldest_pending.get("created_at")
+            if d_ts and (not best_ts or d_ts < best_ts):
+                oldest_pending = d
     if oldest_pending:
         return {
             "title": (

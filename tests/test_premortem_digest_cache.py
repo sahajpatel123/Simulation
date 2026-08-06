@@ -203,4 +203,7 @@ def test_premortem_digest_namespace_consistency() -> None:
     # cache_set_json(...); invalidation uses
     # cache_invalidate(...). At minimum 2 source
     # references to the constant via the f-string format.
-    assert src.count(f"namespace={namespace}") >= 2
+    assert (
+        src.count("namespace=_PREMORTEM_DIGEST_CACHE_NAMESPACE")
+        >= 2
+    )

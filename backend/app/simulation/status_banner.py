@@ -76,6 +76,11 @@ def build_status_banner(
         and pending_decision_count == 0
         and (days_since_latest_sim is None or
              days_since_latest_sim <= SIM_RECENT_DAYS)
+        and (
+            days_since_latest_assumption_extraction is None
+            or days_since_latest_assumption_extraction
+            <= ASSUMPTION_STALE_DAYS
+        )
     ):
         status = "Healthy"
         severity = SIGNAL_OK

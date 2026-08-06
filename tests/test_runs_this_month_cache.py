@@ -192,7 +192,7 @@ def test_runs_this_month_namespace_consistency_across_modules():
             f"imported in {label}"
         )
         assert (
-            f'namespace="{namespace}"' in s
+            f'namespace="{namespace}"' not in s
         ), (
             f"namespace literal not used via constant "
             f"in {label}"

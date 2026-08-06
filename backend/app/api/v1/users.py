@@ -1934,7 +1934,15 @@ def get_projects_summary(
         .all()
     )
     if not project_rows:
-        return ProjectsSummaryOut()
+        empty_payload: dict = {}
+        cache_set_json(
+            namespace=_USER_PROJECTS_SUMMARY_CACHE_NAMESPACE,
+            params={"user_id": current_user.id},
+            user_id=current_user.id,
+            value=empty_payload,
+            ttl_seconds=_USER_PROJECTS_SUMMARY_CACHE_TTL_S,
+        )
+        return ProjectsSummaryOut(**empty_payload)
 
     # Latest sim per project via a single subquery.
     latest_sim_subq = (
@@ -2114,8 +2122,8 @@ def get_usage_by_week(
         .all()
     ]
     if not owned_project_ids:
-        return UsageByWeekOut(
-            weeks=[
+        empty_payload = {
+            "weeks": [
                 {
                     "week_start": ws.isoformat(),
                     "sim_count": 0,
@@ -2124,7 +2132,15 @@ def get_usage_by_week(
                 }
                 for ws in week_starts
             ],
+        }
+        cache_set_json(
+            namespace=_USER_USAGE_BY_WEEK_CACHE_NAMESPACE,
+            params={"user_id": current_user.id},
+            user_id=current_user.id,
+            value=empty_payload,
+            ttl_seconds=_USER_USAGE_BY_WEEK_CACHE_TTL_S,
         )
+        return UsageByWeekOut(**empty_payload)
 
     earliest = datetime.combine(
         week_starts[0], datetime.min.time(),
@@ -2371,9 +2387,15 @@ def get_most_active_project(
         .all()
     ]
     if not owned_project_ids:
-        return MostActiveProjectOut(
-            narrative="No projects on file yet.",
+        empty_payload = {"narrative": "No projects on file yet."}
+        cache_set_json(
+            namespace=_USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
+            params={"user_id": current_user.id},
+            user_id=current_user.id,
+            value=empty_payload,
+            ttl_seconds=_USER_MOST_ACTIVE_PROJECT_CACHE_TTL_S,
         )
+        return MostActiveProjectOut(**empty_payload)
 
     # Sim count per project (last 7d).
     sim_counts_rows = (
@@ -2585,9 +2607,15 @@ def get_portfolio_health_snapshot(
         .all()
     ]
     if not owned_project_ids:
-        return PortfolioHealthSnapshotOut(
-            narrative="No projects on file yet.",
+        empty_payload = {"narrative": "No projects on file yet."}
+        cache_set_json(
+            namespace=_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
+            params={"user_id": current_user.id},
+            user_id=current_user.id,
+            value=empty_payload,
+            ttl_seconds=_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_TTL_S,
         )
+        return PortfolioHealthSnapshotOut(**empty_payload)
 
     # Per-project rollup. For each owned project, pull
     # the inputs the project-health helper needs (latest
@@ -2767,7 +2795,15 @@ def get_last_touched_project(
         .all()
     ]
     if not owned_project_ids:
-        return LastTouchedProjectOut()
+        empty_payload: dict = {}
+        cache_set_json(
+            namespace=_USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
+            params={"user_id": current_user.id},
+            user_id=current_user.id,
+            value=empty_payload,
+            ttl_seconds=_USER_LAST_TOUCHED_PROJECT_CACHE_TTL_S,
+        )
+        return LastTouchedProjectOut(**empty_payload)
 
     # Latest sim per project.
     sim_rows = (
@@ -2964,7 +3000,15 @@ def get_decision_velocity(
         .all()
     ]
     if not owned_project_ids:
-        return DecisionVelocityOut()
+        empty_payload: dict = {}
+        cache_set_json(
+            namespace=_USER_DECISION_VELOCITY_CACHE_NAMESPACE,
+            params={"user_id": current_user.id},
+            user_id=current_user.id,
+            value=empty_payload,
+            ttl_seconds=_USER_DECISION_VELOCITY_CACHE_TTL_S,
+        )
+        return DecisionVelocityOut(**empty_payload)
 
     # Latest completed sim per project.
     sim_rows = (
@@ -3058,7 +3102,15 @@ def get_outcome_velocity(
         .all()
     ]
     if not owned_project_ids:
-        return OutcomeVelocityOut()
+        empty_payload: dict = {}
+        cache_set_json(
+            namespace=_USER_OUTCOME_VELOCITY_CACHE_NAMESPACE,
+            params={"user_id": current_user.id},
+            user_id=current_user.id,
+            value=empty_payload,
+            ttl_seconds=_USER_OUTCOME_VELOCITY_CACHE_TTL_S,
+        )
+        return OutcomeVelocityOut(**empty_payload)
 
     # Latest completed sim per project.
     sim_rows = (
@@ -3149,9 +3201,15 @@ def get_decision_rate(
         .all()
     ]
     if not owned_project_ids:
-        return DecisionRateOut(
-            narrative="No projects on file yet.",
+        empty_payload = {"narrative": "No projects on file yet."}
+        cache_set_json(
+            namespace=_USER_DECISION_RATE_CACHE_NAMESPACE,
+            params={"user_id": current_user.id},
+            user_id=current_user.id,
+            value=empty_payload,
+            ttl_seconds=_USER_DECISION_RATE_CACHE_TTL_S,
         )
+        return DecisionRateOut(**empty_payload)
 
     sim_count = (
         db.query(Simulation)
@@ -3219,9 +3277,15 @@ def get_outcome_rate(
         .all()
     ]
     if not owned_project_ids:
-        return OutcomeRateOut(
-            narrative="No projects on file yet.",
+        empty_payload = {"narrative": "No projects on file yet."}
+        cache_set_json(
+            namespace=_USER_OUTCOME_RATE_CACHE_NAMESPACE,
+            params={"user_id": current_user.id},
+            user_id=current_user.id,
+            value=empty_payload,
+            ttl_seconds=_USER_OUTCOME_RATE_CACHE_TTL_S,
         )
+        return OutcomeRateOut(**empty_payload)
 
     sim_count = (
         db.query(Simulation)
@@ -3292,7 +3356,15 @@ def get_decision_to_outcome_delay(
         .all()
     ]
     if not owned_project_ids:
-        return DecisionToOutcomeDelayOut()
+        empty_payload: dict = {}
+        cache_set_json(
+            namespace=_USER_DECISION_TO_OUTCOME_DELAY_CACHE_NAMESPACE,
+            params={"user_id": current_user.id},
+            user_id=current_user.id,
+            value=empty_payload,
+            ttl_seconds=_USER_DECISION_TO_OUTCOME_DELAY_CACHE_TTL_S,
+        )
+        return DecisionToOutcomeDelayOut(**empty_payload)
 
     # Decisions per project (ascending) and outcomes per
     # project (ascending). For each decision, find the
@@ -3558,7 +3630,15 @@ def get_last_week_stats(
         .all()
     ]
     if not owned_project_ids:
-        return LastWeekStatsOut()
+        empty_payload: dict = {}
+        cache_set_json(
+            namespace=_USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
+            params={"user_id": current_user.id},
+            user_id=current_user.id,
+            value=empty_payload,
+            ttl_seconds=_USER_LAST_WEEK_STATS_CACHE_TTL_S,
+        )
+        return LastWeekStatsOut(**empty_payload)
 
     this_week_start = datetime.now(
         timezone.utc,
@@ -3687,9 +3767,15 @@ def get_projects_needing_attention(
         .all()
     ]
     if not owned_project_ids:
-        return ProjectsNeedingAttentionOut(
-            narrative="No projects on file yet.",
+        empty_payload = {"narrative": "No projects on file yet."}
+        cache_set_json(
+            namespace=_USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
+            params={"user_id": current_user.id},
+            user_id=current_user.id,
+            value=empty_payload,
+            ttl_seconds=_USER_PROJECTS_NEEDING_ATTENTION_CACHE_TTL_S,
         )
+        return ProjectsNeedingAttentionOut(**empty_payload)
 
     # Per-project sim + outcome + decision counts so the
     # helper can decide which reason applies.
@@ -3883,9 +3969,15 @@ def get_sim_failure_rate(
         .all()
     ]
     if not owned_project_ids:
-        return SimFailureRateOut(
-            narrative="No projects on file yet.",
+        empty_payload = {"narrative": "No projects on file yet."}
+        cache_set_json(
+            namespace=_USER_SIM_FAILURE_RATE_CACHE_NAMESPACE,
+            params={"user_id": current_user.id},
+            user_id=current_user.id,
+            value=empty_payload,
+            ttl_seconds=_USER_SIM_FAILURE_RATE_CACHE_TTL_S,
         )
+        return SimFailureRateOut(**empty_payload)
 
     total_simulations = (
         db.query(Simulation)
@@ -3956,9 +4048,15 @@ def get_runs_per_week(
         .all()
     ]
     if not owned_project_ids:
-        return RunsPerWeekOut(
-            narrative="No projects on file yet.",
+        empty_payload = {"narrative": "No projects on file yet."}
+        cache_set_json(
+            namespace=_USER_RUNS_PER_WEEK_CACHE_NAMESPACE,
+            params={"user_id": current_user.id},
+            user_id=current_user.id,
+            value=empty_payload,
+            ttl_seconds=_USER_RUNS_PER_WEEK_CACHE_TTL_S,
         )
+        return RunsPerWeekOut(**empty_payload)
 
     four_weeks_ago = (
         datetime.now(timezone.utc) - timedelta(weeks=4)
@@ -4034,9 +4132,15 @@ def get_most_active_weekday(
         .all()
     ]
     if not owned_project_ids:
-        return MostActiveWeekdayOut(
-            narrative="No projects on file yet.",
+        empty_payload = {"narrative": "No projects on file yet."}
+        cache_set_json(
+            namespace=_USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
+            params={"user_id": current_user.id},
+            user_id=current_user.id,
+            value=empty_payload,
+            ttl_seconds=_USER_MOST_ACTIVE_WEEKDAY_CACHE_TTL_S,
         )
+        return MostActiveWeekdayOut(**empty_payload)
 
     weekday_actions: list[int] = []
 
@@ -4113,9 +4217,15 @@ def get_oldest_open_item(
         .all()
     ]
     if not owned_project_ids:
-        return OldestOpenItemOut(
-            narrative="No projects on file yet.",
+        empty_payload = {"narrative": "No projects on file yet."}
+        cache_set_json(
+            namespace=_USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
+            params={"user_id": current_user.id},
+            user_id=current_user.id,
+            value=empty_payload,
+            ttl_seconds=_USER_OLDEST_OPEN_ITEM_CACHE_TTL_S,
         )
+        return OldestOpenItemOut(**empty_payload)
 
     activity_rows: list[tuple] = []
 
@@ -4191,9 +4301,15 @@ def get_recent_outcomes(
         .all()
     ]
     if not owned_project_ids:
-        return RecentOutcomesOut(
-            narrative="No projects on file yet.",
+        empty_payload = {"narrative": "No projects on file yet."}
+        cache_set_json(
+            namespace=_USER_RECENT_OUTCOMES_CACHE_NAMESPACE,
+            params={"user_id": current_user.id},
+            user_id=current_user.id,
+            value=empty_payload,
+            ttl_seconds=_USER_RECENT_OUTCOMES_CACHE_TTL_S,
         )
+        return RecentOutcomesOut(**empty_payload)
 
     outcome_rows = (
         db.query(

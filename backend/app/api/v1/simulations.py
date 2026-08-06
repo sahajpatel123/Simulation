@@ -55,6 +55,7 @@ from app.models.user import User
 from app.models.cluster_run_summary import ClusterRunSummary
 from app.schemas.cluster_opportunity import ClusterOpportunityMatrixOut
 from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
+from app.schemas.market_sizing import MarketSizingOut
 from app.schemas.simulation import (
     ArchitectAccuracyBridgeOut,
     ArchitectBiasTrendOut,
@@ -101,6 +102,10 @@ from app.simulation.anomaly_detector import detect_simulation_anomalies
 from app.simulation.sensitivity_matrix import compute_simulation_sensitivity_matrix
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.cluster_opportunity import build_cluster_opportunity_matrix
+from app.simulation.market_sizing import (
+    DEFAULT_MARKET_SIZE,
+    build_market_sizing,
+)
 from app.simulation.cluster_drill_down import (
     build_cluster_drill_down,
     normalise_outlier_threshold as normalise_drill_outlier,
@@ -4136,3 +4141,92 @@ def get_simulation_sensitivity_matrix(
     )
     return SimulationSensitivityMatrixOut(**payload)
 
+
+@router.get(
+    "/{simulation_id}/market-sizing",
+    response_model=MarketSizingOut,
+    summary="TAM/SAM/SOM and annual revenue projection for a simulation",
+    responses=_JSON_200,
+)
+def get_market_sizing(
+    simulation_id: int,
+    market_size: int = Query(
+        DEFAULT_MARKET_SIZE,
+        ge=1,
+        le=10_000_000_000,
+        description="Total addressable market (people) to reason about",
+    ),
+    target_market_fraction: float = Query(
+        0.25,
+        ge=0.01,
+        le=1.0,
+        description="Share of the reachable market in the launch segment",
+    ),
+    average_order_value: float = Query(
+        0.0,
+        ge=0,
+        description="Revenue per converted customer (set 0 to skip revenue)",
+    ),
+    purchase_frequency_per_year: float = Query(
+        1.0,
+        ge=0,
+        description="Purchases per customer per year",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MarketSizingOut:
+    """Project TAM / SAM / SOM + annual revenue from completed results.
+
+    Builds a founder-facing market-sizing digest from the run's
+    weighted conversion and cluster breakdown: the obtainable
+    market (SOM) is the reachable share of the target market
+    times the simulation's conversion, and annual revenue is
+    SOM x AOV x purchase frequency. Pure analytics — no Celery,
+    no LLM.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — market sizing requires "
+                "completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    registry = {
+        cid: {
+            "name": cluster.name,
+            "population_weight": cluster.population_weight,
+        }
+        for cid, cluster in _clusters_map.items()
+    }
+
+    payload = build_market_sizing(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        market_size=market_size,
+        target_market_fraction=target_market_fraction,
+        average_order_value=average_order_value,
+        purchase_frequency_per_year=purchase_frequency_per_year,
+        cluster_registry=registry,
+        signal_quality=(
+            float(sim.signal_quality)
+            if sim.signal_quality is not None
+            else None
+        ),
+    )
+    return MarketSizingOut(**payload)

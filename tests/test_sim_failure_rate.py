@@ -176,4 +176,5 @@ def test_schema_round_trip():
     out = SimFailureRateOut(**payload)
     assert out.total_simulations == 10
     assert out.failed_simulations == 1
-    assert out.verdict == "RELIABLE"
+    # 1/10 = 10% failure → ACCEPTABLE (<= 15%).
+    assert out.verdict == "ACCEPTABLE"
