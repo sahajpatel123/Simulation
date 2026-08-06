@@ -1,6 +1,11 @@
 # TheCee Autonomous Improvement Loop
 
-This repo runs an autonomous improvement loop driven by an active Codex goal.
+This repo runs an autonomous improvement loop. The **operational loop is the
+launchd harness in `agent-loop/`** (deterministic 5-minute passes, see
+`agent-loop/README.md`). The goal-driven loop this file documents is the
+fallback / supervisor: it is currently paused (`loop.active = false`) so the
+two never race on the same repo.
+
 The loop never stops on its own; it runs until the owner says "stop".
 
 ## Cadence

@@ -1,10 +1,9 @@
 # TheCee Autonomous Improvement Loop
 
-> **Status: DISABLED.** The repo's active autonomous loop is the goal-driven
-> harness documented in `AGENT_LOOP.md` (run by the Codex session itself).
-> This launchd-based harness is kept as an alternative/fallback. Re-enable
-> with `agent-loop/install.sh` (and remove `agent-loop/stop`) only if the
-> goal-driven loop is stopped first — never run both at once.
+> **Status: ACTIVE.** This launchd-based harness is the repo's single
+> operational autonomous loop (5-minute passes, push to `main`, no PRs).
+> The goal-driven harness documented in `AGENT_LOOP.md` is paused as a
+> fallback — never run both at once.
 
 An infinite, self-driving improvement loop for TheCee. Every **5 minutes** a
 pass runs and does exactly **one** thing:
