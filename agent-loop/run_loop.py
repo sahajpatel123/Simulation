@@ -263,6 +263,19 @@ def run_tests(args, log_path: Path, timeout: int = 900) -> tuple[int, set[str]]:
 
 def ship_pass(args, mode: str, summary: str, log_path: Path) -> tuple[str, int]:
     """Re-run tests, then commit and push the pass. Returns (status, rc)."""
+    if not args.test_python:
+        # Re-resolve in case the environment recovered since startup; a
+        # pass must NEVER ship without a real test gate.
+        args.test_python = resolve_test_python(args.workdir)
+    if not args.test_python:
+        print(
+            f"[{now_text()}] no usable test interpreter; refusing to ship "
+            "without a test gate"
+        )
+        git_cmd(args, "reset", "--hard", "HEAD")
+        git_cmd(args, "clean", "-fdq")
+        return "ENV_ERROR", -99
+
     test_rc, failed = run_tests(args, log_path)
     baseline = load_baseline()
     if not baseline:
