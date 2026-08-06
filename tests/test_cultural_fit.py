@@ -241,7 +241,7 @@ def test_no_metrics_returns_insufficient_data() -> None:
     assert out.recommendations
     assert out.meta["covered_clusters"] == 0
     assert out.meta["covered_weight"] == 0.0
-    assert out.meta["product_type_supported"] is True
+    assert out.meta["product_type_supported"] is False
 
 
 def test_zero_weight_clusters_are_excluded() -> None:
@@ -408,14 +408,100 @@ def test_product_type_is_echoed_and_supported() -> None:
     assert out.meta["product_type_supported"] is True
 
 
-def test_conductor_stack_includes_cultural_context_for_all_product_types() -> None:
+def test_conductor_stack_activates_cultural_context_for_all_product_types() -> None:
+    """Every product-type stack must both list and activate the architect;
+    a stack membership alone is not enough (activation also requires the
+    product type to be in ``product_types`` or the list to be empty)."""
+    from app.simulation.architects.cultural_context import CulturalContextArchitect
     from app.simulation.conductor import ARCHITECT_STACKS
     from app.simulation.product_type import ProductType
 
+    architect = CulturalContextArchitect()
     for product_type in ProductType:
         assert (
             "CulturalContextArchitect" in ARCHITECT_STACKS[product_type]
         ), product_type.value
+        assert (
+            not architect.product_types
+            or product_type.value in architect.product_types
+        ), product_type.value
+
+
+def test_real_conductor_read_works_for_newer_product_types() -> None:
+    """smart_home is one of the product types added after the original ten;
+    the cultural-fit read must return a real verdict for it, not
+    INSUFFICIENT_DATA with a falsely positive supported flag."""
+    from app.simulation.clusters.registry import ClusterRegistry
+    from app.simulation.conductor import Conductor
+    from app.simulation.product_type import ProductType
+
+    conductor = Conductor()
+    result = conductor.run(
+        agents=[],
+        env_params={
+            "average_order_value": 999.0,
+            "price_sensitivity": 0.5,
+            "market_maturity": 0.3,
+        },
+        assumptions=[],
+        product_type=ProductType.SMART_HOME,
+    )
+    assert all(
+        "CulturalContextArchitect" in outputs
+        for outputs in result.cluster_results.values()
+    )
+
+    conductor_results = {
+        cid: {
+            name: {"metrics": output.metrics, "flags": output.flags}
+            for name, output in arch_outputs.items()
+        }
+        for cid, arch_outputs in result.cluster_results.items()
+    }
+    registry = [
+        {
+            "cluster_id": cluster.cluster_id,
+            "name": cluster.name,
+            "population_weight": cluster.population_weight,
+        }
+        for cluster in ClusterRegistry().all_clusters()
+    ]
+    out = build_cultural_fit(
+        {},
+        simulation_id=7,
+        project_id=10,
+        status="COMPLETED",
+        conductor_results=conductor_results,
+        cluster_registry=registry,
+        product_type="smart_home",
+    )
+
+    assert out.verdict != VERDICT_INSUFFICIENT
+    assert out.meta["product_type_supported"] is True
+    assert out.meta["covered_clusters"] == out.meta["total_clusters"]
+
+
+def test_meta_supported_flag_reflects_missing_architect_metrics() -> None:
+    """When no cluster exposes CulturalContextArchitect metrics, the read is
+    INSUFFICIENT_DATA and must not advertise the product type as supported."""
+    registry = _registry(
+        [{"cluster_id": "a", "name": "A", "population_weight": 1.0}]
+    )
+    out = build_cultural_fit(
+        {},
+        simulation_id=7,
+        project_id=10,
+        status="COMPLETED",
+        conductor_results={
+            "a": {"OtherArchitect": {"metrics": {"something": 0.5}, "flags": {}}}
+        },
+        cluster_registry=registry,
+        product_type="smart_home",
+    )
+
+    assert out.verdict == VERDICT_INSUFFICIENT
+    assert out.meta["product_type_supported"] is False
+    assert out.meta["covered_clusters"] == 0
 
 
 def test_meta_surface() -> None:

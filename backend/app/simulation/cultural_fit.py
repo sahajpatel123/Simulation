@@ -485,13 +485,18 @@ def build_cultural_fit(
             }
         )
 
+    architect_available = any(
+        _cultural_metrics(conductor_results, str(entry.get("cluster_id", "")))
+        for entry in registry
+    )
+
     meta: dict[str, Any] = {
         "signal_quality": signal_quality,
         "total_clusters": len(registry),
         "covered_clusters": len(rows),
         "covered_weight": round(covered_weight, 4),
         "primary_barrier_score": 0.0,
-        "product_type_supported": True,
+        "product_type_supported": architect_available,
         "thresholds": {
             "tier_strong_index": TIER_STRONG_INDEX,
             "tier_moderate_index": TIER_MODERATE_INDEX,

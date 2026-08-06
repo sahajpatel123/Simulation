@@ -193,6 +193,26 @@ def test_hardware_product_type_is_supported(
     assert out.meta["product_type_supported"] is True
 
 
+def test_newer_product_type_is_supported_end_to_end() -> None:
+    """smart_home is not one of the original ten architect product types;
+    run the real conductor (no stub) so activation is actually exercised."""
+    session = _FakeSession(
+        _FakeSimulation(
+            results={
+                "population_weighted_conversion": 0.04,
+                "product_type_detected": "smart_home",
+            }
+        )
+    )
+
+    out = _call_route(session=session)
+
+    assert out.product_type == "smart_home"
+    assert out.verdict != "INSUFFICIENT_DATA"
+    assert out.meta["product_type_supported"] is True
+    assert out.meta["covered_clusters"] == out.meta["total_clusters"]
+
+
 def test_failed_simulation_raises_422(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

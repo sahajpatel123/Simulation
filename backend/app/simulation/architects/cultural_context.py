@@ -79,7 +79,14 @@ class CulturalContextArchitect(BaseArchitect):
 
     @property
     def product_types(self) -> list[str]:
-        return self.ALL_PRODUCT_TYPES
+        # Empty list = applies to all product types (BaseArchitect
+        # contract). Every conductor stack includes this architect, and
+        # the cultural-fit read depends on its per-cluster metrics — a
+        # narrower list would silently drop it from newer product types
+        # (consumer_app, d2c, b2b_marketplace, productivity_tool,
+        # smart_home) and turn the read into INSUFFICIENT_DATA while
+        # still advertising product_type_supported=true.
+        return []
 
     def compute(
         self,
