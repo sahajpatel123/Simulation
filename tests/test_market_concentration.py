@@ -137,6 +137,42 @@ def test_small_uniform_markets_do_not_false_flag() -> None:
         assert out.fragility_flags == [], f"n={n}"
 
 
+def test_single_segment_monopoly_is_maximally_concentrated() -> None:
+    out = build_market_concentration(
+        _results({"c1": 0.05}, n=1),
+        simulation_id=1,
+        project_id=1,
+        cluster_registry=_uniform_registry(1),
+    )
+    assert out.verdict == VERDICT_CONCENTRATED
+    assert out.hhi == pytest.approx(1.0, abs=0.0001)
+    assert out.normalized_hhi == pytest.approx(1.0, abs=0.0001)
+    assert out.effective_segments == pytest.approx(1.0, abs=0.01)
+    assert out.top_1_share == pytest.approx(1.0, abs=0.0001)
+    assert out.top_cluster_id == "c1"
+    assert out.top_cluster_name == "Cluster 1"
+    assert out.clusters_with_demand == 1
+    assert FLAG_SINGLE_SEGMENT in out.fragility_flags
+    assert FLAG_HIGH_CONCENTRATION in out.fragility_flags
+    assert any("diversif" in r.lower() for r in out.recommendations)
+
+
+def test_zero_conversion_siblings_do_not_dilute_monopoly() -> None:
+    out = build_market_concentration(
+        _results({"c1": 0.06, "c2": 0.0, "c3": 0.0}, n=3),
+        simulation_id=1,
+        project_id=1,
+        cluster_registry=_uniform_registry(3),
+    )
+    assert out.total_clusters == 3
+    assert out.clusters_with_demand == 1
+    assert out.verdict == VERDICT_CONCENTRATED
+    assert out.hhi == pytest.approx(1.0, abs=0.0001)
+    assert out.normalized_hhi == pytest.approx(1.0, abs=0.0001)
+    assert FLAG_SINGLE_SEGMENT in out.fragility_flags
+    assert FLAG_HIGH_CONCENTRATION in out.fragility_flags
+
+
 def test_dominant_segment_is_concentrated() -> None:
     registry = _uniform_registry(52)
     breakdown = {"c1": 0.50}
@@ -215,6 +251,36 @@ def test_summary_weights_used_when_registry_missing() -> None:
     assert out.segment_shares[0].demand_share == pytest.approx(0.75, abs=0.001)
     assert out.segment_shares[1].demand_share == pytest.approx(0.25, abs=0.001)
     assert out.meta["demand_weighting"] == "cluster_run_summaries"
+
+
+def test_meta_reports_registry_weighting_when_registry_wins() -> None:
+    summaries = [
+        {"cluster_id": "c1", "agents_assigned": 9000, "agents_converted": 100},
+        {"cluster_id": "c2", "agents_assigned": 1000, "agents_converted": 100},
+    ]
+    registry = {
+        "c1": {"name": "Big", "population_weight": 0.5},
+        "c2": {"name": "Small", "population_weight": 0.5},
+    }
+    out = build_market_concentration(
+        _results({"c1": 0.04, "c2": 0.04}, n=2),
+        simulation_id=1,
+        project_id=1,
+        cluster_summaries=summaries,
+        cluster_registry=registry,
+    )
+    # Registry weights take precedence over summaries, so the metadata
+    # must say so instead of claiming cluster_run_summaries.
+    assert out.meta["demand_weighting"] == "registry"
+
+
+def test_meta_reports_uniform_when_no_weight_source() -> None:
+    out = build_market_concentration(
+        _results({"c1": 0.05, "c2": 0.05}, n=2),
+        simulation_id=1,
+        project_id=1,
+    )
+    assert out.meta["demand_weighting"] == "uniform"
 
 
 def test_registry_weights_override_summaries() -> None:

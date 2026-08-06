@@ -116,17 +116,25 @@ def _cluster_weight(
     summary_by_id: dict[str, dict[str, Any]],
     total_assigned: int,
     total_clusters: int,
-) -> float:
-    """Resolve a cluster's demand weight with graceful fallbacks."""
+) -> tuple[float, str]:
+    """Resolve a cluster's demand weight with graceful fallbacks.
+
+    Returns ``(weight, source)`` where ``source`` is one of
+    ``"registry"``, ``"cluster_run_summaries"``, or ``"uniform"`` so
+    the caller can report honestly which data actually drove the
+    concentration read.
+    """
     reg = registry.get(cluster_id) or {}
     reg_weight = _safe_float(reg.get("population_weight"))
     if reg_weight > 0.0:
-        return reg_weight
+        return reg_weight, "registry"
     summary = summary_by_id.get(cluster_id) or {}
     assigned = _safe_int(summary.get("agents_assigned"))
     if total_assigned > 0 and assigned > 0:
-        return assigned / total_assigned
-    return 1.0 / total_clusters if total_clusters > 0 else 0.0
+        return assigned / total_assigned, "cluster_run_summaries"
+    if total_clusters > 0:
+        return 1.0 / total_clusters, "uniform"
+    return 0.0, "uniform"
 
 
 def _recommendations(
@@ -209,16 +217,18 @@ def build_market_concentration(
     # actually contributes demand; zero-conversion clusters are
     # excluded because they hold no share of projected customers.
     weighted: list[tuple[str, float, float]] = []
+    weight_sources: set[str] = set()
     for cid in cluster_ids:
         rate = _cluster_rate(breakdown.get(cid))
         if rate <= 0.0:
             continue
-        weight = _cluster_weight(
+        weight, source = _cluster_weight(
             cid, registry, summary_by_id, total_assigned, total_clusters
         )
         if weight <= 0.0:
             continue
         weighted.append((cid, weight, rate))
+        weight_sources.add(source)
 
     total_weight = sum(w for _, w, _ in weighted)
     total_demand = sum(w * r for _, w, r in weighted)
@@ -257,7 +267,12 @@ def build_market_concentration(
 
     hhi = sum(item.demand_share ** 2 for item in items)
     diversified_baseline = 1.0 / len(items)
-    if hhi > diversified_baseline:
+    if len(items) == 1:
+        # A single segment owning all demand is a perfect monopoly.
+        # The usual normalisation divides by ``1 - baseline`` which is
+        # zero here, so report maximum concentration explicitly.
+        normalized_hhi = 1.0
+    elif hhi > diversified_baseline:
         normalized_hhi = (hhi - diversified_baseline) / (
             1.0 - diversified_baseline
         )
@@ -282,10 +297,17 @@ def build_market_concentration(
 
     fair_share = 1.0 / len(items)
     flags: list[str] = []
-    if top_1 >= max(
-        SINGLE_SEGMENT_MAX_SHARE,
-        SINGLE_SEGMENT_FAIR_SHARE_MULTIPLIER * fair_share,
-    ):
+    # Cap the fair-share term at 1.0: with a single segment the
+    # multiplier would push the threshold above 100% and the most
+    # concentrated market possible would never flag.
+    single_segment_threshold = min(
+        1.0,
+        max(
+            SINGLE_SEGMENT_MAX_SHARE,
+            SINGLE_SEGMENT_FAIR_SHARE_MULTIPLIER * fair_share,
+        ),
+    )
+    if top_1 >= single_segment_threshold:
         flags.append(FLAG_SINGLE_SEGMENT)
     if top_3 >= max(
         TOP3_MAX_SHARE,
@@ -322,9 +344,11 @@ def build_market_concentration(
             "cluster_summaries_used": bool(cluster_summaries),
             "cluster_count": len(items),
             "demand_weighting": (
-                "cluster_run_summaries"
-                if total_assigned > 0
-                else "registry_or_uniform"
+                "registry"
+                if "registry" in weight_sources
+                else "cluster_run_summaries"
+                if "cluster_run_summaries" in weight_sources
+                else "uniform"
             ),
         },
     )
