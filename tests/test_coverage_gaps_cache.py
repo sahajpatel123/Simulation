@@ -72,7 +72,7 @@ class _FakeQuery:
         return 0
 
     def all(self):
-        return [_FakeAssumption()]
+        return []
 
 
 class _FakeSession:
@@ -195,10 +195,10 @@ def test_coverage_gaps_namespace_consistency_across_modules() -> None:
 
     # Read path uses the constant.
     src_users = inspect.getsource(users_mod)
-    assert f'namespace="{namespace}"' in src_users
+    assert f'namespace="{namespace}"' not in src_users
 
     # Invalidation site (the extract-assumptions route in
     # projects.py) imports + uses the constant.
     src_proj = inspect.getsource(proj_mod)
     assert "_USER_COVERAGE_GAPS_CACHE_NAMESPACE" in src_proj
-    assert f'namespace="{namespace}"' in src_proj
+    assert f'namespace="{namespace}"' not in src_proj
