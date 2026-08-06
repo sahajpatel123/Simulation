@@ -201,6 +201,7 @@ def test_completed_simulation_returns_after_sales_payload(
         "spare_parts",
         "lifespan_risk",
     }
+    assert out.meta["visible_assumptions"] == 0
 
 
 def test_hardware_product_type_is_supported(

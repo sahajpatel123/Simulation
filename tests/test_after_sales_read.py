@@ -105,6 +105,8 @@ def _build(
     flags: dict[str, list[str]] | None = None,
     product_type: str = "consumer_hardware",
     results: dict[str, Any] | None = None,
+    signal_quality: float | None = 0.62,
+    visible_assumptions: int | None = None,
 ) -> Any:
     return build_after_sales_read(
         results
@@ -116,12 +118,44 @@ def _build(
         simulation_id=1,
         project_id=10,
         status="COMPLETED",
-        signal_quality=0.62,
+        signal_quality=signal_quality,
+        visible_assumption_count=visible_assumptions,
         conductor_results=_conductor(specs, flags=flags),
         cluster_registry=_registry(
             clusters if clusters is not None else _clusters()
         ),
         product_type=product_type,
+    )
+
+
+def test_low_signal_quality_adds_caveat_and_meta() -> None:
+    out = _build(
+        signal_quality=0.31,
+        visible_assumptions=0,
+        specs={
+            "a": _metrics(),
+            "b": _metrics(),
+        },
+    )
+
+    assert out.meta["signal_quality"] == 0.31
+    assert out.meta["visible_assumptions"] == 0
+    assert any("signal quality is low" in rec for rec in out.recommendations)
+    assert any("No visible project assumptions" in rec for rec in out.recommendations)
+
+
+def test_visible_assumption_count_is_echoed() -> None:
+    out = _build(
+        visible_assumptions=4,
+        specs={
+            "a": _metrics(),
+            "b": _metrics(),
+        },
+    )
+
+    assert out.meta["visible_assumptions"] == 4
+    assert not any(
+        "No visible project assumptions" in rec for rec in out.recommendations
     )
 
 

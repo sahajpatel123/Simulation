@@ -421,6 +421,7 @@ def build_after_sales_read(
     project_id: int,
     status: str = "COMPLETED",
     signal_quality: float | None = None,
+    visible_assumption_count: int | None = None,
     conductor_results: dict[str, Any] | None = None,
     cluster_registry: list[dict[str, Any]] | None = None,
     product_type: str = "saas",
@@ -434,6 +435,8 @@ def build_after_sales_read(
         project_id: Owning project primary key (echoed back).
         status: Simulation status string.
         signal_quality: Persisted signal quality (0..1), if any.
+        visible_assumption_count: Number of visible project assumptions
+            the route fed into the conductor before building this read.
         conductor_results: Per-cluster architect output blocks
             (``{cluster_id: {architect: {"metrics": ..., "flags": ...}}}``).
         cluster_registry: List of ``{cluster_id, name, population_weight}``.
@@ -448,6 +451,7 @@ def build_after_sales_read(
 
     meta: dict[str, Any] = {
         "signal_quality": signal_quality,
+        "visible_assumptions": visible_assumption_count,
         "total_clusters": len(registry),
         "covered_clusters": 0,
         "covered_weight": 0.0,
@@ -850,6 +854,21 @@ def build_after_sales_read(
             f"{index_avg:.2f}, {_fmt_pct(at_risk_share)} of the covered "
             "market AT_RISK) — treat post-purchase experience as part "
             "of the core product."
+        )
+    if signal_quality is not None and signal_quality < 0.4:
+        recommendations.append(
+            f"Overall simulation signal quality is low "
+            f"({signal_quality:.2f}) — treat the after-sales index and "
+            "levers as a model estimate, not a measured outcome, and "
+            "validate support load and repurchase intent with real "
+            "post-launch data."
+        )
+    if visible_assumption_count is not None and visible_assumption_count <= 0:
+        recommendations.append(
+            "No visible project assumptions fed this after-sales read — "
+            "add assumptions about post-purchase behavior (support "
+            "load, repurchase intent, warranty exposure, accessory "
+            "attach) to sharpen the levers."
         )
     recommendations.append(
         f"Primary after-sales risk: {RISK_LABELS[primary_risk]} "

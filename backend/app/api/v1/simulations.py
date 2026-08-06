@@ -6656,6 +6656,7 @@ def get_after_sales(
         signal_quality=float(sim.signal_quality)
         if sim.signal_quality is not None
         else None,
+        visible_assumption_count=len(assumptions),
         conductor_results=conductor_results,
         cluster_registry=registry,
         product_type=product_type_name,
