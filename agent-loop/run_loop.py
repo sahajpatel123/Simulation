@@ -152,12 +152,17 @@ def build_prompt(args, task_text: str, mode: str) -> str:
 
 def classify(text: str, rc: int) -> str:
     upper = text.upper()
-    if re.search(r"\*\*BLOCKED\*\*|\bBLOCKED\b", upper):
+    # The prompt requires the final status line to use the explicit
+    # **DONE** / **BLOCKED** markers. Match those exact markers and
+    # prefer DONE: feature prose legitimately contains words like
+    # "blocked" (e.g. a readiness tier named BLOCKED) and must not
+    # flip a completed pass into BLOCKED.
+    if re.search(r"\*\*DONE\*\*", upper):
+        return "DONE"
+    if re.search(r"\*\*BLOCKED\*\*", upper):
         return "BLOCKED"
     if "STOPPED-NO-PROGRESS" in upper:
         return "STOPPED_NO_PROGRESS"
-    if re.search(r"\*\*DONE\*\*|\bDONE\b", upper):
-        return "DONE"
     if rc != 0:
         return "FAILED"
     return "UNKNOWN"
