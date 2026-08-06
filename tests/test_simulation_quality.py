@@ -6,6 +6,9 @@ Pure deterministic tests — no DB, no LLM, no network. Uses the real
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
+
+import pytest
 
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.simulation_quality import (
@@ -239,6 +242,77 @@ def test_weighted_check_skipped_when_coverage_too_low() -> None:
     check = _check(out, "weighted_conversion_consistent")
     assert check.skipped is True
     assert check.passed is None
+
+
+def test_partial_coverage_consistent_blend_passes_weighted_check() -> None:
+    # A partially persisted breakdown (>= 90% coverage) whose surviving
+    # clusters are internally consistent must not be flagged as a
+    # headline-vs-blend divergence. The blend is coverage-normalized, so
+    # missing segments cannot manufacture a false "diverges" failure.
+    clusters = ClusterRegistry().all_clusters()
+    breakdown = {c.cluster_id: 0.04 for c in clusters}
+    for cid in [c.cluster_id for c in clusters[:5]]:
+        breakdown.pop(cid, None)
+    results = _healthy_results(
+        cluster_breakdown=breakdown,
+        population_weighted_conversion=0.04,
+        mean_conversion_rate=0.04,
+    )
+    out = _run(results)
+    check = _check(out, "weighted_conversion_consistent")
+    assert check.passed is True
+    assert "coverage-normalized" in check.detail
+    # The gate must still surface the missing segments on its own check —
+    # normalization only makes the blend comparison fair, it does not
+    # mask partial coverage.
+    assert _check(out, "cluster_coverage").passed is False
+    assert not any(
+        "diverges from weighted blend" in rec for rec in out.recommendations
+    )
+
+
+def test_partial_coverage_divergent_blend_fails_weighted_check() -> None:
+    # Normalization must not hide a genuinely inconsistent headline:
+    # with every surviving cluster at 0.04, a 0.10 headline is still a
+    # real divergence and must fail the check.
+    clusters = ClusterRegistry().all_clusters()
+    breakdown = {c.cluster_id: 0.04 for c in clusters}
+    for cid in [c.cluster_id for c in clusters[:5]]:
+        breakdown.pop(cid, None)
+    results = _healthy_results(
+        cluster_breakdown=breakdown,
+        population_weighted_conversion=0.10,
+        mean_conversion_rate=0.10,
+    )
+    out = _run(results)
+    check = _check(out, "weighted_conversion_consistent")
+    assert check.passed is False
+    assert "diverges from weighted blend" in check.detail
+
+
+def test_weighted_check_skipped_when_covered_weight_too_low(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Defensive guard: even at full ID coverage, a breakdown whose covered
+    # population weight is negligible cannot anchor a meaningful blend.
+    results = _healthy_results()
+    fake_clusters = [
+        SimpleNamespace(cluster_id=f"fake_{i}", population_weight=0.005)
+        for i in range(52)
+    ]
+    results["cluster_breakdown"] = {f"fake_{i}": 0.04 for i in range(52)}
+    results["population_weighted_conversion"] = 0.04
+    results["mean_conversion_rate"] = 0.04
+    monkeypatch.setattr(
+        ClusterRegistry,
+        "_all_clusters_cache",
+        fake_clusters,
+    )
+    out = _run(results)
+    check = _check(out, "weighted_conversion_consistent")
+    assert check.skipped is True
+    assert check.passed is None
+    assert "population weight" in check.detail
 
 
 # ── Funnel sanity ─────────────────────────────────────────────────────

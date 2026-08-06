@@ -15,7 +15,9 @@ never an LLM call:
   that silently drop segments).
 * **Cluster rates bounded** — every per-cluster rate is finite in [0, 1].
 * **Weighted-blend consistency** — the headline conversion matches the
-  population-weighted cluster blend within tolerance.
+  coverage-normalized, population-weighted cluster blend within tolerance
+  (partial breakdowns are compared on the clusters that survived
+  persistence, so missing segments cannot manufacture divergence).
 * **Funnel sanity** — stage metrics are bounded and the ARRIVE→DECIDE
   counts never increase (PURCHASE is exempt because the funnel anchors
   it directly to the conductor-derived conversion by design).
@@ -70,6 +72,11 @@ COVERAGE_WARN: float = 0.90
 
 # Absolute tolerance for headline vs demand-weighted blend divergence.
 WEIGHTED_CONSISTENCY_TOLERANCE: float = 0.02
+
+# Below this covered population weight (weights sum to 1.0 across the
+# registry) a partial breakdown's normalized blend is too fragile to
+# compare against the headline — skip rather than guess.
+WEIGHTED_CONSISTENCY_MIN_COVERED_WEIGHT: float = 0.5
 
 FUNNEL_ORDER: tuple[str, ...] = ("ARRIVE", "BROWSE", "CONSIDER", "DECIDE")
 
@@ -288,26 +295,51 @@ def _check_weighted_consistency(
         return True, True, "skipped — no headline conversion to compare"
     registry = ClusterRegistry()
     by_id = {cluster.cluster_id: cluster for cluster in registry.all_clusters()}
-    blended = sum(
-        by_id[cid].population_weight * (rate or 0.0)
-        for cid, raw in breakdown.items()
-        if cid in by_id
-        for rate in [_cluster_rate(raw)]
-        if rate is not None
-    )
+    # The conductor computes the headline over *all* 52 clusters, so a
+    # partially persisted breakdown must be compared on the clusters that
+    # survived persistence: normalize by the covered population weight
+    # instead of summing a subset of weights (which would guarantee a
+    # divergence proportional to the missing weight).
+    weighted_sum = 0.0
+    covered_weight = 0.0
+    for cid, raw in breakdown.items():
+        cluster = by_id.get(cid)
+        if cluster is None:
+            continue
+        rate = _cluster_rate(raw)
+        if rate is None:
+            continue
+        weighted_sum += cluster.population_weight * rate
+        covered_weight += cluster.population_weight
+    if covered_weight <= 0.0:
+        return (
+            True,
+            True,
+            "skipped — no registry clusters with parseable rates in breakdown",
+        )
+    if covered_weight < WEIGHTED_CONSISTENCY_MIN_COVERED_WEIGHT:
+        return (
+            True,
+            True,
+            f"skipped — covered population weight {covered_weight:.3f} below "
+            f"{WEIGHTED_CONSISTENCY_MIN_COVERED_WEIGHT:.1f}, blend not meaningful",
+        )
+    blended = weighted_sum / covered_weight
     diff = abs(headline - blended)
     if diff <= WEIGHTED_CONSISTENCY_TOLERANCE:
         return (
             True,
             False,
-            f"headline {headline:.4f} vs weighted blend {blended:.4f} "
+            f"headline {headline:.4f} matches coverage-normalized weighted "
+            f"blend {blended:.4f} "
             f"(|diff| {diff:.4f} <= {WEIGHTED_CONSISTENCY_TOLERANCE})",
         )
     return (
         False,
         False,
         f"headline {headline:.4f} diverges from weighted blend {blended:.4f} "
-        f"(|diff| {diff:.4f} > {WEIGHTED_CONSISTENCY_TOLERANCE})",
+        f"(coverage-normalized; |diff| {diff:.4f} > "
+        f"{WEIGHTED_CONSISTENCY_TOLERANCE})",
     )
 
 
@@ -430,7 +462,7 @@ def _check_specs(
         ),
         (
             "weighted_conversion_consistent",
-            "Headline matches weighted blend",
+            "Headline matches coverage-normalized blend",
             SEVERITY_MAJOR,
             lambda results: _check_weighted_consistency(results, expected_ids),
         ),
