@@ -1,0 +1,36 @@
+# Code Owners for TheCee
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# The maintainers
+*               @sahajpatel123
+
+# API routes
+/backend/app/api/*              @sahajpatel123
+
+# Core simulation engine
+/backend/app/simulation/*       @sahajpatel123
+/backend/app/simulation/architects/*  @sahajpatel123
+
+# Database and models
+/backend/app/models/*           @sahajpatel123
+/backend/app/core/database.py   @sahajpatel123
+
+# Configuration
+pyproject.toml                  @sahajpatel123
+requirements.txt                  @sahajpatel123
+migrate_and_start.py             @sahajpatel123
+
+# Tests
+/tests/*                        @sahajpatel123
+
+# CI/CD
+.github/workflows/*              @sahajpatel123
+.github/dependabot.yml          @sahajpatel123
+
+# Security
+SECURITY.md                      @sahajpatel123
+SECURITY_AUDIT.md              @sahajpatel123
+
+# Special cases
+/backend/app/api/v1/projects.py @sahajpatel123
+/backend/app/tasks/*.py         @sahajpatel123

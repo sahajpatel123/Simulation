@@ -33,10 +33,42 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+# Never commit all env files - only .env.example is tracked
+!.env.example
+
+# Production secrets (never commit)
+*.env.local
+*.env.production
+.env.local
+.env.production
+
 # iCloud duplicate filenames
 * 2.env*
 * 2.local
 * 2.production
+
+# Security reports and temporary files (keep tracked, ignore future copies)
+/AUDIT_REPORT* 2*.md
+/SECURITY_AUDIT* 2*.md
+
+# Bandit and security scan reports (generated, not source)
+bandit-report.json
+pip-audit-report.json
+trivy-report.json
+sarif/
+
+# Coverage and test artifacts
+coverage*
+*.coverage
+htmlcov/
+.coverage*
+
+# API keys and tokens (potential leaks)
+*.key
+*.token
+api-keys.json
+secret*.txt
+credentials.json
 
 # autonomous loop runtime state (never commit)
 .agent_loop_telemetry.json

@@ -1,0 +1,54 @@
+# Pre-commit configuration for TheCee
+# https://pre-commit.com/
+
+repos:
+  # Ruff - fast Python linter and formatter
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.2
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+        files: ^\.venv/ || ^backend/
+
+  # Trailing whitespace
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-added-large-files
+        args: ['--maxkb=5000']
+      - id: check-merge-conflict
+      - id: debug-statements
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # Check for sensitive data
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-private-key
+      - id: detect-aws-credentials
+        args: ["--allow-missing-credentials"]
+      - id: detect-private-key
+
+  # Check for inadvertently committed files
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-case-conflict
+      - id: check-submodule
+      - id: debug-statements
+
+  # Python security scanning with bandit
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.10
+    hooks:
+      - id: bandit
+        args: ["-r", "backend/app", "--skip", "B101,B311"]
+        exclude: "tests/|migrations/|__pycache__"
+        files: ^backend/app/

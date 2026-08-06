@@ -6,23 +6,47 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: '0 0 * * 0'
+    - cron: '0 0 * * 0'  # Weekly on Monday at 00:00 UTC
 
 jobs:
   analyze:
+    name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     permissions:
       security-events: write
       actions: read
+      contents: read
+
     strategy:
+      fail-fast: false
       matrix:
-        language: [javascript, python]
+        language: ['javascript', 'python']
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v2
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.0
+        persistence: true
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-      - uses: github/codeql-action/autobuild@v2
-      - uses: github/codeql-action/analyze@v2
+          # Enable all queries for comprehensive analysis
+          # For python: add queries for security, quality, and best practices
+          # For javascript: add queries for security and quality
+          # See: https://codeql.github.com/docs/codeql-language-guides/
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
         with:
-          category: ${{ matrix.language }}
+          category: '/language:${{ matrix.language }}'
+          output: sarif
+          format: 'sarif'
+
+      - name: Upload SARIF to CodeQL
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: '.codeql/saves/${{ matrix.language }}-pack/compile/default/semmle-codespeed/results.sarif'
