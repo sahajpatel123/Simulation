@@ -38,6 +38,14 @@ yarn-error.log*
 * 2.local
 * 2.production
 
+# autonomous loop runtime state (never commit)
+.agent_loop_telemetry.json
+agent-loop/state.json
+agent-loop/loop.lock
+agent-loop/last_output.md
+agent-loop/stop
+agent-loop/logs/
+
 # vercel
 .vercel
 
