@@ -187,6 +187,11 @@ def _match_method(category: str, roi_tier: str) -> str:
         "size",
     }:
         return "LANDING_PAGE_SMOKE_TEST"
+    if any(
+        k in cat
+        for k in ("preorder", "pre order", "waitlist", "early access", "deposit")
+    ):
+        return "PRE_ORDER_WAITLIST"
     if any(k in cat for k in ("competit", "rival", "substitute")):
         return "COMPETITIVE_DESK_RESEARCH"
     if any(
@@ -236,9 +241,18 @@ def _build_rationale(
     return (
         f"'{snippet}' is {_tier_label(roi_tier)} (ROI {validation_roi:.2f}) at "
         f"{confidence_tier} confidence, and closing its gap could move conversion "
-        f"by up to {expected_swing:.1%}. A {spec['label'].lower()} is the cheapest "
-        "direct evidence you can collect before launch."
+        f"by up to {expected_swing:.1%}. A {spec['label'].lower()} is "
+        f"{_cost_evidence_phrase(spec['cost_tier'])} you can collect before launch."
     )
+
+
+def _cost_evidence_phrase(cost_tier: str) -> str:
+    """Honest cost phrasing for the rationale (MEDIUM tests are not 'cheapest')."""
+    if cost_tier == "FREE":
+        return "the cheapest direct evidence"
+    if cost_tier == "LOW":
+        return "a low-cost, direct piece of evidence"
+    return "the most direct evidence"
 
 
 def _build_experiment(row, method: str) -> ValidationExperiment:
@@ -316,12 +330,24 @@ def _build_narrative(
     top = experiments[0]
     snippet = top.assumption_text[:80]
     return (
-        f"Week-1 validation sprint: {summary.experiment_count} experiments, "
+        f"{_sprint_window_label(summary.sprint_days)} validation sprint: "
+        f"{summary.experiment_count} experiments, "
         f"starting with {summary.top_experiment.lower()} for '{snippet}' "
         f"(ROI {top.validation_roi:.2f}). Run in parallel they fit in about "
         f"{summary.sprint_days} days with a {summary.budget_ceiling.lower()} "
         "budget ceiling; each has an explicit go/no-go rule."
     )
+
+
+def _sprint_window_label(sprint_days: int) -> str:
+    """Label the sprint window from its parallel duration (max experiment)."""
+    if sprint_days <= 7:
+        return "Week-1"
+    if sprint_days <= 14:
+        return "two-week"
+    if sprint_days <= 21:
+        return "three-week"
+    return "multi-week"
 
 
 def build_validation_experiment_plan(
@@ -335,17 +361,26 @@ def build_validation_experiment_plan(
     Only ``VALIDATE_FIRST`` and ``HIGH_VALUE`` assumptions receive experiments;
     lower tiers are already de-risked or too low-impact to spend time on.
     Experiments keep the ROI ranking order and are capped at ``max_experiments``.
+    Rows sharing the same assumption text are deduplicated (the strongest ROI
+    row wins), blank assumption texts are skipped, and ``max_experiments``
+    below 1 yields an empty plan.
     """
+    limit = max(0, int(max_experiments))
     experiments: list[ValidationExperiment] = []
     ranked = sorted(
         roi.assumptions,
         key=lambda r: (-r.validation_roi, -r.sensitivity_score, -abs(r.max_delta)),
     )
+    seen_texts: set[str] = set()
     for row in ranked:
         if row.roi_tier not in (ROI_TIER_VALIDATE_FIRST, ROI_TIER_HIGH_VALUE):
             continue
-        if len(experiments) >= max_experiments:
+        if len(experiments) >= limit:
             break
+        text_key = (row.assumption_text or "").strip()
+        if not text_key or text_key in seen_texts:
+            continue
+        seen_texts.add(text_key)
         method = _match_method(row.category, row.roi_tier)
         experiments.append(_build_experiment(row, method))
 
@@ -367,7 +402,7 @@ def build_validation_experiment_plan(
             "success_thresholds": "conservative defaults; founders should replace "
             "with product-specific benchmarks when available",
             "planned_tiers": [ROI_TIER_VALIDATE_FIRST, ROI_TIER_HIGH_VALUE],
-            "max_experiments": max_experiments,
+            "max_experiments": limit,
         },
     )
 

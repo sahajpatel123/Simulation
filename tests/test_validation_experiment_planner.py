@@ -101,6 +101,16 @@ class TestMethodSelection:
             == "PAID_ACQUISITION_TEST"
         )
 
+    def test_preorder_category_maps_to_preorder_waitlist(self) -> None:
+        assert (
+            _match_method("PreOrderArchitect", "VALIDATE_FIRST")
+            == "PRE_ORDER_WAITLIST"
+        )
+        assert (
+            _match_method("WaitlistConversionArchitect", "HIGH_VALUE")
+            == "PRE_ORDER_WAITLIST"
+        )
+
     def test_retention_category_maps_to_concierge(self) -> None:
         assert (
             _match_method("RetentionArchitect", "VALIDATE_FIRST")
@@ -204,6 +214,77 @@ class TestBuildPlan:
         )
         assert plan.experiments == []
         assert "already validated" in plan.narrative or "No assumptions" in plan.narrative
+
+    def test_deduplicates_identical_assumption_text(self) -> None:
+        rows = [
+            _row("same claim", category="PricingArchitect", roi=0.60),
+            _row("same claim", category="MarketSizeArchitect", roi=0.40),
+        ]
+        plan = _plan(rows)
+        assert len(plan.experiments) == 1
+        assert plan.experiments[0].assumption_text == "same claim"
+        # The strongest-ROI row wins, so the method follows its category.
+        assert plan.experiments[0].method == "WILLINGNESS_TO_PAY_SURVEY"
+        assert plan.experiments[0].validation_roi == 0.60
+
+    def test_skips_blank_assumption_text(self) -> None:
+        plan = _plan(
+            [
+                _row("   ", category="PricingArchitect"),
+                _row("real claim", category="MarketSizeArchitect", roi=0.50),
+            ]
+        )
+        assert len(plan.experiments) == 1
+        assert plan.experiments[0].assumption_text == "real claim"
+
+    def test_max_experiments_below_one_returns_zero_state(self) -> None:
+        plan = _plan(
+            [_row("pricing claim", category="PricingArchitect")],
+            max_experiments=0,
+        )
+        assert plan.experiments == []
+        assert plan.summary.experiment_count == 0
+        assert plan.meta["max_experiments"] == 0
+        assert "No assumptions" in plan.narrative
+
+    def test_rationale_cost_phrasing_is_honest_per_tier(self) -> None:
+        free_plan = _plan(
+            [_row("pricing claim", category="PricingArchitect")]  # FREE
+        )
+        assert "cheapest direct evidence" in free_plan.experiments[0].rationale
+
+        low_plan = _plan(
+            [_row("retention claim", category="RetentionArchitect")]  # LOW
+        )
+        assert "low-cost, direct piece of evidence" in low_plan.experiments[0].rationale
+
+        medium_plan = _plan(
+            [_row("acq claim", category="CustomerAcquisitionArchitect")]  # MEDIUM
+        )
+        assert "most direct evidence" in medium_plan.experiments[0].rationale
+        assert "cheapest" not in medium_plan.experiments[0].rationale
+
+    def test_narrative_window_label_matches_sprint_duration(self) -> None:
+        short_plan = _plan(
+            [_row("pricing claim", category="PricingArchitect")]  # 7 days
+        )
+        assert short_plan.narrative.startswith("Week-1 validation sprint")
+
+        long_plan = _plan(
+            [_row("preorder claim", category="RetentionArchitect"),
+             _row("preorder claim 2", category="CustomerAcquisitionArchitect")]
+        )
+        # Both map to 14-day experiments; no experiment is longer, so the
+        # window stays "two-week" rather than the hardcoded "Week-1".
+        assert long_plan.narrative.startswith("two-week validation sprint")
+
+        longest_plan = _plan(
+            [
+                _row("preorder claim", category="PreOrderArchitect"),
+            ]
+        )
+        assert longest_plan.experiments[0].estimated_duration_days == 21
+        assert longest_plan.narrative.startswith("three-week validation sprint")
 
 
 # ---------------------------------------------------------------------------
