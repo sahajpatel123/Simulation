@@ -56,6 +56,7 @@ from app.models.user import User
 from app.models.cluster_run_summary import ClusterRunSummary
 from app.schemas.cluster_opportunity import ClusterOpportunityMatrixOut
 from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
+from app.schemas.market_concentration import MarketConcentrationOut
 from app.schemas.market_sizing import MarketSizingOut
 from app.schemas.simulation import (
     ArchitectAccuracyBridgeOut,
@@ -103,6 +104,7 @@ from app.simulation.anomaly_detector import detect_simulation_anomalies
 from app.simulation.sensitivity_matrix import compute_simulation_sensitivity_matrix
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.cluster_opportunity import build_cluster_opportunity_matrix
+from app.simulation.market_concentration import build_market_concentration
 from app.simulation.market_sizing import (
     DEFAULT_AVERAGE_ORDER_VALUE,
     DEFAULT_MARKET_SIZE,
@@ -3790,6 +3792,82 @@ def get_cluster_opportunities(
         cluster_registry=registry,
         benchmark=effective_benchmark,
         limit=effective_limit,
+    )
+
+
+@router.get(
+    "/{simulation_id}/market-concentration",
+    response_model=MarketConcentrationOut,
+    summary="Measure how concentrated projected demand is across consumer clusters",
+    responses=_JSON_200,
+)
+def get_market_concentration(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MarketConcentrationOut:
+    """
+    Build a demand-concentration read from completed results:
+
+      * demand share = population_weight × conversion_rate, normalised
+      * HHI + effective segments + top-N shares + fragility verdict
+      * founder-facing recommendations for diversifying demand risk
+
+    Pure analytics — no Celery, no LLM.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — market concentration requires "
+                "completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    summary_rows = (
+        db.query(ClusterRunSummary)
+        .filter(ClusterRunSummary.simulation_id == sim.id)
+        .all()
+    )
+    summaries = [
+        {
+            "cluster_id": row.cluster_id,
+            "agents_assigned": row.agents_assigned,
+            "agents_converted": row.agents_converted,
+            "conversion_rate": row.conversion_rate,
+        }
+        for row in summary_rows
+    ]
+    registry = {
+        cid: {
+            "name": cluster.name,
+            "population_weight": cluster.population_weight,
+        }
+        for cid, cluster in _clusters_map.items()
+    }
+
+    return build_market_concentration(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        signal_quality=float(sim.signal_quality)
+        if sim.signal_quality is not None
+        else None,
+        cluster_summaries=summaries or None,
+        cluster_registry=registry,
     )
 
 
