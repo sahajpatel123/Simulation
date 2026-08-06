@@ -220,6 +220,7 @@ def test_blocked_cluster_produces_blocked_verdict() -> None:
             )
         },
         weights={"a": 1.0},
+        product_type="consumer_hardware",
         flags={"a": ["setup_critical", "tier3_setup_risk"]},
     )
 
@@ -257,6 +258,48 @@ def test_no_metrics_returns_insufficient_data() -> None:
     assert out.meta["covered_weight"] == 0.0
     assert out.meta["product_type_supported"] is False
     assert "consumer_hardware" in out.recommendations[0]
+
+
+def test_supported_product_type_with_missing_metrics_stays_supported() -> None:
+    """``product_type_supported`` must reflect the run's product type,
+    not whether metrics happened to be available: a supported hardware
+    run with no per-cluster metrics is still a supported read, and the
+    recommendation must say metrics are missing rather than claiming the
+    run does not use the hardware stack."""
+    out = _build(
+        specs={"a": _setup_metrics(), "b": _setup_metrics()},
+        weights={"a": 0.6, "b": 0.4},
+        conductor_results={},
+        product_type="consumer_hardware",
+    )
+
+    assert out.verdict == VERDICT_INSUFFICIENT
+    assert out.cluster_profiles == []
+    assert out.levers == []
+    assert out.meta["product_type_supported"] is True
+    assert out.meta["covered_clusters"] == 0
+    assert "No per-cluster SetupFirstUseArchitect metrics" in out.recommendations[0]
+
+
+def test_unsupported_product_type_ignores_stray_metrics() -> None:
+    """An unsupported (non-hardware) product type must always return
+    INSUFFICIENT_DATA, even if a mismatched caller supplies
+    SetupFirstUseArchitect metrics: the support flag is product-type
+    driven and stray metrics must not manufacture a FAST read for a run
+    whose stack does not include SetupFirstUseArchitect."""
+    out = _build(
+        specs={"a": _setup_metrics(completion=0.95, ttfmu=3.5)},
+        weights={"a": 1.0},
+        product_type="saas",
+    )
+
+    assert out.verdict == VERDICT_INSUFFICIENT
+    assert out.cluster_profiles == []
+    assert out.levers == []
+    assert out.flags == []
+    assert out.meta["product_type_supported"] is False
+    assert out.meta["covered_clusters"] == 0
+    assert "does not use that stack" in out.recommendations[0]
 
 
 def test_saas_product_type_is_insufficient() -> None:

@@ -34,7 +34,12 @@ that, and ``INSUFFICIENT_DATA`` when no cluster has usable metrics.
 ``SetupFirstUseArchitect`` activates for consumer_hardware,
 health_hardware, iot_hardware, wearable and b2b_hardware stacks, so
 the read is supported for exactly those product types and reports
-``product_type_supported: false`` otherwise.
+``product_type_supported: false`` otherwise. The flag is derived from
+the run's product type alone, not from metric availability: a
+supported hardware run whose metrics are missing still reports
+``product_type_supported: true`` (with an explicit "no metrics"
+recommendation), and an unsupported run returns
+``INSUFFICIENT_DATA`` even if stray metrics are present.
 
 The covered market is the population weight of clusters with usable
 metrics and a positive population share; zero-weight clusters are
@@ -471,6 +476,49 @@ def build_setup_friction(
         product_type or payload.get("product_type_detected", "saas") or "saas"
     ).lower()
     registry: list[dict[str, Any]] = cluster_registry or []
+    product_type_supported = product_type_name in SUPPORTED_PRODUCT_TYPES
+
+    meta: dict[str, Any] = {
+        "signal_quality": signal_quality,
+        "total_clusters": len(registry),
+        "covered_clusters": 0,
+        "covered_weight": 0.0,
+        "primary_blocker_score": 0.0,
+        "product_type_supported": product_type_supported,
+        "requires_companion_app": requires_companion_app,
+        "supported_product_types": sorted(SUPPORTED_PRODUCT_TYPES),
+        "thresholds": {
+            "tier_seamless_index": TIER_SEAMLESS_INDEX,
+            "tier_rough_index": TIER_ROUGH_INDEX,
+            "tier_slow_index": TIER_SLOW_INDEX,
+            "verdict_fast_index": VERDICT_FAST_INDEX,
+            "verdict_acceptable_index": VERDICT_ACCEPTABLE_INDEX,
+            "verdict_slow_index": VERDICT_SLOW_INDEX,
+        },
+        "normalization": {
+            "ttfmu_min_minutes": TTFMU_MIN_MINUTES,
+            "ttfmu_scale_minutes": TTFMU_SCALE_MINUTES,
+            "firmware_tolerance_scale_min": FIRMWARE_TOLERANCE_SCALE_MIN,
+            "assembly_tolerance_scale": ASSEMBLY_TOLERANCE_SCALE,
+            "pairing_tolerance_scale": PAIRING_TOLERANCE_SCALE,
+        },
+    }
+
+    if not product_type_supported:
+        return SetupFrictionOut(
+            simulation_id=simulation_id,
+            project_id=project_id,
+            status=status,
+            product_type=product_type_name,
+            verdict=VERDICT_INSUFFICIENT,
+            recommendations=[
+                "SetupFirstUseArchitect only activates for "
+                "consumer_hardware, health_hardware, iot_hardware, "
+                "wearable and b2b_hardware product types — this run "
+                "does not use that stack."
+            ],
+            meta=meta,
+        )
 
     rows: list[dict[str, Any]] = []
     covered_weight = 0.0
@@ -571,38 +619,8 @@ def build_setup_friction(
                 ),
             }
         )
-
-    meta: dict[str, Any] = {
-        "signal_quality": signal_quality,
-        "total_clusters": len(registry),
-        "covered_clusters": len(rows),
-        "covered_weight": round(covered_weight, 4),
-        "primary_blocker_score": 0.0,
-        "product_type_supported": any(
-            _setup_metrics(
-                conductor_results,
-                str(entry.get("cluster_id", "")),
-            )
-            for entry in registry
-        ),
-        "requires_companion_app": requires_companion_app,
-        "supported_product_types": sorted(SUPPORTED_PRODUCT_TYPES),
-        "thresholds": {
-            "tier_seamless_index": TIER_SEAMLESS_INDEX,
-            "tier_rough_index": TIER_ROUGH_INDEX,
-            "tier_slow_index": TIER_SLOW_INDEX,
-            "verdict_fast_index": VERDICT_FAST_INDEX,
-            "verdict_acceptable_index": VERDICT_ACCEPTABLE_INDEX,
-            "verdict_slow_index": VERDICT_SLOW_INDEX,
-        },
-        "normalization": {
-            "ttfmu_min_minutes": TTFMU_MIN_MINUTES,
-            "ttfmu_scale_minutes": TTFMU_SCALE_MINUTES,
-            "firmware_tolerance_scale_min": FIRMWARE_TOLERANCE_SCALE_MIN,
-            "assembly_tolerance_scale": ASSEMBLY_TOLERANCE_SCALE,
-            "pairing_tolerance_scale": PAIRING_TOLERANCE_SCALE,
-        },
-    }
+    meta["covered_clusters"] = len(rows)
+    meta["covered_weight"] = round(covered_weight, 4)
 
     if not rows or covered_weight <= 0.0:
         return SetupFrictionOut(
@@ -612,15 +630,8 @@ def build_setup_friction(
             product_type=product_type_name,
             verdict=VERDICT_INSUFFICIENT,
             recommendations=[
-                (
-                    "SetupFirstUseArchitect only activates for "
-                    "consumer_hardware, health_hardware, iot_hardware, "
-                    "wearable and b2b_hardware product types — this run "
-                    "does not use that stack."
-                    if not meta["product_type_supported"]
-                    else "No per-cluster SetupFirstUseArchitect metrics "
-                    "were available for this run."
-                ),
+                "No per-cluster SetupFirstUseArchitect metrics "
+                "were available for this run."
             ],
             meta=meta,
         )
