@@ -30,6 +30,8 @@ Output shape
       ],
       "latest_predicted": float | None,
       "latest_actual": float | None,
+      "latest_revenue": float | None,
+      "latest_predicted_revenue": float | None,
       "latest_variance_pct": float | None,
       "mean_abs_variance_pct": float | None,
       "bias_direction": "OVER_PREDICTING" | "UNDER_PREDICTING" |
@@ -38,6 +40,7 @@ Output shape
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 
@@ -63,6 +66,30 @@ def _variance_pct(
     return round((actual - predicted) / abs(predicted) * 100.0, 2)
 
 
+def _sort_timestamp(recorded_at: Any) -> datetime | None:
+    """Coerce a row's timestamp to a naive UTC datetime for comparison.
+
+    Rows may be ISO strings or ``datetime`` objects (SQLAlchemy returns
+    timezone-aware datetimes from PostgreSQL). Mixing aware and naive
+    datetimes in a ``sorted`` key comparison raises ``TypeError``, so this
+    normalises both to naive UTC. Returns ``None`` for missing or malformed
+    timestamps.
+    """
+    if isinstance(recorded_at, datetime):
+        dt = recorded_at
+    elif isinstance(recorded_at, str) and recorded_at.strip():
+        try:
+            dt = datetime.fromisoformat(recorded_at)
+        except ValueError:
+            return None
+    else:
+        return None
+
+    if dt.tzinfo is None:
+        return dt
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 def build_outcome_tracker_timeline(
     rows: list[dict[str, Any]] | None,
     *,
@@ -83,11 +110,26 @@ def build_outcome_tracker_timeline(
         Dict matching the shape documented in the module docstring.
     """
     points: list[dict[str, Any]] = []
+    sort_keys: list[tuple[int, datetime]] = []
     variance_values: list[float] = []
     signed_variances: list[float] = []
-    latest: dict[str, Any] | None = None
 
     for raw in rows or []:
+        actual_conv = _safe_float(raw.get("actual_conversion_rate"))
+        pred_conv = _safe_float(raw.get("predicted_conversion_rate"))
+        stored_variance = _safe_float(raw.get("variance"))
+        # Backfill variance for legacy/manually inserted rows so the summary
+        # is still meaningful even when the stored column is NULL.
+        variance = stored_variance
+        if variance is None:
+            variance = _variance_pct(actual_conv, pred_conv)
+
+        raw_recorded_at = raw.get("recorded_at")
+        recorded_at_dt = (
+            _sort_timestamp(raw_recorded_at)
+            if raw_recorded_at is not None
+            else None
+        )
         point = {
             "id": int(raw.get("id") or 0),
             "project_id": int(raw.get("project_id") or project_id),
@@ -97,34 +139,45 @@ def build_outcome_tracker_timeline(
                 else None
             ),
             "recorded_at": (
-                raw["recorded_at"].isoformat()
-                if hasattr(raw.get("recorded_at"), "isoformat")
-                else raw.get("recorded_at")
+                raw_recorded_at.isoformat()
+                if hasattr(raw_recorded_at, "isoformat")
+                else raw_recorded_at
             ),
-            "actual_conversion_rate": _safe_float(
-                raw.get("actual_conversion_rate")
-            ),
+            "actual_conversion_rate": actual_conv,
             "actual_revenue": _safe_float(raw.get("actual_revenue")),
-            "predicted_conversion_rate": _safe_float(
-                raw.get("predicted_conversion_rate")
-            ),
+            "predicted_conversion_rate": pred_conv,
             "predicted_revenue": _safe_float(raw.get("predicted_revenue")),
-            "variance": _safe_float(raw.get("variance")),
+            "variance": variance,
             "notes": raw.get("notes"),
         }
         points.append(point)
-        if point["variance"] is not None:
-            variance_values.append(abs(point["variance"]))
-            signed_variances.append(point["variance"])
-        latest = point
+        if recorded_at_dt is None:
+            sort_keys.append((1, datetime.max.replace(tzinfo=None)))
+        else:
+            sort_keys.append((0, recorded_at_dt))
+        if variance is not None:
+            variance_values.append(abs(variance))
+            signed_variances.append(variance)
 
     # Sort ascending so the timeline reads oldest → newest. Rows without a
     # recorded_at stay at the end.
-    def _sort_key(p: dict[str, Any]) -> tuple[int, Any]:
-        return (0 if p["recorded_at"] is not None else 1, p["recorded_at"])
+    paired = sorted(zip(sort_keys, points), key=lambda pair: pair[0])
+    sort_keys = [pair[0] for pair in paired]
+    points = [pair[1] for pair in paired]
 
-    points.sort(key=_sort_key)
-    latest = points[-1] if points else None
+    # The latest point is the row with the newest non-null timestamp. A row
+    # with a NULL recorded_at must not become the "latest" just because it
+    # sorts last.
+    latest: dict[str, Any] | None = None
+    latest_sort_ts: datetime | None = None
+    for sort_key, point in zip(sort_keys, points):
+        if sort_key[0] != 0:
+            continue
+        # Stable tie-break: when two rows share the same timestamp, prefer
+        # the later row in sorted order (i.e. the most recently inserted).
+        if latest_sort_ts is None or sort_key[1] >= latest_sort_ts:
+            latest = point
+            latest_sort_ts = sort_key[1]
 
     mean_abs = (
         round(sum(variance_values) / len(variance_values), 2)
@@ -148,6 +201,8 @@ def build_outcome_tracker_timeline(
         "points": points,
         "latest_predicted": latest["predicted_conversion_rate"] if latest else None,
         "latest_actual": latest["actual_conversion_rate"] if latest else None,
+        "latest_revenue": latest["actual_revenue"] if latest else None,
+        "latest_predicted_revenue": latest["predicted_revenue"] if latest else None,
         "latest_variance_pct": latest["variance"] if latest else None,
         "mean_abs_variance_pct": mean_abs,
         "bias_direction": direction,

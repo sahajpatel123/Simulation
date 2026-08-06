@@ -67,6 +67,8 @@ class OutcomeTrackerTimelineOut(BaseModel):
     points: list[OutcomeTrackerPoint] = Field(default_factory=list)
     latest_predicted: float | None = None
     latest_actual: float | None = None
+    latest_revenue: float | None = None
+    latest_predicted_revenue: float | None = None
     latest_variance_pct: float | None = None
     mean_abs_variance_pct: float | None = None
     bias_direction: str = "INSUFFICIENT_DATA"

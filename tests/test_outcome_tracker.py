@@ -148,6 +148,104 @@ def test_helper_converts_datetime_to_iso() -> None:
     assert out["points"][0]["recorded_at"] == "2026-08-01T00:00:00+00:00"
 
 
+def test_helper_null_recorded_at_does_not_become_latest() -> None:
+    from app.simulation.outcome_tracker_read import (
+        build_outcome_tracker_timeline,
+    )
+
+    rows = [
+        _row(1, recorded_at="2026-08-01T00:00:00+00:00", actual=0.05),
+        _row(2, recorded_at=None, actual=0.99),
+        _row(3, recorded_at="2026-08-10T00:00:00+00:00", actual=0.06),
+    ]
+    out = build_outcome_tracker_timeline(rows, project_id=7)
+
+    assert [p["id"] for p in out["points"]] == [1, 3, 2]
+    assert out["latest_actual"] == 0.06
+    assert out["latest_variance_pct"] is None
+
+
+def test_helper_mixed_aware_and_naive_datetimes_sort_safely() -> None:
+    from app.simulation.outcome_tracker_read import (
+        build_outcome_tracker_timeline,
+    )
+
+    rows = [
+        _row(1, recorded_at=datetime(2026, 8, 1), actual=0.05),
+        _row(2, recorded_at="2026-08-02T00:00:00+05:30", actual=0.06),
+        _row(3, recorded_at=None, actual=0.07),
+    ]
+    out = build_outcome_tracker_timeline(rows, project_id=7)
+
+    assert [p["id"] for p in out["points"]] == [1, 2, 3]
+    assert out["latest_actual"] == 0.06
+
+
+def test_helper_malformed_recorded_at_does_not_crash() -> None:
+    from app.simulation.outcome_tracker_read import (
+        build_outcome_tracker_timeline,
+    )
+
+    rows = [
+        _row(1, recorded_at="not-a-timestamp", actual=0.05),
+        _row(2, recorded_at="2026-08-10T00:00:00+00:00", actual=0.06),
+    ]
+    out = build_outcome_tracker_timeline(rows, project_id=7)
+
+    assert [p["id"] for p in out["points"]] == [2, 1]
+    assert out["latest_actual"] == 0.06
+
+
+def test_helper_backfills_variance_when_stored_column_is_null() -> None:
+    from app.simulation.outcome_tracker_read import (
+        build_outcome_tracker_timeline,
+    )
+
+    rows = [
+        _row(1, actual=0.04, predicted=0.05, variance=None),
+        _row(2, actual=0.06, predicted=0.05, variance=None),
+    ]
+    out = build_outcome_tracker_timeline(rows, project_id=7)
+
+    assert out["points"][0]["variance"] == -20.0
+    assert out["points"][1]["variance"] == 20.0
+    assert out["mean_abs_variance_pct"] == 20.0
+    assert out["bias_direction"] == "BALANCED"
+
+
+def test_helper_revenue_only_latest_fields() -> None:
+    from app.simulation.outcome_tracker_read import (
+        build_outcome_tracker_timeline,
+    )
+
+    rows = [
+        _row(
+            1,
+            recorded_at="2026-08-01T00:00:00+00:00",
+            actual=None,
+            revenue=500.0,
+            predicted=None,
+            pred_rev=1000.0,
+            variance=None,
+        ),
+        _row(
+            2,
+            recorded_at="2026-08-02T00:00:00+00:00",
+            actual=None,
+            revenue=750.0,
+            predicted=None,
+            pred_rev=1000.0,
+            variance=None,
+        ),
+    ]
+    out = build_outcome_tracker_timeline(rows, project_id=7)
+
+    assert out["latest_revenue"] == 750.0
+    assert out["latest_predicted_revenue"] == 1000.0
+    assert out["latest_actual"] is None
+    assert out["latest_predicted"] is None
+
+
 # ---------------------------------------------------------------------------
 # Schemas
 # ---------------------------------------------------------------------------
