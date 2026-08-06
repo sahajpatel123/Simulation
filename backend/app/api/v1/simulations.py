@@ -98,6 +98,7 @@ from app.schemas.agent_routing import (
 )
 from app.schemas.cohort_retention import CohortRetentionOut
 from app.schemas.sensitivity import SensitivityOut
+from app.schemas.validation_roi import ValidationRoiOut
 from app.schemas.what_if import WhatIfOut, WhatIfRequest
 from app.simulation.agent_hierarchy import AgentHierarchyRouter
 from app.simulation.anomaly_detector import detect_simulation_anomalies
@@ -116,6 +117,7 @@ from app.simulation.market_sizing import (
     MIN_TARGET_MARKET_FRACTION,
     build_market_sizing,
 )
+from app.simulation.validation_roi import build_validation_roi
 from app.simulation.cluster_drill_down import (
     build_cluster_drill_down,
     normalise_outlier_threshold as normalise_drill_outlier,
@@ -3938,6 +3940,84 @@ def get_sensitivity_analysis(
         base_results=sim.results_json,
         env_params=env_params,
         existing_assumptions=assumptions,
+    )
+
+
+@router.get(
+    "/{simulation_id}/validation-roi",
+    response_model=ValidationRoiOut,
+    summary="Rank assumptions by expected value of validation (impact x uncertainty)",
+    responses=_JSON_200,
+)
+def get_validation_roi(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ValidationRoiOut:
+    """
+    Validation-ROI analysis from a completed simulation's results.
+
+    Sensitivity tells a founder *which assumption matters most*; validation
+    ROI adds the second axis — *how well is that assumption already backed by
+    evidence?* Each assumption is scored ``sensitivity x uncertainty`` and
+    ranked so the first experiment a founder runs de-risks the projection
+    the most.
+
+    Pure post-hoc analysis — no Celery dispatch, no LLM calls.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — validation-ROI analysis requires "
+                "completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    # Fetch environment params
+    environment = (
+        db.query(Environment)
+        .filter(Environment.id == sim.environment_id)
+        .first()
+    )
+    env_params: dict = {}
+    if environment:
+        env_params = {
+            "average_order_value": float(environment.average_order_value or 999.0),
+            "price_sensitivity": float(environment.price_sensitivity or 0.5),
+            "market_maturity": float(environment.market_maturity or 0.3),
+            "consumer_volume": int(environment.consumer_volume or 10000),
+            "growth_rate_per_month": float(environment.growth_rate_per_month or 5.0),
+        }
+
+    # Fetch existing assumptions for the project
+    assumptions = (
+        db.query(Assumption)
+        .filter(Assumption.project_id == sim.project_id, Assumption.is_hidden.is_(False))
+        .all()
+    )
+
+    return build_validation_roi(
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        base_results=sim.results_json,
+        env_params=env_params,
+        existing_assumptions=assumptions,
+        signal_quality=float(sim.signal_quality)
+        if sim.signal_quality is not None
+        else None,
     )
 
 
