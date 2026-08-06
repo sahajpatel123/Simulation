@@ -155,6 +155,47 @@ def test_insufficient_data_without_pricing_metrics() -> None:
     ]
 
 
+def test_zero_base_demand_is_overpriced_not_insufficient() -> None:
+    # Ceiling below the base price collapses base demand to zero, but the
+    # lowest probed point still converts — that is a pricing signal, so the
+    # read must be OVERPRICED with a concrete revenue-optimal price rather
+    # than INSUFFICIENT_DATA.
+    out = _build(specs={"low": (100.0, 0.9)}, weights={"low": 1.0})
+
+    assert out.verdict == "OVERPRICED"
+    assert out.revenue_optimal_price == round(AOV * 0.10, 2)
+    assert out.base_market_conversion == 0.0
+    assert out.base_market_revenue == 0.0
+    assert out.revenue_lift_vs_base_pct is None
+    assert out.recommended_price is None
+    assert out.meta["clusters_with_data"] == 1
+    assert any(
+        "zero" in r.lower() or "lower-priced" in r.lower()
+        for r in out.recommendations
+    )
+
+
+def test_no_demand_at_any_probed_price_stays_insufficient() -> None:
+    # Ceiling so low that even 0.10x AOV overshoots it: no positive revenue
+    # anywhere, so the verdict is INSUFFICIENT_DATA — but the explanation
+    # must not claim the pricing metrics are missing.
+    out = _build(specs={"low": (50.0, 0.9)}, weights={"low": 1.0})
+
+    assert out.verdict == "INSUFFICIENT_DATA"
+    assert out.revenue_optimal_price is None
+    assert out.revenue_at_optimal == 0.0
+    assert out.meta["clusters_with_data"] == 1
+    assert out.recommendations[0].startswith(
+        "No positive demand at any probed price point"
+    )
+
+
+def test_signal_quality_echoed_in_meta() -> None:
+    out = _build()
+
+    assert out.meta["signal_quality"] == 0.62
+
+
 def test_elasticity_is_elastic_for_tight_ceilings() -> None:
     out = _build(specs={"only": (AOV * 1.2, 0.9)}, weights={"only": 1.0})
     assert out.overall_elasticity is not None

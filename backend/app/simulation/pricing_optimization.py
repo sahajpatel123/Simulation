@@ -23,8 +23,9 @@ Answers the founder's "should I charge more or less?" question by turning the
 
 The verdict buckets the revenue-optimal price against the base price:
 ``UNDERPRICED`` (optimal >= 1.15x base), ``OVERPRICED`` (optimal <= 0.85x
-base), ``PRICE_OPTIMAL`` otherwise, ``INSUFFICIENT_DATA`` when no cluster
-has usable pricing metrics.
+base, including runs where demand at the base price is effectively zero),
+``PRICE_OPTIMAL`` otherwise, ``INSUFFICIENT_DATA`` when no cluster has
+usable pricing metrics or no probed price point yields positive revenue.
 
 No DB / I/O — verifiable without FastAPI or PostgreSQL. The route layer
 supplies ``results``, ``conductor_results`` (per-cluster architect metrics)
@@ -221,7 +222,8 @@ def build_pricing_optimization(
         simulation_id: Simulation primary key (echoed back).
         project_id: Owning project primary key (echoed back).
         status: Simulation status string.
-        signal_quality: Persisted signal quality (0..1), if any.
+        signal_quality: Persisted signal quality (0..1), if any (echoed
+            into ``meta.signal_quality`` so founders can weigh the read).
         conductor_results: Per-cluster architect output blocks
             (``{cluster_id: {architect: {"metrics": ...}}}``).
         cluster_registry: List of ``{cluster_id, name, population_weight}``.
@@ -310,8 +312,8 @@ def build_pricing_optimization(
 
     revenue_optimal_price: float | None = None
     revenue_at_optimal = 0.0
-    if curve and base_revenue > 0:
-        best_revenue = -1.0
+    if curve:
+        best_revenue = 0.0
         for point in curve:
             if point.market_revenue > best_revenue:
                 best_revenue = point.market_revenue
@@ -333,12 +335,7 @@ def build_pricing_optimization(
                 ((q_high - q_low) / q_avg) / p_delta_pct, 2
             )
 
-    if (
-        not price_points
-        or not usable
-        or revenue_optimal_price is None
-        or base_revenue <= 0
-    ):
+    if not price_points or not usable or revenue_optimal_price is None:
         verdict = VERDICT_INSUFFICIENT
     elif revenue_optimal_price >= aov * VERDICT_RAISE_THRESHOLD:
         verdict = VERDICT_UNDERPRICED
@@ -376,6 +373,7 @@ def build_pricing_optimization(
             revenue_optimal_price or aov, clusters
         ),
         at_ceiling_count=at_ceiling_count,
+        clusters_with_data=len(usable),
         total_clusters=len(clusters),
         top_at_ceiling_cluster=_top_at_ceiling_cluster(clusters),
     )
@@ -413,6 +411,11 @@ def build_pricing_optimization(
         key_signals=key_signals,
         meta={
             "cohort_size": COHORT_SIZE,
+            "signal_quality": (
+                round(signal_quality, 4)
+                if signal_quality is not None
+                else None
+            ),
             "total_clusters": len(clusters),
             "clusters_with_data": len(usable),
             "covered_weight": round(
@@ -454,10 +457,18 @@ def _build_recommendations(
     base_conversion: float,
     optimal_conversion: float,
     at_ceiling_count: int,
+    clusters_with_data: int,
     total_clusters: int,
     top_at_ceiling_cluster: ClusterPriceProfile | None,
 ) -> list[str]:
     if verdict == VERDICT_INSUFFICIENT:
+        if clusters_with_data:
+            return [
+                "No positive demand at any probed price point — even the "
+                "lowest tested price sits above every cluster's "
+                "willingness-to-pay ceiling, so no revenue-optimal price "
+                "could be found."
+            ]
         return [
             "Not enough pricing signal in this run — pricing metrics are "
             "missing for every cluster, so no demand curve could be built."
@@ -466,20 +477,34 @@ def _build_recommendations(
     recommendations: list[str] = []
     assert revenue_optimal_price is not None
     if verdict == VERDICT_UNDERPRICED:
-        recommendations.append(
-            f"Raising price from {_fmt_price(aov)} to "
-            f"{_fmt_price(revenue_optimal_price)} could lift cohort revenue "
-            f"~{revenue_lift_pct:.1f}% while demand-weighted conversion "
-            f"moves from {base_conversion:.1%} to "
-            f"{optimal_conversion:.1%}."
-        )
+        if revenue_lift_pct is not None:
+            recommendations.append(
+                f"Raising price from {_fmt_price(aov)} to "
+                f"{_fmt_price(revenue_optimal_price)} could lift cohort "
+                f"revenue ~{revenue_lift_pct:.1f}% while demand-weighted "
+                f"conversion moves from {base_conversion:.1%} to "
+                f"{optimal_conversion:.1%}."
+            )
+        else:
+            recommendations.append(
+                f"Demand holds at {_fmt_price(revenue_optimal_price)} — "
+                "raising the price is worth testing."
+            )
     elif verdict == VERDICT_OVERPRICED:
-        recommendations.append(
-            f"Lowering price from {_fmt_price(aov)} toward "
-            f"{_fmt_price(revenue_optimal_price)} could add "
-            f"~{revenue_lift_pct:.1f}% cohort revenue — demand currently "
-            f"collapses before the base price is reached."
-        )
+        if revenue_lift_pct is not None:
+            recommendations.append(
+                f"Lowering price from {_fmt_price(aov)} toward "
+                f"{_fmt_price(revenue_optimal_price)} could add "
+                f"~{revenue_lift_pct:.1f}% cohort revenue — demand "
+                f"currently collapses before the base price is reached."
+            )
+        else:
+            recommendations.append(
+                f"Demand at the current price is effectively zero — the "
+                f"revenue-optimal price is "
+                f"{_fmt_price(revenue_optimal_price)}. Lower the price or "
+                "add a lower-priced tier."
+            )
     else:
         recommendations.append(
             "Current price is close to the revenue-optimal point — keep "
