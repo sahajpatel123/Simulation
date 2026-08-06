@@ -343,6 +343,94 @@ def test_demand_weighting_honors_conversion() -> None:
     assert out.unprofitable_share < 0.2
 
 
+def test_missing_price_ceiling_falls_back_to_aov_pricing() -> None:
+    # No willingness-to-pay data: clusters must be priced at list AOV rather
+    # than at $0, otherwise the whole read collapses to UNPROFITABLE.
+    registry = [_cluster("unpriced", "Unpriced", 1.0)]
+    conductor = _architect_blocks(
+        "unpriced",
+        price_ceiling=0.0,
+        will_pay=0.0,
+        day30=0.80,
+        day90=0.70,
+    )
+    out = _build(
+        _results({"unpriced": 0.10}),
+        registry=registry,
+        conductor=conductor,
+        average_order_value=999.0,
+    )
+    profile = out.cluster_profiles[0]
+    assert profile.effective_price == pytest.approx(999.0)
+    assert profile.price_ceiling == 0.0
+    assert profile.will_pay_probability == pytest.approx(1.0)
+    assert profile.ltv > 0.0
+    assert profile.verdict != VERDICT_UNPROFITABLE
+
+
+def test_zero_conversion_cluster_drops_out_of_demand_blend() -> None:
+    # A cluster explicitly present in the breakdown at 0.0 conversion carries
+    # no demand and must not pull the blended read toward its population
+    # weight — otherwise a dead segment drags down healthy unit economics.
+    registry = [
+        _cluster("strong", "Strong", 0.5),
+        _cluster("weak", "Weak", 0.5),
+    ]
+    conductor = {
+        **_architect_blocks("strong", day30=0.85, day90=0.80),
+        **_architect_blocks("weak", day30=0.02, day90=0.002),
+    }
+    out = _build(
+        _results({"strong": 0.10, "weak": 0.0}),
+        registry=registry,
+        conductor=conductor,
+    )
+    weak = next(p for p in out.cluster_profiles if p.cluster_id == "weak")
+    strong = next(p for p in out.cluster_profiles if p.cluster_id == "strong")
+    assert weak.conversion_rate == 0.0
+    assert weak.demand_weight == 0.0
+    assert weak.ltv_cac_ratio < 1.0
+    assert out.unprofitable_share == 0.0
+    assert out.strong_share == pytest.approx(1.0)
+    assert out.blended_ltv_cac_ratio == pytest.approx(
+        strong.ltv_cac_ratio, abs=0.01
+    )
+
+
+def test_missing_breakdown_entry_falls_back_to_population_weight() -> None:
+    # Clusters absent from the breakdown still represent population, so they
+    # keep a population-weighted voice in the blend even when demand is
+    # unknown (as opposed to known-zero, see test above).
+    registry = [
+        _cluster("strong", "Strong", 0.5),
+        _cluster("weak", "Weak", 0.5),
+    ]
+    conductor = {
+        **_architect_blocks("strong", day30=0.85, day90=0.80),
+        **_architect_blocks("weak", day30=0.02, day90=0.002),
+    }
+    out = _build(
+        _results({"strong": 0.10}),  # "weak" has no breakdown entry
+        registry=registry,
+        conductor=conductor,
+    )
+    strong = next(p for p in out.cluster_profiles if p.cluster_id == "strong")
+    assert out.worst_cluster_id == "weak"
+    # The unlisted cluster still holds ~91% of blend weight, so its weak
+    # economics must drag the blended ratio well below the strong cluster's.
+    assert out.blended_ltv_cac_ratio < strong.ltv_cac_ratio
+    assert out.unprofitable_share > 0.5
+
+
+def test_breakdown_dict_with_null_conversion_rate_uses_conversion() -> None:
+    out = _build(
+        _results({"c1": {"conversion_rate": None, "conversion": 0.30}}),
+        registry=[_cluster("c1", "C1", 1.0)],
+        conductor=_basic_conductor([_cluster("c1", "C1", 1.0)]),
+    )
+    assert out.cluster_profiles[0].conversion_rate == pytest.approx(0.30)
+
+
 def test_cac_scenarios_scale_blended_ratio() -> None:
     out = _build(
         _results(),

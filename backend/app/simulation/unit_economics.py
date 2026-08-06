@@ -97,7 +97,9 @@ def _cluster_rate(raw: Any) -> float:
     if raw is None:
         return 0.0
     if isinstance(raw, dict):
-        rate = raw.get("conversion_rate", raw.get("conversion"))
+        rate = raw.get("conversion_rate")
+        if rate is None:
+            rate = raw.get("conversion")
     else:
         rate = raw
     return max(0.0, min(1.0, _safe_float(rate)))
@@ -323,13 +325,16 @@ def build_unit_economics(
         price_ceiling = max(0.0, _safe_float(pm.get("price_ceiling")))
         will_pay = _safe_float(pm.get("will_pay_probability"))
         if will_pay <= 0.0:
-            will_pay = (
-                max(0.0, min(1.0, price_ceiling / effective_aov))
-                if effective_aov > 0.0
-                else 0.0
-            )
+            if price_ceiling > 0.0 and effective_aov > 0.0:
+                will_pay = max(0.0, min(1.0, price_ceiling / effective_aov))
+            else:
+                # No willingness-to-pay data — fall back to list-price
+                # purchase (consistent with AOV pricing below).
+                will_pay = 1.0
         effective_price = (
-            min(effective_aov, price_ceiling) if price_ceiling > 0.0 else 0.0
+            min(effective_aov, price_ceiling)
+            if price_ceiling > 0.0
+            else effective_aov
         )
 
         day30 = max(0.0, min(1.0, _safe_float(rm.get("day30_survival"), 0.18)))
@@ -400,13 +405,15 @@ def build_unit_economics(
 
     # Demand weights: population weight x realised conversion, normalised so
     # the blended verdict reflects where demand actually is. Clusters with no
-    # breakdown entry fall back to population weight only.
-    raw_weights = {
-        p.cluster_id: (
-            p.demand_weight if p.demand_weight > 0.0 else p.population_weight
-        )
-        for p in profiles
-    }
+    # breakdown entry fall back to population weight only; clusters that are
+    # present in the breakdown but convert at 0.0 carry no demand and drop out
+    # of the blend entirely.
+    raw_weights: dict[str, float] = {}
+    for p in profiles:
+        if p.cluster_id in breakdown:
+            raw_weights[p.cluster_id] = p.demand_weight
+        else:
+            raw_weights[p.cluster_id] = p.population_weight
     total_weight = sum(raw_weights.values())
     if total_weight <= 0.0:
         weights = {p.cluster_id: 1.0 / len(profiles) for p in profiles}
