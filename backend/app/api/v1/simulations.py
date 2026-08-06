@@ -107,6 +107,7 @@ from app.schemas.support_friction import SupportFrictionOut
 from app.schemas.cultural_fit import CulturalFitOut
 from app.schemas.ecosystem_compatibility import EcosystemCompatibilityOut
 from app.schemas.setup_friction import SetupFrictionOut
+from app.schemas.after_sales import AfterSalesOut
 from app.schemas.retention_churn import RetentionChurnOut
 from app.schemas.distribution_channels import DistributionChannelsOut
 from app.schemas.market_timing import MarketTimingOut
@@ -143,6 +144,7 @@ from app.simulation.support_friction import build_support_friction
 from app.simulation.cultural_fit import build_cultural_fit
 from app.simulation.ecosystem_compatibility import build_ecosystem_compatibility
 from app.simulation.setup_friction import build_setup_friction
+from app.simulation.after_sales_read import build_after_sales_read
 from app.simulation.retention_churn_read import build_retention_churn
 from app.simulation.distribution_channels import build_distribution_channels
 from app.simulation.market_timing_read import build_market_timing
@@ -6514,3 +6516,147 @@ def get_market_sizing(
         ),
     )
     return MarketSizingOut(**payload)
+
+
+@router.get(
+    "/{simulation_id}/after-sales",
+    response_model=AfterSalesOut,
+    summary=(
+        "After-sales lifecycle: population-weighted post-purchase "
+        "health index, per-cluster after-sales risks, and levers"
+    ),
+    responses=_JSON_200,
+)
+def get_after_sales(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AfterSalesOut:
+    """
+    Deterministic after-sales lifecycle read from a completed run's
+    ``AftersalesLifecycleArchitect`` metrics:
+
+      * population-weighted after-sales index (support contact,
+        repeat-purchase loyalty, warranty claims, negative-review risk,
+        spare-parts concern, expected lifespan and accessory attach)
+      * per-cluster after-sales tiers (STRONG / OK / FRAGILE / AT_RISK)
+      * per-cluster primary after-sales risk with a market-level risk
+        distribution
+      * ranked post-purchase levers by the share of the covered market
+        they touch, plus risk flags and actionable recommendations
+
+    Pure post-hoc analytics — no Celery, no LLM, no DB writes. The
+    per-cluster metrics are recomputed deterministically from the
+    project's environment and assumptions so the read matches the run's
+    hardware stack. Supported for consumer_hardware, health_hardware,
+    iot_hardware, wearable and b2b_hardware product types.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — after-sales analysis "
+                "requires completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    environment = (
+        db.query(Environment)
+        .filter(Environment.id == sim.environment_id)
+        .first()
+    )
+    aov = 999.0
+    price_sensitivity = 0.5
+    market_maturity = 0.3
+    if environment:
+        aov = float(environment.average_order_value or 999.0)
+        price_sensitivity = float(environment.price_sensitivity or 0.5)
+        market_maturity = float(environment.market_maturity or 0.3)
+
+    # Feed the project's visible assumptions through so the recomputed
+    # run matches the actual simulation instead of defaulting to
+    # neutral signals.
+    assumptions = (
+        db.query(Assumption)
+        .filter(Assumption.project_id == sim.project_id, Assumption.is_hidden.is_(False))
+        .all()
+    )
+    assumption_dicts = [
+        {
+            "text": assumption.text,
+            "sensitivity": str(assumption.sensitivity or "MEDIUM"),
+            "impact_score": float(
+                assumption.impact_score
+                if assumption.impact_score is not None
+                else 5.0
+            ),
+        }
+        for assumption in assumptions
+    ]
+
+    product_type_name = str(
+        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
+    )
+    try:
+        product_type = ProductType(product_type_name)
+    except ValueError:
+        product_type = ProductType.SAAS
+    # Keep the read consistent with the stack actually recomputed below:
+    # an unknown persisted value falls back to the SAAS stack and read.
+    product_type_name = product_type.value
+
+    # Recompute the deterministic architect stack for this product type so
+    # per-cluster after-sales metrics are available even though regular
+    # simulation runs only persist aggregate results. No DB writes are
+    # performed (no session passed to run()).
+    conductor = Conductor()
+    cond_result = conductor.run(
+        agents=[],
+        env_params={
+            "average_order_value": aov,
+            "price_sensitivity": price_sensitivity,
+            "market_maturity": market_maturity,
+        },
+        assumptions=assumption_dicts,
+        product_type=product_type,
+    )
+    conductor_results = {
+        cid: {
+            name: {"metrics": output.metrics, "flags": output.flags}
+            for name, output in arch_outputs.items()
+        }
+        for cid, arch_outputs in cond_result.cluster_results.items()
+    }
+    registry = [
+        {
+            "cluster_id": cluster.cluster_id,
+            "name": cluster.name,
+            "population_weight": cluster.population_weight,
+        }
+        for cluster in _clusters_map.values()
+    ]
+
+    return build_after_sales_read(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        signal_quality=float(sim.signal_quality)
+        if sim.signal_quality is not None
+        else None,
+        conductor_results=conductor_results,
+        cluster_registry=registry,
+        product_type=product_type_name,
+    )
