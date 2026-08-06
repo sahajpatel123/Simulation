@@ -16,6 +16,8 @@ import time
 from pathlib import Path
 from unittest.mock import AsyncMock
 
+import redis
+
 from app.core import websocket as ws_module
 from app.core.progress_bridge import ProgressBridge
 
@@ -28,23 +30,21 @@ class _FakeWS:
         self.frames.append(text)
 
 
-class _StopLoop(Exception):
-    """Sentinel that makes the fake pubsub end the subscriber loop."""
-
-
 class _FakePubSub:
     def __init__(self, messages: list[dict]) -> None:
         self.messages = list(messages)
         self.subscribed_channel: str | None = None
         self.closed = False
+        self.get_message_calls = 0
 
     def subscribe(self, channel: str, **kwargs) -> None:
         self.subscribed_channel = channel
 
     def get_message(self, *args, **kwargs):
+        self.get_message_calls += 1
         if self.messages:
             return self.messages.pop(0)
-        raise _StopLoop()
+        return None
 
     def close(self) -> None:
         self.closed = True
@@ -53,16 +53,32 @@ class _FakePubSub:
 class _FakeRedis:
     def __init__(self, messages: list[dict] | None = None) -> None:
         self.pubsub_instance = _FakePubSub(messages or [])
+        self.pubsub_calls = 0
         self.published: list[tuple[str, str]] = []
         self.publish_calls = 0
 
     def pubsub(self) -> _FakePubSub:
+        self.pubsub_calls += 1
         return self.pubsub_instance
 
     def publish(self, channel: str, message: str) -> int:
         self.publish_calls += 1
         self.published.append((channel, message))
         return 1
+
+
+class _ReconnectingRedis:
+    """Redis that is down for the first connect, healthy afterwards."""
+
+    def __init__(self, messages: list[dict]) -> None:
+        self.working_pubsub = _FakePubSub(messages)
+        self.pubsub_calls = 0
+
+    def pubsub(self) -> _FakePubSub:
+        self.pubsub_calls += 1
+        if self.pubsub_calls == 1:
+            raise redis.exceptions.ConnectionError("redis down")
+        return self.working_pubsub
 
 
 class _FlakyRedis:
@@ -206,11 +222,22 @@ class TestSubscriberLoop:
             ]
         )
         bridge = ProgressBridge(client=fake, channel="thecee:simulation-progress")
+        delivered = asyncio.Event()
+
+        async def _deliver(sim_id: int, delivered_payload: dict) -> bool:
+            assert sim_id == 7
+            assert delivered_payload == payload
+            delivered.set()
+            return True
+
         send_mock = AsyncMock(return_value=True)
+        send_mock.side_effect = _deliver
         monkeypatch.setattr(ws_module.ws_manager, "send_update", send_mock)
 
         async def _drain() -> None:
             task = asyncio.create_task(bridge._run())
+            await asyncio.wait_for(delivered.wait(), timeout=5.0)
+            await bridge.stop()
             await asyncio.wait_for(task, timeout=5.0)
 
         asyncio.run(_drain())
@@ -218,7 +245,6 @@ class TestSubscriberLoop:
         send_mock.assert_awaited_once()
         sim_id, delivered = send_mock.await_args.args
         assert sim_id == 7
-        assert delivered == payload
         assert fake.pubsub_instance.subscribed_channel == "thecee:simulation-progress"
         assert fake.pubsub_instance.closed
         assert bridge.is_running() is False
@@ -234,17 +260,98 @@ class TestSubscriberLoop:
             ]
         )
         bridge = ProgressBridge(client=fake, channel="ch")
-        send_mock = AsyncMock(return_value=True)
+        delivered = asyncio.Event()
+
+        async def _deliver(sim_id: int, payload: dict) -> bool:
+            delivered.set()
+            return True
+
+        send_mock = AsyncMock(side_effect=_deliver)
         monkeypatch.setattr(ws_module.ws_manager, "send_update", send_mock)
 
         async def _drain() -> None:
             task = asyncio.create_task(bridge._run())
+            await asyncio.wait_for(delivered.wait(), timeout=5.0)
+            await bridge.stop()
             await asyncio.wait_for(task, timeout=5.0)
 
         asyncio.run(_drain())
 
         send_mock.assert_awaited_once()
         assert send_mock.await_args.args[0] == 3
+
+    def test_reconnects_after_connection_failure(self, monkeypatch) -> None:
+        """A dropped/absent Redis must not kill the subscriber permanently."""
+        from app.core import progress_bridge as pb_module
+
+        payload = _progress_payload(simulation_id=11, pct=60)
+        fake = _ReconnectingRedis(
+            messages=[
+                {
+                    "type": "message",
+                    "data": json.dumps(payload),
+                }
+            ]
+        )
+        bridge = ProgressBridge(client=fake, channel="ch")
+        monkeypatch.setattr(pb_module, "_RECONNECT_DELAY_SECONDS", 0.02)
+        delivered = asyncio.Event()
+
+        async def _deliver(sim_id: int, delivered_payload: dict) -> bool:
+            assert sim_id == 11
+            assert delivered_payload == payload
+            delivered.set()
+            return True
+
+        send_mock = AsyncMock(side_effect=_deliver)
+        monkeypatch.setattr(ws_module.ws_manager, "send_update", send_mock)
+
+        async def _drain() -> None:
+            task = asyncio.create_task(bridge._run())
+            await asyncio.wait_for(delivered.wait(), timeout=5.0)
+            await bridge.stop()
+            await asyncio.wait_for(task, timeout=5.0)
+
+        asyncio.run(_drain())
+
+        assert fake.pubsub_calls == 2
+        assert fake.working_pubsub.subscribed_channel == "ch"
+        send_mock.assert_awaited_once()
+        assert bridge.is_running() is False
+
+    def test_retries_until_stopped_when_redis_unavailable(self, monkeypatch) -> None:
+        """While Redis is down the loop stays alive and keeps retrying."""
+        from app.core import progress_bridge as pb_module
+
+        bridge = ProgressBridge(client=None, channel="ch")
+        monkeypatch.setattr(pb_module, "get_redis_client", lambda: None)
+        monkeypatch.setattr(pb_module, "_RECONNECT_DELAY_SECONDS", 0.01)
+
+        async def _drain() -> None:
+            task = asyncio.create_task(bridge._run())
+            await asyncio.sleep(0.05)
+            assert not task.done()
+            await bridge.stop()
+            await asyncio.wait_for(task, timeout=5.0)
+
+        asyncio.run(_drain())
+
+        assert bridge.is_running() is False
+
+    def test_exits_permanently_when_redis_not_configured(self, monkeypatch) -> None:
+        """No Redis configured means the bridge is disabled, not retrying."""
+        from app.core import progress_bridge as pb_module
+
+        bridge = ProgressBridge(client=None, channel="ch")
+        monkeypatch.setattr(pb_module, "get_redis_client", lambda: None)
+        monkeypatch.setattr(pb_module.settings, "REDIS_URL", "")
+
+        async def _drain() -> None:
+            await asyncio.wait_for(bridge._run(), timeout=5.0)
+
+        asyncio.run(_drain())
+
+        assert bridge.is_running() is False
 
 
 class TestWiring:
