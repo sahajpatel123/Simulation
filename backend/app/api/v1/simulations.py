@@ -99,6 +99,7 @@ from app.schemas.agent_routing import (
 from app.schemas.cohort_retention import CohortRetentionOut
 from app.schemas.sensitivity import SensitivityOut
 from app.schemas.pricing_optimization import PricingOptimizationOut
+from app.schemas.feature_prioritization import FeaturePrioritizationOut
 from app.schemas.simulation_quality import SimulationQualityOut
 from app.schemas.unit_economics import UnitEconomicsOut
 from app.schemas.validation_experiment import ValidationExperimentPlanOut
@@ -123,6 +124,7 @@ from app.simulation.market_sizing import (
     build_market_sizing,
 )
 from app.simulation.pricing_optimization import build_pricing_optimization
+from app.simulation.feature_prioritization import build_feature_prioritization
 from app.simulation.product_type import ProductType
 from app.simulation.unit_economics import build_unit_economics
 from app.simulation.validation_roi import build_validation_roi
@@ -4178,6 +4180,142 @@ def get_sensitivity_analysis(
         base_results=sim.results_json,
         env_params=env_params,
         existing_assumptions=assumptions,
+    )
+
+
+@router.get(
+    "/{simulation_id}/feature-prioritization",
+    response_model=FeaturePrioritizationOut,
+    summary=(
+        "Prioritize features by demand-weighted adoption, upside, and "
+        "founder brief alignment"
+    ),
+    responses=_JSON_200,
+)
+def get_feature_prioritization(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FeaturePrioritizationOut:
+    """
+    Deterministic feature-prioritization read from a completed run's
+    ``FeatureAdoptionArchitect`` metrics:
+
+      * nine modeled feature dimensions ranked by validated upside
+        (adoption^2 x unserved headroom, product-type strategic boosts)
+      * per-cluster feature-depth profiles (ADVANCED / MAINSTREAM /
+        LAGGING segments)
+      * the founder's declared brief features mapped onto the modeled
+        dimensions by keyword
+      * adoption-risk flags and actionable recommendations
+
+    Pure post-hoc analytics — no Celery, no LLM, no DB writes. Returns
+    ``INSUFFICIENT_DATA`` for product types whose conductor stack does not
+    model feature adoption (hardware, marketplace, d2c, ...).
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — feature prioritization "
+                "requires completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    environment = (
+        db.query(Environment)
+        .filter(Environment.id == sim.environment_id)
+        .first()
+    )
+    aov = 999.0
+    price_sensitivity = 0.5
+    market_maturity = 0.3
+    if environment:
+        aov = float(environment.average_order_value or 999.0)
+        price_sensitivity = float(environment.price_sensitivity or 0.5)
+        market_maturity = float(environment.market_maturity or 0.3)
+
+    product_type_name = str(
+        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
+    )
+    try:
+        product_type = ProductType(product_type_name)
+    except ValueError:
+        product_type = ProductType.SAAS
+
+    # Recompute the deterministic architect stack for this product type so
+    # per-cluster feature-adoption metrics are available even though regular
+    # simulation runs only persist aggregate results. No DB writes are
+    # performed (no session passed to run()).
+    conductor = Conductor()
+    cond_result = conductor.run(
+        agents=[],
+        env_params={
+            "average_order_value": aov,
+            "price_sensitivity": price_sensitivity,
+            "market_maturity": market_maturity,
+        },
+        assumptions=[],
+        product_type=product_type,
+    )
+    conductor_results = {
+        cid: {
+            name: {"metrics": output.metrics, "flags": output.flags}
+            for name, output in arch_outputs.items()
+        }
+        for cid, arch_outputs in cond_result.cluster_results.items()
+    }
+    registry = [
+        {
+            "cluster_id": cluster.cluster_id,
+            "name": cluster.name,
+            "population_weight": cluster.population_weight,
+        }
+        for cluster in _clusters_map.values()
+    ]
+
+    brief_features: list[str] = []
+    project = (
+        db.query(Project)
+        .filter(Project.id == sim.project_id)
+        .first()
+    )
+    if project is not None and project.brief_features_json:
+        try:
+            parsed = json.loads(project.brief_features_json)
+            if isinstance(parsed, list):
+                brief_features = [
+                    str(feature).strip()
+                    for feature in parsed
+                    if str(feature).strip()
+                ][:5]
+        except (ValueError, TypeError):
+            brief_features = []
+
+    return build_feature_prioritization(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        signal_quality=float(sim.signal_quality)
+        if sim.signal_quality is not None
+        else None,
+        conductor_results=conductor_results,
+        cluster_registry=registry,
+        product_type=product_type_name,
+        brief_features=brief_features,
     )
 
 
