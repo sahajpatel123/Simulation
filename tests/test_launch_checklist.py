@@ -113,6 +113,15 @@ def test_missing_funnel_is_skipped_not_failed() -> None:
     assert funnel.weight == 0.0
 
 
+def test_nan_or_inf_results_fail_hard() -> None:
+    out = _build(results=_results(population_weighted_conversion=float("nan")))
+
+    non_finite = next(item for item in out.items if item.id == "non_finite_free")
+    assert non_finite.status == "FAIL"
+    assert out.meta["non_finite_free"] is False
+    assert any("NaN/Inf" in rec for rec in out.recommendations)
+
+
 class _FakeSimulation:
     def __init__(
         self,

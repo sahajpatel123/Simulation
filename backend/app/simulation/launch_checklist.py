@@ -473,6 +473,33 @@ def build_launch_checklist(
             )
         )
 
+    # 8. NaN/Inf free.
+    non_finite_free = not _contains_non_finite(payload)
+    if non_finite_free:
+        items.append(
+            LaunchChecklistItem(
+                id="non_finite_free",
+                category="data",
+                label="Results free of NaN/Inf",
+                status=STATUS_PASS,
+                detail="Persisted results contain no NaN or infinite values.",
+                weight=0.5,
+                score=1.0,
+            )
+        )
+    else:
+        items.append(
+            LaunchChecklistItem(
+                id="non_finite_free",
+                category="data",
+                label="Results free of NaN/Inf",
+                status=STATUS_FAIL,
+                detail="Persisted results contain NaN or infinite values.",
+                weight=0.5,
+                score=0.0,
+            )
+        )
+
     summary = LaunchChecklistSummary()
     evaluated_weight = 0.0
     passed_weight = 0.0
@@ -538,10 +565,17 @@ def build_launch_checklist(
             "Cluster coverage is materially incomplete — re-run the "
             "simulation so the full consumer population is represented."
         )
+    if not non_finite_free:
+        recommendations.append(
+            "Persisted results contain NaN/Inf values — re-run or repair "
+            "the pipeline before treating any downstream projection as "
+            "launch-ready."
+        )
 
     meta: dict[str, Any] = {
         "expected_clusters": expected_count,
         "coverage": round(coverage, 4),
+        "non_finite_free": non_finite_free,
         "thresholds": {
             "ready": READY_THRESHOLD,
             "needs_work": NEEDS_WORK_THRESHOLD,
