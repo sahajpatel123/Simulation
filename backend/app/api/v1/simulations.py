@@ -98,11 +98,13 @@ from app.schemas.agent_routing import (
 )
 from app.schemas.cohort_retention import CohortRetentionOut
 from app.schemas.sensitivity import SensitivityOut
+from app.schemas.unit_economics import UnitEconomicsOut
 from app.schemas.validation_experiment import ValidationExperimentPlanOut
 from app.schemas.validation_roi import ValidationRoiOut
 from app.schemas.what_if import WhatIfOut, WhatIfRequest
 from app.simulation.agent_hierarchy import AgentHierarchyRouter
 from app.simulation.anomaly_detector import detect_simulation_anomalies
+from app.simulation.conductor import Conductor
 from app.simulation.sensitivity_matrix import compute_simulation_sensitivity_matrix
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.cluster_opportunity import build_cluster_opportunity_matrix
@@ -118,6 +120,8 @@ from app.simulation.market_sizing import (
     MIN_TARGET_MARKET_FRACTION,
     build_market_sizing,
 )
+from app.simulation.product_type import ProductType
+from app.simulation.unit_economics import build_unit_economics
 from app.simulation.validation_roi import build_validation_roi
 from app.simulation.validation_experiment_planner import build_validation_experiment_plan
 from app.simulation.cluster_drill_down import (
@@ -3872,6 +3876,122 @@ def get_market_concentration(
         else None,
         cluster_summaries=summaries or None,
         cluster_registry=registry,
+    )
+
+
+@router.get(
+    "/{simulation_id}/unit-economics",
+    response_model=UnitEconomicsOut,
+    summary="Unit economics: LTV, CAC, payback and margin health per consumer cluster",
+    responses=_JSON_200,
+)
+def get_unit_economics(
+    simulation_id: int,
+    gross_margin: float = Query(0.60, ge=0.0, le=1.0),
+    purchase_frequency_per_year: float = Query(12.0, ge=1.0),
+    assumed_cac: float = Query(0.0, ge=0.0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UnitEconomicsOut:
+    """
+    Build a per-customer economics read from completed results:
+
+      * effective price per cluster (AOV capped at willingness-to-pay ceiling)
+      * expected lifetime from the day-30/90 survival curve
+      * LTV, channel-scaled CAC, LTV:CAC and payback per cluster
+      * demand-weighted blended read, CAC affordability ceiling and verdicts
+
+    Pure deterministic analytics — no Celery, no LLM. Pass ``assumed_cac``
+    (your blended cost per acquired customer) to replace the derived default
+    of half an average order value.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — unit economics requires "
+                "completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    environment = (
+        db.query(Environment)
+        .filter(Environment.id == sim.environment_id)
+        .first()
+    )
+    aov = 999.0
+    price_sensitivity = 0.5
+    market_maturity = 0.3
+    if environment:
+        aov = float(environment.average_order_value or 999.0)
+        price_sensitivity = float(environment.price_sensitivity or 0.5)
+        market_maturity = float(environment.market_maturity or 0.3)
+
+    product_type_name = str(
+        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
+    )
+    try:
+        product_type = ProductType(product_type_name)
+    except ValueError:
+        product_type = ProductType.SAAS
+
+    # Recompute the deterministic architect stack for this product type so
+    # per-cluster price ceilings, survival curves and channel CAC multipliers
+    # are available even though regular simulation runs only persist aggregate
+    # results. No DB writes are performed (no session passed to run()).
+    conductor = Conductor()
+    cond_result = conductor.run(
+        agents=[],
+        env_params={
+            "average_order_value": aov,
+            "price_sensitivity": price_sensitivity,
+            "market_maturity": market_maturity,
+        },
+        assumptions=[],
+        product_type=product_type,
+    )
+    conductor_results = {
+        cid: {
+            name: {"metrics": output.metrics, "flags": output.flags}
+            for name, output in arch_outputs.items()
+        }
+        for cid, arch_outputs in cond_result.cluster_results.items()
+    }
+    registry = [
+        {
+            "cluster_id": cluster.cluster_id,
+            "name": cluster.name,
+            "population_weight": cluster.population_weight,
+        }
+        for cluster in _clusters_map.values()
+    ]
+
+    return build_unit_economics(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        signal_quality=float(sim.signal_quality)
+        if sim.signal_quality is not None
+        else None,
+        conductor_results=conductor_results,
+        cluster_registry=registry,
+        average_order_value=aov,
+        gross_margin=gross_margin,
+        purchase_frequency_per_year=purchase_frequency_per_year,
+        assumed_cac=assumed_cac,
     )
 
 
