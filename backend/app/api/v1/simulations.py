@@ -98,6 +98,7 @@ from app.schemas.agent_routing import (
 )
 from app.schemas.cohort_retention import CohortRetentionOut
 from app.schemas.sensitivity import SensitivityOut
+from app.schemas.validation_experiment import ValidationExperimentPlanOut
 from app.schemas.validation_roi import ValidationRoiOut
 from app.schemas.what_if import WhatIfOut, WhatIfRequest
 from app.simulation.agent_hierarchy import AgentHierarchyRouter
@@ -118,6 +119,7 @@ from app.simulation.market_sizing import (
     build_market_sizing,
 )
 from app.simulation.validation_roi import build_validation_roi
+from app.simulation.validation_experiment_planner import build_validation_experiment_plan
 from app.simulation.cluster_drill_down import (
     build_cluster_drill_down,
     normalise_outlier_threshold as normalise_drill_outlier,
@@ -4019,6 +4021,36 @@ def get_validation_roi(
         if sim.signal_quality is not None
         else None,
     )
+
+
+@router.get(
+    "/{simulation_id}/validation-experiment-plan",
+    response_model=ValidationExperimentPlanOut,
+    summary="Turn validation-ROI rankings into a concrete, sequenced validation sprint",
+    responses=_JSON_200,
+)
+def get_validation_experiment_plan(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ValidationExperimentPlanOut:
+    """
+    Concrete validation experiment plan from a completed simulation's results.
+
+    Composes the validation-ROI ranking (sensitivity x uncertainty) with a
+    deterministic experiment selector: for every validate-first / high-value
+    assumption the plan attaches a method, cost tier, duration, sample target,
+    success threshold and go/no-go rule, sequenced by ROI so the first test a
+    founder runs de-risks the projection the most.
+
+    Pure post-hoc analysis — no Celery dispatch, no LLM calls.
+    """
+    roi = get_validation_roi(
+        simulation_id=simulation_id,
+        db=db,
+        current_user=current_user,
+    )
+    return build_validation_experiment_plan(roi)
 
 
 @router.get(
