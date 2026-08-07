@@ -46,7 +46,9 @@ def compute_readiness(project: dict[str, Any]) -> dict[str, Any]:
     else:
         checks.append({"label": "outcome", "done": False})
 
-    return {"score": min(100, score), "checks": checks}
+    score = min(100, score)
+    level = "HIGH" if score >= 80 else "MEDIUM" if score >= 50 else "LOW"
+    return {"score": score, "level": level, "checks": checks}
 
 
 __all__ = ["compute_readiness"]

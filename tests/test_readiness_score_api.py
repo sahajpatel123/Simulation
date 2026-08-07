@@ -66,6 +66,7 @@ def test_get_readiness_score_returns_score() -> None:
     assert result["project_id"] == 10
     assert isinstance(result["score"], int)
     assert 0 <= result["score"] <= 100
+    assert result["level"] in {"LOW", "MEDIUM", "HIGH"}
     assert isinstance(result["checks"], list)
 
 

@@ -17,6 +17,7 @@ def test_compute_readiness_scores_complete_project() -> None:
     )
 
     assert result["score"] == 100
+    assert result["level"] == "HIGH"
     assert all(check["done"] for check in result["checks"])
 
 
@@ -33,4 +34,5 @@ def test_compute_readiness_scores_partial_project() -> None:
     )
 
     assert result["score"] == 10
+    assert result["level"] == "LOW"
     assert any(not check["done"] for check in result["checks"])

@@ -4587,6 +4587,7 @@ def get_readiness_score(
     return {
         "project_id": project.id,
         "score": readiness["score"],
+        "level": readiness["level"],
         "checks": readiness["checks"],
     }
 
