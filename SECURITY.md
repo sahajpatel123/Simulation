@@ -88,4 +88,11 @@ For security concerns, please contact the project maintainers.
 
 ## Changelog
 
+- 2026-08-07 - CI/CD security hardening: pinned all GitHub Actions to full version
+  tags, enabled CodeQL `security-and-quality` queries, fixed the gitleaks config
+  schema and added a gitleaks pre-commit hook plus a weekly full-history secret
+  scan, made Bandit/pip-audit/Safety fail when scanners cannot run, enforced
+  least-privilege workflow permissions, and added an env-file tracking guard.
+- 2026-08-07 - Added Dependabot update groups, CODEOWNERS coverage for security
+  config files, and documented the local security toolchain.
 - [VERSION] - Initial security policy
