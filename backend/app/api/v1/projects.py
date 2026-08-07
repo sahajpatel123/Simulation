@@ -121,6 +121,7 @@ from app.simulation.readings_export import readings_payload, readings_to_csv
 from app.simulation.precis_export import precis_to_csv
 from app.simulation.project_meta_export import project_meta_to_csv
 from app.simulation.landing_export import landing_to_csv
+from app.simulation.environment_export import environment_to_csv
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -3856,6 +3857,70 @@ def export_landing(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="landing-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/environment/export",
+    summary="Export a project's environment row as CSV",
+    response_class=StreamingResponse,
+)
+def export_environment(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's environment parameters."""
+    get_owned_project(db, current_user.id, project_id)
+
+    environment = (
+        db.query(Environment)
+        .filter(Environment.project_id == project_id)
+        .first()
+    )
+    row = {
+        "environment_id": environment.id if environment else None,
+        "project_id": project_id,
+        "mode": environment.mode if environment else None,
+        "consumer_volume": environment.consumer_volume if environment else None,
+        "growth_rate_per_month": (
+            environment.growth_rate_per_month if environment else None
+        ),
+        "average_order_value": (
+            environment.average_order_value if environment else None
+        ),
+        "price_sensitivity": (
+            environment.price_sensitivity if environment else None
+        ),
+        "market_maturity": (
+            environment.market_maturity if environment else None
+        ),
+        "scenario_type": environment.scenario_type if environment else None,
+        "manual_params_json": (
+            environment.manual_params_json if environment else None
+        ),
+        "trend_data_json": (
+            environment.trend_data_json if environment else None
+        ),
+    }
+    csv_text = environment_to_csv(
+        row,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="environment-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },
