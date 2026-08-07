@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.v1.common import get_owned_project
@@ -56,6 +59,7 @@ from app.schemas.decision import (
     DecisionStatusOut,
     ScenarioResult,
 )
+from app.simulation.decisions_export import decisions_to_csv
 from app.simulation.decision_digest import build_decision_digest
 from app.tasks.decision_tasks import run_decision_comparison
 
@@ -338,6 +342,50 @@ def list_decisions(
         )
         for decision in decisions
     ]
+
+
+@router.get(
+    "/{project_id}/decisions/export",
+    summary="Export a project's decisions as CSV",
+    response_class=StreamingResponse,
+)
+def export_decisions(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's decision comparisons."""
+    get_owned_project(db, current_user.id, project_id)
+
+    decisions = (
+        db.query(Decision)
+        .filter(Decision.project_id == project_id)
+        .order_by(Decision.created_at.desc())
+        .all()
+    )
+    rows = [
+        {
+            "id": decision.id,
+            "project_id": decision.project_id,
+            "title": decision.title,
+            "status": decision.status,
+            "task_id": decision.task_id,
+            "result": decision.results_json,
+        }
+        for decision in decisions
+    ]
+    csv_text = decisions_to_csv(rows)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="decisions-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
 
 
 @router.get(
