@@ -24,10 +24,20 @@ def _text(value: Any) -> str:
     return str(value)
 
 
-def decisions_to_csv(decisions: list[dict[str, Any]]) -> str:
+def decisions_to_csv(
+    decisions: list[dict[str, Any]],
+    metadata: dict[str, Any] | None = None,
+) -> str:
     """Render decision dicts as a single CSV table."""
     buffer = io.StringIO()
     writer = csv.writer(buffer, lineterminator="\n")
+
+    if metadata:
+        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
+        writer.writerow(["user_id", _text(metadata.get("user_id"))])
+        writer.writerow(["format_version", _text(metadata.get("format_version", "1"))])
+        writer.writerow([])
+
     writer.writerow(
         [
             "id",

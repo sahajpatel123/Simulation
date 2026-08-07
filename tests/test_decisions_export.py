@@ -16,11 +16,14 @@ def test_decisions_to_csv_contains_header_and_rows() -> None:
                 "created_at": "2026-08-07T20:00:00+00:00",
                 "result": {"winner": "tier_b"},
             }
-        ]
+        ],
+        metadata={"generated_at": "now", "user_id": 42},
     )
 
     assert "id,project_id,title,status,task_id,created_at,result_json" in csv_text
     assert "1,10,Pricing Tiers,COMPLETED,abc,2026-08-07T20:00:00+00:00" in csv_text
+    assert "generated_at,now" in csv_text
+    assert "user_id,42" in csv_text
     assert "winner" in csv_text
     assert "tier_b" in csv_text
 

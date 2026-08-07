@@ -408,7 +408,14 @@ def export_decisions(
             },
         )
 
-    csv_text = decisions_to_csv(rows)
+    csv_text = decisions_to_csv(
+        rows,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
     body = csv_text.encode("utf-8")
     return StreamingResponse(
         iter([body]),

@@ -96,6 +96,8 @@ def test_export_decisions_returns_csv() -> None:
     body = _body(resp).decode("utf-8")
     assert "id,project_id,title,status,task_id,created_at,result_json" in body
     assert "1,10,Pricing Tiers,COMPLETED,abc,2026-08-07T20:00:00+00:00" in body
+    assert "user_id,42" in body
+    assert "format_version,1" in body
 
 
 def test_export_decisions_format_json_returns_payload() -> None:
