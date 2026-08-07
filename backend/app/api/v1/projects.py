@@ -101,6 +101,7 @@ from app.schemas.accountability import (
 from app.schemas.reweighting import ReweightingPreviewOut
 from app.schemas.simulation_trend import SimulationTrendOut
 from app.simulation.project_simulations_export import simulations_to_csv
+from app.simulation.assumptions_export import assumptions_to_csv
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -1427,6 +1428,59 @@ def get_assumptions(
         assumptions=[AssumptionOut.model_validate(a) for a in assumptions],
         total=len(assumptions),
         hidden_count=hidden_count,
+    )
+
+
+@router.get(
+    "/{project_id}/assumptions/export",
+    summary="Export a project's assumptions as CSV",
+    response_class=StreamingResponse,
+)
+def export_assumptions(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's assumption rows."""
+    get_owned_project(db, current_user.id, project_id)
+
+    assumptions = (
+        db.query(Assumption)
+        .filter(Assumption.project_id == project_id)
+        .order_by(Assumption.impact_score.desc())
+        .all()
+    )
+    rows = [
+        {
+            "id": assumption.id,
+            "project_id": assumption.project_id,
+            "text": assumption.text,
+            "category": assumption.category,
+            "sensitivity": assumption.sensitivity,
+            "impact_score": assumption.impact_score,
+            "is_hidden": assumption.is_hidden,
+            "created_at": assumption.created_at,
+        }
+        for assumption in assumptions
+    ]
+    csv_text = assumptions_to_csv(
+        rows,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="assumptions-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
     )
 
 
