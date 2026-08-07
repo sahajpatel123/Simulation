@@ -449,8 +449,20 @@ def build_after_sales_read(
     registry: list[dict[str, Any]] = cluster_registry or []
     product_type_supported = product_type_name in SUPPORTED_PRODUCT_TYPES
 
+    clean_signal_quality: float | None = None
+    if signal_quality is not None:
+        try:
+            parsed_signal_quality = float(signal_quality)
+            clean_signal_quality = (
+                parsed_signal_quality
+                if math.isfinite(parsed_signal_quality)
+                else None
+            )
+        except (TypeError, ValueError, OverflowError):
+            clean_signal_quality = None
+
     meta: dict[str, Any] = {
-        "signal_quality": signal_quality,
+        "signal_quality": clean_signal_quality,
         "visible_assumptions": visible_assumption_count,
         "total_clusters": len(registry),
         "covered_clusters": 0,
@@ -855,10 +867,10 @@ def build_after_sales_read(
             "market AT_RISK) — treat post-purchase experience as part "
             "of the core product."
         )
-    if signal_quality is not None and signal_quality < 0.4:
+    if clean_signal_quality is not None and clean_signal_quality < 0.4:
         recommendations.append(
             f"Overall simulation signal quality is low "
-            f"({signal_quality:.2f}) — treat the after-sales index and "
+            f"({clean_signal_quality:.2f}) — treat the after-sales index and "
             "levers as a model estimate, not a measured outcome, and "
             "validate support load and repurchase intent with real "
             "post-launch data."

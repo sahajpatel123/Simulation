@@ -144,6 +144,20 @@ def test_low_signal_quality_adds_caveat_and_meta() -> None:
     assert any("No visible project assumptions" in rec for rec in out.recommendations)
 
 
+def test_non_finite_signal_quality_is_stripped_from_meta() -> None:
+    out = _build(
+        signal_quality=float("nan"),
+        visible_assumptions=1,
+        specs={
+            "a": _metrics(),
+            "b": _metrics(),
+        },
+    )
+
+    assert out.meta["signal_quality"] is None
+    assert not any("signal quality is low" in rec for rec in out.recommendations)
+
+
 def test_visible_assumption_count_is_echoed() -> None:
     out = _build(
         visible_assumptions=4,

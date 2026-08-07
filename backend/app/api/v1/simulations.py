@@ -6660,14 +6660,20 @@ def get_after_sales(
         for cluster in _clusters_map.values()
     ]
 
+    raw_signal_quality = sim.signal_quality
+    clean_signal_quality: float | None = None
+    if raw_signal_quality is not None:
+        try:
+            clean_signal_quality = float(raw_signal_quality)
+        except (TypeError, ValueError, OverflowError):
+            clean_signal_quality = None
+
     return build_after_sales_read(
         sim.results_json,
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=clean_signal_quality,
         visible_assumption_count=len(assumptions),
         conductor_results=conductor_results,
         cluster_registry=registry,

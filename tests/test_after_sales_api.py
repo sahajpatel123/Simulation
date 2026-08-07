@@ -96,13 +96,14 @@ class _FakeSimulation:
         status: str = "COMPLETED",
         results: dict | None = None,
         error_message: str | None = None,
+        signal_quality: float | str | None = 0.62,
     ) -> None:
         self.id = sim_id
         self.project_id = 10
         self.environment_id = 5
         self.status = status
         self.error_message = error_message
-        self.signal_quality = 0.62
+        self.signal_quality = signal_quality
         self.results_json = (
             results
             if results is not None
@@ -220,6 +221,18 @@ def test_hardware_product_type_is_supported(
     assert out.product_type == "iot_hardware"
     assert out.verdict != "INSUFFICIENT_DATA"
     assert out.meta["product_type_supported"] is True
+
+
+def test_malformed_signal_quality_route_still_returns_safe_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = _FakeSession(
+        sim=_FakeSimulation(signal_quality="not-a-number")
+    )
+    out = _call_route(session=session, monkeypatch=monkeypatch)
+
+    assert out.meta["signal_quality"] is None
+    assert not any("signal quality is low" in rec for rec in out.recommendations)
 
 
 def test_failed_simulation_raises_422(
