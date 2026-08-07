@@ -88,8 +88,8 @@ def test_export_decisions_returns_csv() -> None:
     assert resp.media_type == "text/csv; charset=utf-8"
     assert 'filename="decisions-10.csv"' in resp.headers["Content-Disposition"]
     body = _body(resp).decode("utf-8")
-    assert "id,project_id,title,status,task_id,result_json" in body
-    assert "1,10,Pricing Tiers,COMPLETED,abc" in body
+    assert "id,project_id,title,status,task_id,created_at,result_json" in body
+    assert "1,10,Pricing Tiers,COMPLETED,abc,2026-08-07T20:00:00+00:00" in body
 
 
 def test_export_decisions_empty_project_returns_header_only() -> None:
@@ -97,7 +97,7 @@ def test_export_decisions_empty_project_returns_header_only() -> None:
     resp = _call_route(session=session)
 
     body = _body(resp).decode("utf-8")
-    assert "id,project_id,title,status,task_id,result_json" in body
+    assert "id,project_id,title,status,task_id,created_at,result_json" in body
     assert "1,10,Pricing Tiers" not in body
 
 
