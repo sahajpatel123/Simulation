@@ -125,6 +125,7 @@ from app.simulation.environment_export import environment_to_csv
 from app.simulation.description_export import description_to_csv
 from app.simulation.tag_suggestions import suggest_tags
 from app.simulation.dossier_axis_export import dossier_axis_to_csv
+from app.simulation.similar_projects import find_similar_projects
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -933,6 +934,43 @@ def get_tag_suggestions(
     return {
         "project_id": project.id,
         "tags": tags,
+    }
+
+
+@router.get(
+    "/{project_id}/similar-projects",
+    summary="Find other owned projects sharing tags with this project",
+    responses=_JSON_200,
+)
+def get_similar_projects(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, object]:
+    """Return the current user's other projects that share tags."""
+    project = get_owned_project(db, current_user.id, project_id)
+    candidates = (
+        db.query(Project)
+        .filter(Project.user_id == current_user.id)
+        .order_by(Project.created_at.desc())
+        .all()
+    )
+    candidate_rows = [
+        {
+            "id": candidate.id,
+            "title": candidate.title,
+            "tags": list(candidate.tags or []),
+        }
+        for candidate in candidates
+    ]
+    project_row = {
+        "id": project.id,
+        "title": project.title,
+        "tags": list(project.tags or []),
+    }
+    return {
+        "project_id": project.id,
+        "similar": find_similar_projects(project_row, candidate_rows),
     }
 
 
