@@ -122,6 +122,7 @@ from app.simulation.precis_export import precis_to_csv
 from app.simulation.project_meta_export import project_meta_to_csv
 from app.simulation.landing_export import landing_to_csv
 from app.simulation.environment_export import environment_to_csv
+from app.simulation.description_export import description_to_csv
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -3953,6 +3954,44 @@ def export_environment(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="environment-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/description/export",
+    summary="Export a project's description as CSV",
+    response_class=StreamingResponse,
+)
+def export_description(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's description field."""
+    project = get_owned_project(db, current_user.id, project_id)
+
+    row = {
+        "project_id": project.id,
+        "description": project.description,
+    }
+    csv_text = description_to_csv(
+        row,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="description-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },
