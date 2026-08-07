@@ -50,6 +50,23 @@ def _value(value: Any) -> object:
     return "" if value is None else value
 
 
+def _safe_csv_cell(value: object) -> object:
+    """Neutralise spreadsheet formula injection while leaving normal data intact.
+
+    Cells that begin with ``=``, ``+``, ``-``, ``@``, tab, or carriage return
+    are prefixed with a single quote so Excel, LibreOffice, and Google Sheets
+    treat them as literal text rather than executable formulas.
+    """
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return f"'{value}"
+    return value
+
+
+def _write_row(writer: Any, row: list[object]) -> None:
+    """Write a CSV row with formula-injection guard applied to every cell."""
+    writer.writerow([_safe_csv_cell(value) for value in row])
+
+
 def _join_list(value: Any) -> str:
     if value is None:
         return ""
@@ -68,13 +85,13 @@ def sensitivity_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     for key, value in _metadata_rows(metadata):
-        writer.writerow([key, value])
+        _write_row(writer, [key, value])
     if metadata:
-        writer.writerow([])
+        _write_row(writer, [])
 
     # Summary section.
-    writer.writerow(["section", "Sensitivity Summary"])
-    writer.writerow(["key", "value"])
+    _write_row(writer, ["section", "Sensitivity Summary"])
+    _write_row(writer, ["key", "value"])
     summary_keys = (
         "simulation_id",
         "project_id",
@@ -113,12 +130,13 @@ def sensitivity_to_csv(
         "avg_sensitivity_score": summary.get("avg_sensitivity_score"),
     }
     for key in summary_keys:
-        writer.writerow([key, _value(summary_values.get(key))])
-    writer.writerow([])
+        _write_row(writer, [key, _value(summary_values.get(key))])
+    _write_row(writer, [])
 
     # Assumption rows.
-    writer.writerow(["section", "Assumption Sensitivity"])
-    writer.writerow(
+    _write_row(writer, ["section", "Assumption Sensitivity"])
+    _write_row(
+        writer,
         [
             "assumption_text",
             "sensitivity",
@@ -149,18 +167,18 @@ def sensitivity_to_csv(
             continue
         values = [assumption.get(key) for key in assumption_keys]
         values[-2] = _join_list(values[-2])
-        writer.writerow([_value(value) for value in values])
-    writer.writerow([])
+        _write_row(writer, [_value(value) for value in values])
+    _write_row(writer, [])
 
     # Recommendations.
-    writer.writerow(["section", "Recommendations"])
-    writer.writerow(["recommendation"])
+    _write_row(writer, ["section", "Recommendations"])
+    _write_row(writer, ["recommendation"])
     recommendations = data.get("recommendations") or []
     if recommendations:
         for recommendation in recommendations:
-            writer.writerow([recommendation])
+            _write_row(writer, [recommendation])
     else:
-        writer.writerow([""])
+        _write_row(writer, [""])
 
     return buffer.getvalue()
 

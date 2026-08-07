@@ -127,6 +127,87 @@ def test_csv_handles_missing_optional_blocks() -> None:
     assert "section,Recommendations" in csv_text
 
 
+def test_csv_neutralizes_spreadsheet_formula_injection() -> None:
+    payload = SensitivityOut(
+        simulation_id=1,
+        project_id=2,
+        status="COMPLETED",
+        baseline_conversion=0.031,
+        baseline_revenue_per_1000=30.97,
+        summary=SensitivitySummary(
+            total_assumptions=1,
+            baseline_conversion=0.031,
+            most_sensitive_assumption='=HYPERLINK("http://evil")',
+            most_sensitive_score=0.42,
+            critical_assumptions=1,
+            high_assumptions=0,
+            medium_assumptions=0,
+            low_assumptions=0,
+            avg_sensitivity_score=0.42,
+        ),
+        assumptions=[
+            AssumptionSensitivity(
+                assumption_text="+1+1",
+                sensitivity="HIGH",
+                baseline_impact_score=7.0,
+                baseline_conversion=0.031,
+                max_delta=-0.013,
+                sensitivity_score=0.42,
+                sensitivity_tier="CRITICAL",
+                curve=[],
+                triggers_markov_rules=True,
+                affected_transitions=["=cmd"],
+                recommendation="@SUM(A1:A2)",
+            )
+        ],
+        recommendations=["-2+3", "All assumptions validated."],
+    )
+    csv_text = sensitivity_to_csv(
+        payload,
+        metadata={
+            "generated_at": "=NOW()",
+            "user_id": 42,
+            "format_version": "1",
+            "simulation_id": 1,
+            "project_id": 2,
+        },
+    )
+
+    assert "'=HYPERLINK" in csv_text
+    assert "'+1+1," in csv_text
+    assert "'=cmd" in csv_text
+    assert "'@SUM(A1:A2)" in csv_text
+    assert "'-2+3" in csv_text
+    assert "'=NOW()" in csv_text
+    assert "All assumptions validated." in csv_text
+
+
+def test_json_does_not_escape_formula_like_text() -> None:
+    json_text = sensitivity_to_json(
+        {
+            "simulation_id": 1,
+            "project_id": 2,
+            "summary": {
+                "most_sensitive_assumption": '=HYPERLINK("http://evil")'
+            },
+            "assumptions": [
+                {
+                    "assumption_text": "+1+1",
+                    "recommendation": "@SUM(A1:A2)",
+                }
+            ],
+            "recommendations": ["-2+3"],
+        },
+        metadata={"generated_at": "=NOW()"},
+    )
+
+    assert '"generated_at": "=NOW()"' in json_text
+    assert '"most_sensitive_assumption": "=HYPERLINK(\\"http://evil\\")"' in json_text
+    assert '"assumption_text": "+1+1"' in json_text
+    assert '"recommendation": "@SUM(A1:A2)"' in json_text
+    assert '"-2+3"' in json_text
+
+
 def test_json_renders_metadata_and_payload() -> None:
     json_text = sensitivity_to_json(
         _payload(),
