@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import time
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -70,6 +71,7 @@ from app.schemas.simulation import (
     ClusterOverlapMatrixOut,
     ClusterTrendOut,
     ClustersAggregateOut,
+    DatabaseHealthOut,
     FindingsAggregateOut,
     FindingsTrendOut,
     OutcomesDigestOut,
@@ -540,6 +542,7 @@ def worker_health():
 @router.get(
     "/db-health",
     summary="Probe database connectivity with SELECT 1",
+    response_model=DatabaseHealthOut,
     responses={
         200: {"description": "Database is reachable"},
         503: {"description": "Database is unreachable"},
@@ -547,16 +550,23 @@ def worker_health():
 )
 def db_health(
     db: Session = Depends(get_db),
-) -> dict[str, str]:
+) -> DatabaseHealthOut:
     """Health probe for the PostgreSQL connection used by the API."""
+    started = time.perf_counter()
     try:
         db.execute(text("SELECT 1"))
-    except Exception as exc:  # pragma: no cover - depends on live DB state
+    except Exception as exc:
+        logger.exception("Database health probe failed")
         raise HTTPException(
             status_code=503,
-            detail=f"Database unreachable: {exc}",
+            detail="Database unreachable",
         ) from exc
-    return {"database": "reachable"}
+    latency_ms = (time.perf_counter() - started) * 1000.0
+    return DatabaseHealthOut(
+        database="reachable",
+        latency_ms=round(max(0.0, latency_ms), 3),
+        checked_at=datetime.now(timezone.utc).isoformat(),
+    )
 
 
 @router.get(
