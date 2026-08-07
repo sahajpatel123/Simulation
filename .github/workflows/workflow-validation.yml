@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -50,7 +50,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -80,7 +80,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -109,7 +109,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -157,7 +157,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -174,7 +174,7 @@ jobs:
                       ref = step.get('uses') or ''
                       if not ref:
                           continue
-                      if ref == 'actions/checkout@v6.0.2' and 'persist-credentials' not in step.get('with', {}):
+                      if ref == 'actions/checkout@v7.0.1' and 'persist-credentials' not in step.get('with', {}):
                           errors.append(
                               f'{f} step {i}: checkout must set persist-credentials: false'
                           )
