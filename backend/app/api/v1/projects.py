@@ -2821,6 +2821,15 @@ def get_interventions(
 )
 def export_interventions(
     project_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "intervention rows."
+        ),
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
@@ -2834,6 +2843,29 @@ def export_interventions(
             row = dict(item)
             row["list_type"] = list_type
             rows.append(row)
+
+    fmt = format.strip().lower() if format else "csv"
+    if fmt == "json":
+        json_text = json.dumps(
+            {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "project_id": project_id,
+                "interventions": rows,
+            },
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="interventions-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
 
     csv_text = interventions_to_csv(
         rows,
