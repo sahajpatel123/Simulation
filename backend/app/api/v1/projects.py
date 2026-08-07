@@ -133,6 +133,7 @@ from app.simulation.created_at_export import created_at_to_csv
 from app.simulation.status_export import status_to_csv
 from app.simulation.duplicate_title import find_duplicate_titles
 from app.simulation.readiness_score import compute_readiness
+from app.simulation.landing_url_export import landing_url_to_csv
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -4590,6 +4591,44 @@ def get_readiness_score(
         "level": readiness["level"],
         "checks": readiness["checks"],
     }
+
+
+@router.get(
+    "/{project_id}/landing-page-url/export",
+    summary="Export a project's landing page URL as CSV",
+    response_class=StreamingResponse,
+)
+def export_landing_url(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's landing page URL field."""
+    project = get_owned_project(db, current_user.id, project_id)
+
+    row = {
+        "project_id": project.id,
+        "landing_page_url": getattr(project, "landing_page_url", None),
+    }
+    csv_text = landing_url_to_csv(
+        row,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="landing-page-url-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
 
 
 @router.post(
