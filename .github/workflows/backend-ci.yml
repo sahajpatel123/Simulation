@@ -93,7 +93,7 @@ jobs:
           pytest tests/ -v --maxfail=5 --tb=short --cov=app --cov-report=term-missing --cov-fail-under=0
 
       - name: Upload test coverage
-        uses: actions/upload-artifact@v5.0.0
+        uses: actions/upload-artifact@v7.0.1
         if: always()
         with:
           name: test-coverage-report
