@@ -104,7 +104,8 @@ jobs:
           if [ -f "SECURITY.md" ]; then
             echo "✅ SECURITY.md exists"
           else
-            echo "⚠️ SECURITY.md not found"
+            echo "::error::SECURITY.md not found"
+            exit 1
           fi
 
       - name: Check for security issue template
@@ -112,7 +113,8 @@ jobs:
           if [ -f ".github/ISSUE_TEMPLATE/security_report.md" ]; then
             echo "✅ Security issue template exists"
           else
-            echo "⚠️ Security issue template not found"
+            echo "::error::Security issue template not found"
+            exit 1
           fi
 
       - name: Validate dependabot configuration
@@ -121,7 +123,8 @@ jobs:
             python -c "import yaml; yaml.safe_load(open('.github/dependabot.yml'))"
             echo "✅ dependabot.yml is valid"
           else
-            echo "⚠️ dependabot.yml not found"
+            echo "::error::dependabot.yml not found"
+            exit 1
           fi
 
       - name: Ensure no environment files are tracked
