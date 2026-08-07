@@ -119,6 +119,39 @@ def test_csv_neutralizes_spreadsheet_formula_injection() -> None:
     assert "'=NOW()" in csv_text
 
 
+def test_csv_neutralizes_formula_after_leading_whitespace() -> None:
+    """Formula chars hidden after leading whitespace are still neutralized."""
+    payload = ProjectHealthOut(
+        project_health_score=1,
+        verdict=" =AT_RISK",
+        score_breakdown={},
+        narrative="\t=SUM(1,2)",
+        key_signals=[
+            {
+                "label": "  @cmd",
+                "value": 1,
+                "severity": "ok",
+                "display": " +NOW()",
+            }
+        ],
+    )
+    csv_text = project_health_to_csv(
+        payload,
+        metadata={
+            "generated_at": "\r=cmd",
+            "user_id": 42,
+            "format_version": "1",
+            "project_id": 1,
+        },
+    )
+
+    assert "' =AT_RISK" in csv_text
+    assert "'\t=SUM(1,2)" in csv_text
+    assert "'  @cmd" in csv_text
+    assert "' +NOW()" in csv_text
+    assert "'\r=cmd" in csv_text
+
+
 # ---------------------------------------------------------------------------
 # JSON helper
 # ---------------------------------------------------------------------------
