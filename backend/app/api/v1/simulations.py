@@ -176,6 +176,10 @@ from app.simulation.sustainability_positioning import (
 from app.simulation.product_type import ProductType
 from app.simulation.unit_economics import build_unit_economics
 from app.simulation.unit_economics_export import unit_economics_to_csv
+from app.simulation.sensitivity_export import (
+    sensitivity_to_csv,
+    sensitivity_to_json,
+)
 from app.simulation.validation_roi import build_validation_roi
 from app.simulation.validation_experiment_planner import build_validation_experiment_plan
 from app.simulation.cluster_drill_down import (
@@ -4520,6 +4524,87 @@ def get_sensitivity_analysis(
         base_results=sim.results_json,
         env_params=env_params,
         existing_assumptions=assumptions,
+    )
+
+
+@router.get(
+    "/{simulation_id}/sensitivity/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export the sensitivity analysis as CSV (or JSON with "
+        "?format=json)"
+    ),
+    # Same DB read + Markov recompute cost as the JSON sensitivity
+    # endpoint; cap polling so a dashboard loop can't drive repeated
+    # scenario recomputes.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_sensitivity_analysis(
+    simulation_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "sensitivity payload. Unsupported values return a 400 "
+            "response."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a simulation's sensitivity analysis.
+
+    Computes the same payload as ``GET /simulations/{id}/sensitivity``,
+    then renders it as CSV (default) or JSON. The CSV includes the
+    summary, one row per assumption, and the recommendation list so a
+    founder can prioritize which assumptions to validate in a planning
+    tool.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unsupported export format {format!r}; expected 'csv' or 'json'",
+        )
+
+    payload = get_sensitivity_analysis(
+        simulation_id=simulation_id,
+        db=db,
+        current_user=current_user,
+    )
+
+    metadata = {
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "user_id": current_user.id,
+        "format_version": "1",
+        "simulation_id": simulation_id,
+        "project_id": payload.project_id,
+    }
+
+    if fmt == "json":
+        body = sensitivity_to_json(payload, metadata=metadata).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="sensitivity.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = sensitivity_to_csv(payload, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="sensitivity.csv"',
+            "Content-Length": str(len(body)),
+        },
     )
 
 
