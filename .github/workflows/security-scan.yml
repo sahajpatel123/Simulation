@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -108,7 +108,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v7.0.1
 
       - name: Setup Python
         uses: actions/setup-python@v6.0.0
@@ -177,7 +177,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v7.0.1
 
       - name: Initialize Docker Buildx
         uses: docker/setup-buildx-action@v4.1.0
