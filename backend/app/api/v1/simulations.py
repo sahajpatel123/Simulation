@@ -12,6 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
+from app.core.redis_client import get_redis_client
 from app.api.v1.common import get_owned_project
 from app.api.v1.projects import (
     _ACTIVITY_FEED_CACHE_NAMESPACE,
@@ -571,6 +572,36 @@ def db_health(
         latency_ms=round(max(0.0, latency_ms), 3),
         checked_at=datetime.now(timezone.utc).isoformat(),
     )
+
+
+@router.get(
+    "/redis-health",
+    summary="Probe Redis connectivity with PING",
+    responses={
+        200: {"description": "Redis is reachable or unconfigured"},
+        503: {"description": "Redis is unreachable"},
+    },
+)
+def redis_health() -> dict[str, object]:
+    """Health probe for the Redis connection used by the API."""
+    client = get_redis_client()
+    if client is None:
+        return {"redis": "unconfigured"}
+    started = time.perf_counter()
+    try:
+        client.ping()
+    except Exception as exc:
+        logger.exception("Redis health probe failed")
+        raise HTTPException(
+            status_code=503,
+            detail="Redis unreachable",
+        ) from exc
+    latency_ms = (time.perf_counter() - started) * 1000.0
+    return {
+        "redis": "reachable",
+        "latency_ms": round(max(0.0, latency_ms), 3),
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @router.get(
