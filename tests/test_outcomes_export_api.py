@@ -73,12 +73,18 @@ class _FakeSession:
         return _FakeQuery([])
 
 
-def _call_route(*, project_id: int = 10, session: _FakeSession | None = None):
+def _call_route(
+    *,
+    project_id: int = 10,
+    format: str = "csv",
+    session: _FakeSession | None = None,
+):
     from app.api.v1 import outcomes as out_mod
 
     db = session if session is not None else _FakeSession()
     return out_mod.export_outcomes(
         project_id=project_id,
+        format=format,
         db=db,
         current_user=type("U", (), {"id": 42})(),
     )
@@ -103,6 +109,15 @@ def test_export_outcomes_returns_csv() -> None:
     body = _body(resp).decode("utf-8")
     assert "id,project_id,simulation_id,created_at" in body
     assert "1,10,7,2026-08-07T20:00:00+00:00,0.042" in body
+
+
+def test_export_outcomes_format_json_returns_payload() -> None:
+    resp = _call_route(format="json")
+
+    assert resp.media_type == "application/json; charset=utf-8"
+    body = _body(resp).decode("utf-8")
+    assert '"project_id": 10' in body
+    assert '"actual_conversion_rate": 0.042' in body
 
 
 def test_export_outcomes_empty_project_returns_header_only() -> None:
