@@ -157,6 +157,10 @@ from app.simulation.project_health_export import (
     project_health_to_csv,
     project_health_to_json,
 )
+from app.simulation.recommendations_export import (
+    recommendations_to_csv,
+    recommendations_to_json,
+)
 from app.simulation.confidence_explainer import (
     build_confidence_explainer,
 )
@@ -4963,6 +4967,89 @@ def get_recommendations_digest(
         ttl_seconds=_RECOMMENDATIONS_DIGEST_CACHE_TTL_S,
     )
     return RecommendationsDigestOut(**payload)
+
+
+@router.get(
+    "/{project_id}/recommendations/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export a project's ranked recommendations as CSV (or JSON "
+        "with ?format=json)"
+    ),
+    # Same composition cost as the JSON digest endpoint; cap polling so a
+    # dashboard loop can't drive repeated premortem/intervention reads.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_project_recommendations(
+    project_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly ranked table; ``json`` returns the "
+            "raw recommendations payload. Unsupported values return "
+            "a 400 response."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's recommendations digest.
+
+    Reuses the same composition path as ``GET /projects/{id}/recommendations-digest``.
+    ``format=csv`` renders the summary, one row per ranked recommendation,
+    and the key signals. ``format=json`` returns the raw payload for
+    machine consumers.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; expected "
+                "'csv' or 'json'"
+            ),
+        )
+
+    payload = get_recommendations_digest(
+        project_id=project_id,
+        db=db,
+        current_user=current_user,
+    )
+    metadata = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "user_id": current_user.id,
+        "format_version": "1",
+        "project_id": project_id,
+    }
+
+    if fmt == "json":
+        json_text = recommendations_to_json(payload, metadata=metadata)
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="recommendations-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = recommendations_to_csv(payload, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="recommendations-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
 
 
 @router.get(
