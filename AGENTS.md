@@ -34,6 +34,37 @@ open http://localhost:8000/docs
 
 ---
 
+## Security & CI
+
+The repo ships several GitHub Actions workflows in `.github/workflows/`:
+
+- `backend-ci.yml` — pytest (real gate), gitleaks secret scan, DB migrations.
+- `codeql.yml` — CodeQL for Python + JavaScript with `security-and-quality` queries.
+- `lint.yml` — ruff + `pip-audit` / `safety` dependency scans.
+- `security-scan.yml` — Bandit, `pip-audit`, and Trivy (fs + Dockerfile config).
+- `secret-scan.yml` — weekly full-history gitleaks scan (scheduled + manual).
+- `workflow-validation.yml` — actionlint, YAML/TOML validation, security-policy,
+  supply-chain pinning, least-privilege permissions, and env-file tracking guard.
+
+Rules that keep CI green and secure:
+
+- Never commit `.env*` files (only `.env.example`); CI fails if one is tracked.
+- Pin every GitHub Action to a full version tag (e.g. `@v6.0.2`), never `@master`
+  or a floating `@vN` — `workflow-validation.yml` enforces this.
+- If a security scanner cannot run, fix the runner; do not silence it with `|| true`.
+- When adding a new workflow, declare explicit least-privilege `permissions`.
+
+Local security scans:
+
+```bash
+bandit -r backend/app
+pip-audit -r requirements.txt
+safety check -r requirements.txt
+gitleaks detect --config .github/gitleaks.toml
+```
+
+---
+
 ## Key mental models
 
 ### 1. The simulation pipeline
