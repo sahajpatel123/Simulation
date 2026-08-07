@@ -68,7 +68,7 @@ jobs:
 
       - name: Install security tools
         run: |
-          pip install --quiet pip-audit safety bandit
+          pip install --quiet pip-audit==2.7.2 safety==2.3.5 bandit==1.7.10
 
       - name: Audit requirements.txt for CVEs
         id: pip-audit
@@ -93,7 +93,7 @@ jobs:
         id: safety
         run: |
           set +e
-          safety check -r requirements.txt --output safety-report.json --json
+          safety check -r requirements.txt --output json > safety-report.json
           safety_exit=$?
           set -e
           echo "safety_exit=$safety_exit" >> "$GITHUB_OUTPUT"
