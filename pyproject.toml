@@ -58,3 +58,9 @@ python-version = "3.11"
 # weight (line breaks, prompt formatting) and must NOT be
 # auto-stripped.
 "backend/app/core/prompts.py" = ["W291"]
+
+[tool.bandit]
+# Central security-scan config shared by CI and pre-commit.
+# B101 (assert) and B311 (random) are accepted project-wide after triage.
+skips = ["B101", "B311"]
+exclude_dirs = ["tests", "migrations", "node_modules", ".venv", ".venv2", ".venv_step86"]
