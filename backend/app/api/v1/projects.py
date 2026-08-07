@@ -3315,6 +3315,41 @@ def export_brief(
     )
 
 
+@router.get(
+    "/{project_id}/tags/export",
+    summary="Export a project's tags as CSV",
+    response_class=StreamingResponse,
+)
+def export_tags(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's tag list."""
+    project = get_owned_project(db, current_user.id, project_id)
+
+    tags = list(project.tags or [])
+    csv_text = tags_to_csv(
+        tags,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="tags-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
 @router.post(
     "/{project_id}/environments",
     response_model=EnvironmentOut,
