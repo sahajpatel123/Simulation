@@ -43,10 +43,12 @@ The repo ships several GitHub Actions workflows in `.github/workflows/`:
 - `dependency-review.yml` — fails PRs that introduce high-severity dependency
   vulnerabilities (scans dependency diffs).
 - `lint.yml` — ruff + `pip-audit` / `safety` dependency scans.
-- `security-scan.yml` — Bandit, `pip-audit`, and Trivy (fs + Dockerfile config).
+- `security-scan.yml` — Bandit, `pip-audit`, `npm audit`, and Trivy (fs + Dockerfile config).
 - `secret-scan.yml` — weekly full-history gitleaks scan (scheduled + manual).
+- `scorecard.yml` — OpenSSF Scorecard supply-chain analysis (SARIF → Code Scanning).
 - `workflow-validation.yml` — actionlint, YAML/TOML validation, security-policy,
-  supply-chain pinning, least-privilege permissions, and env-file tracking guard.
+  supply-chain pinning, least-privilege permissions, `persist-credentials: false`
+  enforcement, and env-file tracking guard.
 
 Rules that keep CI green and secure:
 
@@ -55,6 +57,8 @@ Rules that keep CI green and secure:
   or a floating `@vN` — `workflow-validation.yml` enforces this.
 - If a security scanner cannot run, fix the runner; do not silence it with `|| true`.
 - When adding a new workflow, declare explicit least-privilege `permissions`.
+- Do not grant `actions: write`; use `actions: read` or omit the scope.
+- Set `persist-credentials: false` on every checkout step.
 
 Local security scans:
 
@@ -62,6 +66,7 @@ Local security scans:
 bandit -r backend/app
 pip-audit -r requirements.txt
 safety check -r requirements.txt
+npm audit --json
 gitleaks detect --config .github/gitleaks.toml
 ```
 
