@@ -1,0 +1,29 @@
+# GitHub Security Advisories Configuration
+# https://docs.github.com/en/code-security/security-advisories
+
+# This file is a placeholder for security advisory configuration
+# Security advisories are created through GitHub's UI or via the API
+
+# Recommended process:
+# 1. When a vulnerability is discovered:
+#    - Create a draft security advisory in GitHub
+#    - Mark as "Draft" to allow time for investigation
+# 2. During investigation:
+#    - Add detailed description
+#    - Identify affected versions
+#    - Propose mitigations
+#    - Assign to maintainers
+# 3. Before publishing:
+#    - Finalize the fix
+#    - Create a patch release
+#    - Coordinate with users who may be affected
+# 4. After publishing:
+#    - Monitor for additional reports
+#    - Update dependencies that may fix the issue
+#    - Document lessons learned
+
+# Security Advisory Labels to use:
+# - security
+# - vulnerability
+# - critical (for critical severity)
+# - advisory (for security advisory tracking)
