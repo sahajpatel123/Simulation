@@ -550,6 +550,42 @@ class ConfidenceExplainerOut(BaseModel):
     key_signals: list[dict] = []
 
 
+class ProjectCoverageGapsOut(BaseModel):
+    """Response from ``GET /projects/{id}/coverage-gaps``.
+
+    Project-scoped version of the user-level coverage-gaps digest: surfaces
+    which standard assumption categories this project has never explored,
+    the sensitivity mix, and how many consumer clusters the completed sims
+    actually touched.
+
+    * ``project_id`` - the project this digest was built for.
+    * ``project_title`` - the project's current title (or ``None``).
+    * ``covered_categories`` - standard categories with at least one
+      non-hidden assumption.
+    * ``missing_categories`` - standard categories absent from the project's
+      assumptions.
+    * ``sensitivity_breakdown`` - count of visible assumptions by
+      sensitivity (e.g. ``{"HIGH": 2, "LOW": 1}``).
+    * ``covered_cluster_count`` - distinct cluster IDs seen across the
+      project's completed sims.
+    * ``missing_architect_count`` - standard categories never touched.
+    * ``total_assumption_count`` - visible assumptions on file.
+    * ``narrative`` - one-paragraph plain-text summary.
+    * ``key_signals`` - ``{label, value, severity, display}``.
+    """
+
+    project_id: int = 0
+    project_title: str | None = None
+    covered_categories: list[str] = []
+    missing_categories: list[str] = []
+    sensitivity_breakdown: dict[str, int] = {}
+    covered_cluster_count: int = 0
+    missing_architect_count: int = 0
+    total_assumption_count: int = 0
+    narrative: str = ""
+    key_signals: list[dict] = []
+
+
 class LatestSnapshotOut(BaseModel):
     """Response from ``GET /projects/{id}/latest-snapshot``.
 
@@ -751,5 +787,4 @@ class ClusterCohortDriftOut(BaseModel):
     top_drifting_clusters: list[dict] = []
     narrative: str = ""
     key_signals: list[dict] = []
-
 

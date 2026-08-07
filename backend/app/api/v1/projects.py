@@ -87,6 +87,7 @@ from app.schemas.project import (
     ProjectTagsPatch,
     StatusBannerOut,
     ConfidenceExplainerOut,
+    ProjectCoverageGapsOut,
 )
 from app.schemas.prototype import FunnelEdge, FunnelGraph, FunnelNode, PrototypeOut
 from app.schemas.stress_test import (
@@ -147,6 +148,7 @@ from app.simulation.adoption_milestones import (
     build_adoption_milestones,
 )
 from app.simulation.assumption_digest import build_assumption_digest
+from app.simulation.coverage_gaps import build_coverage_gaps
 from app.simulation.confidence_explainer import (
     build_confidence_explainer,
 )
@@ -4339,6 +4341,82 @@ def get_assumption_digest(
         ttl_seconds=_ASSUMPTION_DIGEST_CACHE_TTL_S,
     )
     return AssumptionDigestOut(**payload)
+
+
+@router.get(
+    "/{project_id}/coverage-gaps",
+    response_model=ProjectCoverageGapsOut,
+    summary=(
+        "Per-project coverage-gaps digest — which standard "
+        "assumption categories has this project never "
+        "explored, plus sensitivity + cluster coverage"
+    ),
+    # Read-only aggregation; bounded.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_project_coverage_gaps(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProjectCoverageGapsOut:
+    """Project-scoped coverage-gaps digest.
+
+    The user-level /me/coverage-gaps endpoint answers "which dimensions has
+    this account never explored?"; this endpoint answers the same question
+    for a single project. Founders can see, for example, that a project has
+    never recorded a Pricing or Trust assumption, or that only 2 clusters
+    were ever touched by completed simulations.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+
+    rows = (
+        db.query(Assumption)
+        .filter(Assumption.project_id == project_id)
+        .all()
+    )
+    assumption_dicts = [
+        {
+            "category": a.category,
+            "sensitivity": a.sensitivity,
+            "is_hidden": a.is_hidden,
+        }
+        for a in rows
+    ]
+
+    cluster_ids: set[str] = set()
+    sim_rows = (
+        db.query(Simulation.results_json)
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status == "COMPLETED",
+        )
+        .all()
+    )
+    for (raw_results,) in sim_rows:
+        results = (
+            raw_results
+            if isinstance(raw_results, dict)
+            else json.loads(raw_results)
+            if isinstance(raw_results, str)
+            else {}
+        )
+        breakdown = results.get("cluster_breakdown") or {}
+        if not isinstance(breakdown, dict):
+            continue
+        for cid in breakdown.keys():
+            # Cluster IDs are stable string keys in the registry
+            # (e.g. ``metro_power_professional``). Preserve them as-is;
+            # the helper only needs distinct values for the count.
+            if cid is not None:
+                cluster_ids.add(str(cid))
+
+    payload = build_coverage_gaps(
+        assumptions=assumption_dicts,
+        cluster_ids=list(cluster_ids),
+    )
+    payload["project_id"] = project_id
+    payload["project_title"] = project.title
+    return ProjectCoverageGapsOut(**payload)
 
 
 @router.get(
