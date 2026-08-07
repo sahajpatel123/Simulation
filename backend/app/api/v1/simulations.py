@@ -152,6 +152,10 @@ from app.simulation.ecosystem_compatibility import build_ecosystem_compatibility
 from app.simulation.setup_friction import build_setup_friction
 from app.simulation.after_sales_read import build_after_sales_read
 from app.simulation.assumption_cascade_read import build_assumption_cascade
+from app.simulation.simulation_export import (
+    build_simulation_export,
+    simulation_to_csv,
+)
 from app.simulation.launch_checklist import build_launch_checklist
 from app.simulation.founder_brief import build_founder_brief
 from app.simulation.retention_churn_read import build_retention_churn
@@ -7278,4 +7282,127 @@ def get_assumption_cascade(
         conductor_results=conductor_results,
         cluster_registry=registry,
         product_type=product_type_name,
+    )
+
+
+@router.get(
+    "/{simulation_id}/export",
+    summary=(
+        "Per-simulation spreadsheet export — key metrics plus "
+        "one row per cluster (CSV by default, JSON with "
+        "?format=json)"
+    ),
+    response_class=StreamingResponse,
+)
+def get_simulation_export(
+    simulation_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the "
+            "raw export payload. Anything other than ``json`` "
+            "falls back to ``csv``."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a single completed simulation.
+
+    Default ``format=csv`` returns a flat table with simulation-level
+    metadata on every row plus each cluster's population weight and
+    conversion rate. ``format=json`` returns the same data as a JSON
+    document so machine consumers can avoid CSV parsing.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — export requires "
+                "completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    product_type = str(
+        (sim.results_json or {}).get("product_type_detected", "saas")
+        or "saas"
+    ).lower()
+    cluster_names = {
+        cluster.cluster_id: cluster.name
+        for cluster in _registry.all_clusters()
+    }
+    cluster_weights = {
+        cluster.cluster_id: float(cluster.population_weight or 0.0)
+        for cluster in _registry.all_clusters()
+    }
+
+    raw_signal_quality = sim.signal_quality
+    clean_signal_quality: float | None = None
+    if raw_signal_quality is not None:
+        try:
+            clean_signal_quality = float(raw_signal_quality)
+        except (TypeError, ValueError, OverflowError):
+            clean_signal_quality = None
+
+    export = build_simulation_export(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        product_type=product_type,
+        signal_quality=clean_signal_quality,
+        cluster_names=cluster_names,
+        cluster_weights=cluster_weights,
+    )
+
+    metadata = {
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "user_id": current_user.id,
+        "format_version": "1",
+    }
+
+    fmt = format.strip().lower() if format else "csv"
+    if fmt == "json":
+        json_text = json.dumps(
+            {"metadata": metadata, "simulation": export},
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="simulation-{simulation_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = simulation_to_csv(export, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="simulation-{simulation_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
     )
