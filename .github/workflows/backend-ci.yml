@@ -46,13 +46,13 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Setup Python
-        uses: actions/setup-python@v6.0.0
+        uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -94,7 +94,7 @@ jobs:
           pytest tests/ -v --maxfail=5 --tb=short --cov=app --cov-report=term-missing --cov-fail-under=0
 
       - name: Upload test coverage
-        uses: actions/upload-artifact@v5.0.0
+        uses: actions/upload-artifact@v7.0.1
         if: always()
         with:
           name: test-coverage-report
