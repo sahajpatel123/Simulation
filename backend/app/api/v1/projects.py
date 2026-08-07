@@ -105,6 +105,7 @@ from app.simulation.project_simulations_export import simulations_to_csv
 from app.simulation.assumptions_export import assumptions_to_csv
 from app.simulation.evidence_export import evidence_to_csv
 from app.simulation.prototypes_export import prototypes_to_csv
+from app.simulation.premortem_export import premortem_to_csv
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -2344,6 +2345,42 @@ def get_premortem(
         total=len(failure_modes),
         critical_count=critical_count,
         generated_at=data.get("generated_at", ""),
+    )
+
+
+@router.get(
+    "/{project_id}/premortem/export",
+    summary="Export a project's premortem failure modes as CSV",
+    response_class=StreamingResponse,
+)
+def export_premortem(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's premortem failure modes."""
+    project = get_owned_project(db, current_user.id, project_id)
+
+    data = getattr(project, "premortem_json", None) or {}
+    rows = list(data.get("failure_modes", []) or [])
+    csv_text = premortem_to_csv(
+        rows,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="premortem-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
     )
 
 
