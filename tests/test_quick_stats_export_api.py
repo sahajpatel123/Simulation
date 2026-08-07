@@ -43,11 +43,12 @@ class _User:
         self.created_at = datetime(2026, 8, 1, tzinfo=timezone.utc)
 
 
-def _call_route(*, session: _FakeSession | None = None):
+def _call_route(*, format: str = "csv", session: _FakeSession | None = None):
     from app.api.v1 import users as user_mod
 
     db = session if session is not None else _FakeSession()
     return user_mod.export_my_quick_stats(
+        format=format,
         db=db,
         current_user=_User(),
     )
@@ -73,3 +74,13 @@ def test_export_my_quick_stats_returns_csv() -> None:
     assert "user_id,total_projects,total_simulations" in body
     assert "42,1,1,1,1" in body
     assert "user_id,42" in body
+
+
+def test_export_my_quick_stats_format_json_returns_payload() -> None:
+    resp = _call_route(format="json")
+
+    assert resp.media_type == "application/json; charset=utf-8"
+    body = _body(resp).decode("utf-8")
+    assert '"quick_stats"' in body
+    assert '"user_id": 42' in body
+    assert '"total_projects": 1' in body
