@@ -83,11 +83,19 @@ jobs:
       - name: Verify pip-audit produced a report
         if: always()
         run: |
-          if [ ! -f pip-audit-report.json ]; then
-            echo "::error::pip-audit did not produce a report — scanner failed"
-            exit 1
-          fi
-          echo "✅ pip-audit report generated"
+          python - <<'PY'
+          import json, sys
+          try:
+              with open('pip-audit-report.json') as f:
+                  data = json.load(f)
+          except Exception as e:
+              print(f'::error::pip-audit report is not valid JSON: {e}')
+              sys.exit(1)
+          if not isinstance(data, list):
+              print('::error::pip-audit report is not a list')
+              sys.exit(1)
+          print('✅ pip-audit report is valid JSON')
+          PY
 
       - name: Safety check for known vulnerabilities
         id: safety
@@ -102,11 +110,16 @@ jobs:
       - name: Verify safety produced a report
         if: always()
         run: |
-          if [ ! -f safety-report.json ]; then
-            echo "::error::safety did not produce a report — scanner failed"
-            exit 1
-          fi
-          echo "✅ safety report generated"
+          python - <<'PY'
+          import json, sys
+          try:
+              with open('safety-report.json') as f:
+                  json.load(f)
+          except Exception as e:
+              print(f'::error::safety report is not valid JSON: {e}')
+              sys.exit(1)
+          print('✅ safety report is valid JSON')
+          PY
 
       - name: Upload dependency audit reports
         if: always()
