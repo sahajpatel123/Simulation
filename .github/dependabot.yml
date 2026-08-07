@@ -18,6 +18,12 @@ updates:
     labels:
       - "dependencies"
       - "python"
+    groups:
+      python-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
     allow:
       - dependency-type: "direct"
       - dependency-type: "production"
@@ -45,6 +51,10 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
+    groups:
+      actions:
+        patterns:
+          - "*"
 
   # Node.js dependencies (for frontend/src if needed)
   - package-ecosystem: "npm"
@@ -61,6 +71,12 @@ updates:
     labels:
       - "dependencies"
       - "javascript"
+    groups:
+      npm-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
     allow:
       - dependency-type: "direct"
       - dependency-type: "production"
