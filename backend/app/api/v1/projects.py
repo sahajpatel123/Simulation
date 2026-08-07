@@ -4528,6 +4528,7 @@ def export_status(
 )
 def get_duplicate_title(
     project_id: int,
+    limit: int = Query(default=10, ge=1, le=50),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, object]:
@@ -4542,9 +4543,12 @@ def get_duplicate_title(
     candidate_rows = [
         {"id": candidate.id, "title": candidate.title} for candidate in candidates
     ]
+    duplicates = find_duplicate_titles(project.title, candidate_rows, project.id)[
+        :limit
+    ]
     return {
         "project_id": project.id,
-        "duplicates": find_duplicate_titles(project.title, candidate_rows, project.id),
+        "duplicates": duplicates,
     }
 
 

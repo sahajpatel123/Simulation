@@ -48,12 +48,18 @@ class _FakeSession:
         return _FakeQuery([])
 
 
-def _call_route(*, project_id: int = 1, session: _FakeSession | None = None):
+def _call_route(
+    *,
+    project_id: int = 1,
+    limit: int = 10,
+    session: _FakeSession | None = None,
+):
     from app.api.v1 import projects as proj_mod
 
     db = session if session is not None else _FakeSession()
     return proj_mod.get_duplicate_title(
         project_id=project_id,
+        limit=limit,
         db=db,
         current_user=type("U", (), {"id": 42})(),
     )
@@ -66,6 +72,13 @@ def test_get_duplicate_title_returns_list() -> None:
     assert result["project_id"] == 1
     assert len(result["duplicates"]) == 1
     assert result["duplicates"][0]["project_id"] == 2
+
+
+def test_get_duplicate_title_respects_limit() -> None:
+    session = _FakeSession([_Project(1), _Project(2), _Project(3)])
+    result = _call_route(session=session, limit=1)
+
+    assert len(result["duplicates"]) == 1
 
 
 def test_get_duplicate_title_missing_project_raises_404() -> None:
