@@ -97,6 +97,97 @@ def test_csv_empty_payload_still_renders_sections() -> None:
     assert "label,value,severity,display" in csv_text
 
 
+def test_csv_summary_project_id_falls_back_to_metadata() -> None:
+    """The digest payload omits project_id; the summary should use the
+    metadata block instead of rendering a blank project_id row.
+    """
+    csv_text = recommendations_to_csv(
+        RecommendationsDigestOut(),
+        metadata={
+            "generated_at": "now",
+            "user_id": 42,
+            "format_version": "1",
+            "project_id": 17,
+        },
+    )
+
+    assert csv_text.count("project_id,17") >= 2
+
+
+def test_csv_handles_plain_dict_payload() -> None:
+    """The helper is used with both Pydantic models and plain dicts."""
+    csv_text = recommendations_to_csv(
+        {
+            "recommendation_count": 1,
+            "critical_failure_count": 0,
+            "quick_win_count": 1,
+            "top_recommendations": [
+                {
+                    "source": "intervention",
+                    "title": "Quick win: Tighten first-screen copy",
+                    "severity": "LOW",
+                    "impact_score": None,
+                    "priority_score": 0.91,
+                    "description": "Match buyer language on the landing page.",
+                }
+            ],
+            "narrative": "One quick win ready to act on.",
+            "key_signals": [
+                {
+                    "label": "quick_win_count",
+                    "value": 1,
+                    "severity": "ok",
+                    "display": "1 quick win(s) ready",
+                }
+            ],
+        }
+    )
+
+    assert "recommendation_count,1" in csv_text
+    assert "1,intervention,Quick win: Tighten first-screen copy,LOW,,0.91" in csv_text
+    assert "1 quick win(s) ready" in csv_text
+
+
+def test_csv_skips_non_dict_rows() -> None:
+    """Non-dict entries in the recommendation/signal lists must not crash
+    the export and must not render garbage rows.
+    """
+    csv_text = recommendations_to_csv(
+        {
+            "recommendation_count": 1,
+            "critical_failure_count": 0,
+            "quick_win_count": 1,
+            "top_recommendations": [
+                {
+                    "source": "intervention",
+                    "title": "Only dict",
+                    "severity": "LOW",
+                    "impact_score": None,
+                    "priority_score": 0.9,
+                    "description": "Keep this one.",
+                },
+                "not-a-dict",
+                None,
+            ],
+            "narrative": "One recommendation.",
+            "key_signals": [
+                {
+                    "label": "recommendation_count",
+                    "value": 1,
+                    "severity": "ok",
+                    "display": "1 ready",
+                },
+                42,
+                None,
+            ],
+        }
+    )
+
+    assert "Only dict" in csv_text
+    assert "not-a-dict" not in csv_text
+    assert "1 ready" in csv_text
+
+
 def test_csv_neutralizes_spreadsheet_formula_injection() -> None:
     payload = RecommendationsDigestOut(
         recommendation_count=1,

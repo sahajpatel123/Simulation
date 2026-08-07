@@ -108,7 +108,14 @@ def recommendations_to_csv(
         "narrative",
     )
     for key in summary_keys:
-        _write_row(writer, [key, _value(data.get(key))])
+        value = data.get(key)
+        if key == "project_id" and value is None:
+            # The digest payload does not carry its own project id;
+            # fall back to the metadata block so the summary isn't
+            # self-contradictory when metadata says project_id=7 but
+            # the summary renders a blank.
+            value = (metadata or {}).get("project_id")
+        _write_row(writer, [key, _value(value)])
     _write_row(writer, [])
 
     # Recommendations table.
