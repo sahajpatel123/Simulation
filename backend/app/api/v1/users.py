@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -20,6 +21,7 @@ from app.models.outcome import Outcome
 from app.models.project import Project
 from app.models.simulation import Simulation
 from app.models.user import User
+from app.simulation.user_projects_export import user_projects_to_csv
 from app.schemas.audit_log import AuditLogListOut, AuditLogOut
 from app.schemas.auth import MessageResponse
 from app.schemas.project import (
@@ -1886,6 +1888,52 @@ def get_digest_snapshot(
         weekly_digest=weekly_digest,
     )
     return DigestSnapshotOut(**payload)
+
+
+@router.get(
+    "/me/projects/export",
+    summary="Export the current user's projects as CSV",
+    response_class=StreamingResponse,
+)
+def export_my_projects(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of the current user's project rows."""
+    projects = (
+        db.query(Project)
+        .filter(Project.user_id == current_user.id)
+        .order_by(Project.created_at.desc())
+        .all()
+    )
+    rows = [
+        {
+            "project_id": project.id,
+            "title": project.title,
+            "status": project.status,
+            "intake_mode": project.intake_mode,
+            "is_archived": project.is_archived,
+            "created_at": project.created_at,
+        }
+        for project in projects
+    ]
+    csv_text = user_projects_to_csv(
+        rows,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="my-projects.csv"',
+            "Content-Length": str(len(body)),
+        },
+    )
 
 
 @router.get(
