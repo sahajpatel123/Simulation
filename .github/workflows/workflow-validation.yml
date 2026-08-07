@@ -170,15 +170,23 @@ jobs:
           for f in glob.glob('.github/workflows/*.yml'):
               with open(f) as fh:
                   data = yaml.safe_load(fh) or {}
+              blocks = []
               if data.get('permissions'):
-                  continue
+                  blocks.append(('workflow', data['permissions']))
               for job_name, job in (data.get('jobs') or {}).items():
-                  if not job.get('permissions'):
-                      errors.append(f'{f} job {job_name}: no permissions block')
+                  if job.get('permissions'):
+                      blocks.append((f'job {job_name}', job['permissions']))
+              if not blocks:
+                  errors.append(f'{f}: no permissions block')
+              for name, block in blocks:
+                  if block.get('actions') == 'write':
+                      errors.append(
+                          f'{f} {name}: actions: write is too broad; use actions: read or omit'
+                      )
           if errors:
               print('::error::Least-privilege permission violations')
               for e in errors:
                   print(f'  {e}')
               sys.exit(1)
-          print('✅ All workflows define explicit permissions')
+          print('✅ All workflows use least-privilege permissions')
           PY
