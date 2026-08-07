@@ -47,12 +47,18 @@ class _FakeSession:
         return _FakeQuery([])
 
 
-def _call_route(*, project_id: int = 10, session: _FakeSession | None = None):
+def _call_route(
+    *,
+    project_id: int = 10,
+    format: str = "csv",
+    session: _FakeSession | None = None,
+):
     from app.api.v1 import projects as proj_mod
 
     db = session if session is not None else _FakeSession()
     return proj_mod.export_project_metadata(
         project_id=project_id,
+        format=format,
         db=db,
         current_user=type("U", (), {"id": 42})(),
     )
@@ -78,6 +84,16 @@ def test_export_project_metadata_returns_csv() -> None:
     assert "project_id,title,description,status" in body
     assert "10,TheCee,A simulation tool,DRAFT,IDEA,False" in body
     assert "user_id,42" in body
+
+
+def test_export_project_metadata_format_json_returns_payload() -> None:
+    resp = _call_route(format="json")
+
+    assert resp.media_type == "application/json; charset=utf-8"
+    body = _body(resp).decode("utf-8")
+    assert '"metadata"' in body
+    assert '"project_id": 10' in body
+    assert '"title": "TheCee"' in body
 
 
 def test_export_project_metadata_missing_project_raises_404() -> None:
