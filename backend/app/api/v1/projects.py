@@ -179,7 +179,10 @@ from app.simulation.intervention_digest import (
 from app.simulation.latest_snapshot import build_latest_snapshot
 from app.simulation.next_best_action import build_next_best_action
 from app.simulation.premortem_digest import build_premortem_digest
-from app.simulation.project_comparison import build_project_comparison
+from app.simulation.project_comparison import (
+    build_project_comparison,
+    normalise_confidence_score,
+)
 from app.simulation.project_export import build_project_export
 from app.simulation.project_health import build_project_health
 from app.simulation.recommendations_digest import (
@@ -361,12 +364,14 @@ def _project_comparison_row(db: Session, project: Project) -> dict[str, Any]:
     primary_failure_domain: str | None = None
     product_type_detected: str | None = None
     if latest_sim is not None:
-        sim_confidence = getattr(latest_sim, "confidence_score", None)
+        sim_confidence = normalise_confidence_score(
+            getattr(latest_sim, "confidence_score", None),
+        )
         if sim_confidence is None and latest_sim.results_json:
             agg = latest_sim.results_json.get("aggregated") or {}
-            sim_confidence = agg.get("confidence_score")
-        if sim_confidence is not None:
-            sim_confidence = float(sim_confidence) / 100.0
+            sim_confidence = normalise_confidence_score(
+                agg.get("confidence_score"),
+            )
 
         results = latest_sim.results_json or {}
         latest_conversion_rate = results.get(

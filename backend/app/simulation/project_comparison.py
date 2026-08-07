@@ -108,6 +108,26 @@ def _ref(row: dict[str, Any]) -> ComparisonProjectRef:
     )
 
 
+def normalise_confidence_score(value: Any) -> float | None:
+    """Normalise a confidence value to the 0..1 scale.
+
+    ``Simulation.confidence_score`` is persisted as 0..1, while
+    ``results_json.aggregated.confidence_score`` is stored as a 0..100
+    integer.  This helper accepts either scale (plus numeric strings)
+    and returns a clamped 0..1 float, or ``None`` for missing/unusable
+    values.
+    """
+    if value is None:
+        return None
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        return None
+    if score > 1:
+        score = score / 100.0
+    return max(0.0, min(1.0, score))
+
+
 def _summary_block(
     a: dict[str, Any],
     b: dict[str, Any],
@@ -261,4 +281,4 @@ def build_project_comparison(
     )
 
 
-__all__ = ["build_project_comparison"]
+__all__ = ["build_project_comparison", "normalise_confidence_score"]

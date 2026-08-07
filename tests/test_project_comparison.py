@@ -10,7 +10,10 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas.project_comparison import ProjectCompareRequest
-from app.simulation.project_comparison import build_project_comparison
+from app.simulation.project_comparison import (
+    build_project_comparison,
+    normalise_confidence_score,
+)
 
 
 if "razorpay" not in sys.modules:
@@ -144,6 +147,17 @@ def test_build_comparison_rejects_wrong_row_count() -> None:
         build_project_comparison([_row(1), _row(2), _row(3)])
 
 
+def test_normalise_confidence_score_handles_both_scales() -> None:
+    assert normalise_confidence_score(None) is None
+    assert normalise_confidence_score(0.62) == 0.62
+    assert normalise_confidence_score(62) == 0.62
+    assert normalise_confidence_score(62.0) == 0.62
+    assert normalise_confidence_score("62") == 0.62
+    assert normalise_confidence_score("0.4") == 0.4
+    assert normalise_confidence_score("not-a-number") is None
+    assert normalise_confidence_score(99) == 0.99
+
+
 # ---------------------------------------------------------------------------
 # Route
 # ---------------------------------------------------------------------------
@@ -159,7 +173,7 @@ class _FakeProject:
 
 class _FakeSimulation:
     def __init__(self) -> None:
-        self.confidence_score = 62.0
+        self.confidence_score = 0.62
         self.results_json = {
             "population_weighted_conversion": 0.04,
             "product_type_detected": "saas",
@@ -238,4 +252,5 @@ def test_compare_projects_route_builds_payload(monkeypatch: pytest.MonkeyPatch) 
     assert out.projects[0].outcome_count == 1
     assert out.projects[0].assumption_count == 5
     assert out.projects[0].latest_conversion_rate == 0.04
+    assert out.projects[0].latest_confidence_score == 0.62
     assert out.projects[0].brief_completed is True
