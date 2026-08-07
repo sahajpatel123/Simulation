@@ -25,6 +25,7 @@ from app.models.user import User
 from app.simulation.user_projects_export import user_projects_to_csv
 from app.simulation.user_account_export import user_account_to_csv
 from app.simulation.user_simulations_export import user_simulations_to_csv
+from app.simulation.user_decisions_export import user_decisions_to_csv
 from app.schemas.audit_log import AuditLogListOut, AuditLogOut
 from app.schemas.auth import MessageResponse
 from app.schemas.project import (
@@ -2047,6 +2048,52 @@ def export_my_simulations(
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": 'attachment; filename="my-simulations.csv"',
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/me/decisions/export",
+    summary="Export the current user's decisions as CSV",
+    response_class=StreamingResponse,
+)
+def export_my_decisions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of the current user's decision rows."""
+    rows = (
+        db.query(Decision, Project)
+        .join(Project, Decision.project_id == Project.id)
+        .filter(Project.user_id == current_user.id)
+        .order_by(Decision.created_at.desc())
+        .all()
+    )
+    decision_rows = [
+        {
+            "decision_id": decision.id,
+            "project_id": decision.project_id,
+            "title": decision.title,
+            "status": decision.status,
+            "created_at": decision.created_at,
+        }
+        for decision, _project in rows
+    ]
+    csv_text = user_decisions_to_csv(
+        decision_rows,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="my-decisions.csv"',
             "Content-Length": str(len(body)),
         },
     )
