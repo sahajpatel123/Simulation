@@ -123,6 +123,7 @@ from app.simulation.project_meta_export import project_meta_to_csv
 from app.simulation.landing_export import landing_to_csv
 from app.simulation.environment_export import environment_to_csv
 from app.simulation.description_export import description_to_csv
+from app.simulation.tag_suggestions import suggest_tags
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -907,6 +908,24 @@ def put_project_tags(
         user_id=current_user.id,
     )
     return ProjectTagsOut(id=project.id, tags=list(project.tags or []))
+
+
+@router.get(
+    "/{project_id}/tag-suggestions",
+    summary="Suggest simple keyword tags from the project title/description",
+    responses=_JSON_200,
+)
+def get_tag_suggestions(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, object]:
+    """Return a small heuristic tag-suggestion list for the project."""
+    project = get_owned_project(db, current_user.id, project_id)
+    return {
+        "project_id": project.id,
+        "tags": suggest_tags(project.title, project.description),
+    }
 
 
 @router.delete(
