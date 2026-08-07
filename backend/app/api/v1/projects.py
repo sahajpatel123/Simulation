@@ -117,7 +117,8 @@ from app.simulation.competitive_export import competitors_to_csv
 from app.simulation.mvp_features_export import features_to_csv
 from app.simulation.brief_export import brief_to_csv
 from app.simulation.tags_export import tags_to_csv
-from app.simulation.readings_export import readings_to_csv
+from app.simulation.readings_export import readings_payload, readings_to_csv
+from app.simulation.precis_export import precis_to_csv
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -3597,10 +3598,13 @@ def export_readings(
 
     fmt = format.strip().lower() if format else "csv"
     if fmt == "json":
+        normalized = readings_payload(row.get("readings_json"))
         json_text = json.dumps(
             {
                 "generated_at": datetime.now(timezone.utc).isoformat(),
-                "readings": row,
+                "project_id": project_id,
+                "readings": normalized["readings"],
+                "ledger": normalized["ledger"],
             },
             default=str,
             indent=2,
@@ -3632,6 +3636,44 @@ def export_readings(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="readings-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/precis/export",
+    summary="Export a project's precis as CSV",
+    response_class=StreamingResponse,
+)
+def export_precis(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's precis field."""
+    project = get_owned_project(db, current_user.id, project_id)
+
+    row = {
+        "project_id": project.id,
+        "precis": getattr(project, "precis", None),
+    }
+    csv_text = precis_to_csv(
+        row,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="precis-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },

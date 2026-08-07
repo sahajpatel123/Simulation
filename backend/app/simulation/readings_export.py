@@ -13,10 +13,15 @@ from __future__ import annotations
 import csv
 import io
 import json
-from typing import Any
+from typing import Any, TypedDict
 
 
 FORMAT_VERSION = "2"
+
+
+class ReadingsPayload(TypedDict):
+    readings: list[dict[str, str]]
+    ledger: dict[str, str]
 
 
 def _text(value: Any) -> str:
@@ -79,6 +84,18 @@ def _parse_readings_json(raw: Any) -> tuple[list[dict[str, str]], dict[str, str]
     return readings, ledger
 
 
+def readings_payload(raw: Any) -> ReadingsPayload:
+    """Normalise a project's raw ``readings_json`` for export.
+
+    The CSV helper already tolerates legacy bare arrays, malformed JSON,
+    and ``None`` so a corrupted row still exports as an empty table. This
+    helper exposes that same parsing so the JSON export path returns the
+    same normalised shape instead of echoing whatever string was stored.
+    """
+    readings, ledger = _parse_readings_json(raw)
+    return {"readings": readings, "ledger": ledger}
+
+
 def readings_to_csv(
     row: dict[str, Any],
     metadata: dict[str, Any] | None = None,
@@ -100,7 +117,9 @@ def readings_to_csv(
         )
         writer.writerow([])
 
-    readings, ledger = _parse_readings_json(row.get("readings_json"))
+    payload = readings_payload(row.get("readings_json"))
+    readings = payload["readings"]
+    ledger = payload["ledger"]
 
     writer.writerow(["index", "label", "body"])
     for index, reading in enumerate(readings, start=1):
@@ -116,4 +135,4 @@ def readings_to_csv(
     return buffer.getvalue()
 
 
-__all__ = ["readings_to_csv"]
+__all__ = ["readings_payload", "readings_to_csv"]

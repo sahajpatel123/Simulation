@@ -1,4 +1,4 @@
-"""Route-level tests for the /projects/{id}/readings/export endpoint."""
+"""Route-level tests for the /projects/{id}/precis/export endpoint."""
 from __future__ import annotations
 
 import asyncio
@@ -17,10 +17,7 @@ if "razorpay" not in sys.modules:
 class _Project:
     def __init__(self) -> None:
         self.id = 10
-        self.readings_json = (
-            '{"readings": [{"label": "WHAT IT IS", "body": "A lean tool"}],'
-            ' "ledger": {"deck_line": "Small desk tool"}}'
-        )
+        self.precis = "A lean tool"
 
 
 class _FakeQuery:
@@ -45,18 +42,12 @@ class _FakeSession:
         return _FakeQuery([])
 
 
-def _call_route(
-    *,
-    project_id: int = 10,
-    format: str = "csv",
-    session: _FakeSession | None = None,
-):
+def _call_route(*, project_id: int = 10, session: _FakeSession | None = None):
     from app.api.v1 import projects as proj_mod
 
     db = session if session is not None else _FakeSession()
-    return proj_mod.export_readings(
+    return proj_mod.export_precis(
         project_id=project_id,
-        format=format,
         db=db,
         current_user=type("U", (), {"id": 42})(),
     )
@@ -73,51 +64,18 @@ def _body(resp) -> bytes:
     return asyncio.run(_collect(resp))
 
 
-def test_export_readings_returns_csv() -> None:
+def test_export_precis_returns_csv() -> None:
     resp = _call_route()
 
     assert resp.media_type == "text/csv; charset=utf-8"
-    assert 'filename="readings-10.csv"' in resp.headers["Content-Disposition"]
+    assert 'filename="precis-10.csv"' in resp.headers["Content-Disposition"]
     body = _body(resp).decode("utf-8")
-    assert "project_id,10" in body
-    assert "index,label,body" in body
-    assert "1,WHAT IT IS,A lean tool" in body
-    assert "deck_line,Small desk tool" in body
+    assert "project_id,precis" in body
+    assert "10,A lean tool" in body
     assert "user_id,42" in body
 
 
-def test_export_readings_format_json_returns_payload() -> None:
-    resp = _call_route(format="json")
-
-    assert resp.media_type == "application/json; charset=utf-8"
-    body = _body(resp).decode("utf-8")
-    assert '"project_id": 10' in body
-    assert '"readings"' in body
-    assert '"ledger"' in body
-    assert "A lean tool" in body
-    assert "Small desk tool" in body
-
-
-def test_export_readings_format_json_normalizes_legacy_array() -> None:
-    class LegacyProject(_Project):
-        def __init__(self) -> None:
-            self.id = 11
-            self.readings_json = '[{"label": "WHAT IT IS", "body": "Lean"}]'
-
-    resp = _call_route(
-        project_id=11,
-        format="json",
-        session=_FakeSession(LegacyProject()),
-    )
-
-    body = _body(resp).decode("utf-8")
-    assert '"project_id": 11' in body
-    assert '"readings"' in body
-    assert '"WHAT IT IS"' in body
-    assert '"ledger": {}' in body
-
-
-def test_export_readings_missing_project_raises_404() -> None:
+def test_export_precis_missing_project_raises_404() -> None:
     class NoProjectSession(_FakeSession):
         def query(self, model, *args, **kwargs):
             return _FakeQuery([])

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from app.simulation.readings_export import readings_to_csv
+from app.simulation.readings_export import readings_payload, readings_to_csv
 
 
 def test_readings_to_csv_contains_header_and_row() -> None:
@@ -84,3 +84,24 @@ def test_readings_to_csv_handles_preparsed_list() -> None:
     )
 
     assert "1,UNTESTED CLAIM,Needs evidence" in csv_text
+
+
+def test_readings_payload_normalises_legacy_bare_array() -> None:
+    payload = readings_payload('[{"label":"WHAT IT IS","body":"Lean"}]')
+
+    assert payload["readings"] == [{"label": "WHAT IT IS", "body": "Lean"}]
+    assert payload["ledger"] == {}
+
+
+def test_readings_payload_tolerates_malformed_json() -> None:
+    payload = readings_payload("{not valid json")
+
+    assert payload["readings"] == []
+    assert payload["ledger"] == {}
+
+
+def test_readings_payload_handles_none() -> None:
+    payload = readings_payload(None)
+
+    assert payload["readings"] == []
+    assert payload["ledger"] == {}
