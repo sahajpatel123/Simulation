@@ -11,10 +11,26 @@ import io
 from typing import Any
 
 
+def _safe_csv_cell(value: object) -> object:
+    """Neutralise spreadsheet formula injection while leaving normal data intact.
+
+    Cells that begin with ``=``, ``+``, ``-``, ``@``, tab, or carriage return
+    (after stripping leading whitespace) are prefixed with a single quote so
+    Excel, LibreOffice, and Google Sheets treat them as literal text rather
+    than executable formulas. Leading whitespace is ignored during detection
+    because spreadsheets often accept ``<space>=cmd()`` as a formula too.
+    """
+    if isinstance(value, str):
+        stripped = value.lstrip()
+        if stripped[:1] in ("=", "+", "-", "@", "\t", "\r"):
+            return f"'{value}"
+    return value
+
+
 def _text(value: Any) -> str:
     if value is None:
         return ""
-    return str(value)
+    return str(_safe_csv_cell(str(value)))
 
 
 def user_account_to_csv(
