@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -10,16 +12,14 @@ from app.core.database import get_db
 from app.core.deps import get_current_user, require_admin
 from app.core.rate_limiter import rate_limit
 from app.models.user import User
-from app.schemas.portfolio import UserPortfolioOut
-from app.schemas.calibration import CalibrationStatusOut
-from app.schemas.outcome import FounderOutcomeSubmit
-from app.simulation.portfolio_analytics import (
-    build_conversion_distribution,
-    build_failure_domain_counts,
-    build_recent_projects,
-    build_status_breakdown,
-    build_stress_test_coverage,
+from app.schemas.calibration import (
+    ArchitectWeightedDrift,
+    CalibrationStatusOut,
+    WeightedDriftSummary,
 )
+from app.schemas.outcome import FounderOutcomeSubmit
+from app.schemas.portfolio import UserPortfolioOut
+from app.simulation.calibration_engine import ALL_ARCHITECT_NAMES
 from app.simulation.calibration_insights import (
     build_architect_health,
     build_outcome_coverage,
@@ -27,8 +27,17 @@ from app.simulation.calibration_insights import (
     build_weighted_drift,
     summarise_calibration,
 )
-from app.simulation.calibration_engine import ALL_ARCHITECT_NAMES
-from app.schemas.calibration import ArchitectWeightedDrift, WeightedDriftSummary
+from app.simulation.founder_outcomes_export import (
+    founder_outcomes_to_csv,
+    predicted_conversion_from_results,
+)
+from app.simulation.portfolio_analytics import (
+    build_conversion_distribution,
+    build_failure_domain_counts,
+    build_recent_projects,
+    build_status_breakdown,
+    build_stress_test_coverage,
+)
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -211,6 +220,116 @@ def submit_founder_outcome(
         )
     db.commit()
     return {"status": "outcome_recorded"}
+
+
+@router.get(
+    "/founder-outcomes/export",
+    summary="Export all founder outcomes as CSV (or JSON)",
+    response_class=StreamingResponse,
+    # Admin-only audit export of the learning layer. 10/min/IP keeps a
+    # stray admin token from driving repeated full-table scans.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
+)
+def export_founder_outcomes(
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "enriched rows."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of the calibration learning layer."""
+    _require_admin(current_user)
+
+    rows_raw = db.execute(
+        text("""
+            SELECT
+                fo.id,
+                fo.simulation_id,
+                fo.project_id,
+                p.title AS project_title,
+                fo.created_at,
+                fo.launched,
+                fo.actual_conversion_rate,
+                fo.days_since_launch,
+                fo.data_confidence,
+                fo.product_changed_since_sim,
+                fo.pricing_changed,
+                fo.target_market_changed,
+                fo.signal_quality_at_run,
+                fo.validated,
+                fo.learning_weight,
+                fo.notes,
+                s.results_json
+            FROM founder_outcomes fo
+            JOIN simulations s ON s.id = fo.simulation_id
+            JOIN projects p ON p.id = fo.project_id
+            ORDER BY fo.created_at DESC, fo.id DESC
+        """)
+    ).mappings().all()
+
+    rows = []
+    for raw in rows_raw:
+        predicted = predicted_conversion_from_results(raw.get("results_json"))
+        rows.append(
+            {
+                "id": raw.get("id"),
+                "simulation_id": raw.get("simulation_id"),
+                "project_id": raw.get("project_id"),
+                "project_title": raw.get("project_title"),
+                "created_at": raw.get("created_at"),
+                "launched": raw.get("launched"),
+                "actual_conversion_rate": raw.get("actual_conversion_rate"),
+                "predicted_conversion_rate": predicted,
+                "signal_quality_at_run": raw.get("signal_quality_at_run"),
+                "days_since_launch": raw.get("days_since_launch"),
+                "data_confidence": raw.get("data_confidence"),
+                "product_changed_since_sim": raw.get("product_changed_since_sim"),
+                "pricing_changed": raw.get("pricing_changed"),
+                "target_market_changed": raw.get("target_market_changed"),
+                "validated": raw.get("validated"),
+                "learning_weight": raw.get("learning_weight"),
+                "notes": raw.get("notes"),
+            }
+        )
+
+    generated_at = datetime.now(timezone.utc).isoformat()
+    fmt = format.strip().lower() if format else "csv"
+    if fmt == "json":
+        payload = {
+            "generated_at": generated_at,
+            "user_id": current_user.id,
+            "total": len(rows),
+            "rows": rows,
+        }
+        body = json.dumps(payload, default=str, indent=2).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": 'attachment; filename="founder-outcomes.json"',
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = founder_outcomes_to_csv(
+        rows,
+        metadata={"generated_at": generated_at, "user_id": current_user.id},
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="founder-outcomes.csv"',
+            "Content-Length": str(len(body)),
+        },
+    )
 
 
 @router.get(
