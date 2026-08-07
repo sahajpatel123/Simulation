@@ -34,6 +34,8 @@ SECURITY_AUDIT.md              @sahajpatel123
 .github/SECURITY_ADVISORIES.yml  @sahajpatel123
 .github/ISSUE_TEMPLATE/security_report.md @sahajpatel123
 .github/workflows/codeql.yml     @sahajpatel123
+.github/workflows/dependency-review.yml @sahajpatel123
+.github/workflows/scorecard.yml          @sahajpatel123
 .github/workflows/security-scan.yml       @sahajpatel123
 .github/workflows/secret-scan.yml         @sahajpatel123
 .github/workflows/workflow-validation.yml @sahajpatel123
