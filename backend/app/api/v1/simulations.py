@@ -538,6 +538,28 @@ def worker_health():
 
 
 @router.get(
+    "/db-health",
+    summary="Probe database connectivity with SELECT 1",
+    responses={
+        200: {"description": "Database is reachable"},
+        503: {"description": "Database is unreachable"},
+    },
+)
+def db_health(
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    """Health probe for the PostgreSQL connection used by the API."""
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as exc:  # pragma: no cover - depends on live DB state
+        raise HTTPException(
+            status_code=503,
+            detail=f"Database unreachable: {exc}",
+        ) from exc
+    return {"database": "reachable"}
+
+
+@router.get(
     "/clusters",
     summary="List 52 customer clusters and registry metadata",
     responses=_JSON_200,
