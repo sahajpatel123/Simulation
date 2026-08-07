@@ -113,7 +113,7 @@ For security concerns, please contact the project maintainers.
   tightened the workflow validator to fail on invalid YAML and reject
   `actions: write`.
 - 2026-08-07 - Added OpenSSF Scorecard supply-chain analysis with SARIF results
-  uploaded to GitHub Code Scanning.
+  uploaded to GitHub Code Scanning, and enabled Scorecard runs on pull requests.
 - 2026-08-07 - Restricted `id-token: write` to the Scorecard workflow, validated
   `gitleaks.toml` in the workflow validator, and made scanner artifact uploads
   fail when reports are missing.
