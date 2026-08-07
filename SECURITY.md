@@ -41,6 +41,7 @@ This repository runs automated security scans:
 - **Trivy**: Container, filesystem, and Dockerfile configuration scanner (`security-scan.yml`)
 - **npm audit**: Frontend dependency vulnerability scanner (`security-scan.yml`)
 - **CodeQL**: Semantic code analysis with the `security-and-quality` query suite (`codeql.yml`)
+- **Scorecard**: OpenSSF supply-chain health checks with SARIF uploaded to Code Scanning (`scorecard.yml`)
 - **Dependency Review**: PR-time gate on high-severity dependency changes (`dependency-review.yml`)
 - **Gitleaks**: Git history and working-tree secret scanner (`backend-ci.yml`)
 - **Gitleaks (scheduled)**: Weekly full-history secret scan to catch pre-existing leaks (`secret-scan.yml`)
@@ -106,4 +107,6 @@ For security concerns, please contact the project maintainers.
   actionlint install to a release artifact instead of an unpinned script, and
   tightened the workflow validator to fail on invalid YAML and reject
   `actions: write`.
+- 2026-08-07 - Added OpenSSF Scorecard supply-chain analysis with SARIF results
+  uploaded to GitHub Code Scanning.
 - [VERSION] - Initial security policy
