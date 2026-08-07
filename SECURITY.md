@@ -117,4 +117,6 @@ For security concerns, please contact the project maintainers.
 - 2026-08-07 - Restricted `id-token: write` to the Scorecard workflow, validated
   `gitleaks.toml` in the workflow validator, and made scanner artifact uploads
   fail when reports are missing.
+- 2026-08-07 - Added a Safety scan job to `security-scan.yml`, consolidating
+  Python advisory checks in the security workflow alongside lint.
 - [VERSION] - Initial security policy
