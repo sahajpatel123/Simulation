@@ -23,6 +23,7 @@ from app.models.project import Project
 from app.models.simulation import Simulation
 from app.models.user import User
 from app.simulation.user_projects_export import user_projects_to_csv
+from app.simulation.user_account_export import user_account_to_csv
 from app.schemas.audit_log import AuditLogListOut, AuditLogOut
 from app.schemas.auth import MessageResponse
 from app.schemas.project import (
@@ -1963,6 +1964,45 @@ def export_my_projects(
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": 'attachment; filename="my-projects.csv"',
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/me/account/export",
+    summary="Export the current user's account info as CSV",
+    response_class=StreamingResponse,
+)
+def export_my_account(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of the current user's account row."""
+    row = {
+        "user_id": current_user.id,
+        "email": current_user.email,
+        "full_name": current_user.full_name,
+        "tier": current_user.tier,
+        "subscription_tier": current_user.subscription_tier,
+        "simulations_used_this_month": current_user.simulations_used_this_month,
+        "is_admin": current_user.is_admin,
+        "created_at": current_user.created_at,
+    }
+    csv_text = user_account_to_csv(
+        row,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="my-account.csv"',
             "Content-Length": str(len(body)),
         },
     )
