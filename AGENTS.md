@@ -43,7 +43,7 @@ The repo ships several GitHub Actions workflows in `.github/workflows/`:
 - `dependency-review.yml` — fails PRs that introduce high-severity dependency
   vulnerabilities (scans dependency diffs).
 - `lint.yml` — ruff + `pip-audit` / `safety` dependency scans.
-- `security-scan.yml` — Bandit, `pip-audit`, `npm audit`, and Trivy (fs + Dockerfile config).
+- `security-scan.yml` — Bandit, `pip-audit`, `safety`, `npm audit`, and Trivy (fs + Dockerfile config).
 - `secret-scan.yml` — weekly full-history gitleaks scan (scheduled + manual).
 - `scorecard.yml` — OpenSSF Scorecard supply-chain analysis (SARIF → Code Scanning).
 - `workflow-validation.yml` — actionlint, YAML/TOML validation, security-policy,
