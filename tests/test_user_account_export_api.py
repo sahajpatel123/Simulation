@@ -23,10 +23,11 @@ class _User:
         self.created_at = "2026-08-08T04:00:00+00:00"
 
 
-def _call_route():
+def _call_route(*, format: str = "csv"):
     from app.api.v1 import users as user_mod
 
     return user_mod.export_my_account(
+        format=format,
         db=object(),
         current_user=_User(),
     )
@@ -52,3 +53,13 @@ def test_export_my_account_returns_csv() -> None:
     assert "user_id,email,full_name,tier" in body
     assert "42,a@b.com,Ada,free,,2,False" in body
     assert "user_id,42" in body
+
+
+def test_export_my_account_format_json_returns_payload() -> None:
+    resp = _call_route(format="json")
+
+    assert resp.media_type == "application/json; charset=utf-8"
+    body = _body(resp).decode("utf-8")
+    assert '"account"' in body
+    assert '"user_id": 42' in body
+    assert '"email": "a@b.com"' in body
