@@ -917,14 +917,21 @@ def put_project_tags(
 )
 def get_tag_suggestions(
     project_id: int,
+    max_tags: int = Query(default=5, ge=1, le=20),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, object]:
     """Return a small heuristic tag-suggestion list for the project."""
     project = get_owned_project(db, current_user.id, project_id)
+    existing = set(project.tags or [])
+    tags = [
+        tag
+        for tag in suggest_tags(project.title, project.description, max_tags=max_tags)
+        if tag not in existing
+    ]
     return {
         "project_id": project.id,
-        "tags": suggest_tags(project.title, project.description),
+        "tags": tags,
     }
 
 

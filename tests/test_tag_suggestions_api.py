@@ -18,6 +18,7 @@ class _Project:
         self.id = 10
         self.title = "AI Sim"
         self.description = "A simulation engine for founders"
+        self.tags = ["sim"]
 
 
 class _FakeQuery:
@@ -42,12 +43,18 @@ class _FakeSession:
         return _FakeQuery([])
 
 
-def _call_route(*, project_id: int = 10, session: _FakeSession | None = None):
+def _call_route(
+    *,
+    project_id: int = 10,
+    max_tags: int = 5,
+    session: _FakeSession | None = None,
+):
     from app.api.v1 import projects as proj_mod
 
     db = session if session is not None else _FakeSession()
     return proj_mod.get_tag_suggestions(
         project_id=project_id,
+        max_tags=max_tags,
         db=db,
         current_user=type("U", (), {"id": 42})(),
     )
@@ -58,7 +65,8 @@ def test_get_tag_suggestions_returns_list() -> None:
 
     assert result["project_id"] == 10
     assert isinstance(result["tags"], list)
-    assert "sim" in result["tags"]
+    assert "sim" not in result["tags"]
+    assert "founders" in result["tags"]
 
 
 def test_get_tag_suggestions_missing_project_raises_404() -> None:
