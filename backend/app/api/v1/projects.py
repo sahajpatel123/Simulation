@@ -4493,7 +4493,7 @@ def export_project_coverage_gaps(
             media_type="application/json; charset=utf-8",
             headers={
                 "Content-Disposition": (
-                    'attachment; filename="coverage-gaps.json"'
+                    f'attachment; filename="coverage-gaps-{project_id}.json"'
                 ),
                 "Content-Length": str(len(body)),
             },
@@ -4505,7 +4505,9 @@ def export_project_coverage_gaps(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": 'attachment; filename="coverage-gaps.csv"',
+            "Content-Disposition": (
+                f'attachment; filename="coverage-gaps-{project_id}.csv"'
+            ),
             "Content-Length": str(len(body)),
         },
     )

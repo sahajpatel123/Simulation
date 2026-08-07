@@ -51,6 +51,15 @@ def _value(value: Any) -> object:
     return "" if value is None else value
 
 
+def _breakdown_cell(breakdown: Any) -> str:
+    """Render the sensitivity breakdown as a compact ``KEY=count`` cell."""
+    if not isinstance(breakdown, dict) or not breakdown:
+        return ""
+    return "; ".join(
+        f"{key}={_value(value)}" for key, value in sorted(breakdown.items())
+    )
+
+
 def _safe_csv_cell(value: object) -> object:
     """Neutralise spreadsheet formula injection while leaving normal data intact.
 
@@ -97,7 +106,10 @@ def coverage_gaps_to_csv(
         "narrative",
     )
     for key in summary_keys:
-        _write_row(writer, [key, _value(data.get(key))])
+        if key == "sensitivity_breakdown":
+            _write_row(writer, [key, _breakdown_cell(data.get(key))])
+        else:
+            _write_row(writer, [key, _value(data.get(key))])
     _write_row(writer, [])
 
     # Covered categories.

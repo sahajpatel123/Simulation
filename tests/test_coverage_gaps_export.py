@@ -60,6 +60,7 @@ def test_csv_renders_summary_categories_and_signals() -> None:
     assert "section,Coverage Gaps Summary" in csv_text
     assert "project_title,Pricing idea" in csv_text
     assert "total_assumption_count,3" in csv_text
+    assert "sensitivity_breakdown,HIGH=2; MEDIUM=1" in csv_text
     assert "section,Covered Categories" in csv_text
     assert "1,Pricing" in csv_text
     assert "2,Trust" in csv_text
@@ -147,6 +148,24 @@ def test_csv_neutralizes_spreadsheet_formula_injection() -> None:
     assert "'-2+3" in csv_text
     assert "'=cmd" in csv_text
     assert "'=NOW()" in csv_text
+
+
+def test_csv_summary_breakdown_formula_key_is_guarded() -> None:
+    payload = ProjectCoverageGapsOut(
+        project_id=1,
+        project_title="Pricing idea",
+        covered_categories=[],
+        missing_categories=[],
+        sensitivity_breakdown={"=cmd": 1},
+        covered_cluster_count=0,
+        missing_architect_count=0,
+        total_assumption_count=1,
+        narrative="",
+        key_signals=[],
+    )
+    csv_text = coverage_gaps_to_csv(payload)
+
+    assert "'=cmd=1" in csv_text
 
 
 # ---------------------------------------------------------------------------
@@ -265,7 +284,7 @@ def test_export_route_returns_csv(monkeypatch: pytest.MonkeyPatch) -> None:
     resp = _call_route(monkeypatch)
 
     assert resp.media_type == "text/csv; charset=utf-8"
-    assert 'filename="coverage-gaps.csv"' in resp.headers["Content-Disposition"]
+    assert 'filename="coverage-gaps-1.csv"' in resp.headers["Content-Disposition"]
     body = _body(resp).decode("utf-8")
     assert "section,Coverage Gaps Summary" in body
     assert "total_assumption_count,3" in body
@@ -281,12 +300,22 @@ def test_export_route_returns_json(monkeypatch: pytest.MonkeyPatch) -> None:
     resp = _call_route(monkeypatch, format="json")
 
     assert resp.media_type == "application/json; charset=utf-8"
-    assert 'filename="coverage-gaps.json"' in resp.headers["Content-Disposition"]
+    assert 'filename="coverage-gaps-1.json"' in resp.headers["Content-Disposition"]
     body = _body(resp).decode("utf-8")
     assert '"metadata"' in body
     assert '"coverage_gaps"' in body
     assert '"project_title"' in body
     assert '"Retention"' in body
+
+
+def test_export_route_filename_includes_project_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    csv_resp = _call_route(monkeypatch, project_id=42)
+    assert 'filename="coverage-gaps-42.csv"' in csv_resp.headers["Content-Disposition"]
+
+    json_resp = _call_route(monkeypatch, project_id=42, format="json")
+    assert 'filename="coverage-gaps-42.json"' in json_resp.headers["Content-Disposition"]
 
 
 def test_export_route_rejects_unknown_format(
