@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -83,6 +84,18 @@ from app.simulation.outcomes_digest_v2 import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/projects", tags=["outcomes"])
+
+
+def _json_default(value: Any) -> str:
+    """Serialize non-JSON values for export payloads deterministically.
+
+    Datetimes are rendered as ISO 8601 strings (matching the CSV export and
+    the timeline endpoint) instead of Python's space-separated ``str()``.
+    """
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
 
 # Outcomes digest cache — single source of truth so
 # future rename propagates to every invalidation site.
@@ -739,7 +752,7 @@ def export_outcome_tracker(
                 "total": len(rows),
                 "points": rows,
             },
-            default=str,
+            default=_json_default,
             indent=2,
         )
         body = json_text.encode("utf-8")
@@ -760,6 +773,7 @@ def export_outcome_tracker(
             "generated_at": generated_at,
             "user_id": current_user.id,
             "project_id": project_id,
+            "total": len(rows),
         },
     )
     body = csv_text.encode("utf-8")

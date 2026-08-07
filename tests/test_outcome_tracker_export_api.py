@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import types
+from datetime import datetime, timezone
 
 if "razorpay" not in sys.modules:
     stub = types.ModuleType("razorpay")
@@ -148,6 +149,7 @@ def test_export_outcome_tracker_csv() -> None:
     assert "generated_at," in body
     assert "user_id,42" in body
     assert "project_id,7" in body
+    assert "total,1" in body
 
 
 def test_export_outcome_tracker_json() -> None:
@@ -159,6 +161,24 @@ def test_export_outcome_tracker_json() -> None:
     assert '"project_id": 7' in body
     assert '"total": 0' in body
     assert '"points": []' in body
+
+
+def test_export_outcome_tracker_json_uses_iso_timestamps() -> None:
+    session = _FakeSession(
+        rows=[
+            _TrackerRow(
+                1,
+                recorded_at=datetime(2026, 8, 1, tzinfo=timezone.utc),
+                actual=0.05,
+            )
+        ]
+    )
+    resp = _call_route(format="json", session=session)
+
+    body = _body(resp).decode("utf-8")
+    assert '"total": 1' in body
+    assert '"recorded_at": "2026-08-01T00:00:00+00:00"' in body
+    assert '"2026-08-01 00:00:00+00:00"' not in body
 
 
 def test_export_outcome_tracker_queries_owned_project_and_ordered_rows() -> None:

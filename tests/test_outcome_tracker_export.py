@@ -40,12 +40,14 @@ def test_csv_contains_header_rows_and_metadata() -> None:
             "generated_at": "now",
             "user_id": 42,
             "project_id": 7,
+            "total": 1,
         },
     )
 
     assert "generated_at,now" in csv_text
     assert "user_id,42" in csv_text
     assert "project_id,7" in csv_text
+    assert "total,1" in csv_text
     assert "format_version,1" in csv_text
     assert (
         "id,project_id,simulation_id,recorded_at,actual_conversion_rate,"

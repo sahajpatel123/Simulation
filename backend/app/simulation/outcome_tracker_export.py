@@ -90,6 +90,8 @@ def outcome_tracker_to_csv(
         writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
         writer.writerow(["user_id", _text(metadata.get("user_id"))])
         writer.writerow(["project_id", _text(metadata.get("project_id"))])
+        if metadata.get("total") is not None:
+            writer.writerow(["total", _text(metadata.get("total"))])
         writer.writerow(["format_version", _text(metadata.get("format_version", FORMAT_VERSION))])
         writer.writerow([])
 
