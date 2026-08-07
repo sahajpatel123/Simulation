@@ -204,6 +204,10 @@ jobs:
                       errors.append(
                           f'{f} {name}: actions: write is too broad; use actions: read or omit'
                       )
+                  if 'scorecard.yml' not in f and block.get('id-token') == 'write':
+                      errors.append(
+                          f'{f} {name}: id-token: write is only allowed in scorecard.yml'
+                      )
           if errors:
               print('::error::Least-privilege permission violations')
               for e in errors:
