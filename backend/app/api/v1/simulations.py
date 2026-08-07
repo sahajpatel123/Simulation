@@ -59,6 +59,7 @@ from app.models.cluster_run_summary import ClusterRunSummary
 from app.schemas.channel_attribution import ChannelAttributionOut
 from app.schemas.cluster_opportunity import ClusterOpportunityMatrixOut
 from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
+from app.schemas.founder_action_plan import FounderActionPlanOut
 from app.schemas.market_concentration import MarketConcentrationOut
 from app.schemas.market_sizing import MarketSizingOut
 from app.schemas.simulation import (
@@ -240,6 +241,7 @@ from app.simulation.conductor import _ARCHITECTS as _architect_registry
 from app.simulation.comparison import build_simulation_comparison
 from app.simulation.cohort_retention import build_cohort_retention
 from app.simulation.funnel_diagnosis import build_funnel_diagnosis
+from app.simulation.founder_action_plan import build_founder_action_plan
 from app.simulation.scored_assumption import (
     ClaimConfidence,
     score_assumptions,
@@ -7257,6 +7259,70 @@ def get_founder_brief(
         target_market_fraction=target_market_fraction,
         average_order_value=average_order_value,
         purchase_frequency_per_year=purchase_frequency_per_year,
+    )
+
+
+@router.get(
+    "/{simulation_id}/founder-action-plan",
+    response_model=FounderActionPlanOut,
+    summary=(
+        "Founder action plan: ranked, effort-weighted next actions with "
+        "quick-win prioritisation"
+    ),
+    responses=_JSON_200,
+)
+def get_founder_action_plan(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FounderActionPlanOut:
+    """
+    Deterministic founder action plan from a completed run.
+
+    Re-uses the persisted domain findings and funnel metrics to produce a
+    ranked action list sorted by quick-win score (conversion impact per
+    unit of implementation effort). Pure post-hoc analytics — no Celery,
+    no LLM, no DB writes.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — founder action plan requires "
+                "completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    product_type_name = str(
+        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
+    )
+    try:
+        product_type = ProductType(product_type_name)
+    except ValueError:
+        product_type = ProductType.SAAS
+    product_type_name = product_type.value
+
+    return build_founder_action_plan(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        product_type=product_type_name,
+        signal_quality=float(sim.signal_quality)
+        if sim.signal_quality is not None
+        else None,
     )
 
 
