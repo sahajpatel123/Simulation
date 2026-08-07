@@ -90,6 +90,16 @@ jobs:
             echo "⚠️ dependabot.yml not found"
           fi
 
+      - name: Ensure no environment files are tracked
+        run: |
+          tracked_env=$(git ls-files | grep -E '(^|/)\.env(\.local|\.production)?$' || true)
+          if [ -n "$tracked_env" ]; then
+            echo "::error::Environment files must never be committed:"
+            echo "$tracked_env"
+            exit 1
+          fi
+          echo "✅ No environment files tracked"
+
   validate-supply-chain:
     name: Validate action pinning & permissions
     runs-on: ubuntu-latest
