@@ -60,3 +60,35 @@ jobs:
         run: |
           python -c "import tomllib; tomllib.load(open('pyproject.toml', 'rb'))"
           echo "✅ TOML files are valid"
+
+  security-policy-check:
+    name: Security policy validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.2.0
+
+      - name: Validate security policy exists
+        run: |
+          if [ -f "SECURITY.md" ]; then
+            echo "✅ SECURITY.md exists"
+          else
+            echo "⚠️ SECURITY.md not found"
+          fi
+
+      - name: Check for security issue template
+        run: |
+          if [ -f ".github/ISSUE_TEMPLATE/security_report.md" ]; then
+            echo "✅ Security issue template exists"
+          else
+            echo "⚠️ Security issue template not found"
+          fi
+
+      - name: Validate dependabot configuration
+        run: |
+          if [ -f ".github/dependabot.yml" ]; then
+            python -c "import yaml; yaml.safe_load(open('.github/dependabot.yml'))"
+            echo "✅ dependabot.yml is valid"
+          else
+            echo "⚠️ dependabot.yml not found"
+          fi
