@@ -73,6 +73,7 @@ from app.schemas.simulation import (
     ClusterTrendOut,
     ClustersAggregateOut,
     DatabaseHealthOut,
+    RedisHealthOut,
     FindingsAggregateOut,
     FindingsTrendOut,
     OutcomesDigestOut,
@@ -577,16 +578,17 @@ def db_health(
 @router.get(
     "/redis-health",
     summary="Probe Redis connectivity with PING",
+    response_model=RedisHealthOut,
     responses={
         200: {"description": "Redis is reachable or unconfigured"},
         503: {"description": "Redis is unreachable"},
     },
 )
-def redis_health() -> dict[str, object]:
+def redis_health() -> RedisHealthOut:
     """Health probe for the Redis connection used by the API."""
     client = get_redis_client()
     if client is None:
-        return {"redis": "unconfigured"}
+        return RedisHealthOut(redis="unconfigured")
     started = time.perf_counter()
     try:
         client.ping()
@@ -597,11 +599,11 @@ def redis_health() -> dict[str, object]:
             detail="Redis unreachable",
         ) from exc
     latency_ms = (time.perf_counter() - started) * 1000.0
-    return {
-        "redis": "reachable",
-        "latency_ms": round(max(0.0, latency_ms), 3),
-        "checked_at": datetime.now(timezone.utc).isoformat(),
-    }
+    return RedisHealthOut(
+        redis="reachable",
+        latency_ms=round(max(0.0, latency_ms), 3),
+        checked_at=datetime.now(timezone.utc).isoformat(),
+    )
 
 
 @router.get(

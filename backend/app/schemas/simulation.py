@@ -68,6 +68,17 @@ class DatabaseHealthOut(BaseModel):
     checked_at: str = ""
 
 
+class RedisHealthOut(BaseModel):
+    """Response from ``GET /simulations/redis-health``.
+
+    A typed payload for the Redis connectivity probe.
+    """
+
+    redis: str
+    latency_ms: float = 0.0
+    checked_at: str = ""
+
+
 class FindingsAggregateOut(BaseModel):
     """Response from ``GET /simulations/aggregate/findings``.
 
@@ -964,4 +975,3 @@ class SimulationSensitivityMatrixOut(BaseModel):
     risk_matrix: list[dict] = []
     recommendations: list[dict] = []
     narrative: str = ""
-

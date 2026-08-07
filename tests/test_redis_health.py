@@ -33,23 +33,29 @@ def _patch_redis(monkeypatch: pytest.MonkeyPatch, value):
 def test_redis_health_returns_unconfigured_when_no_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from app.schemas.simulation import RedisHealthOut
+
     sim_mod = _patch_redis(monkeypatch, None)
 
     result = sim_mod.redis_health()
 
-    assert result["redis"] == "unconfigured"
+    assert isinstance(result, RedisHealthOut)
+    assert result.redis == "unconfigured"
 
 
 def test_redis_health_returns_reachable(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.schemas.simulation import RedisHealthOut
+
     sim_mod = _patch_redis(monkeypatch, _OkRedis())
 
     result = sim_mod.redis_health()
 
-    assert result["redis"] == "reachable"
-    assert isinstance(result["latency_ms"], float)
-    assert result["latency_ms"] >= 0.0
-    assert isinstance(result["checked_at"], str)
-    assert result["checked_at"]
+    assert isinstance(result, RedisHealthOut)
+    assert result.redis == "reachable"
+    assert isinstance(result.latency_ms, float)
+    assert result.latency_ms >= 0.0
+    assert isinstance(result.checked_at, str)
+    assert result.checked_at
 
 
 def test_redis_health_raises_503_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
