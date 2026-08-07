@@ -213,3 +213,71 @@ jobs:
           scan-ref: './Dockerfile'
           format: 'table'
           exit-code: '0'
+
+  npm-audit:
+    name: npm audit (frontend dependencies)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Node
+        uses: actions/setup-node@v5.0.0
+        with:
+          node-version: "20"
+
+      - name: Audit npm dependencies
+        id: npm-audit
+        run: |
+          set +e
+          npm audit --json --audit-level=moderate > npm-audit-report.json 2>npm-audit-stderr.txt
+          audit_exit=$?
+          set -e
+          echo "npm_audit_exit=$audit_exit" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Verify npm audit report
+        if: always()
+        run: |
+          python - <<'PY'
+          import json, sys
+          try:
+              with open('npm-audit-report.json') as f:
+                  data = json.load(f)
+          except Exception as e:
+              print(f'::error::npm audit report is not valid JSON: {e}')
+              sys.exit(1)
+          if not isinstance(data, dict):
+              print('::error::npm audit report is not an object')
+              sys.exit(1)
+          print('✅ npm audit report is valid JSON')
+          PY
+
+      - name: Upload npm audit report
+        if: always()
+        uses: actions/upload-artifact@v5.0.0
+        with:
+          name: npm-audit-report
+          path: npm-audit-report.json
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Summarise npm audit findings
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          try:
+              with open('npm-audit-report.json') as f:
+                  data = json.load(f)
+              metadata = data.get('metadata', {}).get('vulnerabilities', {})
+              total = sum(metadata.values()) if isinstance(metadata, dict) else 0
+              print(f'::notice title=npm audit:: {total} total vulnerabilities')
+              for k in ('critical', 'high', 'moderate', 'low', 'info'):
+                  if metadata.get(k):
+                      print(f'- {k}: {metadata[k]}')
+          except Exception as e:
+              print(f'npm audit summary failed: {e}', file=sys.stderr)
+          PY
