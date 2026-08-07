@@ -73,6 +73,9 @@ from app.simulation.calibration_health import (
 from app.simulation.outcome_tracker_read import (
     build_outcome_tracker_timeline,
 )
+from app.simulation.outcome_tracker_export import (
+    outcome_tracker_to_csv,
+)
 from app.simulation.outcomes_export import outcomes_to_csv
 from app.simulation.outcomes_digest_v2 import (
     build_outcomes_digest,
@@ -679,6 +682,97 @@ def get_outcome_tracker_timeline(
         project_id=project_id,
     )
     return OutcomeTrackerTimelineOut(**payload)
+
+
+@router.get(
+    "/{project_id}/outcome-tracker/export",
+    summary="Export a project's conversion-tracking checkpoints as CSV (or JSON)",
+    response_class=StreamingResponse,
+)
+def export_outcome_tracker(
+    project_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "checkpoint rows."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's conversion-tracking checkpoints."""
+    get_owned_project(db, current_user.id, project_id)
+
+    trackers = (
+        db.query(OutcomeTracker)
+        .filter(OutcomeTracker.project_id == project_id)
+        .order_by(OutcomeTracker.recorded_at.asc())
+        .all()
+    )
+    rows = [
+        {
+            "id": row.id,
+            "project_id": row.project_id,
+            "simulation_id": row.simulation_id,
+            "recorded_at": row.recorded_at,
+            "actual_conversion_rate": row.actual_conversion_rate,
+            "actual_revenue": row.actual_revenue,
+            "predicted_conversion_rate": row.predicted_conversion_rate,
+            "predicted_revenue": row.predicted_revenue,
+            "variance": row.variance,
+            "notes": row.notes,
+        }
+        for row in trackers
+    ]
+
+    generated_at = datetime.now(timezone.utc).isoformat()
+    fmt = format.strip().lower() if format else "csv"
+    if fmt == "json":
+        json_text = json.dumps(
+            {
+                "generated_at": generated_at,
+                "user_id": current_user.id,
+                "project_id": project_id,
+                "total": len(rows),
+                "points": rows,
+            },
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="outcome-tracker-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = outcome_tracker_to_csv(
+        rows,
+        metadata={
+            "generated_at": generated_at,
+            "user_id": current_user.id,
+            "project_id": project_id,
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="outcome-tracker-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
 
 
 @router.post(
