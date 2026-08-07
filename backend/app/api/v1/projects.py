@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -99,6 +100,7 @@ from app.schemas.accountability import (
 )
 from app.schemas.reweighting import ReweightingPreviewOut
 from app.schemas.simulation_trend import SimulationTrendOut
+from app.simulation.project_simulations_export import simulations_to_csv
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -4802,3 +4804,58 @@ def get_cluster_cohort_drift(
         ttl_seconds=_COHORT_DRIFT_CACHE_TTL_S,
     )
     return ClusterCohortDriftOut(**payload)
+
+
+@router.get(
+    "/{project_id}/simulations/export",
+    summary="Export a project's simulations as CSV",
+    response_class=StreamingResponse,
+)
+def export_project_simulations(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's simulation rows."""
+    get_owned_project(db, current_user.id, project_id)
+
+    simulations = (
+        db.query(Simulation)
+        .filter(Simulation.project_id == project_id)
+        .order_by(Simulation.created_at.desc())
+        .all()
+    )
+    rows = [
+        {
+            "simulation_id": simulation.id,
+            "project_id": simulation.project_id,
+            "status": simulation.status,
+            "created_at": simulation.created_at,
+            "signal_quality": simulation.signal_quality,
+            "product_type": (
+                (simulation.results_json or {}).get("product_type_detected", "")
+                if simulation.results_json
+                else ""
+            ),
+            "population_weighted_conversion": (
+                (simulation.results_json or {}).get(
+                    "population_weighted_conversion"
+                )
+                if simulation.results_json
+                else None
+            ),
+        }
+        for simulation in simulations
+    ]
+    csv_text = simulations_to_csv(rows)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="simulations-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
