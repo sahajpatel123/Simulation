@@ -39,6 +39,7 @@ This repository runs automated security scans:
 - **pip-audit**: Python dependency vulnerability scanner (`security-scan.yml`, `lint.yml`)
 - **Safety**: Python dependency vulnerability scanner (`lint.yml`)
 - **Trivy**: Container, filesystem, and Dockerfile configuration scanner (`security-scan.yml`)
+- **npm audit**: Frontend dependency vulnerability scanner (`security-scan.yml`)
 - **CodeQL**: Semantic code analysis with the `security-and-quality` query suite (`codeql.yml`)
 - **Dependency Review**: PR-time gate on high-severity dependency changes (`dependency-review.yml`)
 - **Gitleaks**: Git history and working-tree secret scanner (`backend-ci.yml`)
@@ -46,7 +47,9 @@ This repository runs automated security scans:
 - **Actionlint + YAML/TOML validation**: GitHub Actions workflow syntax and security-policy checks (`workflow-validation.yml`)
 
 The `workflow-validation.yml` job also enforces that every GitHub Action ref is pinned
-to a full version tag and that every workflow declares least-privilege permissions.
+to a full version tag, that every workflow declares least-privilege permissions,
+and that no workflow grants `actions: write`. YAML files are parsed and invalid
+workflow files fail the validator.
 
 ### Running Security Checks Locally
 
@@ -60,6 +63,9 @@ safety check -r requirements.txt
 
 # Secret scanning
 gitleaks detect --config .github/gitleaks.toml
+
+# Frontend dependency audit
+npm audit --json
 ```
 
 ### Dependency Management
@@ -96,4 +102,8 @@ For security concerns, please contact the project maintainers.
   least-privilege workflow permissions, and added an env-file tracking guard.
 - 2026-08-07 - Added Dependabot update groups, CODEOWNERS coverage for security
   config files, and documented the local security toolchain.
+- 2026-08-07 - Added npm audit scanning for frontend dependencies, pinned the
+  actionlint install to a release artifact instead of an unpinned script, and
+  tightened the workflow validator to fail on invalid YAML and reject
+  `actions: write`.
 - [VERSION] - Initial security policy
