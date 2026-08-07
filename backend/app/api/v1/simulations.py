@@ -4287,6 +4287,13 @@ def export_unit_economics(
     and price scenarios, and recommendations as a multi-section spreadsheet.
     ``format=json`` returns the raw payload for machine consumers.
     """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unsupported export format {format!r}; expected 'csv' or 'json'",
+        )
+
     payload = _build_unit_economics_payload(
         simulation_id=simulation_id,
         current_user_id=current_user.id,
@@ -4304,12 +4311,6 @@ def export_unit_economics(
         "project_id": payload.project_id,
     }
 
-    fmt = (format or "csv").strip().lower()
-    if fmt not in {"csv", "json"}:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"unsupported export format {format!r}; expected 'csv' or 'json'",
-        )
     if fmt == "json":
         json_text = json.dumps(
             {"metadata": metadata, "unit_economics": payload.model_dump()},

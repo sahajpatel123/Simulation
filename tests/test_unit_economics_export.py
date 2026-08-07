@@ -224,6 +224,31 @@ def test_export_route_rejects_unknown_format(monkeypatch: pytest.MonkeyPatch) ->
     assert "unsupported export format" in exc_info.value.detail
 
 
+def test_export_route_unknown_format_fails_before_payload_build(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unsupported format must not pay for the expensive payload build."""
+    sim_mod = _import_simulations_module()
+    calls: list[object] = []
+
+    def _forbidden_build(**kwargs: object) -> object:
+        calls.append(kwargs)
+        raise AssertionError("payload builder should not run for bad format")
+
+    monkeypatch.setattr(sim_mod, "_build_unit_economics_payload", _forbidden_build)
+
+    with pytest.raises(HTTPException) as exc_info:
+        sim_mod.export_unit_economics(
+            simulation_id=1,
+            format="yaml",
+            db=object(),  # type: ignore[arg-type]
+            current_user=type("U", (), {"id": 42})(),
+        )
+
+    assert exc_info.value.status_code == 400
+    assert calls == []
+
+
 def test_export_route_registered() -> None:
     """The unit-economics export route is present in the router."""
     sim_mod = _import_simulations_module()
