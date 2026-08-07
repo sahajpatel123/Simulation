@@ -175,6 +175,7 @@ from app.simulation.sustainability_positioning import (
 )
 from app.simulation.product_type import ProductType
 from app.simulation.unit_economics import build_unit_economics
+from app.simulation.unit_economics_export import unit_economics_to_csv
 from app.simulation.validation_roi import build_validation_roi
 from app.simulation.validation_experiment_planner import build_validation_experiment_plan
 from app.simulation.cluster_drill_down import (
@@ -4139,19 +4140,27 @@ def get_unit_economics(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> UnitEconomicsOut:
-    """
-    Build a per-customer economics read from completed results:
+    """Build the per-customer economics read (see :func:`_build_unit_economics_payload`)."""
+    return _build_unit_economics_payload(
+        simulation_id=simulation_id,
+        current_user_id=current_user.id,
+        db=db,
+        gross_margin=gross_margin,
+        purchase_frequency_per_year=purchase_frequency_per_year,
+        assumed_cac=assumed_cac,
+    )
 
-      * effective price per cluster (AOV capped at willingness-to-pay ceiling)
-      * expected lifetime from the day-30/90 survival curve
-      * LTV, channel-scaled CAC, LTV:CAC and payback per cluster
-      * demand-weighted blended read, CAC affordability ceiling and verdicts
 
-    Pure deterministic analytics — no Celery, no LLM. Pass ``assumed_cac``
-    (your blended cost per acquired customer) to replace the derived default
-    of half an average order value.
-    """
-    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+def _build_unit_economics_payload(
+    simulation_id: int,
+    current_user_id: int,
+    db: Session,
+    gross_margin: float = 0.60,
+    purchase_frequency_per_year: float = 12.0,
+    assumed_cac: float = 0.0,
+) -> UnitEconomicsOut:
+    """Compute a complete unit-economics payload for an owned simulation."""
+    sim = _get_owned_simulation(simulation_id, current_user_id, db)
 
     if sim.status == "FAILED":
         raise HTTPException(
@@ -4238,6 +4247,96 @@ def get_unit_economics(
         gross_margin=gross_margin,
         purchase_frequency_per_year=purchase_frequency_per_year,
         assumed_cac=assumed_cac,
+    )
+
+
+@router.get(
+    "/{simulation_id}/unit-economics/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export the unit-economics analysis as CSV (or JSON with "
+        "?format=json)"
+    ),
+    # Same DB read cost as the JSON unit-economics endpoint; cap polling
+    # so a dashboard loop can't drive repeated Conductor recomputes.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_unit_economics(
+    simulation_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "unit-economics payload. Unsupported values return a 400 "
+            "response."
+        ),
+    ),
+    gross_margin: float = Query(0.60, ge=0.0, le=1.0),
+    purchase_frequency_per_year: float = Query(12.0, ge=1.0),
+    assumed_cac: float = Query(0.0, ge=0.0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a simulation's unit-economics analysis.
+
+    Supports the same ``gross_margin`` / ``purchase_frequency_per_year`` /
+    ``assumed_cac`` inputs as ``GET /simulations/{id}/unit-economics``.
+    Default ``format=csv`` renders the summary, per-cluster economics, CAC
+    and price scenarios, and recommendations as a multi-section spreadsheet.
+    ``format=json`` returns the raw payload for machine consumers.
+    """
+    payload = _build_unit_economics_payload(
+        simulation_id=simulation_id,
+        current_user_id=current_user.id,
+        db=db,
+        gross_margin=gross_margin,
+        purchase_frequency_per_year=purchase_frequency_per_year,
+        assumed_cac=assumed_cac,
+    )
+
+    metadata = {
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "user_id": current_user.id,
+        "format_version": "1",
+        "simulation_id": simulation_id,
+        "project_id": payload.project_id,
+    }
+
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unsupported export format {format!r}; expected 'csv' or 'json'",
+        )
+    if fmt == "json":
+        json_text = json.dumps(
+            {"metadata": metadata, "unit_economics": payload.model_dump()},
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="unit-economics.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = unit_economics_to_csv(payload, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="unit-economics.csv"',
+            "Content-Length": str(len(body)),
+        },
     )
 
 
