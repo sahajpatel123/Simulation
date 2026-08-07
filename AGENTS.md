@@ -58,6 +58,7 @@ Rules that keep CI green and secure:
 - If a security scanner cannot run, fix the runner; do not silence it with `|| true`.
 - When adding a new workflow, declare explicit least-privilege `permissions`.
 - Do not grant `actions: write`; use `actions: read` or omit the scope.
+- Do not grant `id-token: write` outside `scorecard.yml`.
 - Set `persist-credentials: false` on every checkout step.
 
 Local security scans:
