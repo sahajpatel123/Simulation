@@ -115,6 +115,7 @@ from app.schemas.retention_churn import RetentionChurnOut
 from app.schemas.distribution_channels import DistributionChannelsOut
 from app.schemas.market_timing import MarketTimingOut
 from app.schemas.competitive_moat import CompetitiveMoatOut
+from app.schemas.sustainability_positioning import SustainabilityPositioningOut
 from app.schemas.simulation_quality import SimulationQualityOut
 from app.schemas.unit_economics import UnitEconomicsOut
 from app.schemas.validation_experiment import ValidationExperimentPlanOut
@@ -155,6 +156,9 @@ from app.simulation.retention_churn_read import build_retention_churn
 from app.simulation.distribution_channels import build_distribution_channels
 from app.simulation.market_timing_read import build_market_timing
 from app.simulation.competitive_moat import build_competitive_moat
+from app.simulation.sustainability_positioning import (
+    build_sustainability_positioning,
+)
 from app.simulation.product_type import ProductType
 from app.simulation.unit_economics import build_unit_economics
 from app.simulation.validation_roi import build_validation_roi
@@ -6971,6 +6975,144 @@ def get_channel_attribution(
     ]
 
     return build_channel_attribution(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        signal_quality=float(sim.signal_quality)
+        if sim.signal_quality is not None
+        else None,
+        conductor_results=conductor_results,
+        cluster_registry=registry,
+        product_type=product_type_name,
+    )
+
+
+@router.get(
+    "/{simulation_id}/sustainability-positioning",
+    response_model=SustainabilityPositioningOut,
+    summary=(
+        "Sustainability positioning: ESG claim reach, population-weighted "
+        "conversion lift, per-cluster response tiers, and risk flags"
+    ),
+    responses=_JSON_200,
+)
+def get_sustainability_positioning(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SustainabilityPositioningOut:
+    """
+    Deterministic sustainability-positioning read from a completed run's
+    ``SustainabilityArchitect`` metrics:
+
+      * whether the brief makes environmental / ethical-sourcing claims
+        and whether those claims are evidence-backed
+      * population-weighted ESG affinity, green premium tolerance,
+        conversion lift, and premium friction
+      * the share of the covered market whose conversion model responds
+        to sustainability positioning
+      * per-cluster response tiers (HIGH / MODERATE / LOW / NO_SIGNAL)
+      * the highest-impact clusters to lead with, plus market-level
+        greenwashing, premium-friction and narrow-reach flags and
+        actionable recommendations
+
+    Pure post-hoc analytics — no Celery, no LLM, no DB writes. Metrics
+    are recomputed from the project's visible assumptions so
+    eco / ethical / evidence signals from the brief shape the read. Works
+    for all product types because SustainabilityArchitect runs in every
+    conductor stack.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — sustainability-positioning "
+                "analysis requires completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    environment = (
+        db.query(Environment)
+        .filter(Environment.id == sim.environment_id)
+        .first()
+    )
+    aov = 999.0
+    price_sensitivity = 0.5
+    market_maturity = 0.3
+    if environment:
+        aov = float(environment.average_order_value or 999.0)
+        price_sensitivity = float(environment.price_sensitivity or 0.5)
+        market_maturity = float(environment.market_maturity or 0.3)
+
+    assumptions = (
+        db.query(Assumption)
+        .filter(Assumption.project_id == sim.project_id, Assumption.is_hidden.is_(False))
+        .all()
+    )
+    assumption_dicts = [
+        {
+            "text": assumption.text,
+            "sensitivity": str(assumption.sensitivity or "MEDIUM"),
+            "impact_score": float(
+                assumption.impact_score
+                if assumption.impact_score is not None
+                else 5.0
+            ),
+        }
+        for assumption in assumptions
+    ]
+
+    product_type_name = str(
+        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
+    )
+    try:
+        product_type = ProductType(product_type_name)
+    except ValueError:
+        product_type = ProductType.SAAS
+    product_type_name = product_type.value
+
+    conductor = Conductor()
+    cond_result = conductor.run(
+        agents=[],
+        env_params={
+            "average_order_value": aov,
+            "price_sensitivity": price_sensitivity,
+            "market_maturity": market_maturity,
+            "sustainability_weight": 1.0,
+        },
+        assumptions=assumption_dicts,
+        product_type=product_type,
+    )
+    conductor_results = {
+        cid: {
+            name: {"metrics": output.metrics, "flags": output.flags}
+            for name, output in arch_outputs.items()
+        }
+        for cid, arch_outputs in cond_result.cluster_results.items()
+    }
+    registry = [
+        {
+            "cluster_id": cluster.cluster_id,
+            "name": cluster.name,
+            "population_weight": cluster.population_weight,
+        }
+        for cluster in _clusters_map.values()
+    ]
+
+    return build_sustainability_positioning(
         sim.results_json,
         simulation_id=sim.id,
         project_id=sim.project_id,
