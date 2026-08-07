@@ -3,31 +3,39 @@
 
 title = "TheCee Gitleaks Configuration"
 
-[[linters.rules]]
+[extend]
+useDefault = true
+
+[[rules]]
+id = "thecee-generic-secret"
 description = "Generic Secret"
 regex = '''(?i)(password|passwd|pwd)\s*[=:]\s*['\"][^'\"]{4,}['\"]'''
 tags = ["generic", "password"]
 entropy = 0
 
-[[linters.rules]]
+[[rules]]
+id = "thecee-aws-access-key-id"
 description = "AWS Access Key ID"
 regex = '''(AKIA[0-9A-Z]{16})'''
 tags = ["aws"]
 entropy = 0
 
-[[linters.rules]]
+[[rules]]
+id = "thecee-aws-secret-access-key"
 description = "AWS Secret Access Key"
 regex = '''(?:AWS_ACCESS_KEY_ID|aws_secret_access_key|secret_key).*['\"][A-Za-z0-9/+=]{40}['\"]'''
 tags = ["aws"]
 entropy = 0
 
-[[linters.rules]]
+[[rules]]
+id = "thecee-generic-api-key"
 description = "Generic API Key Pattern"
 regex = '''(?i)api[_-]?key\s*[=:]\s*['\"][a-z0-9_-]{16,}['\"]'''
 tags = ["generic", "api"]
 entropy = 4
 
-[[linters.rules]]
+[[rules]]
+id = "thecee-jwt-secret"
 description = "JWT Secret"
 regex = '''(?i)secret[_-]?key\s*[=:]\s*['\"][^'\"]{16,}['\"]'''
 tags = ["generic", "jwt"]
@@ -40,7 +48,7 @@ paths = [
     '''test.*\.py$''',        # Test files with mock data
     '''\.pydevproject$''',  # Python dev config
 ]
-words = [
+stopwords = [
     "sk-test-placeholder",  # Test placeholder in CI
     "ci-secret-key-not-used",  # CI secret placeholder
     "dev-secret-change-in-prod",  # Weak secret detection false positive

@@ -52,3 +52,10 @@ repos:
         args: ["-r", "backend/app", "--skip", "B101,B311"]
         exclude: "tests/|migrations/|__pycache__"
         files: ^backend/app/
+
+  # Secret scanning with gitleaks (same config as CI)
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.3
+    hooks:
+      - id: gitleaks
+        args: ["--config", ".github/gitleaks.toml"]
