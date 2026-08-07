@@ -4371,7 +4371,10 @@ def get_project_coverage_gaps(
 
     rows = (
         db.query(Assumption)
-        .filter(Assumption.project_id == project_id)
+        .filter(
+            Assumption.project_id == project_id,
+            Assumption.is_hidden.is_(False),
+        )
         .all()
     )
     assumption_dicts = [
@@ -4393,13 +4396,19 @@ def get_project_coverage_gaps(
         .all()
     )
     for (raw_results,) in sim_rows:
-        results = (
-            raw_results
-            if isinstance(raw_results, dict)
-            else json.loads(raw_results)
-            if isinstance(raw_results, str)
-            else {}
-        )
+        if isinstance(raw_results, dict):
+            results = raw_results
+        elif isinstance(raw_results, str):
+            try:
+                results = json.loads(raw_results)
+            except (ValueError, TypeError):
+                # A single malformed legacy row should not take
+                # the whole digest down; treat it as no results.
+                results = {}
+        else:
+            results = {}
+        if not isinstance(results, dict):
+            results = {}
         breakdown = results.get("cluster_breakdown") or {}
         if not isinstance(breakdown, dict):
             continue

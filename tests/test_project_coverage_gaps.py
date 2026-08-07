@@ -92,10 +92,15 @@ def test_project_coverage_gaps_route_registered() -> None:
 
 
 class _FakeAssumption:
-    def __init__(self, category: str, sensitivity: str) -> None:
+    def __init__(
+        self,
+        category: str,
+        sensitivity: str,
+        is_hidden: bool = False,
+    ) -> None:
         self.category = category
         self.sensitivity = sensitivity
-        self.is_hidden = False
+        self.is_hidden = is_hidden
 
 
 class _FakeProject:
@@ -125,9 +130,11 @@ class _FakeSession:
         self,
         assumptions: list[object] | None = None,
         sim_results: list[dict] | None = None,
+        raw_sim_rows: list[tuple[object]] | None = None,
     ) -> None:
         self.assumptions = assumptions or []
         self.sim_results = sim_results or []
+        self.raw_sim_rows = raw_sim_rows
 
     def query(self, *args, **kwargs):
         target = args[0] if args else None
@@ -138,9 +145,9 @@ class _FakeSession:
         if name == "Assumption":
             return _FakeQuery(rows=self.assumptions)
         if name == "Simulation":
-            return _FakeQuery(
-                rows=[(raw,) for raw in self.sim_results]
-            )
+            if self.raw_sim_rows is not None:
+                return _FakeQuery(rows=self.raw_sim_rows)
+            return _FakeQuery(rows=[(raw,) for raw in self.sim_results])
         return _FakeQuery(rows=[])
 
 
@@ -150,6 +157,7 @@ def _call_route(
     project_id: int = 1,
     assumptions: list[object] | None = None,
     sim_results: list[dict] | None = None,
+    raw_sim_rows: list[tuple[object]] | None = None,
 ):
     from app.api.v1 import projects as proj_mod
 
@@ -158,6 +166,7 @@ def _call_route(
         db=_FakeSession(
             assumptions=assumptions,
             sim_results=sim_results,
+            raw_sim_rows=raw_sim_rows,
         ),
         current_user=type("U", (), {"id": current_user_id})(),
     )
@@ -232,6 +241,56 @@ def test_project_coverage_gaps_handles_string_results_json() -> None:
         ],
     )
     assert out.covered_cluster_count == 1
+
+
+def test_project_coverage_gaps_handles_malformed_results_json() -> None:
+    pytest.importorskip(
+        "scipy", reason="Route registration requires scipy",
+    )
+    import sys
+    import types
+
+    if "razorpay" not in sys.modules:
+        stub = types.ModuleType("razorpay")
+        stub.Client = object  # type: ignore[attr-defined]
+        sys.modules["razorpay"] = stub
+
+    # A corrupted legacy text row should not take the digest down.
+    out = _call_route(
+        assumptions=[],
+        raw_sim_rows=[
+            ("{not valid json",),
+            ("[1, 2, 3]",),
+        ],
+    )
+    assert out.covered_cluster_count == 0
+    assert out.total_assumption_count == 0
+    assert "Pricing" in out.missing_categories
+
+
+def test_project_coverage_gaps_excludes_hidden_assumptions() -> None:
+    pytest.importorskip(
+        "scipy", reason="Route registration requires scipy",
+    )
+    import sys
+    import types
+
+    if "razorpay" not in sys.modules:
+        stub = types.ModuleType("razorpay")
+        stub.Client = object  # type: ignore[attr-defined]
+        sys.modules["razorpay"] = stub
+
+    out = _call_route(
+        assumptions=[
+            _FakeAssumption("Pricing", "HIGH"),
+            _FakeAssumption("Trust", "LOW", is_hidden=True),
+        ],
+    )
+    assert out.total_assumption_count == 1
+    assert "Pricing" in out.covered_categories
+    assert "Trust" in out.missing_categories
+    assert out.sensitivity_breakdown.get("HIGH") == 1
+    assert "LOW" not in out.sensitivity_breakdown
 
 
 def test_project_coverage_gaps_counts_string_cluster_ids() -> None:
