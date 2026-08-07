@@ -134,7 +134,7 @@ jobs:
             pip-audit-report.json
             safety-report.json
           retention-days: 30
-          if-no-files-found: ignore
+          if-no-files-found: error
 
       - name: Summarise findings
         if: always()

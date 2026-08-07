@@ -86,7 +86,7 @@ jobs:
           name: bandit-report
           path: bandit-report.json
           retention-days: 30
-          if-no-files-found: ignore
+          if-no-files-found: error
 
       - name: Summarise findings
         if: always()
@@ -166,7 +166,7 @@ jobs:
           name: pip-audit-report
           path: pip-audit-report.json
           retention-days: 30
-          if-no-files-found: ignore
+          if-no-files-found: error
 
       - name: Summarise findings
         if: always()
@@ -270,7 +270,7 @@ jobs:
           name: npm-audit-report
           path: npm-audit-report.json
           retention-days: 30
-          if-no-files-found: ignore
+          if-no-files-found: error
 
       - name: Summarise npm audit findings
         if: always()
