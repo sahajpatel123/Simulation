@@ -157,6 +157,10 @@ jobs:
                       ref = step.get('uses') or ''
                       if not ref:
                           continue
+                      if ref == 'actions/checkout@v6.0.2' and 'persist-credentials' not in step.get('with', {}):
+                          errors.append(
+                              f'{f} step {i}: checkout must set persist-credentials: false'
+                          )
                       if ref.startswith('docker://'):
                           if ref.count(':') < 2:
                               errors.append(f'{f} step {i}: {ref} not pinned to a specific tag')
