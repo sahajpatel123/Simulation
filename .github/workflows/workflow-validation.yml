@@ -89,3 +89,63 @@ jobs:
           else
             echo "⚠️ dependabot.yml not found"
           fi
+
+  validate-supply-chain:
+    name: Validate action pinning & permissions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Check action refs are pinned
+        run: |
+          python - <<'PY'
+          import glob, re, sys, yaml
+          errors = []
+          for f in glob.glob('.github/workflows/*.yml'):
+              with open(f) as fh:
+                  data = yaml.safe_load(fh) or {}
+              for job in (data.get('jobs') or {}).values():
+                  for i, step in enumerate((job.get('steps') or []), 1):
+                      ref = step.get('uses') or ''
+                      if not ref:
+                          continue
+                      if ref.startswith('docker://'):
+                          if ref.count(':') < 2:
+                              errors.append(f'{f} step {i}: {ref} not pinned to a specific tag')
+                          continue
+                      _, _, version = ref.partition('@')
+                      if re.fullmatch(r'[0-9a-f]{40}', version or ''):
+                          continue  # SHA-pinned is fine
+                      if version is None or version.count('.') < 2:
+                          errors.append(
+                              f'{f} step {i}: {ref} is not pinned to a full version tag'
+                          )
+          if errors:
+              print('::error::Supply-chain pinning violations')
+              for e in errors:
+                  print(f'  {e}')
+              sys.exit(1)
+          print('✅ All action refs are pinned to specific tags')
+          PY
+
+      - name: Check workflows set least-privilege permissions
+        run: |
+          python - <<'PY'
+          import glob, sys, yaml
+          errors = []
+          for f in glob.glob('.github/workflows/*.yml'):
+              with open(f) as fh:
+                  data = yaml.safe_load(fh) or {}
+              if data.get('permissions'):
+                  continue
+              for job_name, job in (data.get('jobs') or {}).items():
+                  if not job.get('permissions'):
+                      errors.append(f'{f} job {job_name}: no permissions block')
+          if errors:
+              print('::error::Least-privilege permission violations')
+              for e in errors:
+                  print(f'  {e}')
+              sys.exit(1)
+          print('✅ All workflows define explicit permissions')
+          PY

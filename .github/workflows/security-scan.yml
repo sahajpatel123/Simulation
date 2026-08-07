@@ -27,7 +27,6 @@ jobs:
     name: bandit (Python security)
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    continue-on-error: true
 
     steps:
       - name: Checkout code
@@ -48,14 +47,28 @@ jobs:
       - name: Run bandit (medium+ severity)
         id: bandit-scan
         run: |
+          set +e
           bandit -r backend/app \
             --severity-level medium \
             --confidence-level medium \
-            -f json -o bandit-report.json || true
+            -f json -o bandit-report.json
+          bandit_exit=$?
           bandit -r backend/app \
             --severity-level medium \
             --confidence-level medium \
             -f txt || true
+          set -e
+          echo "bandit_exit=$bandit_exit" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Verify bandit produced a report
+        if: always()
+        run: |
+          if [ ! -f bandit-report.json ]; then
+            echo "::error::Bandit did not produce a report — scanner failed"
+            exit 1
+          fi
+          echo "✅ Bandit report generated"
 
       - name: Upload bandit JSON
         if: always()
@@ -92,7 +105,6 @@ jobs:
     name: pip-audit (dependency CVEs)
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    continue-on-error: true
 
     steps:
       - name: Checkout
@@ -111,9 +123,22 @@ jobs:
       - name: Audit requirements.txt
         id: pip-audit
         run: |
+          set +e
           pip-audit -r requirements.txt \
-            --format json --output pip-audit-report.json || true
-          pip-audit -r requirements.txt || true
+            --format json --output pip-audit-report.json
+          audit_exit=$?
+          set -e
+          echo "audit_exit=$audit_exit" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Verify pip-audit produced a report
+        if: always()
+        run: |
+          if [ ! -f pip-audit-report.json ]; then
+            echo "::error::pip-audit did not produce a report — scanner failed"
+            exit 1
+          fi
+          echo "✅ pip-audit report generated"
 
       - name: Upload pip-audit JSON
         if: always()
