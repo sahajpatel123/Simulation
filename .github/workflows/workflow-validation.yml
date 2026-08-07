@@ -23,7 +23,12 @@ jobs:
       - name: Install actionlint
         id: get_actionlint
         run: |
-          bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.5
+          set -euo pipefail
+          curl -fsSL \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.5/actionlint_1.7.5_linux_amd64.tar.gz \
+            -o actionlint.tar.gz
+          tar -xzf actionlint.tar.gz actionlint
+          ./actionlint -version
           echo "executable=$PWD/actionlint" >> "$GITHUB_OUTPUT"
 
       - name: Validate workflows
