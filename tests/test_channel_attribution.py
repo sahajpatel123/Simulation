@@ -292,6 +292,39 @@ def test_score_channels_handles_missing_metrics_via_defaults() -> None:
         assert 0.0 <= s <= 1.0
 
 
+def test_score_channels_handles_malformed_metric_values() -> None:
+    """Non-numeric / NaN / Inf metrics fall back to defaults, not crashes."""
+    from app.simulation.channel_attribution import ChannelAttributionEngine
+
+    engine = ChannelAttributionEngine()
+    malformed: dict[str, Any] = {
+        "word_of_mouth_coefficient": "not-a-number",
+        "organic_referral_trigger_score": float("nan"),
+        "invite_completion_rate": float("inf"),
+        "content_virality_rate": -5.0,
+        "community_building_participation": 99.0,
+        "viral_coefficient": None,
+        "press_mention_lift": [],
+        "brand_deficit_multiplier": True,
+        "free_trial_as_trust_substitute": "0.4",
+        "category_awareness_score": float("-inf"),
+        "problem_urgency_intensity": None,
+        "incumbent_switching_friction": "0.6",
+    }
+    scores = engine._score_channels(
+        "metro_power_professional",
+        malformed,
+        malformed,
+        malformed,
+        malformed,
+        {},
+    )
+    assert set(scores.keys()) == set(CHANNEL_KEYS)
+    for s in scores.values():
+        assert 0.0 <= s <= 1.0
+        assert s == s  # not NaN
+
+
 # ---------------------------------------------------------------------------
 # generate + to_dict
 # ---------------------------------------------------------------------------
@@ -514,6 +547,91 @@ def test_generate_handles_missing_cluster_weight() -> None:
     assert len(result.cluster_profiles) == 1
     # Defaults to 0.02 → market ranking scores are populated.
     assert result.market_channel_ranking[0][1] >= 0.0
+
+
+def test_generate_skips_malformed_registry_rows() -> None:
+    """Non-dict or id-less registry rows are ignored instead of raising."""
+    from app.simulation.channel_attribution import ChannelAttributionEngine
+
+    engine = ChannelAttributionEngine()
+    bad_registry: list[Any] = [
+        None,
+        "string-row",
+        42,
+        {},
+        {"name": "missing id"},
+        {"cluster_id": "", "name": "blank id"},
+        {"cluster_id": None, "name": "null id"},
+        _cluster("metro_power_professional", "Metro", 0.02),
+    ]
+    result = engine.generate(
+        generated_ui_id=1,
+        conductor_results=_make_conductor_for_registry(),
+        cluster_registry=bad_registry,
+        product_type="saas",
+    )
+    assert len(result.cluster_profiles) == 1
+    assert result.cluster_profiles[0].cluster_id == "metro_power_professional"
+    assert all(p.population_weight >= 0.0 for p in result.cluster_profiles)
+
+
+def test_generate_handles_nan_and_bad_weights_without_poisoning() -> None:
+    """NaN/Inf/bool weights are coerced so ranking stays finite."""
+    from app.simulation.channel_attribution import ChannelAttributionEngine
+
+    engine = ChannelAttributionEngine()
+    registry = [
+        _cluster("metro_power_professional", "Metro", float("nan")),
+        _cluster("tier3_first_time_app_user", "Tier-3", float("inf")),
+        _cluster("high_literacy_student_freemium_ceiling", "Student", True),
+        _cluster("anxiety_driven_researcher", "Research", "0.25"),
+    ]
+    conductor = _make_conductor_for_registry()
+    result = engine.generate(
+        generated_ui_id=1,
+        conductor_results=conductor,
+        cluster_registry=registry,
+        product_type="saas",
+    )
+    assert len(result.cluster_profiles) == 4
+    assert all(
+        weight == weight and weight != float("inf") and weight >= 0.0
+        for weight in (p.population_weight for p in result.cluster_profiles)
+    )
+    assert all(
+        score == score and score != float("inf")
+        for _, score in result.market_channel_ranking
+    )
+    # "0.25" string still parses; NaN/Inf fall back to 0.02 default.
+    assert result.cluster_profiles[-1].population_weight == 0.25
+
+
+def test_generate_handles_non_dict_architect_blocks() -> None:
+    """Malformed per-cluster architect blocks fall back to defaults."""
+    from app.simulation.channel_attribution import ChannelAttributionEngine
+
+    engine = ChannelAttributionEngine()
+    conductor: dict[str, Any] = {
+        "metro_power_professional": {
+            "ViralityArchitect": "oops",
+            "TrustArchitect": None,
+        },
+        # anxiety_driven_researcher intentionally absent
+    }
+    registry = [
+        _cluster("metro_power_professional", "Metro", 0.5),
+        _cluster("anxiety_driven_researcher", "Research", 0.5),
+    ]
+    result = engine.generate(
+        generated_ui_id=7,
+        conductor_results=conductor,
+        cluster_registry=registry,
+        product_type="saas",
+    )
+    assert len(result.cluster_profiles) == 2
+    for p in result.cluster_profiles:
+        assert p.primary_channel in CHANNEL_KEYS
+        assert p.channel_scores
 
 
 def test_generate_primary_and_secondary_differ_for_multi_channel() -> None:

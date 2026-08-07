@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -48,17 +49,67 @@ class ChannelAttributionResult:
 
 class ChannelAttributionEngine:
 
+    @staticmethod
+    def _safe_metric(
+        value: Any,
+        default: float,
+        *,
+        max_value: float = 1.0,
+    ) -> float:
+        """Coerce a metric value to a finite float clamped to [0, max_value].
+
+        Conductor metrics should already be finite scores, but malformed
+        or legacy data can contain ``None``, booleans, non-numeric
+        strings, or NaN/Inf. Falling back to the default and clamping
+        keeps the read deterministic instead of crashing or poisoning
+        the market-weighted ranking. ``viral_coefficient`` is allowed to
+        exceed 1.0 because K > 1 is the signal that a channel is viral.
+        """
+        if value is None or isinstance(value, bool):
+            return default
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError, OverflowError):
+            return default
+        if not math.isfinite(parsed):
+            return default
+        return max(0.0, min(max_value, parsed))
+
     def _virality(self, arch: dict) -> dict:
-        return arch.get("ViralityArchitect", {}).get("metrics", {})
+        if not isinstance(arch, dict):
+            return {}
+        architect = arch.get("ViralityArchitect")
+        if not isinstance(architect, dict):
+            return {}
+        metrics = architect.get("metrics")
+        return metrics if isinstance(metrics, dict) else {}
 
     def _trust(self, arch: dict) -> dict:
-        return arch.get("TrustArchitect", {}).get("metrics", {})
+        if not isinstance(arch, dict):
+            return {}
+        architect = arch.get("TrustArchitect")
+        if not isinstance(architect, dict):
+            return {}
+        metrics = architect.get("metrics")
+        return metrics if isinstance(metrics, dict) else {}
 
     def _timing(self, arch: dict) -> dict:
-        return arch.get("MarketTimingArchitect", {}).get("metrics", {})
+        if not isinstance(arch, dict):
+            return {}
+        architect = arch.get("MarketTimingArchitect")
+        if not isinstance(architect, dict):
+            return {}
+        metrics = architect.get("metrics")
+        return metrics if isinstance(metrics, dict) else {}
 
     def _competitive(self, arch: dict) -> dict:
-        return arch.get("CompetitiveDynamicsArchitect", {}).get("metrics", {})
+        if not isinstance(arch, dict):
+            return {}
+        architect = arch.get("CompetitiveDynamicsArchitect")
+        if not isinstance(architect, dict):
+            return {}
+        metrics = architect.get("metrics")
+        return metrics if isinstance(metrics, dict) else {}
 
     def _score_channels(
         self,
@@ -70,17 +121,29 @@ class ChannelAttributionEngine:
         profile: dict,
     ) -> dict[str, float]:
         _ = profile
-        wom = float(vm.get("word_of_mouth_coefficient", 0.5))
-        organic_t = float(vm.get("organic_referral_trigger_score", 0.1))
-        invite_cr = float(vm.get("invite_completion_rate", 0.3))
-        content_v = float(vm.get("content_virality_rate", 0.1))
-        community = float(vm.get("community_building_participation", 0.2))
-        press_lift = float(tm.get("press_mention_lift", 0.1))
-        brand_def = float(tm.get("brand_deficit_multiplier", 0.8))
-        free_trial = float(tm.get("free_trial_as_trust_substitute", 0.3))
-        awareness = float(timing_m.get("category_awareness_score", 0.6))
-        urgency = float(timing_m.get("problem_urgency_intensity", 0.5))
-        switch_fr = float(comp_m.get("incumbent_switching_friction", 0.4))
+        wom = self._safe_metric(vm.get("word_of_mouth_coefficient"), 0.5)
+        organic_t = self._safe_metric(
+            vm.get("organic_referral_trigger_score"), 0.1
+        )
+        invite_cr = self._safe_metric(vm.get("invite_completion_rate"), 0.3)
+        content_v = self._safe_metric(vm.get("content_virality_rate"), 0.1)
+        community = self._safe_metric(
+            vm.get("community_building_participation"), 0.2
+        )
+        press_lift = self._safe_metric(tm.get("press_mention_lift"), 0.1)
+        brand_def = self._safe_metric(tm.get("brand_deficit_multiplier"), 0.8)
+        free_trial = self._safe_metric(
+            tm.get("free_trial_as_trust_substitute"), 0.3
+        )
+        awareness = self._safe_metric(
+            timing_m.get("category_awareness_score"), 0.6
+        )
+        urgency = self._safe_metric(
+            timing_m.get("problem_urgency_intensity"), 0.5
+        )
+        switch_fr = self._safe_metric(
+            comp_m.get("incumbent_switching_friction"), 0.4
+        )
 
         is_tier3 = "tier3" in cluster_id
         is_metro = "metro" in cluster_id or "professional" in cluster_id
@@ -127,9 +190,15 @@ class ChannelAttributionEngine:
         profiles: list[ClusterChannelProfile] = []
 
         for cluster_info in cluster_registry:
-            cid = cluster_info["cluster_id"]
+            if not isinstance(cluster_info, dict):
+                continue
+            cid = str(cluster_info.get("cluster_id", "") or "")
+            if not cid:
+                continue
             cname = cluster_info.get("name", cid)
-            weight = float(cluster_info.get("population_weight", 0.02))
+            weight = self._safe_metric(
+                cluster_info.get("population_weight"), 0.02
+            )
             arch = conductor_results.get(cid, {})
 
             vm = self._virality(arch)
@@ -152,8 +221,12 @@ class ChannelAttributionEngine:
                     primary_channel=primary,
                     secondary_channel=secondary,
                     cac_multiplier=cac_mult,
-                    viral_coefficient=float(vm.get("viral_coefficient", 0.05)),
-                    wom_strength=float(vm.get("word_of_mouth_coefficient", 0.5)),
+                    viral_coefficient=self._safe_metric(
+                        vm.get("viral_coefficient"), 0.05, max_value=100.0
+                    ),
+                    wom_strength=self._safe_metric(
+                        vm.get("word_of_mouth_coefficient"), 0.5
+                    ),
                     paid_receptivity=float(scores.get("social_paid", 0.3)),
                     influencer_dependency=float(scores.get("influencer", 0.2)),
                 )
