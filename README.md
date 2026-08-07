@@ -245,6 +245,15 @@ thecee/
 
 ---
 
+## 🔒 Security
+
+See [SECURITY.md](SECURITY.md) for the security policy and reporting process. CI runs
+Bandit, pip-audit, safety, npm audit, Trivy, gitleaks, CodeQL, OpenSSF Scorecard,
+dependency review, and a workflow validator that enforces pinned actions and
+least-privilege workflow permissions.
+
+---
+
 <div align="center">
 
 <br>
