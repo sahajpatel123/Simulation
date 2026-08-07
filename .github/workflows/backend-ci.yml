@@ -61,7 +61,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip --quiet
           pip install --no-cache-dir -r requirements.txt
-          pip install --no-cache-dir pytest pytest-asyncio pytest-cov
+          pip install --no-cache-dir pytest pytest-asyncio pytest-cov bandit safety
+
+      - name: Check for secrets in codebase
+        uses: gitleaks/gitleaks-action@v2.2.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          config: .github/gitleaks.toml
+          report_format: json
+          fail: false
 
       - name: Wait for database
         run: |

@@ -66,9 +66,44 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
 
-      - name: Install pip-audit
-        run: pip install --quiet pip-audit
-
-      - name: Audit requirements.txt
+      - name: Install security tools
         run: |
-          pip-audit -r requirements.txt --format github-actions || echo "Dependency audit completed"
+          pip install --quiet pip-audit safety bandit
+
+      - name: Audit requirements.txt for CVEs
+        id: pip-audit
+        run: |
+          pip-audit -r requirements.txt --format json --output pip-audit-report.json || true
+          pip-audit -r requirements.txt || true
+
+      - name: Safety check for known vulnerabilities
+        run: |
+          safety check -r requirements.txt --output json --json > safety-report.json || true
+          safety check -r requirements.txt || true
+
+      - name: Upload dependency audit reports
+        if: always()
+        uses: actions/upload-artifact@v4.6.1
+        with:
+          name: dependency-audit-reports
+          path: |
+            pip-audit-report.json
+            safety-report.json
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Summarise findings
+        if: always()
+        run: |
+          if [ -f pip-audit-report.json ]; then
+            python -c "
+          import json, sys
+          try:
+              with open('pip-audit-report.json') as f:
+                  data = json.load(f)
+              vulns = len(data) if isinstance(data, list) else 0
+              print(f'::notice title=pip-audit:: {vulns} known vulnerabilities found in requirements.txt')
+          except Exception as e:
+              print(f'Summary failed: {e}', file=sys.stderr)
+          "
+          fi
