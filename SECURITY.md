@@ -72,6 +72,7 @@ npm audit --json
 ### Dependency Management
 
 - Dependabot automatically creates security updates for dependencies
+- Dependabot watches Python, npm, GitHub Actions, and the Docker base image
 - All dependencies are pinned to specific versions in `requirements.txt`
 - Regular audits are recommended
 
