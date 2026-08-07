@@ -2,6 +2,7 @@ import json
 import logging
 import re
 from datetime import datetime, timezone
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,10 @@ from app.schemas.project import (
     ConfidenceExplainerOut,
     ProjectCoverageGapsOut,
 )
+from app.schemas.project_comparison import (
+    ProjectCompareRequest,
+    ProjectComparisonOut,
+)
 from app.schemas.prototype import FunnelEdge, FunnelGraph, FunnelNode, PrototypeOut
 from app.schemas.stress_test import (
     AssumptionStressResult,
@@ -174,6 +179,7 @@ from app.simulation.intervention_digest import (
 from app.simulation.latest_snapshot import build_latest_snapshot
 from app.simulation.next_best_action import build_next_best_action
 from app.simulation.premortem_digest import build_premortem_digest
+from app.simulation.project_comparison import build_project_comparison
 from app.simulation.project_export import build_project_export
 from app.simulation.project_health import build_project_health
 from app.simulation.recommendations_digest import (
@@ -330,6 +336,165 @@ def _backfill_display_precis_lazy(db: Session, project: Project) -> None:
     db.add(project)
     db.commit()
     db.refresh(project)
+
+
+def _project_comparison_row(db: Session, project: Project) -> dict[str, Any]:
+    """Gather one project's comparison snapshot.
+
+    Keeps the route thin by collecting the same metrics the dashboard
+    already uses elsewhere (health, latest sim funnel, assumptions,
+    outcomes, pending decisions) into a single pure-helper payload.
+    """
+    latest_sim = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == project.id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc())
+        .first()
+    )
+
+    sim_confidence: float | None = None
+    latest_conversion_rate: float | None = None
+    critical_finding_count = 0
+    primary_failure_domain: str | None = None
+    product_type_detected: str | None = None
+    if latest_sim is not None:
+        sim_confidence = getattr(latest_sim, "confidence_score", None)
+        if sim_confidence is None and latest_sim.results_json:
+            agg = latest_sim.results_json.get("aggregated") or {}
+            sim_confidence = agg.get("confidence_score")
+        if sim_confidence is not None:
+            sim_confidence = float(sim_confidence) / 100.0
+
+        results = latest_sim.results_json or {}
+        latest_conversion_rate = results.get(
+            "population_weighted_conversion",
+            results.get("conversion_rate"),
+        )
+        if latest_conversion_rate is not None:
+            latest_conversion_rate = float(latest_conversion_rate)
+        primary_failure_domain = results.get("primary_failure_domain")
+        product_type_detected = results.get("product_type_detected")
+        for finding in results.get("domain_findings", []) or []:
+            if isinstance(finding, dict) and (
+                finding.get("severity") == "CRITICAL"
+                or finding.get("level") == "CRITICAL"
+            ):
+                critical_finding_count += 1
+
+    simulation_count = (
+        db.query(Simulation)
+        .filter(Simulation.project_id == project.id)
+        .count()
+    )
+    assumption_count = (
+        db.query(Assumption)
+        .filter(
+            Assumption.project_id == project.id,
+            Assumption.is_hidden.is_(False),
+        )
+        .count()
+    )
+    outcome_count = (
+        db.query(Outcome)
+        .filter(Outcome.project_id == project.id)
+        .count()
+    )
+    has_outcome = outcome_count > 0
+    pending_decision_count = (
+        db.query(Decision)
+        .filter(
+            Decision.project_id == project.id,
+            Decision.status.in_(("PENDING", "RUNNING")),
+        )
+        .count()
+    )
+
+    weak_link_count = 0
+    high_assumptions = (
+        db.query(Assumption)
+        .filter(
+            Assumption.project_id == project.id,
+            Assumption.is_hidden.is_(False),
+            Assumption.sensitivity.in_(("HIGH", "CRITICAL")),
+        )
+        .all()
+    )
+    if high_assumptions:
+        digest = build_assumption_digest([
+            {
+                "id": a.id,
+                "sensitivity": a.sensitivity,
+                "specificity_score": getattr(a, "specificity_score", None),
+                "impact_score": a.impact_score,
+                "is_hidden": a.is_hidden,
+            }
+            for a in high_assumptions
+        ])
+        weak_link_count = digest["weak_link_count"]
+
+    health_payload = build_project_health(
+        sim_confidence=sim_confidence,
+        critical_finding_count=critical_finding_count,
+        pending_decision_count=pending_decision_count,
+        weak_link_count=weak_link_count,
+        has_outcome=has_outcome,
+    )
+
+    return {
+        "project_id": project.id,
+        "title": project.title or "",
+        "status": project.status or "DRAFT",
+        "simulation_count": simulation_count,
+        "assumption_count": assumption_count,
+        "outcome_count": outcome_count,
+        "pending_decision_count": pending_decision_count,
+        "critical_finding_count": critical_finding_count,
+        "weak_link_count": weak_link_count,
+        "latest_conversion_rate": latest_conversion_rate,
+        "latest_confidence_score": sim_confidence,
+        "brief_completed": bool(project.brief_completed_at),
+        "primary_failure_domain": primary_failure_domain,
+        "product_type_detected": product_type_detected,
+        "project_health_score": health_payload["project_health_score"],
+        "project_health_verdict": health_payload["verdict"],
+    }
+
+
+@router.post(
+    "/compare",
+    response_model=ProjectComparisonOut,
+    summary=(
+        "Compare two owned projects side-by-side (health, funnel, "
+        "assumptions, outcomes, risk signals)"
+    ),
+    responses=_JSON_200,
+    # Pure analytics — no LLM, no Celery — but the comparison fans out
+    # across both projects' child rows. Cap the path at 30/min/IP so a
+    # single actor can't pin the API process on repeated comparison
+    # workloads.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def compare_projects(
+    payload: ProjectCompareRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProjectComparisonOut:
+    """Side-by-side comparison of exactly two owned projects.
+
+    Returns per-project snapshots (latest sim funnel, health score,
+    assumption / outcome / pending-decision counts) plus a dimensions
+    table and an overall winner verdict. Pure analytics — no Celery
+    dispatch and no LLM calls.
+    """
+    projects: list[Project] = []
+    for project_id in payload.project_ids:
+        projects.append(get_owned_project(db, current_user.id, project_id))
+
+    rows = [_project_comparison_row(db, project) for project in projects]
+    return build_project_comparison(rows)
 
 
 # ── THE BRIEF — founder-authored product spec ────────────────────────────
