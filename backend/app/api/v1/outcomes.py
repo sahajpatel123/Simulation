@@ -1511,8 +1511,9 @@ def get_funnel_calibration_digest(
 
     Cross-references the simulation's predicted ``BROWSE`` / ``CONSIDER`` /
     ``DECIDE`` drop-off rates with the actual drop-off rates founders
-    recorded on ``founder_outcomes`` so the dashboard can show exactly
-    which funnel stage the simulation is mis-predicting.
+    recorded on calibration-eligible ``founder_outcomes`` (validated rows
+    with ``learning_weight > 0``) so the dashboard can show exactly which
+    funnel stage the simulation is mis-predicting.
     """
     get_owned_project(db, current_user.id, project_id)
 
@@ -1536,6 +1537,8 @@ def get_funnel_calibration_digest(
             JOIN projects p ON p.id = fo.project_id
             WHERE fo.project_id = :pid
               AND p.user_id = :uid
+              AND fo.validated = true
+              AND fo.learning_weight > 0
             ORDER BY fo.created_at DESC, fo.id DESC
             LIMIT 50
         """),

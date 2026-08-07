@@ -6,7 +6,9 @@ founder question: *"which funnel stage is the simulation mis-predicting?"*
 
 It pairs the **predicted drop-off** that the simulation produced for each
 forward funnel stage (``BROWSE`` / ``CONSIDER`` / ``DECIDE``) with the
-**actual drop-off** founders recorded on their outcomes, then reports:
+**actual drop-off** founders recorded on their calibration-eligible
+outcomes (rows with ``validated = true`` and ``learning_weight > 0``),
+then reports:
 
 * per-stage predicted / actual drop-off means,
 * per-stage absolute error and bias direction,
@@ -228,7 +230,7 @@ def build_funnel_calibration_digest(
             }
         )
 
-        if mae > primary_mismatch_gap:
+        if mae > 0.0 and mae > primary_mismatch_gap:
             primary_mismatch_gap = mae
             primary_mismatch_stage = stage
 
@@ -286,7 +288,9 @@ def build_funnel_calibration_digest(
             {
                 "label": "primary_mismatch_stage",
                 "value": mismatch_detail["stage"],
-                "severity": SIGNAL_CRITICAL,
+                "severity": _severity_for_gap(
+                    float(mismatch_detail["mean_abs_gap"])
+                ),
                 "display": (
                     f"Primary mismatch: {mismatch_detail['stage'].lower()} "
                     f"({mismatch_detail['domain'].lower()})"
@@ -319,13 +323,19 @@ def build_funnel_calibration_digest(
             f"{outcome_count} outcome(s) recorded but none have both "
             "simulated and actual stage drop-off values."
         )
-    else:
+    elif mismatch_detail:
         sentences.append(
             f"Across {usable_count} usable stage pair(s), the biggest "
             f"prediction gap is at "
             f"{primary_mismatch_stage.lower()} "
             f"({mismatch_detail['domain'].lower()} domain)."
         )
+    else:
+        sentences.append(
+            "No per-stage prediction gap was detected across the "
+            "usable outcomes."
+        )
+    if usable_count > 0:
         if overall_direction == "OVER_PREDICTING_DROP":
             sentences.append(
                 "The simulation over-predicts drop-off — actual users "

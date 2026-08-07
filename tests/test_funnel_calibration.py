@@ -133,3 +133,46 @@ def test_digest_treats_missing_sim_results_as_unusable():
     assert payload["outcome_count"] == 1
     assert payload["usable_count"] == 0
     assert payload["primary_mismatch_stage"] is None
+
+
+def test_digest_no_primary_mismatch_when_stages_match():
+    payload = build_funnel_calibration_digest(
+        [
+            (
+                _results(
+                    [
+                        {"state": "BROWSE", "drop_off_rate": 0.40},
+                        {"state": "CONSIDER", "drop_off_rate": 0.38},
+                        {"state": "DECIDE", "drop_off_rate": 0.60},
+                    ]
+                ),
+                {"BROWSE": 0.40, "CONSIDER": 0.38, "DECIDE": 0.60},
+            )
+        ]
+    )
+    assert payload["usable_count"] == 3
+    assert payload["primary_mismatch_stage"] is None
+    assert payload["primary_mismatch"] is None
+    assert "No per-stage prediction gap" in payload["narrative"]
+    assert not any(
+        signal["label"] == "primary_mismatch_stage"
+        for signal in payload["key_signals"]
+    )
+    by_stage = {s["stage"]: s for s in payload["stages"]}
+    assert by_stage["BROWSE"]["severity"] == "ok"
+
+
+def test_digest_primary_mismatch_signal_severity_tracks_gap():
+    payload = build_funnel_calibration_digest(
+        [
+            (
+                _results([{"state": "BROWSE", "drop_off_rate": 0.40}]),
+                {"BROWSE": 0.41},
+            )
+        ]
+    )
+    signal = next(
+        s for s in payload["key_signals"]
+        if s["label"] == "primary_mismatch_stage"
+    )
+    assert signal["severity"] == "ok"
