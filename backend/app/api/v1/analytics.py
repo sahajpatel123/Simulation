@@ -267,8 +267,8 @@ def export_founder_outcomes(
                 fo.notes,
                 s.results_json
             FROM founder_outcomes fo
-            JOIN simulations s ON s.id = fo.simulation_id
-            JOIN projects p ON p.id = fo.project_id
+            LEFT JOIN simulations s ON s.id = fo.simulation_id
+            LEFT JOIN projects p ON p.id = fo.project_id
             ORDER BY fo.created_at DESC, fo.id DESC
         """)
     ).mappings().all()

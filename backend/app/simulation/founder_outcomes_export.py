@@ -2,9 +2,10 @@
 Pure helper for exporting the calibration learning layer (``founder_outcomes``)
 as CSV.
 
-The route layer joins ``founder_outcomes`` to the owning simulation/project
-and hands enriched row dicts here; this module stays deterministic and treats
-missing or malformed fields as empty strings.
+The route layer left-joins ``founder_outcomes`` to the owning simulation/project
+(so audit rows are never dropped after a cascade delete) and hands enriched row
+dicts here; this module stays deterministic and treats missing or malformed
+fields as empty strings.
 """
 from __future__ import annotations
 

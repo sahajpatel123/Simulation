@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import sys
 import types
 
@@ -55,10 +56,18 @@ class _FakeResult:
 
 
 class _FakeSession:
-    def __init__(self, rows: list[dict] | None = None) -> None:
+    def __init__(
+        self,
+        rows: list[dict] | None = None,
+        sql_calls: list[str] | None = None,
+    ) -> None:
         self.rows = rows if rows is not None else _rows()
+        self.sql_calls = sql_calls
 
     def execute(self, *args, **kwargs) -> _FakeResult:
+        if self.sql_calls is not None and args:
+            statement = args[0]
+            self.sql_calls.append(getattr(statement, "text", str(statement)))
         return _FakeResult(self.rows)
 
 
@@ -124,6 +133,21 @@ def test_export_founder_outcomes_empty_rows() -> None:
     body = _body(resp).decode("utf-8")
     assert "id,simulation_id,project_id,project_title" in body
     assert "1,7,10" not in body
+
+
+def test_export_founder_outcomes_left_joins_simulation_and_project() -> None:
+    """Deleted simulation/project rows must not silently drop audit rows."""
+    calls: list[str] = []
+    session = _FakeSession(rows=_rows(), sql_calls=calls)
+    _body(_call_route(session=session))
+
+    sql = "\n".join(calls)
+    assert "LEFT JOIN simulations s ON s.id = fo.simulation_id" in sql
+    assert "LEFT JOIN projects p ON p.id = fo.project_id" in sql
+    # A plain inner join would lose rows when either FK target has been deleted.
+    assert len(re.findall(r"LEFT JOIN simulations", sql)) == 1
+    assert len(re.findall(r"LEFT JOIN projects", sql)) == 1
+    assert not re.search(r"(?m)^\s*JOIN ", sql)
 
 
 def test_export_founder_outcomes_requires_admin() -> None:
