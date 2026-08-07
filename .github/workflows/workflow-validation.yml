@@ -48,11 +48,23 @@ jobs:
 
       - name: Validate YAML files
         run: |
-          find .github -name '*.yml' -o -name '*.yaml' | while read f; do
-            echo "Validating $f"
-            python -c "import yaml; yaml.safe_load(open('$f'))"
-          done
-          echo "✅ All YAML files are valid"
+          python - <<'PY'
+          import glob, sys, yaml
+          errors = []
+          files = glob.glob('.github/**/*.yml', recursive=True) + glob.glob('.github/**/*.yaml', recursive=True)
+          for f in files:
+              try:
+                  with open(f) as fh:
+                      yaml.safe_load(fh)
+              except Exception as e:
+                  errors.append(f'{f}: {e}')
+          if errors:
+              print('::error::Invalid YAML files found')
+              for e in errors:
+                  print(f'  {e}')
+              sys.exit(1)
+          print('✅ All YAML files are valid')
+          PY
 
   validate-toml:
     name: Validate TOML syntax
