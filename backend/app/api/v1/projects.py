@@ -108,6 +108,7 @@ from app.simulation.prototypes_export import prototypes_to_csv
 from app.simulation.premortem_export import premortem_to_csv
 from app.simulation.interventions_export import interventions_to_csv
 from app.simulation.competitive_export import competitors_to_csv
+from app.simulation.mvp_features_export import features_to_csv
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -3165,6 +3166,41 @@ def export_competitive_analysis(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="competitive-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/mvp-features/export",
+    summary="Export a project's MVP feature list as CSV",
+    response_class=StreamingResponse,
+)
+def export_mvp_features(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's MVP feature list."""
+    project = get_owned_project(db, current_user.id, project_id)
+
+    features = list(project.mvp_feature_list or [])
+    csv_text = features_to_csv(
+        features,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="mvp-features-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },
