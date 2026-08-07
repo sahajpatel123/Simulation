@@ -56,11 +56,12 @@ class _FakeSession:
         return _FakeQuery([])
 
 
-def _call_route(*, session: _FakeSession | None = None):
+def _call_route(*, format: str = "csv", session: _FakeSession | None = None):
     from app.api.v1 import users as user_mod
 
     db = session if session is not None else _FakeSession()
     return user_mod.export_my_outcomes(
+        format=format,
         db=db,
         current_user=type("U", (), {"id": 42})(),
     )
@@ -86,3 +87,13 @@ def test_export_my_outcomes_returns_csv() -> None:
     assert "outcome_id,project_id,actual_conversion_rate" in body
     assert "1,10,0.042,1000.0,50.0,0.03" in body
     assert "user_id,42" in body
+
+
+def test_export_my_outcomes_format_json_returns_payload() -> None:
+    resp = _call_route(format="json")
+
+    assert resp.media_type == "application/json; charset=utf-8"
+    body = _body(resp).decode("utf-8")
+    assert '"outcomes"' in body
+    assert '"outcome_id": 1' in body
+    assert '"actual_mrr": 1000.0' in body
