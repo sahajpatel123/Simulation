@@ -71,6 +71,10 @@ updates:
     labels:
       - "dependencies"
       - "docker"
+    groups:
+      docker:
+        patterns:
+          - "*"
 
   # Node.js dependencies (for frontend/src if needed)
   - package-ecosystem: "npm"
