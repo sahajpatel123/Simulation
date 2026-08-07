@@ -65,6 +65,8 @@ def extract_findings(results: Any) -> list[dict[str, Any]]:
 def findings_to_csv(
     findings: list[dict[str, Any]],
     metadata: dict[str, Any] | None = None,
+    simulation_id: int | None = None,
+    project_id: int | None = None,
 ) -> str:
     """Render findings as a single CSV table."""
     buffer = io.StringIO()
@@ -78,6 +80,8 @@ def findings_to_csv(
 
     writer.writerow(
         [
+            "simulation_id",
+            "project_id",
             "severity",
             "architect_name",
             "cluster_id",
@@ -91,6 +95,8 @@ def findings_to_csv(
     for finding in findings:
         writer.writerow(
             [
+                _safe_text(simulation_id),
+                _safe_text(project_id),
                 _safe_text(finding.get("severity", "INFO")).upper(),
                 _safe_text(finding.get("architect_name", "")),
                 _safe_text(finding.get("cluster_id", "")),

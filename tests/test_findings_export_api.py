@@ -111,8 +111,8 @@ def test_completed_simulation_returns_findings_csv() -> None:
     assert resp.media_type == "text/csv; charset=utf-8"
     assert 'filename="findings-1.csv"' in resp.headers["Content-Disposition"]
     body = _body(resp).decode("utf-8")
-    assert "severity,architect_name,cluster_id" in body
-    assert "CRITICAL,PricingArchitect,metro_power_professional" in body
+    assert "simulation_id,project_id,severity,architect_name,cluster_id" in body
+    assert "1,10,CRITICAL,PricingArchitect,metro_power_professional" in body
 
 
 def test_format_json_returns_findings_payload() -> None:

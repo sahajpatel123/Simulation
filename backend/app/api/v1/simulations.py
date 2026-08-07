@@ -7520,7 +7520,12 @@ def get_findings_export(
             },
         )
 
-    csv_text = findings_to_csv(findings, metadata=metadata)
+    csv_text = findings_to_csv(
+        findings,
+        metadata=metadata,
+        simulation_id=simulation_id,
+        project_id=sim.project_id,
+    )
     body = csv_text.encode("utf-8")
     return StreamingResponse(
         iter([body]),

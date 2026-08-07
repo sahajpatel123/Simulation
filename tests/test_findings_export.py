@@ -33,10 +33,12 @@ def test_findings_to_csv_contains_header_and_row() -> None:
     csv_text = findings_to_csv(
         [_finding()],
         metadata={"generated_at": "now", "user_id": 42},
+        simulation_id=7,
+        project_id=10,
     )
 
-    assert "severity,architect_name,cluster_id" in csv_text
-    assert "CRITICAL,PricingArchitect,metro_power_professional" in csv_text
+    assert "simulation_id,project_id,severity,architect_name,cluster_id" in csv_text
+    assert "7,10,CRITICAL,PricingArchitect,metro_power_professional" in csv_text
     assert "generated_at,now" in csv_text
     assert "0.0420" in csv_text
 
@@ -46,3 +48,4 @@ def test_findings_to_csv_handles_missing_fields() -> None:
 
     assert "WARNING" in csv_text
     assert "0.0000" in csv_text
+    assert ",,WARNING" in csv_text
