@@ -47,6 +47,8 @@ def test_build_health_summary_redis_unconfigured_counts_healthy() -> None:
 
 
 def test_system_health_route_returns_summary() -> None:
+    from app.schemas.system_health import SystemHealthOut
+
     class _OkDB:
         def execute(self, stmt):
             return object()
@@ -56,3 +58,4 @@ def test_system_health_route_returns_summary() -> None:
     assert "healthy" in summary
     assert "checks" in summary
     assert "database" in summary["checks"]
+    assert isinstance(SystemHealthOut(**summary), SystemHealthOut)

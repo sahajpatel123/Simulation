@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_db
 from app.core.redis_client import get_redis_client
 from app.worker import celery_app
+from app.schemas.system_health import SystemHealthOut
 
 router = APIRouter(prefix="/system", tags=["system"])
 
@@ -79,6 +80,7 @@ def _worker_status() -> dict[str, Any]:
     "/health",
     summary="Combined database, Redis, and worker health probe",
     responses=_JSON_200,
+    response_model=SystemHealthOut,
 )
 def system_health(
     db: Session = Depends(get_db),
