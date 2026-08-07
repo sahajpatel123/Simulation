@@ -3179,6 +3179,15 @@ def export_competitive_analysis(
 )
 def export_mvp_features(
     project_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "feature list."
+        ),
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
@@ -3186,6 +3195,30 @@ def export_mvp_features(
     project = get_owned_project(db, current_user.id, project_id)
 
     features = list(project.mvp_feature_list or [])
+
+    fmt = format.strip().lower() if format else "csv"
+    if fmt == "json":
+        json_text = json.dumps(
+            {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "project_id": project_id,
+                "features": features,
+            },
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="mvp-features-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
     csv_text = features_to_csv(
         features,
         metadata={
