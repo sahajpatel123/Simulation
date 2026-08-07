@@ -26,6 +26,7 @@ from app.simulation.user_projects_export import user_projects_to_csv
 from app.simulation.user_account_export import user_account_to_csv
 from app.simulation.user_simulations_export import user_simulations_to_csv
 from app.simulation.user_decisions_export import user_decisions_to_csv
+from app.simulation.user_outcomes_export import user_outcomes_to_csv
 from app.schemas.audit_log import AuditLogListOut, AuditLogOut
 from app.schemas.auth import MessageResponse
 from app.schemas.project import (
@@ -2125,6 +2126,54 @@ def export_my_decisions(
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": 'attachment; filename="my-decisions.csv"',
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/me/outcomes/export",
+    summary="Export the current user's outcomes as CSV",
+    response_class=StreamingResponse,
+)
+def export_my_outcomes(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of the current user's outcome rows."""
+    rows = (
+        db.query(Outcome, Project)
+        .join(Project, Outcome.project_id == Project.id)
+        .filter(Project.user_id == current_user.id)
+        .order_by(Outcome.created_at.desc())
+        .all()
+    )
+    outcome_rows = [
+        {
+            "outcome_id": outcome.id,
+            "project_id": outcome.project_id,
+            "actual_conversion_rate": outcome.actual_conversion_rate,
+            "actual_mrr": outcome.actual_mrr,
+            "actual_cac": outcome.actual_cac,
+            "actual_churn_rate": outcome.actual_churn_rate,
+            "created_at": outcome.created_at,
+        }
+        for outcome, _project in rows
+    ]
+    csv_text = user_outcomes_to_csv(
+        outcome_rows,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="my-outcomes.csv"',
             "Content-Length": str(len(body)),
         },
     )
