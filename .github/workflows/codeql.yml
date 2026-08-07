@@ -24,11 +24,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4.2.0
-        persistence: true
+        uses: actions/checkout@v6.0.2
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4.37.4
         with:
           languages: ${{ matrix.language }}
           # Enable all queries for comprehensive analysis
@@ -37,16 +36,9 @@ jobs:
           # See: https://codeql.github.com/docs/codeql-language-guides/
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+        uses: github/codeql-action/autobuild@v4.37.4
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4.37.4
         with:
           category: '/language:${{ matrix.language }}'
-          output: sarif
-          format: 'sarif'
-
-      - name: Upload SARIF to CodeQL
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: '.codeql/saves/${{ matrix.language }}-pack/compile/default/semmle-codespeed/results.sarif'

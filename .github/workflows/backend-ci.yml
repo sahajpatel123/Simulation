@@ -45,13 +45,13 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4.2.0
+        uses: actions/checkout@v6.0.2
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Setup Python
-        uses: actions/setup-python@v5.3.0
+        uses: actions/setup-python@v6.0.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -64,13 +64,12 @@ jobs:
           pip install --no-cache-dir pytest pytest-asyncio pytest-cov bandit safety
 
       - name: Check for secrets in codebase
-        uses: gitleaks/gitleaks-action@v2.2.0
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          config: .github/gitleaks.toml
-          report_format: json
-          fail: false
+          GITLEAKS_CONFIG: .github/gitleaks.toml
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
 
       - name: Wait for database
         run: |
@@ -87,20 +86,14 @@ jobs:
 
       - name: Run database migrations
         run: |
-          python migrate_and_start.py --dry-run || python -c "
-          from app.core.database import engine
-          from sqlalchemy import inspect
-          print('Database connection OK')
-          for t in inspect(engine).get_table_names():
-            print(f'  Table: {t}')
-          "
+          python migrate_and_start.py
 
       - name: Run pytest with coverage
         run: |
-          pytest tests/ -v --maxfail=5 --tb=short --cov=app --cov-report=term-missing --cov-fail-under=0 || echo "Some tests failed - check coverage report"
+          pytest tests/ -v --maxfail=5 --tb=short --cov=app --cov-report=term-missing --cov-fail-under=0
 
       - name: Upload test coverage
-        uses: actions/upload-artifact@v4.6.1
+        uses: actions/upload-artifact@v5.0.0
         if: always()
         with:
           name: test-coverage-report
