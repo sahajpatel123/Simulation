@@ -13,6 +13,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: workflow-validation-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate-workflows:
     name: Validate workflow syntax
