@@ -3394,7 +3394,7 @@ def export_readings(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
-    """Spreadsheet export of a project's readings field."""
+    """Spreadsheet export of a project's readings (one row per reading, plus ledger)."""
     project = get_owned_project(db, current_user.id, project_id)
 
     row = {
@@ -3406,7 +3406,7 @@ def export_readings(
         metadata={
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "user_id": current_user.id,
-            "format_version": "1",
+            "format_version": "2",
         },
     )
     body = csv_text.encode("utf-8")

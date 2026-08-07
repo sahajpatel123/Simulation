@@ -17,7 +17,10 @@ if "razorpay" not in sys.modules:
 class _Project:
     def __init__(self) -> None:
         self.id = 10
-        self.readings_json = '{"a": 1}'
+        self.readings_json = (
+            '{"readings": [{"label": "WHAT IT IS", "body": "A lean tool"}],'
+            ' "ledger": {"deck_line": "Small desk tool"}}'
+        )
 
 
 class _FakeQuery:
@@ -70,8 +73,10 @@ def test_export_readings_returns_csv() -> None:
     assert resp.media_type == "text/csv; charset=utf-8"
     assert 'filename="readings-10.csv"' in resp.headers["Content-Disposition"]
     body = _body(resp).decode("utf-8")
-    assert "project_id,readings_json" in body
-    assert "10," in body
+    assert "project_id,10" in body
+    assert "index,label,body" in body
+    assert "1,WHAT IT IS,A lean tool" in body
+    assert "deck_line,Small desk tool" in body
     assert "user_id,42" in body
 
 
