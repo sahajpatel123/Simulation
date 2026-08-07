@@ -63,6 +63,9 @@ coverage*
 htmlcov/
 .coverage*
 
+# TheCee's coverage-gaps insight is source, not a coverage artifact.
+!backend/app/simulation/coverage_gaps_export.py
+
 # API keys and tokens (potential leaks)
 *.key
 *.token

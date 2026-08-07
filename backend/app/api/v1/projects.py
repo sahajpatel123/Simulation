@@ -149,6 +149,10 @@ from app.simulation.adoption_milestones import (
 )
 from app.simulation.assumption_digest import build_assumption_digest
 from app.simulation.coverage_gaps import build_coverage_gaps
+from app.simulation.coverage_gaps_export import (
+    coverage_gaps_to_csv,
+    coverage_gaps_to_json,
+)
 from app.simulation.confidence_explainer import (
     build_confidence_explainer,
 )
@@ -4426,6 +4430,85 @@ def get_project_coverage_gaps(
     payload["project_id"] = project_id
     payload["project_title"] = project.title
     return ProjectCoverageGapsOut(**payload)
+
+
+@router.get(
+    "/{project_id}/coverage-gaps/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export the coverage-gaps digest as CSV (or JSON with "
+        "?format=json)"
+    ),
+    # Same DB reads as the JSON coverage-gaps endpoint; cap polling so a
+    # dashboard loop can't drive repeated coverage aggregation.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_project_coverage_gaps(
+    project_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "coverage-gaps payload. Unsupported values return a 400 "
+            "response."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's coverage-gaps digest.
+
+    Computes the same payload as ``GET /projects/{id}/coverage-gaps``,
+    then renders it as CSV (default) or JSON. The CSV includes the
+    summary, one row per covered / missing category, the sensitivity
+    breakdown, and the key signals so a founder can see at a glance
+    which assumption dimensions their project has never explored.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unsupported export format {format!r}; expected 'csv' or 'json'",
+        )
+
+    payload = get_project_coverage_gaps(
+        project_id=project_id,
+        db=db,
+        current_user=current_user,
+    )
+
+    metadata = {
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "user_id": current_user.id,
+        "format_version": "1",
+        "project_id": project_id,
+    }
+
+    if fmt == "json":
+        body = coverage_gaps_to_json(payload, metadata=metadata).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="coverage-gaps.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = coverage_gaps_to_csv(payload, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="coverage-gaps.csv"',
+            "Content-Length": str(len(body)),
+        },
+    )
 
 
 @router.get(
