@@ -46,11 +46,12 @@ class _FakeSession:
         return _FakeQuery([])
 
 
-def _call_route(*, session: _FakeSession | None = None):
+def _call_route(*, format: str = "csv", session: _FakeSession | None = None):
     from app.api.v1 import users as user_mod
 
     db = session if session is not None else _FakeSession()
     return user_mod.export_my_projects(
+        format=format,
         db=db,
         current_user=type("U", (), {"id": 42})(),
     )
@@ -76,6 +77,16 @@ def test_export_my_projects_returns_csv() -> None:
     assert "project_id,title,status,intake_mode" in body
     assert "1,TheCee,DRAFT,IDEA,False" in body
     assert "user_id,42" in body
+
+
+def test_export_my_projects_format_json_returns_payload() -> None:
+    resp = _call_route(format="json")
+
+    assert resp.media_type == "application/json; charset=utf-8"
+    body = _body(resp).decode("utf-8")
+    assert '"projects"' in body
+    assert '"project_id": 1' in body
+    assert '"title": "TheCee"' in body
 
 
 def test_export_my_projects_empty_returns_header_only() -> None:
