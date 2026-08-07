@@ -109,6 +109,7 @@ from app.simulation.premortem_export import premortem_to_csv
 from app.simulation.interventions_export import interventions_to_csv
 from app.simulation.competitive_export import competitors_to_csv
 from app.simulation.mvp_features_export import features_to_csv
+from app.simulation.brief_export import brief_to_csv
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -3234,6 +3235,47 @@ def export_mvp_features(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="mvp-features-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/brief/export",
+    summary="Export a project's founder brief as CSV",
+    response_class=StreamingResponse,
+)
+def export_brief(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's founder brief."""
+    project = get_owned_project(db, current_user.id, project_id)
+
+    row = {
+        "project_id": project.id,
+        "brief_positioning": getattr(project, "brief_positioning", None),
+        "brief_features_json": getattr(project, "brief_features_json", None),
+        "brief_hook": getattr(project, "brief_hook", None),
+        "brief_completed_at": getattr(project, "brief_completed_at", None),
+    }
+    csv_text = brief_to_csv(
+        row,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="brief-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },
