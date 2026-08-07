@@ -41,6 +41,7 @@ This repository runs automated security scans:
 - **Trivy**: Container, filesystem, and Dockerfile configuration scanner (`security-scan.yml`)
 - **CodeQL**: Semantic code analysis with the `security-and-quality` query suite (`codeql.yml`)
 - **Gitleaks**: Git history and working-tree secret scanner (`backend-ci.yml`)
+- **Gitleaks (scheduled)**: Weekly full-history secret scan to catch pre-existing leaks (`secret-scan.yml`)
 - **Actionlint + YAML/TOML validation**: GitHub Actions workflow syntax and security-policy checks (`workflow-validation.yml`)
 
 The `workflow-validation.yml` job also enforces that every GitHub Action ref is pinned
