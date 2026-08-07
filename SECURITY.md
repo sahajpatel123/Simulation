@@ -67,6 +67,10 @@ gitleaks detect --config .github/gitleaks.toml
 
 # Frontend dependency audit
 npm audit --json
+
+# Container/filesystem and Dockerfile config scan
+trivy fs --ignore-unfixed --severity CRITICAL,HIGH .
+trivy config ./Dockerfile
 ```
 
 ### Dependency Management
