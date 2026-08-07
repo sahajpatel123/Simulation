@@ -49,6 +49,7 @@ from app.models.outcome_tracker import OutcomeTracker
 from app.models.project import Project
 from app.models.simulation import Simulation
 from app.models.user import User
+from app.schemas.funnel_calibration import FunnelCalibrationDigestOut
 from app.schemas.outcome import (
     OutcomeCreate,
     OutcomeDigestOut,
@@ -70,6 +71,9 @@ from app.simulation.architect_leaderboard import (
 )
 from app.simulation.calibration_health import (
     build_calibration_health,
+)
+from app.simulation.funnel_calibration import (
+    build_funnel_calibration_digest,
 )
 from app.simulation.outcome_tracker_read import (
     build_outcome_tracker_timeline,
@@ -101,6 +105,7 @@ def _json_default(value: Any) -> str:
 # future rename propagates to every invalidation site.
 # 120s TTL matches the digest's internal cache.
 _OUTCOMES_DIGEST_CACHE_NAMESPACE: str = "project-outcomes-digest"
+_FUNNEL_CALIBRATION_CACHE_NAMESPACE: str = "project-funnel-calibration"
 
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
@@ -439,6 +444,11 @@ def submit_outcome_feedback(
     )
     cache_invalidate(
         namespace=_OUTCOMES_DIGEST_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_FUNNEL_CALIBRATION_CACHE_NAMESPACE,
+        params={"project_id": project_id},
         user_id=current_user.id,
     )
     cache_invalidate(
@@ -1480,3 +1490,77 @@ def get_outcomes_digest(
         ttl_seconds=120,
     )
     return OutcomeDigestOut(**payload)
+
+
+@router.get(
+    "/{project_id}/funnel-calibration-digest",
+    response_model=FunnelCalibrationDigestOut,
+    summary=(
+        "Per-project funnel calibration digest — compares simulated "
+        "stage drop-off against actual founder-reported drop-off"
+    ),
+    # Read-only aggregation over the calibration learning layer; bounded.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_funnel_calibration_digest(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FunnelCalibrationDigestOut:
+    """Per-project funnel calibration digest.
+
+    Cross-references the simulation's predicted ``BROWSE`` / ``CONSIDER`` /
+    ``DECIDE`` drop-off rates with the actual drop-off rates founders
+    recorded on ``founder_outcomes`` so the dashboard can show exactly
+    which funnel stage the simulation is mis-predicting.
+    """
+    get_owned_project(db, current_user.id, project_id)
+
+    cached = cache_get_json(
+        namespace=_FUNNEL_CALIBRATION_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return FunnelCalibrationDigestOut(**cached)
+
+    rows = db.execute(
+        text("""
+            SELECT
+                s.results_json,
+                fo.actual_drop_at_browse_pct,
+                fo.actual_drop_at_consider_pct,
+                fo.actual_drop_at_decide_pct
+            FROM founder_outcomes fo
+            JOIN simulations s ON s.id = fo.simulation_id
+            JOIN projects p ON p.id = fo.project_id
+            WHERE fo.project_id = :pid
+              AND p.user_id = :uid
+            ORDER BY fo.created_at DESC, fo.id DESC
+            LIMIT 50
+        """),
+        {"pid": project_id, "uid": current_user.id},
+    ).mappings().all()
+
+    pairs: list[tuple[object | None, dict[str, float | None]]] = []
+    for row in rows:
+        pairs.append(
+            (
+                row.get("results_json"),
+                {
+                    "BROWSE": row.get("actual_drop_at_browse_pct"),
+                    "CONSIDER": row.get("actual_drop_at_consider_pct"),
+                    "DECIDE": row.get("actual_drop_at_decide_pct"),
+                },
+            )
+        )
+
+    payload = build_funnel_calibration_digest(pairs)
+    cache_set_json(
+        namespace=_FUNNEL_CALIBRATION_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=120,
+    )
+    return FunnelCalibrationDigestOut(**payload)
