@@ -24,6 +24,7 @@ from app.models.simulation import Simulation
 from app.models.user import User
 from app.simulation.user_projects_export import user_projects_to_csv
 from app.simulation.user_account_export import user_account_to_csv
+from app.simulation.user_simulations_export import user_simulations_to_csv
 from app.schemas.audit_log import AuditLogListOut, AuditLogOut
 from app.schemas.auth import MessageResponse
 from app.schemas.project import (
@@ -1964,6 +1965,57 @@ def export_my_projects(
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": 'attachment; filename="my-projects.csv"',
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/me/simulations/export",
+    summary="Export the current user's simulations as CSV",
+    response_class=StreamingResponse,
+)
+def export_my_simulations(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of the current user's simulation rows."""
+    rows = (
+        db.query(Simulation, Project)
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(Project.user_id == current_user.id)
+        .order_by(Simulation.created_at.desc())
+        .all()
+    )
+    simulation_rows = [
+        {
+            "simulation_id": sim.id,
+            "project_id": sim.project_id,
+            "status": sim.status,
+            "created_at": sim.created_at,
+            "signal_quality": sim.signal_quality,
+            "product_type": (
+                (sim.results_json or {}).get("product_type_detected", "")
+                if sim.results_json
+                else ""
+            ),
+        }
+        for sim, _project in rows
+    ]
+    csv_text = user_simulations_to_csv(
+        simulation_rows,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="my-simulations.csv"',
             "Content-Length": str(len(body)),
         },
     )
