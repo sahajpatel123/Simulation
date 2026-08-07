@@ -11,7 +11,6 @@ on:
 permissions:
   contents: read
   pull-requests: read
-  actions: write
 
 concurrency:
   group: backend-ci-${{ github.ref }}

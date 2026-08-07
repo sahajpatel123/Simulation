@@ -1,9 +1,9 @@
 name: security-scan
 
-# Defensive scan: Bandit (Python security) + pip-audit (deps).
-# Runs in parallel to backend-ci — its results surface as a job
-# summary but never block merges. When findings need to block,
-# flip ``continue-on-error`` to ``false`` after triaging.
+# Defensive scan: Bandit (Python security) + pip-audit (deps) + Trivy.
+# Runs in parallel to backend-ci. Scanner setup/report failures fail the
+# job so a broken scanner can't silently pass; findings surface as notices
+# so they inform without blocking merges.
 
 on:
   push:
@@ -17,7 +17,6 @@ on:
 
 permissions:
   contents: read
-  actions: write
 
 concurrency:
   group: security-scan-${{ github.ref }}
