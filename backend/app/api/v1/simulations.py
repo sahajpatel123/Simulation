@@ -221,6 +221,7 @@ from app.core.response_cache import (
 from app.simulation.calibration_health import (
     build_calibration_health,
 )
+from app.simulation.calibration_health_export import calibration_health_to_csv
 from app.simulation.portfolio_narrative import (
     build_portfolio_narrative,
 )
@@ -2912,6 +2913,66 @@ def get_outlier_detection(
     return OutlierDetectionOut(**payload)
 
 
+def _fetch_calibration_health_rows(
+    db: Session,
+    user_id: int,
+    canonical_ids: list[int],
+) -> list[tuple[object, object, object, list[dict] | None]]:
+    """Fetch sim/outcome rows for calibration-health aggregation.
+
+    The query keeps the latest outcome per simulation (the LEFT JOIN
+    is ordered by outcome ``created_at`` descending, so the first row
+    per simulation is the newest outcome). It is scoped to simulations
+    owned by ``user_id`` and accepts a pre-parsed, capped ID list.
+    """
+    rows = (
+        db.query(
+            Simulation.id,
+            Simulation.created_at,
+            Outcome.predicted_conversion_rate,
+            Outcome.actual_conversion_rate,
+            Simulation.results_json,
+        )
+        .outerjoin(
+            Outcome, Outcome.simulation_id == Simulation.id,
+        )
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(
+            Simulation.id.in_(canonical_ids),
+            Simulation.status == "COMPLETED",
+            Project.user_id == user_id,
+        )
+        .order_by(Simulation.created_at.asc(), Outcome.created_at.desc())
+        .all()
+    )
+
+    # Keep latest outcome per sim. The LEFT JOIN produces one
+    # row per (sim, outcome) pair; with the ORDER BY above the
+    # newest outcome for each sim is the FIRST row we see, so
+    # the ``seen`` set keeps one row per Simulation.id.
+    seen: set[int] = set()
+    health_rows: list[tuple[object, object, object, list[dict] | None]] = []
+    for r in rows:
+        if r.created_at is None:
+            # can't build a health row without created_at.
+            continue
+        if r.id in seen:
+            continue
+        seen.add(r.id)
+        findings = (
+            (r.results_json or {}).get("domain_findings") or []
+        )
+        health_rows.append(
+            (
+                r.created_at,
+                r.predicted_conversion_rate,
+                r.actual_conversion_rate,
+                findings,
+            )
+        )
+    return health_rows
+
+
 @router.get(
     "/calibration-health",
     response_model=CalibrationHealthOut,
@@ -2954,54 +3015,112 @@ def get_calibration_health(
     if not canonical_ids:
         return CalibrationHealthOut()
 
-    rows = (
-        db.query(
-            Simulation.id,
-            Simulation.created_at,
-            Outcome.predicted_conversion_rate,
-            Outcome.actual_conversion_rate,
-            Simulation.results_json,
-        )
-        .outerjoin(
-            Outcome, Outcome.simulation_id == Simulation.id,
-        )
-        .join(Project, Simulation.project_id == Project.id)
-        .filter(
-            Simulation.id.in_(canonical_ids),
-            Simulation.status == "COMPLETED",
-            Project.user_id == current_user.id,
-        )
-        .order_by(Simulation.created_at.asc(), Outcome.created_at.desc())
-        .all()
+    health_rows = _fetch_calibration_health_rows(
+        db,
+        current_user.id,
+        canonical_ids,
     )
-
-    # Keep latest outcome per sim. The LEFT JOIN produces one
-    # row per (sim, outcome) pair; with the ORDER BY above the
-    # newest outcome for each sim is the FIRST row we see, so
-    # the ``seen`` set keeps one row per Simulation.id.
-    seen: set[int] = set()
-    health_rows: list[tuple] = []
-    for r in rows:
-        if r.created_at is None:
-            # can't build a health row without created_at.
-            continue
-        if r.id in seen:
-            continue
-        seen.add(r.id)
-        findings = (
-            (r.results_json or {}).get("domain_findings") or []
-        )
-        health_rows.append(
-            (
-                r.created_at,
-                r.predicted_conversion_rate,
-                r.actual_conversion_rate,
-                findings,
-            )
-        )
 
     payload = build_calibration_health(health_rows)
     return CalibrationHealthOut(**payload)
+
+
+@router.get(
+    "/calibration-health/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export the calibration-health payload as CSV (or JSON "
+        "with ?format=json)"
+    ),
+    # Same DB read cost as the JSON health endpoint; cap polling
+    # so a dashboard loop can't drive repeated N-sim scans.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_calibration_health(
+    ids: list[str] | None = Query(
+        default=None,
+        description=(
+            "One or more simulation ids. Same parser as "
+            "``/simulations/calibration-health``. Optional; "
+            "without ids the export contains an empty "
+            "INSUFFICIENT_DATA health payload."
+        ),
+    ),
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the "
+            "raw calibration-health payload."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of the user's calibration-health report.
+
+    Supports the same ``ids`` filter as ``GET /simulations/calibration-health``.
+    Default ``format=csv`` renders the summary, trend buckets, and architect
+    recommendation counts as a multi-section spreadsheet. ``format=json``
+    returns the raw payload for machine consumers.
+    """
+    try:
+        canonical_ids = parse_id_list(ids)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    if canonical_ids:
+        health_rows = _fetch_calibration_health_rows(
+            db,
+            current_user.id,
+            canonical_ids,
+        )
+        payload = build_calibration_health(health_rows)
+    else:
+        payload = build_calibration_health([])
+
+    metadata = {
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "user_id": current_user.id,
+        "format_version": "1",
+        "requested_ids": canonical_ids,
+    }
+
+    fmt = format.strip().lower() if format else "csv"
+    if fmt == "json":
+        json_text = json.dumps(
+            {"metadata": metadata, "calibration_health": payload},
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="calibration-health.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = calibration_health_to_csv(payload, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="calibration-health.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
 
 
 @router.get(
