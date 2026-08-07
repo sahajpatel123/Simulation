@@ -45,12 +45,18 @@ class _FakeSession:
         return _FakeQuery([])
 
 
-def _call_route(*, project_id: int = 10, session: _FakeSession | None = None):
+def _call_route(
+    *,
+    project_id: int = 10,
+    format: str = "csv",
+    session: _FakeSession | None = None,
+):
     from app.api.v1 import projects as proj_mod
 
     db = session if session is not None else _FakeSession()
     return proj_mod.export_brief(
         project_id=project_id,
+        format=format,
         db=db,
         current_user=type("U", (), {"id": 42})(),
     )
@@ -76,6 +82,15 @@ def test_export_brief_returns_csv() -> None:
     assert "project_id,brief_positioning,brief_features_json" in body
     assert "10,premium saas" in body
     assert "user_id,42" in body
+
+
+def test_export_brief_format_json_returns_payload() -> None:
+    resp = _call_route(format="json")
+
+    assert resp.media_type == "application/json; charset=utf-8"
+    body = _body(resp).decode("utf-8")
+    assert '"brief_positioning": "premium saas"' in body
+    assert '"brief_hook": "save time"' in body
 
 
 def test_export_brief_missing_project_raises_404() -> None:
