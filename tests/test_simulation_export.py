@@ -36,12 +36,14 @@ def test_build_simulation_export_returns_rows() -> None:
             "metro_power_professional": 0.5,
             "tier3_first_time_app_user": 0.01,
         },
+        created_at="2026-08-07T20:00:00+00:00",
     )
 
     assert export["simulation_id"] == 7
     assert export["project_id"] == 10
     assert export["product_type"] == "saas"
     assert export["signal_quality"] == 0.62
+    assert export["created_at"] == "2026-08-07T20:00:00+00:00"
     assert export["population_weighted_conversion"] == pytest.approx(0.042)
     assert export["total_clusters"] == 2
     assert export["rows"][0]["cluster_id"] == "metro_power_professional"
@@ -88,6 +90,7 @@ def test_csv_contains_header_and_rows() -> None:
         project_id=10,
         product_type="saas",
         signal_quality=0.62,
+        created_at="2026-08-07T20:00:00+00:00",
     )
     csv_text = simulation_to_csv(export, metadata={"generated_at": "now", "user_id": 42})
 
@@ -95,3 +98,4 @@ def test_csv_contains_header_and_rows() -> None:
     assert "metro_power_professional" in csv_text
     assert "tier3_first_time_app_user" in csv_text
     assert "generated_at,now" in csv_text
+    assert "2026-08-07T20:00:00+00:00" in csv_text

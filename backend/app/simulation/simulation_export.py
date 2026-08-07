@@ -51,6 +51,17 @@ def _clean_signal_quality(value: Any) -> float | None:
     return parsed if math.isfinite(parsed) else None
 
 
+def _text(value: Any) -> str:
+    if value is None:
+        return ""
+    if hasattr(value, "isoformat"):
+        try:
+            return value.isoformat()
+        except Exception:
+            return str(value)
+    return str(value)
+
+
 def _cluster_rows(
     results: dict[str, Any],
     cluster_names: dict[str, str] | None,
@@ -101,6 +112,7 @@ def build_simulation_export(
     signal_quality: float | None = None,
     cluster_names: dict[str, str] | None = None,
     cluster_weights: dict[str, float] | None = None,
+    created_at: Any = None,
 ) -> dict[str, Any]:
     """Compose the per-simulation export payload.
 
@@ -113,6 +125,7 @@ def build_simulation_export(
         signal_quality: Persisted signal quality, if any.
         cluster_names: ``{cluster_id: name}`` lookup.
         cluster_weights: ``{cluster_id: population_weight}`` lookup.
+        created_at: Simulation creation timestamp, if any.
     """
     payload = _coerce_results(results)
     rows = _cluster_rows(payload, cluster_names, cluster_weights)
@@ -133,6 +146,7 @@ def build_simulation_export(
         "status": status,
         "product_type": str(product_type or "saas"),
         "signal_quality": _clean_signal_quality(signal_quality),
+        "created_at": _text(created_at),
         "population_weighted_conversion": conversion,
         "total_clusters": len(rows),
         "rows": rows,
@@ -157,6 +171,7 @@ def simulation_to_csv(export: dict[str, Any], metadata: dict[str, Any] | None = 
             "status",
             "product_type",
             "signal_quality",
+            "created_at",
             "population_weighted_conversion",
             "cluster_id",
             "cluster_name",
@@ -172,6 +187,7 @@ def simulation_to_csv(export: dict[str, Any], metadata: dict[str, Any] | None = 
                 export.get("status", ""),
                 export.get("product_type", ""),
                 export.get("signal_quality", ""),
+                export.get("created_at", ""),
                 export.get("population_weighted_conversion", ""),
                 row.get("cluster_id", ""),
                 row.get("cluster_name", ""),

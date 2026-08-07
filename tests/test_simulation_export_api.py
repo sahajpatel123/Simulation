@@ -29,6 +29,7 @@ class _FakeSimulation:
         self.status = status
         self.error_message = error_message
         self.signal_quality = 0.62
+        self.created_at = "2026-08-07T20:00:00+00:00"
         self.results_json = (
             results
             if results is not None
@@ -108,6 +109,7 @@ def test_completed_simulation_returns_csv_export() -> None:
     assert "simulation_id,project_id,status,product_type" in body
     assert "metro_power_professional" in body
     assert "tier3_first_time_app_user" in body
+    assert "2026-08-07T20:00:00+00:00" in body
 
 
 def test_format_json_returns_json_payload() -> None:
@@ -117,6 +119,7 @@ def test_format_json_returns_json_payload() -> None:
     body = _body(resp).decode("utf-8")
     assert '"simulation_id": 1' in body
     assert '"metro_power_professional"' in body
+    assert '"created_at": "2026-08-07T20:00:00+00:00"' in body
 
 
 def test_failed_simulation_raises_422() -> None:

@@ -7367,6 +7367,7 @@ def get_simulation_export(
         signal_quality=clean_signal_quality,
         cluster_names=cluster_names,
         cluster_weights=cluster_weights,
+        created_at=sim.created_at,
     )
 
     metadata = {
