@@ -60,12 +60,18 @@ class _FakeSession:
         return _FakeQuery([])
 
 
-def _call_route(*, project_id: int = 10, session: _FakeSession | None = None):
+def _call_route(
+    *,
+    project_id: int = 10,
+    format: str = "csv",
+    session: _FakeSession | None = None,
+):
     from app.api.v1 import decisions as dec_mod
 
     db = session if session is not None else _FakeSession()
     return dec_mod.export_decisions(
         project_id=project_id,
+        format=format,
         db=db,
         current_user=type("U", (), {"id": 42})(),
     )
@@ -90,6 +96,15 @@ def test_export_decisions_returns_csv() -> None:
     body = _body(resp).decode("utf-8")
     assert "id,project_id,title,status,task_id,created_at,result_json" in body
     assert "1,10,Pricing Tiers,COMPLETED,abc,2026-08-07T20:00:00+00:00" in body
+
+
+def test_export_decisions_format_json_returns_payload() -> None:
+    resp = _call_route(format="json")
+
+    assert resp.media_type == "application/json; charset=utf-8"
+    body = _body(resp).decode("utf-8")
+    assert '"project_id": 10' in body
+    assert '"title": "Pricing Tiers"' in body
 
 
 def test_export_decisions_empty_project_returns_header_only() -> None:

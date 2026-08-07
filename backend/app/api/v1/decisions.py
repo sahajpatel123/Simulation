@@ -4,7 +4,7 @@ import json
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -351,6 +351,15 @@ def list_decisions(
 )
 def export_decisions(
     project_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "decision rows."
+        ),
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
@@ -375,6 +384,30 @@ def export_decisions(
         }
         for decision in decisions
     ]
+
+    fmt = format.strip().lower() if format else "csv"
+    if fmt == "json":
+        json_text = json.dumps(
+            {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "project_id": project_id,
+                "decisions": rows,
+            },
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="decisions-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
     csv_text = decisions_to_csv(rows)
     body = csv_text.encode("utf-8")
     return StreamingResponse(
