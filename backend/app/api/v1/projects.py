@@ -126,6 +126,7 @@ from app.simulation.description_export import description_to_csv
 from app.simulation.tag_suggestions import suggest_tags
 from app.simulation.dossier_axis_export import dossier_axis_to_csv
 from app.simulation.similar_projects import find_similar_projects
+from app.simulation.intake_mode_export import intake_mode_to_csv
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -4159,6 +4160,44 @@ def export_dossier_axis(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="dossier-axis-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/intake-mode/export",
+    summary="Export a project's intake mode as CSV",
+    response_class=StreamingResponse,
+)
+def export_intake_mode(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's intake mode field."""
+    project = get_owned_project(db, current_user.id, project_id)
+
+    row = {
+        "project_id": project.id,
+        "intake_mode": project.intake_mode,
+    }
+    csv_text = intake_mode_to_csv(
+        row,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="intake-mode-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },
