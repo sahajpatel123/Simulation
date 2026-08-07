@@ -120,6 +120,7 @@ from app.simulation.tags_export import tags_to_csv
 from app.simulation.readings_export import readings_payload, readings_to_csv
 from app.simulation.precis_export import precis_to_csv
 from app.simulation.project_meta_export import project_meta_to_csv
+from app.simulation.landing_export import landing_to_csv
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -3782,6 +3783,47 @@ def export_project_metadata(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="metadata-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/landing/export",
+    summary="Export a project's landing page fields as CSV",
+    response_class=StreamingResponse,
+)
+def export_landing(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's landing page fields."""
+    project = get_owned_project(db, current_user.id, project_id)
+
+    row = {
+        "project_id": project.id,
+        "landing_page_url": getattr(project, "landing_page_url", None),
+        "existing_product_description": getattr(
+            project, "existing_product_description", None
+        ),
+    }
+    csv_text = landing_to_csv(
+        row,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="landing-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },
