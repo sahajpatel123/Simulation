@@ -153,6 +153,10 @@ from app.simulation.coverage_gaps_export import (
     coverage_gaps_to_csv,
     coverage_gaps_to_json,
 )
+from app.simulation.project_health_export import (
+    project_health_to_csv,
+    project_health_to_json,
+)
 from app.simulation.confidence_explainer import (
     build_confidence_explainer,
 )
@@ -4772,6 +4776,89 @@ def get_project_health(
         ttl_seconds=_PROJECT_HEALTH_CACHE_TTL_S,
     )
     return ProjectHealthOut(**payload)
+
+
+@router.get(
+    "/{project_id}/health/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export a project's health scorecard as CSV (or JSON "
+        "with ?format=json)"
+    ),
+    # Same read cost as the JSON health endpoint; cap polling so a
+    # dashboard loop can't drive repeated child-row scans.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_project_health(
+    project_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly scorecard; ``json`` returns the "
+            "raw project-health payload. Unsupported values return "
+            "a 400 response."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's health scorecard.
+
+    Reuses the same cached payload as ``GET /projects/{id}/health``.
+    ``format=csv`` renders the score summary, per-component breakdown,
+    and key signals as a multi-section spreadsheet. ``format=json``
+    returns the raw payload for machine consumers.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; expected "
+                "'csv' or 'json'"
+            ),
+        )
+
+    payload = get_project_health(
+        project_id=project_id,
+        db=db,
+        current_user=current_user,
+    )
+    metadata = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "user_id": current_user.id,
+        "format_version": "1",
+        "project_id": project_id,
+    }
+
+    if fmt == "json":
+        json_text = project_health_to_json(payload, metadata=metadata)
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="health-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = project_health_to_csv(payload, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="health-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
 
 
 @router.get(
