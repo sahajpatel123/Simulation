@@ -30,10 +30,9 @@ jobs:
         uses: github/codeql-action/init@v4.37.4
         with:
           languages: ${{ matrix.language }}
-          # Enable all queries for comprehensive analysis
-          # For python: add queries for security, quality, and best practices
-          # For javascript: add queries for security and quality
-          # See: https://codeql.github.com/docs/codeql-language-guides/
+          # security-and-quality covers the full default security suite plus
+          # maintainability/correctness queries for both Python and JavaScript.
+          queries: security-and-quality
 
       - name: Autobuild
         uses: github/codeql-action/autobuild@v4.37.4

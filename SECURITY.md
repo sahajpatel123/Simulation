@@ -35,10 +35,30 @@ We take security seriously. If you discover a security vulnerability in TheCee, 
 
 This repository runs automated security scans:
 
-- **Bandit**: Python security linter for security issues
-- **pip-audit**: Dependency vulnerability scanner
-- **Trivy**: Container and configuration scanner
-- **CodeQL**: Semantic code analysis for vulnerabilities
+- **Bandit**: Python security linter for security issues (`security-scan.yml`)
+- **pip-audit**: Python dependency vulnerability scanner (`security-scan.yml`, `lint.yml`)
+- **Safety**: Python dependency vulnerability scanner (`lint.yml`)
+- **Trivy**: Container, filesystem, and Dockerfile configuration scanner (`security-scan.yml`)
+- **CodeQL**: Semantic code analysis with the `security-and-quality` query suite (`codeql.yml`)
+- **Gitleaks**: Git history and working-tree secret scanner (`backend-ci.yml`)
+- **Actionlint + YAML/TOML validation**: GitHub Actions workflow syntax and security-policy checks (`workflow-validation.yml`)
+
+The `workflow-validation.yml` job also enforces that every GitHub Action ref is pinned
+to a full version tag and that every workflow declares least-privilege permissions.
+
+### Running Security Checks Locally
+
+```bash
+# Python security lint
+bandit -r backend/app
+
+# Dependency vulnerability scans
+pip-audit -r requirements.txt
+safety check -r requirements.txt
+
+# Secret scanning
+gitleaks detect --config .github/gitleaks.toml
+```
 
 ### Dependency Management
 
