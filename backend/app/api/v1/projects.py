@@ -104,6 +104,7 @@ from app.schemas.simulation_trend import SimulationTrendOut
 from app.simulation.project_simulations_export import simulations_to_csv
 from app.simulation.assumptions_export import assumptions_to_csv
 from app.simulation.evidence_export import evidence_to_csv
+from app.simulation.prototypes_export import prototypes_to_csv
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -2005,6 +2006,56 @@ def get_prototype(
         project_id=project_id,
         html_content=prototype.html_content,
         funnel_graph=funnel_graph,
+    )
+
+
+@router.get(
+    "/{project_id}/prototypes/export",
+    summary="Export a project's prototypes as CSV",
+    response_class=StreamingResponse,
+)
+def export_prototypes(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's prototype rows."""
+    get_owned_project(db, current_user.id, project_id)
+
+    prototypes = (
+        db.query(Prototype)
+        .filter(Prototype.project_id == project_id)
+        .order_by(Prototype.created_at.desc())
+        .all()
+    )
+    rows = [
+        {
+            "id": prototype.id,
+            "project_id": prototype.project_id,
+            "html_content": prototype.html_content,
+            "funnel_graph_json": prototype.funnel_graph_json,
+            "created_at": prototype.created_at,
+        }
+        for prototype in prototypes
+    ]
+    csv_text = prototypes_to_csv(
+        rows,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="prototypes-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
     )
 
 
