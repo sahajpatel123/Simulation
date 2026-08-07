@@ -40,6 +40,8 @@ The repo ships several GitHub Actions workflows in `.github/workflows/`:
 
 - `backend-ci.yml` — pytest (real gate), gitleaks secret scan, DB migrations.
 - `codeql.yml` — CodeQL for Python + JavaScript with `security-and-quality` queries.
+- `dependency-review.yml` — fails PRs that introduce high-severity dependency
+  vulnerabilities (scans dependency diffs).
 - `lint.yml` — ruff + `pip-audit` / `safety` dependency scans.
 - `security-scan.yml` — Bandit, `pip-audit`, and Trivy (fs + Dockerfile config).
 - `secret-scan.yml` — weekly full-history gitleaks scan (scheduled + manual).
