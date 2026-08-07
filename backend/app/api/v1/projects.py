@@ -131,6 +131,7 @@ from app.simulation.title_export import title_to_csv
 from app.simulation.is_archived_export import is_archived_to_csv
 from app.simulation.created_at_export import created_at_to_csv
 from app.simulation.status_export import status_to_csv
+from app.simulation.duplicate_title import find_duplicate_titles
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -4518,6 +4519,33 @@ def export_status(
             "Content-Length": str(len(body)),
         },
     )
+
+
+@router.get(
+    "/{project_id}/duplicate-title",
+    summary="Check for other owned projects with the same title",
+    responses=_JSON_200,
+)
+def get_duplicate_title(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, object]:
+    """Return other owned projects whose title matches this project."""
+    project = get_owned_project(db, current_user.id, project_id)
+    candidates = (
+        db.query(Project)
+        .filter(Project.user_id == current_user.id)
+        .order_by(Project.created_at.desc())
+        .all()
+    )
+    candidate_rows = [
+        {"id": candidate.id, "title": candidate.title} for candidate in candidates
+    ]
+    return {
+        "project_id": project.id,
+        "duplicates": find_duplicate_titles(project.title, candidate_rows, project.id),
+    }
 
 
 @router.post(
