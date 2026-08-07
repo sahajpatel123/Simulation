@@ -7112,14 +7112,20 @@ def get_sustainability_positioning(
         for cluster in _clusters_map.values()
     ]
 
+    raw_signal_quality = sim.signal_quality
+    signal_quality: float | None = None
+    if raw_signal_quality is not None:
+        try:
+            signal_quality = float(raw_signal_quality)
+        except (TypeError, ValueError, OverflowError):
+            signal_quality = None
+
     return build_sustainability_positioning(
         sim.results_json,
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=signal_quality,
         conductor_results=conductor_results,
         cluster_registry=registry,
         product_type=product_type_name,

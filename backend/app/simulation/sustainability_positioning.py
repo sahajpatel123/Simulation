@@ -200,6 +200,14 @@ def build_sustainability_positioning(
         product_type: Detected product type for the run.
     """
     payload = _coerce_results(results)
+    # Harden persisted signal quality: malformed legacy rows can contain
+    # NaN/Inf or out-of-range values which would otherwise poison JSON
+    # serialization in the response's meta dict.
+    signal_quality_safe: float | None = _safe_float(
+        signal_quality, default=None
+    )
+    if signal_quality_safe is not None:
+        signal_quality_safe = round(_clamp(signal_quality_safe), 4)
     product_type_name = str(
         product_type or payload.get("product_type_detected", "saas") or "saas"
     ).lower()
@@ -251,7 +259,7 @@ def build_sustainability_positioning(
         )
 
     meta: dict[str, Any] = {
-        "signal_quality": signal_quality,
+        "signal_quality": signal_quality_safe,
         "total_clusters": len(registry),
         "covered_clusters": len(rows),
         "covered_weight": round(covered_weight, 4),

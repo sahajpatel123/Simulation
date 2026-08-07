@@ -102,13 +102,14 @@ class _FakeSimulation:
         status: str = "COMPLETED",
         results: dict | None = None,
         error_message: str | None = None,
+        signal_quality: float | str | None = 0.62,
     ) -> None:
         self.id = sim_id
         self.project_id = 10
         self.environment_id = 5
         self.status = status
         self.error_message = error_message
-        self.signal_quality = 0.62
+        self.signal_quality = signal_quality
         self.results_json = (
             results
             if results is not None
@@ -336,6 +337,37 @@ def test_build_handles_malformed_metrics_deterministically() -> None:
     assert profile.premium_friction == 0.0
 
 
+def test_build_handles_non_finite_signal_quality() -> None:
+    out = build_sustainability_positioning(
+        results={"product_type_detected": "consumer_hardware"},
+        simulation_id=4,
+        project_id=14,
+        status="COMPLETED",
+        signal_quality=float("nan"),
+        conductor_results=_conductor("eco_cluster"),
+        cluster_registry=[_cluster("eco_cluster", "Eco Cluster", 1.0)],
+        product_type="consumer_hardware",
+    )
+
+    assert out.meta["signal_quality"] is None
+    assert out.verdict == "STRONG"
+
+
+def test_build_clamps_out_of_range_signal_quality() -> None:
+    out = build_sustainability_positioning(
+        results={"product_type_detected": "consumer_hardware"},
+        simulation_id=5,
+        project_id=15,
+        status="COMPLETED",
+        signal_quality=2.0,
+        conductor_results=_conductor("eco_cluster"),
+        cluster_registry=[_cluster("eco_cluster", "Eco Cluster", 1.0)],
+        product_type="consumer_hardware",
+    )
+
+    assert out.meta["signal_quality"] == 1.0
+
+
 # ---------------------------------------------------------------------------
 # Route
 # ---------------------------------------------------------------------------
@@ -418,3 +450,17 @@ def test_missing_simulation_raises_404(
     with pytest.raises(HTTPException) as exc:
         _call_route(session=session, monkeypatch=monkeypatch)
     assert exc.value.status_code == 404
+
+
+def test_route_handles_malformed_signal_quality(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = _FakeSession(
+        sim=_FakeSimulation(signal_quality="not-a-number")
+    )
+    out = _call_route(session=session, monkeypatch=monkeypatch)
+
+    assert out.simulation_id == 1
+    assert out.project_id == 10
+    assert out.meta["signal_quality"] is None
+    assert len(out.cluster_profiles) >= 50
