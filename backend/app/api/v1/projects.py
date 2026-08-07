@@ -110,6 +110,7 @@ from app.simulation.interventions_export import interventions_to_csv
 from app.simulation.competitive_export import competitors_to_csv
 from app.simulation.mvp_features_export import features_to_csv
 from app.simulation.brief_export import brief_to_csv
+from app.simulation.tags_export import tags_to_csv
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
