@@ -119,6 +119,7 @@ from app.simulation.brief_export import brief_to_csv
 from app.simulation.tags_export import tags_to_csv
 from app.simulation.readings_export import readings_payload, readings_to_csv
 from app.simulation.precis_export import precis_to_csv
+from app.simulation.project_meta_export import project_meta_to_csv
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -3706,6 +3707,49 @@ def export_precis(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="precis-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/metadata/export",
+    summary="Export a project's core metadata as CSV",
+    response_class=StreamingResponse,
+)
+def export_project_metadata(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's core metadata."""
+    project = get_owned_project(db, current_user.id, project_id)
+
+    row = {
+        "project_id": project.id,
+        "title": project.title,
+        "description": project.description,
+        "status": project.status,
+        "intake_mode": project.intake_mode,
+        "is_archived": project.is_archived,
+        "created_at": project.created_at,
+    }
+    csv_text = project_meta_to_csv(
+        row,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="metadata-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },
