@@ -4813,6 +4813,15 @@ def get_cluster_cohort_drift(
 )
 def export_project_simulations(
     project_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "simulation rows."
+        ),
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
@@ -4847,6 +4856,30 @@ def export_project_simulations(
         }
         for simulation in simulations
     ]
+
+    fmt = format.strip().lower() if format else "csv"
+    if fmt == "json":
+        json_text = json.dumps(
+            {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "project_id": project_id,
+                "simulations": rows,
+            },
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="simulations-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
     csv_text = simulations_to_csv(rows)
     body = csv_text.encode("utf-8")
     return StreamingResponse(
