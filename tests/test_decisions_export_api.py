@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 import types
 
@@ -105,8 +106,14 @@ def test_export_decisions_format_json_returns_payload() -> None:
 
     assert resp.media_type == "application/json; charset=utf-8"
     body = _body(resp).decode("utf-8")
-    assert '"project_id": 10' in body
-    assert '"title": "Pricing Tiers"' in body
+    payload = json.loads(body)
+
+    assert payload["project_id"] == 10
+    assert payload["format_version"] == "1"
+    assert payload["generated_at"].endswith("+00:00")
+    assert len(payload["decisions"]) == 1
+    assert payload["decisions"][0]["title"] == "Pricing Tiers"
+    assert payload["decisions"][0]["result"] == {"winner": "tier_b"}
 
 
 def test_export_decisions_empty_project_returns_header_only() -> None:

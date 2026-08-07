@@ -346,7 +346,7 @@ def list_decisions(
 
 @router.get(
     "/{project_id}/decisions/export",
-    summary="Export a project's decisions as CSV",
+    summary="Export a project's decisions as CSV (or JSON)",
     response_class=StreamingResponse,
 )
 def export_decisions(
@@ -391,6 +391,7 @@ def export_decisions(
             {
                 "generated_at": datetime.now(timezone.utc).isoformat(),
                 "project_id": project_id,
+                "format_version": "1",
                 "decisions": rows,
             },
             default=str,
