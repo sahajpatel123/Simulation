@@ -28,6 +28,7 @@ from app.core.prompts import (
     PROTOTYPE_GENERATION_PROMPT,
 )
 from app.models.assumption import Assumption
+from app.models.assumption_evidence import AssumptionEvidence
 from app.models.decision import Decision
 from app.models.environment import Environment
 from app.models.outcome import Outcome
@@ -102,6 +103,7 @@ from app.schemas.reweighting import ReweightingPreviewOut
 from app.schemas.simulation_trend import SimulationTrendOut
 from app.simulation.project_simulations_export import simulations_to_csv
 from app.simulation.assumptions_export import assumptions_to_csv
+from app.simulation.evidence_export import evidence_to_csv
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -1511,6 +1513,59 @@ def export_assumptions(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="assumptions-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/evidence/export",
+    summary="Export a project's assumption evidence as CSV",
+    response_class=StreamingResponse,
+)
+def export_evidence(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's assumption evidence rows."""
+    get_owned_project(db, current_user.id, project_id)
+
+    evidence_rows = (
+        db.query(AssumptionEvidence)
+        .filter(AssumptionEvidence.project_id == project_id)
+        .order_by(AssumptionEvidence.created_at.desc())
+        .all()
+    )
+    rows = [
+        {
+            "id": evidence.id,
+            "project_id": evidence.project_id,
+            "assumption_id": evidence.assumption_id,
+            "method": evidence.method,
+            "result": evidence.result,
+            "observed_metric": evidence.observed_metric,
+            "notes": evidence.notes,
+            "created_at": evidence.created_at,
+        }
+        for evidence in evidence_rows
+    ]
+    csv_text = evidence_to_csv(
+        rows,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="evidence-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },
