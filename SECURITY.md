@@ -37,7 +37,7 @@ This repository runs automated security scans:
 
 - **Bandit**: Python security linter for security issues (`security-scan.yml`)
 - **pip-audit**: Python dependency vulnerability scanner (`security-scan.yml`, `lint.yml`)
-- **Safety**: Python dependency vulnerability scanner (`lint.yml`)
+- **Safety**: Python dependency vulnerability scanner (`lint.yml`, `security-scan.yml`)
 - **Trivy**: Container, filesystem, and Dockerfile configuration scanner (`security-scan.yml`)
 - **npm audit**: Frontend dependency vulnerability scanner (`security-scan.yml`)
 - **CodeQL**: Semantic code analysis with the `security-and-quality` query suite (`codeql.yml`)
