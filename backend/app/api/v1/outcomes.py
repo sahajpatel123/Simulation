@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -71,6 +72,7 @@ from app.simulation.calibration_health import (
 from app.simulation.outcome_tracker_read import (
     build_outcome_tracker_timeline,
 )
+from app.simulation.outcomes_export import outcomes_to_csv
 from app.simulation.outcomes_digest_v2 import (
     build_outcomes_digest,
 )
@@ -959,6 +961,64 @@ def get_outcome_history(
         best_calibration_score=round(max(scores), 2),
         worst_calibration_score=round(min(scores), 2),
         calibration_trend=_calibration_trend(outcomes),
+    )
+
+
+@router.get(
+    "/{project_id}/outcomes/export",
+    summary="Export a project's outcome records as CSV",
+    response_class=StreamingResponse,
+)
+def export_outcomes(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's outcome records."""
+    get_owned_project(db, current_user.id, project_id)
+
+    outcomes = (
+        db.query(Outcome)
+        .filter(Outcome.project_id == project_id)
+        .order_by(Outcome.created_at.desc())
+        .all()
+    )
+    rows = [
+        {
+            "id": outcome.id,
+            "project_id": outcome.project_id,
+            "simulation_id": outcome.simulation_id,
+            "created_at": outcome.created_at,
+            "actual_conversion_rate": outcome.actual_conversion_rate,
+            "actual_mrr": outcome.actual_mrr,
+            "actual_cac": outcome.actual_cac,
+            "actual_churn_rate": outcome.actual_churn_rate,
+            "actual_dau": outcome.actual_dau,
+            "actual_nps": outcome.actual_nps,
+            "days_since_launch": outcome.days_since_launch,
+            "notes": outcome.notes,
+            "predicted_conversion_rate": outcome.predicted_conversion_rate,
+            "predicted_mrr": outcome.predicted_mrr,
+            "predicted_revenue": outcome.predicted_revenue,
+            "variance_conversion": outcome.variance_conversion,
+            "variance_mrr": outcome.variance_mrr,
+            "variance_cac": outcome.variance_cac,
+            "variance_churn": outcome.variance_churn,
+            "calibration_score": outcome.calibration_score,
+        }
+        for outcome in outcomes
+    ]
+    csv_text = outcomes_to_csv(rows)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="outcomes-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
     )
 
 

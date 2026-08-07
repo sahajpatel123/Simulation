@@ -1,0 +1,127 @@
+"""Route-level tests for the /projects/{id}/outcomes/export endpoint."""
+from __future__ import annotations
+
+import asyncio
+import sys
+import types
+
+import pytest
+from fastapi import HTTPException
+
+if "razorpay" not in sys.modules:
+    stub = types.ModuleType("razorpay")
+    stub.Client = object  # type: ignore[attr-defined]
+    sys.modules["razorpay"] = stub
+
+
+class _Outcome:
+    def __init__(self, outcome_id: int = 1) -> None:
+        self.id = outcome_id
+        self.project_id = 10
+        self.simulation_id = 7
+        self.created_at = "2026-08-07T20:00:00+00:00"
+        self.actual_conversion_rate = 0.042
+        self.actual_mrr = 1000.0
+        self.actual_cac = 50.0
+        self.actual_churn_rate = 0.03
+        self.actual_dau = 120
+        self.actual_nps = 42.0
+        self.days_since_launch = 30
+        self.notes = "launch"
+        self.predicted_conversion_rate = 0.04
+        self.predicted_mrr = 900.0
+        self.predicted_revenue = 950.0
+        self.variance_conversion = 0.002
+        self.variance_mrr = 100.0
+        self.variance_cac = -5.0
+        self.variance_churn = 0.01
+        self.calibration_score = 0.82
+
+
+class _Project:
+    def __init__(self) -> None:
+        self.id = 10
+
+
+class _FakeQuery:
+    def __init__(self, items: list | None = None) -> None:
+        self.items = items if items is not None else []
+
+    def filter(self, *args, **kwargs):
+        return self
+
+    def order_by(self, *args, **kwargs):
+        return self
+
+    def first(self):
+        return self.items[0] if self.items else None
+
+    def all(self):
+        return list(self.items)
+
+
+class _FakeSession:
+    def __init__(self, outcomes: list | None = None) -> None:
+        self.outcomes = outcomes if outcomes is not None else [_Outcome()]
+
+    def query(self, model, *args, **kwargs):
+        name = getattr(model, "__name__", "")
+        if name == "Project":
+            return _FakeQuery([_Project()])
+        if name == "Outcome":
+            return _FakeQuery(self.outcomes)
+        return _FakeQuery([])
+
+
+def _call_route(*, project_id: int = 10, session: _FakeSession | None = None):
+    from app.api.v1 import outcomes as out_mod
+
+    db = session if session is not None else _FakeSession()
+    return out_mod.export_outcomes(
+        project_id=project_id,
+        db=db,
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+
+async def _collect(resp) -> bytes:
+    chunks = []
+    async for chunk in resp.body_iterator:
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _body(resp) -> bytes:
+    return asyncio.run(_collect(resp))
+
+
+def test_export_outcomes_returns_csv() -> None:
+    resp = _call_route()
+
+    assert resp.media_type == "text/csv; charset=utf-8"
+    assert 'filename="outcomes-10.csv"' in resp.headers["Content-Disposition"]
+    body = _body(resp).decode("utf-8")
+    assert "id,project_id,simulation_id,created_at" in body
+    assert "1,10,7,2026-08-07T20:00:00+00:00,0.042" in body
+
+
+def test_export_outcomes_empty_project_returns_header_only() -> None:
+    session = _FakeSession(outcomes=[])
+    resp = _call_route(session=session)
+
+    body = _body(resp).decode("utf-8")
+    assert "id,project_id,simulation_id,created_at" in body
+    assert "1,10,7,2026-08-07T20:00:00+00:00,0.042" not in body
+
+
+def test_export_outcomes_missing_project_raises_404() -> None:
+    class NoProjectSession(_FakeSession):
+        def query(self, model, *args, **kwargs):
+            name = getattr(model, "__name__", "")
+            if name == "Project":
+                return _FakeQuery([])
+            return _FakeQuery(self.outcomes)
+
+    with pytest.raises(HTTPException) as exc:
+        _call_route(session=NoProjectSession())
+    assert exc.value.status_code == 404
