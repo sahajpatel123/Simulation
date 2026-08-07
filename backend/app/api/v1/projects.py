@@ -128,6 +128,7 @@ from app.simulation.dossier_axis_export import dossier_axis_to_csv
 from app.simulation.similar_projects import find_similar_projects
 from app.simulation.intake_mode_export import intake_mode_to_csv
 from app.simulation.title_export import title_to_csv
+from app.simulation.is_archived_export import is_archived_to_csv
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -4301,6 +4302,44 @@ def export_title(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="title-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/is-archived/export",
+    summary="Export a project's is_archived flag as CSV",
+    response_class=StreamingResponse,
+)
+def export_is_archived(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's is_archived flag."""
+    project = get_owned_project(db, current_user.id, project_id)
+
+    row = {
+        "project_id": project.id,
+        "is_archived": project.is_archived,
+    }
+    csv_text = is_archived_to_csv(
+        row,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="is-archived-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },
