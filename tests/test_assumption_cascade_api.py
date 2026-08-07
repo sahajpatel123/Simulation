@@ -1,4 +1,5 @@
 """Route-level tests for the /simulations/{id}/assumption-cascade endpoint."""
+
 from __future__ import annotations
 
 import functools
@@ -6,9 +7,9 @@ import sys
 import types
 
 import pytest
+from fastapi import HTTPException
 from app.simulation.conductor import Conductor as _RealConductor
 from app.simulation.product_type import ProductType
-from fastapi import HTTPException
 
 if "razorpay" not in sys.modules:
     stub = types.ModuleType("razorpay")
@@ -233,9 +234,7 @@ def test_unknown_product_type_falls_back_to_saas_but_still_supported(
 def test_failed_simulation_raises_422(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    session = _FakeSession(
-        sim=_FakeSimulation(status="FAILED", error_message="boom")
-    )
+    session = _FakeSession(sim=_FakeSimulation(status="FAILED", error_message="boom"))
     with pytest.raises(HTTPException) as exc:
         _call_route(session=session, monkeypatch=monkeypatch)
     assert exc.value.status_code == 422

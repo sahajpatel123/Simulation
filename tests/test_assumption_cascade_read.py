@@ -1,6 +1,7 @@
 """Tests for the pure assumption-cascade builder
 (``app.simulation.assumption_cascade_read``).
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -87,9 +88,7 @@ def _build(
     }
     weights = weights or {"a": 0.5, "b": 0.5}
     if registry is None:
-        registry = [
-            _cluster(cid, cid.upper(), weights[cid]) for cid in specs
-        ]
+        registry = [_cluster(cid, cid.upper(), weights[cid]) for cid in specs]
     if conductor_results is None:
         conductor_results = _conductor(specs)
     return build_assumption_cascade(
@@ -248,9 +247,7 @@ def test_positive_cascade_share_is_surfaced() -> None:
     assert out.positive_cascade_share == pytest.approx(0.4)
     assert out.meta["positive_cascade_share"] == pytest.approx(0.4)
     assert "positive_cascade_market" in out.flags
-    profile_a = next(
-        p for p in out.cluster_profiles if p.cluster_id == "a"
-    )
+    profile_a = next(p for p in out.cluster_profiles if p.cluster_id == "a")
     assert profile_a.positive_cascade_active is True
 
 

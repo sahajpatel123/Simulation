@@ -28,7 +28,7 @@ The covered market is the population weight of clusters with usable
 metrics and a positive population share; zero-weight clusters are
 excluded from profiles, shares, flags and blocker distributions.
 ``meta`` carries the weighted blind-spot score, positive-cascade share,
-verdict/tier thresholds and the primary-blocker severity.
+verdict/tier thresholds and the primary-blocker market share.
 
 No DB / I/O — verifiable without FastAPI or PostgreSQL. The route layer
 supplies ``results``, ``conductor_results`` (per-cluster architect
@@ -38,6 +38,7 @@ payload use neutral defaults (0.0) and a metrics block with none of the
 cascade keys is treated as uncovered, so a missing field never
 manufactures risk or hides a real blocker present in other metrics.
 """
+
 from __future__ import annotations
 
 import json
@@ -188,16 +189,17 @@ def _architect_flags(
 ) -> list[str]:
     """Sorted truthy flag keys for one cluster."""
     return sorted(
-        key for key, value in _architect_flag_map(
-            conductor_results, cluster_id,
-        ).items() if value
+        key
+        for key, value in _architect_flag_map(
+            conductor_results,
+            cluster_id,
+        ).items()
+        if value
     )
 
 
 def _usable_metrics(metrics: dict[str, Any]) -> bool:
-    return bool(metrics) and any(
-        key in metrics for key in _CASCADE_METRIC_KEYS
-    )
+    return bool(metrics) and any(key in metrics for key in _CASCADE_METRIC_KEYS)
 
 
 def _cascade_tier(
@@ -228,15 +230,9 @@ def _profile_blockers(
     blockers: list[str] = []
     if flags.get("existential_risk") or risk >= TIER_HIGH_INDEX:
         blockers.append(BLOCKER_EXISTENTIAL)
-    if (
-        flags.get("dual_failure_risk")
-        or compound_probability >= COMPOUND_RISK_THRESHOLD
-    ):
+    if flags.get("dual_failure_risk") or compound_probability >= COMPOUND_RISK_THRESHOLD:
         blockers.append(BLOCKER_DUAL_FAILURE)
-    if (
-        flags.get("blind_spot_detected")
-        or blind_spot_score >= BLIND_SPOT_THRESHOLD
-    ):
+    if flags.get("blind_spot_detected") or blind_spot_score >= BLIND_SPOT_THRESHOLD:
         blockers.append(BLOCKER_BLIND_SPOT)
     if flags.get("cluster_sensitivity_high"):
         blockers.append(BLOCKER_SENSITIVE_SEGMENTS)
@@ -252,18 +248,10 @@ def _primary_blocker(blockers: list[str]) -> str:
 
 
 def _weighted_average(rows: list[dict[str, Any]], key: str) -> float:
-    total_weight = sum(
-        max(0.0, row["population_weight"]) for row in rows
-    )
+    total_weight = sum(max(0.0, row["population_weight"]) for row in rows)
     if total_weight <= 0.0:
         return 0.0
-    return (
-        sum(
-            max(0.0, row["population_weight"]) * row[key]
-            for row in rows
-        )
-        / total_weight
-    )
+    return sum(max(0.0, row["population_weight"]) * row[key] for row in rows) / total_weight
 
 
 def build_assumption_cascade(
@@ -295,9 +283,7 @@ def build_assumption_cascade(
     """
     payload = _coerce_results(results)
     product_type_name = str(
-        product_type
-        or payload.get("product_type_detected", "saas")
-        or "saas"
+        product_type or payload.get("product_type_detected", "saas") or "saas"
     ).lower()
     registry: list[dict[str, Any]] = cluster_registry or []
 
@@ -306,9 +292,7 @@ def build_assumption_cascade(
     if raw_signal is not None:
         try:
             parsed_signal = float(raw_signal)
-            clean_signal = (
-                parsed_signal if math.isfinite(parsed_signal) else None
-            )
+            clean_signal = parsed_signal if math.isfinite(parsed_signal) else None
         except (TypeError, ValueError, OverflowError):
             clean_signal = None
 
@@ -319,7 +303,7 @@ def build_assumption_cascade(
         "covered_clusters": 0,
         "covered_weight": 0.0,
         "positive_cascade_share": 0.0,
-        "primary_blocker_score": 0.0,
+        "primary_blocker_share": 0.0,
         "product_type_supported": True,
         "thresholds": {
             "tier_low_index": TIER_LOW_INDEX,
@@ -352,22 +336,10 @@ def build_assumption_cascade(
             continue
 
         flags = _architect_flag_map(conductor_results, cid)
-        risk = _clamp(
-            _safe_float(metrics.get("total_cascade_risk"), 0.0)
-        )
-        compound = _clamp(
-            _safe_float(
-                metrics.get("compound_failure_probability"), 0.0
-            )
-        )
-        blind_score = _clamp(
-            _safe_float(metrics.get("blind_spot_score"), 0.0)
-        )
-        failure_delta = _clamp(
-            _safe_float(
-                metrics.get("primary_failure_domain_delta"), 0.0
-            )
-        )
+        risk = _clamp(_safe_float(metrics.get("total_cascade_risk"), 0.0))
+        compound = _clamp(_safe_float(metrics.get("compound_failure_probability"), 0.0))
+        blind_score = _clamp(_safe_float(metrics.get("blind_spot_score"), 0.0))
+        failure_delta = _clamp(_safe_float(metrics.get("primary_failure_domain_delta"), 0.0))
         critical_count = max(
             0.0,
             _safe_float(metrics.get("critical_assumption_count"), 0.0),
@@ -376,15 +348,10 @@ def build_assumption_cascade(
             0.0,
             _safe_float(metrics.get("validated_assumption_count"), 0.0),
         )
-        positive = (
-            _safe_float(metrics.get("positive_cascade_active"), 0.0)
-            > 0.5
-        )
+        positive = _safe_float(metrics.get("positive_cascade_active"), 0.0) > 0.5
 
         tier = _cascade_tier(risk, blind_score, flags)
-        blockers = _profile_blockers(
-            risk, compound, blind_score, flags
-        )
+        blockers = _profile_blockers(risk, compound, blind_score, flags)
         primary = _primary_blocker(blockers)
         covered_weight += weight
         rows.append(
@@ -402,9 +369,7 @@ def build_assumption_cascade(
                 "tier": tier,
                 "blockers": blockers,
                 "primary_blocker": primary,
-                "architect_flags": _architect_flags(
-                    conductor_results, cid
-                ),
+                "architect_flags": _architect_flags(conductor_results, cid),
             }
         )
 
@@ -445,11 +410,7 @@ def build_assumption_cascade(
     critical_count_avg = _weighted_average(rows, "critical_count")
     validated_count_avg = _weighted_average(rows, "validated_count")
 
-    positive_weight = sum(
-        row["population_weight"]
-        for row in rows
-        if row["positive"]
-    )
+    positive_weight = sum(row["population_weight"] for row in rows if row["positive"])
     positive_share = positive_weight / covered_weight
 
     tier_weights = {
@@ -458,14 +419,10 @@ def build_assumption_cascade(
         TIER_HIGH: 0.0,
         TIER_CRITICAL: 0.0,
     }
-    blocker_weights: dict[str, float] = {
-        key: 0.0 for key in sorted(VALID_BLOCKERS)
-    }
+    blocker_weights: dict[str, float] = {key: 0.0 for key in sorted(VALID_BLOCKERS)}
     for row in rows:
         tier_weights[row["tier"]] += row["population_weight"]
-        blocker_weights[row["primary_blocker"]] += (
-            row["population_weight"]
-        )
+        blocker_weights[row["primary_blocker"]] += row["population_weight"]
 
     low_share = tier_weights[TIER_LOW] / covered_weight
     elevated_share = tier_weights[TIER_ELEVATED] / covered_weight
@@ -473,8 +430,7 @@ def build_assumption_cascade(
     critical_share = tier_weights[TIER_CRITICAL] / covered_weight
 
     blocker_distribution = {
-        key: round(weight / covered_weight, 4)
-        for key, weight in blocker_weights.items()
+        key: round(weight / covered_weight, 4) for key, weight in blocker_weights.items()
     }
     primary_blocker = BLOCKER_NONE
     primary_blocker_share = -1.0
@@ -507,17 +463,13 @@ def build_assumption_cascade(
         flags.append("positive_cascade_market")
     if critical_share >= CRITICAL_SHARE_THRESHOLD:
         flags.append("critical_segment_concentration")
-    if any(
-        BLOCKER_EXISTENTIAL in row["blockers"] for row in rows
-    ):
+    if any(BLOCKER_EXISTENTIAL in row["blockers"] for row in rows):
         flags.append("existential_risk_clusters_present")
-    if any(
-        BLOCKER_BLIND_SPOT in row["blockers"] for row in rows
-    ):
+    if any(BLOCKER_BLIND_SPOT in row["blockers"] for row in rows):
         flags.append("blind_spot_clusters_present")
 
     meta["positive_cascade_share"] = round(positive_share, 4)
-    meta["primary_blocker_score"] = round(primary_blocker_share, 4)
+    meta["primary_blocker_share"] = round(primary_blocker_share, 4)
 
     recommendations: list[str] = []
     if verdict == VERDICT_STABLE:
@@ -618,13 +570,9 @@ def build_assumption_cascade(
         cascade_index=round(risk_avg, 4),
         weighted_compound_failure_probability=round(compound_avg, 4),
         weighted_blind_spot_score=round(blind_avg, 4),
-        weighted_primary_failure_domain_delta=round(
-            failure_delta_avg, 4
-        ),
+        weighted_primary_failure_domain_delta=round(failure_delta_avg, 4),
         weighted_critical_assumption_count=round(critical_count_avg, 4),
-        weighted_validated_assumption_count=round(
-            validated_count_avg, 4
-        ),
+        weighted_validated_assumption_count=round(validated_count_avg, 4),
         positive_cascade_share=round(positive_share, 4),
         low_share=round(low_share, 4),
         elevated_share=round(elevated_share, 4),
@@ -642,15 +590,9 @@ def build_assumption_cascade(
                 total_cascade_risk=round(row["risk"], 4),
                 compound_failure_probability=round(row["compound"], 4),
                 blind_spot_score=round(row["blind_score"], 4),
-                primary_failure_domain_delta=round(
-                    row["failure_delta"], 4
-                ),
-                critical_assumption_count=round(
-                    row["critical_count"], 4
-                ),
-                validated_assumption_count=round(
-                    row["validated_count"], 4
-                ),
+                primary_failure_domain_delta=round(row["failure_delta"], 4),
+                critical_assumption_count=round(row["critical_count"], 4),
+                validated_assumption_count=round(row["validated_count"], 4),
                 positive_cascade_active=row["positive"],
                 cascade_tier=row["tier"],
                 blockers=row["blockers"],
@@ -658,9 +600,7 @@ def build_assumption_cascade(
             )
             for row in rows
         ],
-        top_risk_clusters=[
-            row["cluster_id"] for row in rows[:TOP_RISK_CLUSTERS]
-        ],
+        top_risk_clusters=[row["cluster_id"] for row in rows[:TOP_RISK_CLUSTERS]],
         flags=flags,
         recommendations=recommendations,
         meta=meta,

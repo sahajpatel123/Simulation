@@ -11,6 +11,7 @@ attributes each cluster's dominant blocker (existential cascade,
 compound dual-assumption failure, validation blind spots, or sensitive
 segments), and ranks the highest-risk clusters for validation focus.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -38,9 +39,7 @@ TIER_ELEVATED: str = "ELEVATED"
 TIER_HIGH: str = "HIGH"
 TIER_CRITICAL: str = "CRITICAL"
 
-VALID_TIERS: frozenset[str] = frozenset(
-    {TIER_LOW, TIER_ELEVATED, TIER_HIGH, TIER_CRITICAL}
-)
+VALID_TIERS: frozenset[str] = frozenset({TIER_LOW, TIER_ELEVATED, TIER_HIGH, TIER_CRITICAL})
 
 BLOCKER_NONE: str = "none"
 BLOCKER_EXISTENTIAL: str = "existential_risk"
@@ -108,9 +107,7 @@ class AssumptionCascadeOut(BaseModel):
     primary_blocker_label: str = "No dominant blocker"
     primary_blocker_share: float = 0.0
     blocker_distribution: dict[str, float] = Field(default_factory=dict)
-    cluster_profiles: list[ClusterCascadeProfile] = Field(
-        default_factory=list
-    )
+    cluster_profiles: list[ClusterCascadeProfile] = Field(default_factory=list)
     top_risk_clusters: list[str] = Field(default_factory=list)
     flags: list[str] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)
