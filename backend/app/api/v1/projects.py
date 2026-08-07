@@ -4600,6 +4600,15 @@ def get_readiness_score(
 )
 def export_landing_url(
     project_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "landing-page-URL row."
+        ),
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
@@ -4610,6 +4619,29 @@ def export_landing_url(
         "project_id": project.id,
         "landing_page_url": getattr(project, "landing_page_url", None),
     }
+
+    fmt = format.strip().lower() if format else "csv"
+    if fmt == "json":
+        json_text = json.dumps(
+            {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "landing_page_url": row,
+            },
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="landing-page-url-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
     csv_text = landing_url_to_csv(
         row,
         metadata={
