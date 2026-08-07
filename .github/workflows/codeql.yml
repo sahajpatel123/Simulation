@@ -9,6 +9,10 @@ on:
   schedule:
     - cron: '0 0 * * 1'  # Weekly on Monday at 00:00 UTC
 
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
