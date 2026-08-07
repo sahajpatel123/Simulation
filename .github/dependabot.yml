@@ -12,8 +12,6 @@ updates:
       time: "06:00"
       timezone: "UTC"
     open-pull-requests-limit: 10
-    reviewers:
-      - ""
     commit-message:
       prefix: "deps"
       prefix-development: "deps"

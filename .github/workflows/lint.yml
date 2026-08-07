@@ -73,13 +73,40 @@ jobs:
       - name: Audit requirements.txt for CVEs
         id: pip-audit
         run: |
-          pip-audit -r requirements.txt --format json --output pip-audit-report.json || true
-          pip-audit -r requirements.txt || true
+          set +e
+          pip-audit -r requirements.txt --format json --output pip-audit-report.json
+          audit_exit=$?
+          set -e
+          echo "audit_exit=$audit_exit" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Verify pip-audit produced a report
+        if: always()
+        run: |
+          if [ ! -f pip-audit-report.json ]; then
+            echo "::error::pip-audit did not produce a report — scanner failed"
+            exit 1
+          fi
+          echo "✅ pip-audit report generated"
 
       - name: Safety check for known vulnerabilities
+        id: safety
         run: |
-          safety check -r requirements.txt --output json --json > safety-report.json || true
-          safety check -r requirements.txt || true
+          set +e
+          safety check -r requirements.txt --output safety-report.json --json
+          safety_exit=$?
+          set -e
+          echo "safety_exit=$safety_exit" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Verify safety produced a report
+        if: always()
+        run: |
+          if [ ! -f safety-report.json ]; then
+            echo "::error::safety did not produce a report — scanner failed"
+            exit 1
+          fi
+          echo "✅ safety report generated"
 
       - name: Upload dependency audit reports
         if: always()
