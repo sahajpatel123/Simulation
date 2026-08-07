@@ -55,11 +55,12 @@ class _FakeSession:
         return _FakeQuery([])
 
 
-def _call_route(*, session: _FakeSession | None = None):
+def _call_route(*, format: str = "csv", session: _FakeSession | None = None):
     from app.api.v1 import users as user_mod
 
     db = session if session is not None else _FakeSession()
     return user_mod.export_my_simulations(
+        format=format,
         db=db,
         current_user=type("U", (), {"id": 42})(),
     )
@@ -85,3 +86,13 @@ def test_export_my_simulations_returns_csv() -> None:
     assert "simulation_id,project_id,status,created_at" in body
     assert "1,10,COMPLETED,2026-08-08T06:00:00+00:00,0.62,saas" in body
     assert "user_id,42" in body
+
+
+def test_export_my_simulations_format_json_returns_payload() -> None:
+    resp = _call_route(format="json")
+
+    assert resp.media_type == "application/json; charset=utf-8"
+    body = _body(resp).decode("utf-8")
+    assert '"simulations"' in body
+    assert '"simulation_id": 1' in body
+    assert '"status": "COMPLETED"' in body
