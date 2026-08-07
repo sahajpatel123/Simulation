@@ -106,6 +106,7 @@ from app.simulation.assumptions_export import assumptions_to_csv
 from app.simulation.evidence_export import evidence_to_csv
 from app.simulation.prototypes_export import prototypes_to_csv
 from app.simulation.premortem_export import premortem_to_csv
+from app.simulation.interventions_export import interventions_to_csv
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -2810,6 +2811,48 @@ def get_interventions(
         quick_wins=quick_wins,
         generated_at=data.get("generated_at", ""),
         context_used=data.get("context_used", {}),
+    )
+
+
+@router.get(
+    "/{project_id}/interventions/export",
+    summary="Export a project's interventions as CSV",
+    response_class=StreamingResponse,
+)
+def export_interventions(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's intervention rows."""
+    project = get_owned_project(db, current_user.id, project_id)
+
+    data = getattr(project, "interventions_json", None) or {}
+    rows = []
+    for list_type in ("interventions", "quick_wins"):
+        for item in data.get(list_type, []) or []:
+            row = dict(item)
+            row["list_type"] = list_type
+            rows.append(row)
+
+    csv_text = interventions_to_csv(
+        rows,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="interventions-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
     )
 
 
