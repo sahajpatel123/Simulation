@@ -591,13 +591,19 @@ def redis_health() -> RedisHealthOut:
         return RedisHealthOut(redis="unconfigured")
     started = time.perf_counter()
     try:
-        client.ping()
+        pong = client.ping()
     except Exception as exc:
         logger.exception("Redis health probe failed")
         raise HTTPException(
             status_code=503,
             detail="Redis unreachable",
         ) from exc
+    if not pong:
+        logger.error("Redis health probe failed: PING returned %r", pong)
+        raise HTTPException(
+            status_code=503,
+            detail="Redis unreachable",
+        )
     latency_ms = (time.perf_counter() - started) * 1000.0
     return RedisHealthOut(
         redis="reachable",

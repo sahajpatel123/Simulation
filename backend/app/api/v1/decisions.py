@@ -370,6 +370,7 @@ def export_decisions(
             "title": decision.title,
             "status": decision.status,
             "task_id": decision.task_id,
+            "created_at": decision.created_at,
             "result": decision.results_json,
         }
         for decision in decisions

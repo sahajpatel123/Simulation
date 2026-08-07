@@ -35,6 +35,7 @@ def decisions_to_csv(decisions: list[dict[str, Any]]) -> str:
             "title",
             "status",
             "task_id",
+            "created_at",
             "result_json",
         ]
     )
@@ -46,6 +47,7 @@ def decisions_to_csv(decisions: list[dict[str, Any]]) -> str:
                 _text(decision.get("title")),
                 _text(decision.get("status")),
                 _text(decision.get("task_id")),
+                _text(decision.get("created_at")),
                 _text(decision.get("result")),
             ]
         )
