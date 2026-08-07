@@ -67,13 +67,20 @@ def calibration_health_to_csv(
     ]
     top = payload.get("top_miscalibrated_architect")
     if isinstance(top, dict):
-        summary_rows.append(("top_miscalibrated_architect", top.get("architect_name", "")))
-        summary_rows.append(
-            ("top_miscalibrated_abs_variance", top.get("abs_calibration_variance"))
-        )
-        summary_rows.append(
-            ("top_miscalibrated_recommendation", top.get("recommendation"))
-        )
+        for key in (
+            "architect_name",
+            "abs_calibration_variance",
+            "calibration_variance",
+            "calibration_direction",
+            "recommendation",
+            "finding_count",
+        ):
+            summary_rows.append(
+                (
+                    f"top_miscalibrated_{key}",
+                    top.get(key, ""),
+                )
+            )
     summary_rows.append(("summary", payload.get("summary", "")))
     for key, value in summary_rows:
         writer.writerow([key, "" if value is None else value])

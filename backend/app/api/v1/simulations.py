@@ -3052,7 +3052,8 @@ def export_calibration_health(
         description=(
             "Output format. ``csv`` (default) returns the "
             "spreadsheet-friendly table; ``json`` returns the "
-            "raw calibration-health payload."
+            "raw calibration-health payload. Unsupported values "
+            "return a 400 response."
         ),
     ),
     db: Session = Depends(get_db),
@@ -3090,7 +3091,12 @@ def export_calibration_health(
         "requested_ids": canonical_ids,
     }
 
-    fmt = format.strip().lower() if format else "csv"
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unsupported export format {format!r}; expected 'csv' or 'json'",
+        )
     if fmt == "json":
         json_text = json.dumps(
             {"metadata": metadata, "calibration_health": payload},

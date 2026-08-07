@@ -6,6 +6,7 @@ import sys
 import types
 
 import pytest
+from fastapi import HTTPException
 
 from app.simulation.calibration_health_export import calibration_health_to_csv
 
@@ -64,8 +65,11 @@ def test_csv_renders_metadata_summary_trends_and_counts() -> None:
     assert "section,Calibration Summary" in csv_text
     assert "overall_health,WELL_CALIBRATED" in csv_text
     assert "mean_abs_variance,0.01" in csv_text
-    assert "top_miscalibrated_architect,PricingArchitect" in csv_text
+    assert "top_miscalibrated_architect_name,PricingArchitect" in csv_text
     assert "top_miscalibrated_recommendation,TIGHTEN" in csv_text
+    assert "top_miscalibrated_calibration_variance,0.02" in csv_text
+    assert "top_miscalibrated_calibration_direction,OVER_PREDICTS" in csv_text
+    assert "top_miscalibrated_finding_count,4" in csv_text
     assert "section,Trend Buckets" in csv_text
     assert "7d,7,2,0.01" in csv_text
     assert "30d,30,2,0.01" in csv_text
@@ -218,6 +222,14 @@ def test_export_route_without_ids_returns_empty_health() -> None:
     body = _body(resp).decode("utf-8")
     assert "overall_health,INSUFFICIENT_DATA" in body
     assert "observation_count,0" in body
+
+
+def test_export_route_rejects_unknown_format() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        _call_route(ids=["1"], format="yaml")
+
+    assert exc_info.value.status_code == 400
+    assert "unsupported export format" in exc_info.value.detail
 
 
 def test_export_route_registered_before_dynamic_export() -> None:
