@@ -86,8 +86,22 @@ jobs:
 
       - name: Validate TOML files
         run: |
-          python -c "import tomllib; tomllib.load(open('pyproject.toml', 'rb'))"
-          echo "✅ TOML files are valid"
+          python - <<'PY'
+          import sys, tomllib
+          errors = []
+          for f in ('pyproject.toml', '.github/gitleaks.toml'):
+              try:
+                  with open(f, 'rb') as fh:
+                      tomllib.load(fh)
+              except Exception as e:
+                  errors.append(f'{f}: {e}')
+          if errors:
+              print('::error::Invalid TOML files found')
+              for e in errors:
+                  print(f'  {e}')
+              sys.exit(1)
+          print('✅ TOML files are valid')
+          PY
 
   security-policy-check:
     name: Security policy validation
