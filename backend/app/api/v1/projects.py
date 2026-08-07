@@ -132,6 +132,7 @@ from app.simulation.is_archived_export import is_archived_to_csv
 from app.simulation.created_at_export import created_at_to_csv
 from app.simulation.status_export import status_to_csv
 from app.simulation.duplicate_title import find_duplicate_titles
+from app.simulation.readiness_score import compute_readiness
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -4549,6 +4550,44 @@ def get_duplicate_title(
     return {
         "project_id": project.id,
         "duplicates": duplicates,
+    }
+
+
+@router.get(
+    "/{project_id}/readiness-score",
+    summary="Compute a simple project readiness score",
+    responses=_JSON_200,
+)
+def get_readiness_score(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, object]:
+    """Return a lightweight 0-100 readiness score for the project."""
+    project = get_owned_project(db, current_user.id, project_id)
+    simulation_count = (
+        db.query(Simulation).filter(Simulation.project_id == project_id).count()
+    )
+    decision_count = (
+        db.query(Decision).filter(Decision.project_id == project_id).count()
+    )
+    outcome_count = (
+        db.query(Outcome).filter(Outcome.project_id == project_id).count()
+    )
+    readiness = compute_readiness(
+        {
+            "title": project.title,
+            "description": project.description,
+            "tags": list(project.tags or []),
+            "simulation_count": simulation_count,
+            "decision_count": decision_count,
+            "outcome_count": outcome_count,
+        }
+    )
+    return {
+        "project_id": project.id,
+        "score": readiness["score"],
+        "checks": readiness["checks"],
     }
 
 
