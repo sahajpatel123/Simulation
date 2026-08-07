@@ -27,6 +27,7 @@ from app.simulation.user_account_export import user_account_to_csv
 from app.simulation.user_simulations_export import user_simulations_to_csv
 from app.simulation.user_decisions_export import user_decisions_to_csv
 from app.simulation.user_outcomes_export import user_outcomes_to_csv
+from app.simulation.quick_stats_export import quick_stats_to_csv
 from app.schemas.audit_log import AuditLogListOut, AuditLogOut
 from app.schemas.auth import MessageResponse
 from app.schemas.project import (
@@ -2205,6 +2206,65 @@ def export_my_outcomes(
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": 'attachment; filename="my-outcomes.csv"',
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/me/quick-stats/export",
+    summary="Export the current user's quick stats as CSV",
+    response_class=StreamingResponse,
+)
+def export_my_quick_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of the current user's quick-stats row."""
+    total_projects = db.query(Project).filter(Project.user_id == current_user.id).count()
+    total_simulations = (
+        db.query(Simulation)
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(Project.user_id == current_user.id)
+        .count()
+    )
+    total_decisions = (
+        db.query(Decision)
+        .join(Project, Decision.project_id == Project.id)
+        .filter(Project.user_id == current_user.id)
+        .count()
+    )
+    total_outcomes = (
+        db.query(Outcome)
+        .join(Project, Outcome.project_id == Project.id)
+        .filter(Project.user_id == current_user.id)
+        .count()
+    )
+    account_age_days = (
+        datetime.now(timezone.utc) - current_user.created_at
+    ).days if current_user.created_at else 0
+    row = {
+        "user_id": current_user.id,
+        "total_projects": total_projects,
+        "total_simulations": total_simulations,
+        "total_decisions": total_decisions,
+        "total_outcomes": total_outcomes,
+        "account_age_days": max(0, account_age_days),
+    }
+    csv_text = quick_stats_to_csv(
+        row,
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="my-quick-stats.csv"',
             "Content-Length": str(len(body)),
         },
     )
