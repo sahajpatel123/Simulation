@@ -46,6 +46,27 @@ def _as_dict_map(value: Any) -> dict[Any, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _lookup(value: Any, key: Any) -> Any:
+    """Look up a dict value tolerating int/str key mismatches.
+
+    Comparison payloads can arrive either as a Pydantic model (Python-mode
+    ``model_dump`` keeps ``dict[int, ...]`` keys as ints) or as a JSON-style
+    dict (where those same keys are strings).  This helper makes the export
+    serializers indifferent to that difference.
+    """
+    if not isinstance(value, dict):
+        return None
+    if key in value:
+        return value[key]
+    if isinstance(key, int):
+        return value.get(str(key))
+    try:
+        int_key = int(key)
+    except (TypeError, ValueError):
+        return None
+    return value.get(int_key)
+
+
 def _safe_text(value: Any) -> str:
     if value is None:
         return ""
@@ -240,8 +261,8 @@ def simulation_comparison_to_csv(
                 _safe_int(row.get("best_simulation_id")),
                 _safe_text(row.get("winner_label")),
             ]
-            + [_safe_float(conversions.get(sid)) for sid in sim_ids]
-            + [_safe_float(deltas.get(sid)) for sid in sim_ids],
+            + [_safe_float(_lookup(conversions, sid)) for sid in sim_ids]
+            + [_safe_float(_lookup(deltas, sid)) for sid in sim_ids],
         )
     _write_row(writer, [])
 
@@ -258,14 +279,14 @@ def simulation_comparison_to_csv(
         finding_texts: list[str] = []
         for sid in sim_ids:
             severity = _safe_text(
-                _as_dict_map(row.get("severity_by_sim")).get(sid)
+                _lookup(row.get("severity_by_sim"), sid)
             )
             severities.append(
                 f"{_id_label(data, sid)}:{severity}" if severity else f"{_id_label(data, sid)}:"
             )
             finding_texts.append(
                 f"{_id_label(data, sid)}:"
-                f"{_findings_text(_as_dict_map(row.get('findings')).get(sid))}"
+                f"{_findings_text(_lookup(row.get('findings'), sid))}"
             )
         _write_row(
             writer,
@@ -412,7 +433,7 @@ def simulation_comparison_to_markdown(
                     name=_escape_md_cell(row.get("cluster_name")),
                     weight=f"{_safe_float(row.get('population_weight')):.4f}",
                     conv_cells=" | ".join(
-                        _pct(conversions.get(sid)) for sid in sim_ids
+                        _pct(_lookup(conversions, sid)) for sid in sim_ids
                     ),
                     winner=_escape_md_cell(row.get("winner_label")),
                 )
@@ -432,11 +453,11 @@ def simulation_comparison_to_markdown(
             findings_by_sim = _as_dict_map(row.get("findings"))
             sev_parts: list[str] = []
             for sid in sim_ids:
-                sev = _safe_text(severity_by_sim.get(sid))
+                sev = _safe_text(_lookup(severity_by_sim, sid))
                 sev_parts.append(f"{_id_label(data, sid)}: {sev or '—'}")
             finding_parts: list[str] = []
             for sid in sim_ids:
-                text = _findings_text(findings_by_sim.get(sid))
+                text = _findings_text(_lookup(findings_by_sim, sid))
                 if text:
                     finding_parts.append(f"{_id_label(data, sid)}: {text}")
             lines.append(

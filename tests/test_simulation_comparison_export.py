@@ -183,6 +183,36 @@ def test_csv_empty_payload_still_renders_sections() -> None:
     assert "section,Domain Finding Comparison" in csv_text
 
 
+def test_csv_and_markdown_handle_json_style_string_keyed_maps() -> None:
+    # A JSON-serialized comparison (e.g. a cached endpoint response) uses
+    # string keys for dict[int, ...] fields; the serializers should render
+    # the same output as the in-memory Pydantic payload.
+    payload = json.loads(
+        simulation_comparison_to_json(_comparison(), metadata=_METADATA)
+    )["simulation_comparison"]
+
+    csv_text = simulation_comparison_to_csv(payload, metadata=_METADATA)
+    cluster_lines = [
+        row
+        for row in _rows(csv_text)
+        if row and row[0] == "metro_power_professional"
+    ]
+    assert len(cluster_lines) == 1
+    metro = cluster_lines[0]
+    # cluster_id, name, weight, best_sim, winner, conv1, conv2, delta1, delta2
+    assert metro[5] == "0.05"
+    assert metro[6] == "0.1"
+    assert metro[7] == "-0.05"
+    assert metro[8] == "0.0"
+    assert "A:CRITICAL" in csv_text
+    assert "price too high" in csv_text
+
+    md = simulation_comparison_to_markdown(payload, metadata=_METADATA)
+    assert "Metro Pros" in md
+    assert "A: CRITICAL" in md
+    assert "price too high" in md
+
+
 # ---------------------------------------------------------------------------
 # JSON
 # ---------------------------------------------------------------------------
