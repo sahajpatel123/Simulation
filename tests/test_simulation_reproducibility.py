@@ -154,6 +154,22 @@ def test_build_environment_snapshot_prefers_manual_params() -> None:
     }
 
 
+def test_build_environment_snapshot_treats_empty_manual_params_as_defaults() -> None:
+    # Legacy ``manual_params_json or {...defaults}`` treated an empty dict
+    # as "no manual override". The snapshot must preserve that so a run
+    # never loses the canonical environment inputs to an empty object.
+    env = _fake_environment(manual_params_json={})
+    snapshot = build_environment_snapshot(env, consumer_volume=10_000)
+
+    assert snapshot["base_env"] == {
+        "consumer_volume": 10_000,
+        "growth_rate_per_month": 5.0,
+        "average_order_value": 999.0,
+        "price_sensitivity": 0.5,
+        "market_maturity": 0.3,
+    }
+
+
 def test_resolve_run_environment_prefers_frozen_snapshot() -> None:
     sim = _fake_sim(
         consumer_volume=10_000,
@@ -185,7 +201,7 @@ def test_resolve_run_environment_falls_back_to_live_env_for_legacy_runs() -> Non
     assert scenario_type == "RECESSION"
 
 
-def test_resolve_run_environment_ignores_malformed_snapshot_base_env() -> None:
+def test_resolve_run_environment_falls_back_to_defaults_on_malformed_snapshot() -> None:
     sim = _fake_sim(
         env_snapshot_json={
             "base_env": "not-a-dict",
@@ -197,8 +213,29 @@ def test_resolve_run_environment_ignores_malformed_snapshot_base_env() -> None:
     )
 
     base_env, scenario_type = resolve_run_environment(sim, live)
-    assert base_env == {}
+    assert base_env == {
+        "consumer_volume": 10_000,
+        "growth_rate_per_month": 5.0,
+        "average_order_value": 999.0,
+        "price_sensitivity": 0.5,
+        "market_maturity": 0.3,
+    }
     assert scenario_type == "HIGH_GROWTH"
+
+
+def test_resolve_run_environment_empty_manual_params_uses_defaults() -> None:
+    sim = _fake_sim(consumer_volume=10_000, env_snapshot_json=None)
+    live = _fake_environment(manual_params_json={})
+
+    base_env, scenario_type = resolve_run_environment(sim, live)
+    assert base_env == {
+        "consumer_volume": 10_000,
+        "growth_rate_per_month": 5.0,
+        "average_order_value": 999.0,
+        "price_sensitivity": 0.5,
+        "market_maturity": 0.3,
+    }
+    assert scenario_type is None
 
 
 # ── Rerun route contract ────────────────────────────────────────────────────
@@ -213,10 +250,31 @@ def test_rerun_route_declares_rate_limit() -> None:
     assert "Depends(rate_limit(" in route_block.group(0)
 
 
-def test_rerun_locks_source_row_and_scopes_to_owner() -> None:
+def test_rerun_locks_project_row_and_scopes_to_owner() -> None:
     block = _extract(_SIMULATIONS_PATH, "rerun_simulation")
-    assert ".with_for_update()" in block
+
+    project_query = re.search(
+        r"db\.query\(\s*Project\s*\)([\s\S]*?)\.one\(\)",
+        block,
+    )
+    assert project_query, "No locked Project query found in rerun_simulation"
+    chain = project_query.group(1)
+    assert "Project.id == source.project_id" in chain
+    assert ".with_for_update()" in chain
     assert "Project.user_id == current_user.id" in block
+
+
+def test_rerun_project_lock_precedes_in_flight_check() -> None:
+    """The project row lock must be acquired before the in-flight check so
+    the check+insert sequence is one serialised critical section per
+    project (mirrors create_simulation)."""
+    block = _extract(_SIMULATIONS_PATH, "rerun_simulation")
+    lock_pos = block.index(".with_for_update()")
+    running_pos = block.index('Simulation.status.in_(["QUEUED", "RUNNING"])')
+    assert lock_pos < running_pos, (
+        "rerun_simulation must lock the project row before the "
+        "no-in-flight-run check to close the concurrent-rerun TOCTOU race."
+    )
 
 
 def test_rerun_requires_completed_source() -> None:

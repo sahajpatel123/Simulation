@@ -681,10 +681,6 @@ def rerun_simulation(
         db.query(Simulation)
         .join(Project, Simulation.project_id == Project.id)
         .filter(Simulation.id == simulation_id, Project.user_id == current_user.id)
-        # Lock the source row so two concurrent reruns of the same sim
-        # serialise: only the first passes the "no in-flight run" check
-        # and consumes a tier-quota slot.
-        .with_for_update()
         .first()
     )
     if not source:
@@ -694,6 +690,15 @@ def rerun_simulation(
             status_code=409,
             detail=f"Simulation is {source.status} — rerun requires completed results.",
         )
+
+    # Lock the PROJECT row — not just the source simulation — so
+    # concurrent reruns of any simulation in this project (and concurrent
+    # create/rerun pairs) serialise on the same critical section as
+    # create_simulation. Without the project lock, two reruns of different
+    # completed sims could both observe an empty in-flight set, both
+    # insert QUEUED rows, and drain two tier-quota slots for one click.
+    # The row lock is held until this transaction commits.
+    db.query(Project).filter(Project.id == source.project_id).with_for_update().one()
 
     try:
         enforce_simulation_limit(current_user, db)

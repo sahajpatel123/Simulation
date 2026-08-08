@@ -77,6 +77,17 @@ def resolve_simulation_seed(seed: int | None, simulation_id: int) -> int:
     return seed if seed is not None else simulation_id * 37
 
 
+def _default_base_env(consumer_volume: int, environment: Environment) -> dict:
+    """The canonical full environment parameter set for a run."""
+    return {
+        "consumer_volume": consumer_volume,
+        "growth_rate_per_month": environment.growth_rate_per_month,
+        "average_order_value": environment.average_order_value,
+        "price_sensitivity": environment.price_sensitivity,
+        "market_maturity": environment.market_maturity,
+    }
+
+
 def build_environment_snapshot(
     environment: Environment,
     consumer_volume: int,
@@ -91,14 +102,8 @@ def build_environment_snapshot(
     manual = environment.manual_params_json
     base_env = (
         manual
-        if isinstance(manual, dict)
-        else {
-            "consumer_volume": consumer_volume,
-            "growth_rate_per_month": environment.growth_rate_per_month,
-            "average_order_value": environment.average_order_value,
-            "price_sensitivity": environment.price_sensitivity,
-            "market_maturity": environment.market_maturity,
-        }
+        if isinstance(manual, dict) and manual
+        else _default_base_env(consumer_volume, environment)
     )
     return {
         "base_env": base_env,
@@ -120,21 +125,20 @@ def resolve_run_environment(
     )
     if snapshot is not None:
         base = snapshot.get("base_env")
+        if isinstance(base, dict) and base:
+            return {**base}, snapshot.get("scenario_type")
+        # Unusable frozen base (corrupt/empty) — fall back to the live
+        # row's canonical defaults rather than running with an empty
+        # env_params dict.
         return (
-            {**base} if isinstance(base, dict) else {},
+            _default_base_env(sim.consumer_volume, environment),
             snapshot.get("scenario_type"),
         )
     manual = environment.manual_params_json
     base_env = (
         manual
-        if isinstance(manual, dict)
-        else {
-            "consumer_volume": sim.consumer_volume,
-            "growth_rate_per_month": environment.growth_rate_per_month,
-            "average_order_value": environment.average_order_value,
-            "price_sensitivity": environment.price_sensitivity,
-            "market_maturity": environment.market_maturity,
-        }
+        if isinstance(manual, dict) and manual
+        else _default_base_env(sim.consumer_volume, environment)
     )
     return base_env, environment.scenario_type
 
