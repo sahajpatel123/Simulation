@@ -108,6 +108,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
         "AccessibilityInclusionArchitect",
         "SustainabilityArchitect",
+        "MarketplaceLiquidityArchitect",
         "TrustArchitect", "PricingArchitect", "OnboardingArchitect",
         "RetentionArchitect", "SupportFrictionArchitect", "ViralityArchitect",
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
@@ -234,6 +235,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "MarketTimingArchitect", "CompetitiveDynamicsArchitect", "CulturalContextArchitect",
         "AccessibilityInclusionArchitect",
         "SustainabilityArchitect",
+        "MarketplaceLiquidityArchitect",
         "TrustArchitect", "PricingArchitect", "OnboardingArchitect",
         "RetentionArchitect", "SupportFrictionArchitect", "ViralityArchitect",
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
@@ -432,6 +434,9 @@ def _build_architect_registry() -> dict[str, Any]:
     from app.simulation.architects.health_safety_hardware import HealthSafetyHardwareArchitect
     from app.simulation.architects.macroeconomic import MacroeconomicArchitect
     from app.simulation.architects.market_timing import MarketTimingArchitect
+    from app.simulation.architects.marketplace_liquidity import (
+        MarketplaceLiquidityArchitect,
+    )
     from app.simulation.architects.onboarding import OnboardingArchitect
     from app.simulation.architects.performance_threshold import PerformanceThresholdArchitect
     from app.simulation.architects.physical_sensory import PhysicalSensoryArchitect
@@ -453,6 +458,7 @@ def _build_architect_registry() -> dict[str, Any]:
         "CulturalContextArchitect":       CulturalContextArchitect(),
         "AccessibilityInclusionArchitect": AccessibilityInclusionArchitect(),
         "SustainabilityArchitect":        SustainabilityArchitect(),
+        "MarketplaceLiquidityArchitect":  MarketplaceLiquidityArchitect(),
         "TrustArchitect":                  TrustArchitect(),
         "PricingArchitect":                PricingArchitect(),
         "OnboardingArchitect":             OnboardingArchitect(),

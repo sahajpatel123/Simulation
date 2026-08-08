@@ -19,6 +19,7 @@ ALL_ARCHITECT_NAMES = [
     "ViralityArchitect",
     "MacroeconomicArchitect",
     "DemographicInteractionArchitect",
+    "MarketplaceLiquidityArchitect",
     "AssumptionCascadeArchitect",
     "PurchaseDecisionArchitect",
     "PhysicalSensoryArchitect",
