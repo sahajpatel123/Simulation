@@ -208,6 +208,10 @@ from app.simulation.cluster_overlap_matrix import (
     MAX_CLUSTERS as _MAX_MATRIX_CLUSTERS,
     build_cluster_overlap_matrix,
 )
+from app.simulation.cluster_overlap_export import (
+    cluster_overlap_to_csv,
+    cluster_overlap_to_json,
+)
 from app.simulation.cluster_trend import (
     build_cluster_trend,
     normalise_bin as normalise_trend_bin,
@@ -2250,10 +2254,123 @@ def get_cluster_overlap_matrix(
     current_user: User = Depends(get_current_user),
 ):
     """Pairwise similarity matrix across N clusters."""
-    # Normalise the ids: split comma-separated values, strip,
-    # dedupe (preserving first-seen order). parse_id_list
-    # handles the same shape but expects ints — we want
-    # strings here.
+    canonical = _normalise_cluster_ids(cluster_ids, _MAX_MATRIX_CLUSTERS)
+    entries = _build_cluster_overlap_entries(canonical)
+
+    try:
+        payload = build_cluster_overlap_matrix(entries)
+    except ValueError as exc:
+        # Defensive — the route layer is already validating
+        # the cap; this catches any future helper-level guard.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    return ClusterOverlapMatrixOut(**payload)
+
+
+@router.get(
+    "/cluster-overlap-matrix/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export the cluster-overlap matrix as CSV (or JSON "
+        "with ?format=json)"
+    ),
+    # Same registry read as the JSON overlap endpoint; cap
+    # polling so a dashboard loop can't drive repeated
+    # matrix builds.
+    dependencies=[
+        Depends(rate_limit(limit=30, window_s=60)),
+        Depends(get_current_user),
+    ],
+)
+def export_cluster_overlap_matrix(
+    cluster_ids: list[str] = Query(
+        ...,
+        min_length=1,
+        description=(
+            "Cluster ids to include in the matrix. Repeat the "
+            "param or pass comma-separated values. Order is "
+            "preserved. Capped at 25 ids."
+        ),
+    ),
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly matrix; ``json`` returns the "
+            "raw cluster-overlap payload. Unsupported values "
+            "return a 400 response."
+        ),
+    ),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of the cluster-overlap matrix.
+
+    Supports the same ``cluster_ids`` filter as
+    ``GET /simulations/cluster-overlap-matrix``. Default ``format=csv``
+    renders the summary, similarity matrix, pair summaries, and
+    consolidation candidates as a multi-section spreadsheet. ``json``
+    returns the raw payload for machine consumers.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unsupported export format {format!r}; expected 'csv' or 'json'",
+        )
+
+    canonical_ids = _normalise_cluster_ids(cluster_ids, _MAX_MATRIX_CLUSTERS)
+    entries = _build_cluster_overlap_entries(canonical_ids)
+    try:
+        payload = build_cluster_overlap_matrix(entries)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    metadata = {
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "user_id": current_user.id,
+        "format_version": "1",
+        "requested_ids": canonical_ids,
+    }
+
+    if fmt == "json":
+        json_text = cluster_overlap_to_json(payload, metadata=metadata)
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="cluster-overlap-matrix.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = cluster_overlap_to_csv(payload, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="cluster-overlap-matrix.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+def _normalise_cluster_ids(
+    cluster_ids: list[str],
+    max_clusters: int,
+) -> list[str]:
+    """Normalise comma-separated cluster ids into a deduplicated list."""
     seen: set[str] = set()
     canonical: list[str] = []
     for raw in cluster_ids:
@@ -2272,19 +2389,21 @@ def get_cluster_overlap_matrix(
                 "id"
             ),
         )
-    if len(canonical) > _MAX_MATRIX_CLUSTERS:
+    if len(canonical) > max_clusters:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 f"too many cluster_ids ({len(canonical)}); max "
-                f"is {_MAX_MATRIX_CLUSTERS}"
+                f"is {max_clusters}"
             ),
         )
+    return canonical
 
-    # Pull each cluster definition from the registry. Unknown
-    # id → 400 so the dashboard can show a clear error.
+
+def _build_cluster_overlap_entries(canonical_ids: list[str]) -> list[dict]:
+    """Load cluster definitions in canonical order as matrix entries."""
     entries: list[dict] = []
-    for cid in canonical:
+    for cid in canonical_ids:
         definition = next(
             (c for c in _registry.all_clusters() if c.cluster_id == cid),
             None,
@@ -2299,17 +2418,7 @@ def get_cluster_overlap_matrix(
             "cluster_name": definition.name,
             "traits": dict(definition.base_traits),
         })
-
-    try:
-        payload = build_cluster_overlap_matrix(entries)
-    except ValueError as exc:
-        # Defensive — the route layer is already validating
-        # the cap; this catches any future helper-level guard.
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        )
-    return ClusterOverlapMatrixOut(**payload)
+    return entries
 
 
 @router.get(
