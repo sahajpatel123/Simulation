@@ -177,6 +177,10 @@ from app.simulation.sustainability_positioning import (
 from app.simulation.product_type import ProductType
 from app.simulation.unit_economics import build_unit_economics
 from app.simulation.unit_economics_export import unit_economics_to_csv
+from app.simulation.founder_action_plan_export import (
+    founder_action_plan_to_csv,
+    founder_action_plan_to_json,
+)
 from app.simulation.sensitivity_export import (
     sensitivity_to_csv,
     sensitivity_to_json,
@@ -7323,6 +7327,86 @@ def get_founder_action_plan(
         signal_quality=float(sim.signal_quality)
         if sim.signal_quality is not None
         else None,
+    )
+
+
+@router.get(
+    "/{simulation_id}/founder-action-plan/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export the founder action plan as CSV (or JSON with ?format=json)"
+    ),
+    # Same DB read cost as the JSON founder-action-plan endpoint; cap
+    # polling so a dashboard loop can't drive repeated reads.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_founder_action_plan(
+    simulation_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "founder-action-plan payload. Unsupported values return a 400 "
+            "response."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a simulation's founder action plan.
+
+    Default ``format=csv`` renders the summary and the ranked actions as a
+    multi-section spreadsheet. ``format=json`` returns the raw payload for
+    machine consumers.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unsupported export format {format!r}; expected 'csv' or 'json'",
+        )
+
+    payload = get_founder_action_plan(
+        simulation_id=simulation_id,
+        db=db,
+        current_user=current_user,
+    )
+
+    metadata = {
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "user_id": current_user.id,
+        "format_version": "1",
+        "simulation_id": simulation_id,
+        "project_id": payload.project_id,
+    }
+
+    if fmt == "json":
+        body = founder_action_plan_to_json(
+            payload,
+            metadata=metadata,
+        ).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="founder-action-plan.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = founder_action_plan_to_csv(payload, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="founder-action-plan.csv"',
+            "Content-Length": str(len(body)),
+        },
     )
 
 
