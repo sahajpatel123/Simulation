@@ -591,6 +591,70 @@ def build_journey_analytics(
     }
 
 
+def summarise_journey_matrices(
+    raw_matrices: Any,
+    cluster_weights: dict[str, float] | None = None,
+) -> dict[str, Any] | None:
+    """Weighted funnel summary for a simulation, without path/leverage detail.
+
+    This is the lightweight variant of :func:`build_journey_analytics` used
+    when callers only need the aggregate absorption metrics (purchase and
+    abandon probability, expected steps and revisits, per-stage exit leaks
+    and the primary exit stage). It deliberately skips the most-probable-path
+    search and the per-transition leverage experiments, which makes it cheap
+    enough to run over a whole portfolio of simulations for benchmarking.
+
+    ``None`` is returned when no usable cluster matrix exists.
+    """
+    matrices = deserialise_per_cluster_matrices(raw_matrices)
+    triples, _baseline, weighted_metrics, _weighted = _weighted_cluster_metrics(
+        matrices,
+        cluster_weights,
+    )
+    if not triples or weighted_metrics is None:
+        return None
+
+    weight_sum = sum(w for _, _, w in triples)
+    if weight_sum <= 0.0:
+        weight_sum = 1.0
+
+    def _weighted_avg(key: str) -> float:
+        total = sum(
+            float(m[key]) * w
+            for m, (_, _, w) in zip(weighted_metrics, triples)
+        )
+        return total / weight_sum
+
+    exit_stage_distribution: dict[str, float] = {}
+    for stage in (s.value for s in TRANSIENT_STATES if s is not State.RETURN):
+        total = sum(
+            float(m["exit_stage_distribution"].get(stage, 0.0)) * w
+            for m, (_, _, w) in zip(weighted_metrics, triples)
+        )
+        exit_stage_distribution[stage] = round(total / weight_sum, 6)
+
+    primary_exit_stage = (
+        max(
+            exit_stage_distribution,
+            key=lambda stage: exit_stage_distribution[stage],
+        )
+        if max(exit_stage_distribution.values(), default=0.0) > 0.0
+        else None
+    )
+
+    return {
+        "purchase_probability": round(_weighted_avg("purchase_probability"), 6),
+        "abandon_probability": round(_weighted_avg("abandon_probability"), 6),
+        "expected_steps_to_absorb": round(
+            _weighted_avg("expected_steps_to_absorb"),
+            4,
+        ),
+        "expected_revisits": round(_weighted_avg("expected_revisits"), 4),
+        "exit_stage_distribution": exit_stage_distribution,
+        "primary_exit_stage": primary_exit_stage,
+    }
+
+
 def _key_insights(
     *,
     purchase_probability: float,
@@ -650,4 +714,5 @@ __all__ = [
     "cluster_metrics",
     "deserialise_per_cluster_matrices",
     "serialise_per_cluster_matrices",
+    "summarise_journey_matrices",
 ]

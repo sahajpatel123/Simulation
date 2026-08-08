@@ -89,6 +89,7 @@ from app.schemas.founder_action_plan import FounderActionPlanOut
 from app.schemas.founder_brief import FounderBriefOut
 from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
 from app.schemas.journey_analytics import JourneyAnalyticsOut
+from app.schemas.journey_benchmark import JourneyBenchmarkOut
 from app.schemas.launch_checklist import LaunchChecklistOut
 from app.schemas.market_concentration import MarketConcentrationOut
 from app.schemas.market_sizing import MarketSizingOut
@@ -223,12 +224,14 @@ from app.simulation.founder_brief import build_founder_brief
 from app.simulation.journey_analytics import (
     build_journey_analytics,
     deserialise_per_cluster_matrices,
+    summarise_journey_matrices,
 )
 from app.simulation.journey_analytics_export import (
     FORMAT_VERSION,
     journey_analytics_to_csv,
     journey_analytics_to_json,
 )
+from app.simulation.journey_benchmark import build_journey_benchmark
 from app.simulation.launch_checklist import build_launch_checklist
 from app.simulation.launch_checklist_export import (
     launch_checklist_to_csv,
@@ -8718,6 +8721,76 @@ def export_simulation_journey_analytics(
             ),
             "Content-Length": str(len(body)),
         },
+    )
+
+
+@router.get(
+    "/{simulation_id}/journey/benchmark",
+    response_model=JourneyBenchmarkOut,
+    summary=(
+        "Journey benchmark: how this simulation's funnel ranks against the "
+        "founder's other completed simulations"
+    ),
+    responses=_JSON_200,
+)
+def get_simulation_journey_benchmark(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> JourneyBenchmarkOut:
+    """
+    Benchmark a completed simulation's customer journey against the founder's
+    own portfolio history.
+
+    The cohort is every other completed simulation owned by the user that
+    persisted per-cluster journey data. The response compares purchase
+    probability (median/mean/percentiles and this simulation's percentile
+    rank), journey length and revisits, per-stage leak medians, and the modal
+    primary exit stage, then translates the comparison into plain-language
+    insights. Pure post-hoc analytics — no Celery, no LLM, no DB writes.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+    current_payload = _journey_payload_for_simulation(sim)
+
+    rows = (
+        db.query(
+            Simulation.id,
+            Simulation.project_id,
+            Simulation.results_json,
+        )
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(
+            Project.user_id == current_user.id,
+            Simulation.id != simulation_id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc())
+        .all()
+    )
+
+    cohort_summaries: list[dict[str, Any]] = []
+    skipped_without_journey_data = 0
+    for row in rows:
+        results = row.results_json if isinstance(row.results_json, dict) else {}
+        summary = summarise_journey_matrices(
+            results.get("per_cluster_matrices"),
+            results.get("cluster_weights"),
+        )
+        if summary is None:
+            skipped_without_journey_data += 1
+            continue
+        cohort_summaries.append(summary)
+
+    payload = build_journey_benchmark(current_payload, cohort_summaries)
+    payload["meta"] = {
+        **payload["meta"],
+        "raw_completed_count": len(rows),
+        "skipped_without_journey_data": skipped_without_journey_data,
+    }
+    return JourneyBenchmarkOut(
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        **payload,
     )
 
 
