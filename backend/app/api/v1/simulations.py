@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import math
@@ -386,6 +387,8 @@ from app.simulation.what_if import build_what_if_scenario
 from app.simulation.what_if_batch import build_what_if_batch
 from app.tasks.simulation_tasks import (
     _enqueue_simulation_webhooks,
+    build_environment_snapshot,
+    resolve_simulation_seed,
     run_full_simulation,
 )
 from app.worker import celery_app
@@ -543,6 +546,10 @@ def create_simulation(
         environment_id=environment.id,
         status="QUEUED",
         consumer_volume=payload.consumer_volume,
+        seed=payload.seed,
+        env_snapshot_json=build_environment_snapshot(
+            environment, payload.consumer_volume
+        ),
     )
     db.add(sim)
     db.commit()
@@ -641,6 +648,122 @@ def redis_health() -> RedisHealthOut:
         latency_ms=round(max(0.0, latency_ms), 3),
         checked_at=datetime.now(UTC).isoformat(),
     )
+
+
+@router.post(
+    "/{simulation_id}/rerun",
+    response_model=SimulationStatusOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Re-run a completed simulation with identical inputs and RNG seed",
+    responses={
+        201: {"description": "Identical re-run enqueued"},
+        400: {"description": "Project environment is no longer configured"},
+        404: {"description": "Simulation not found"},
+        409: {"description": "Simulation is not completed or a run is already in flight"},
+    },
+    # Mutating lifecycle endpoint backed by Celery — 10/min/IP is plenty
+    # for a human verifying reproducibility and bounds accidental loops.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
+)
+def rerun_simulation(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SimulationStatusOut:
+    """Queue an exact replay of a completed simulation.
+
+    The clone reuses the source run's frozen environment snapshot and the
+    same RNG seed, so a rerun whose result differs from the source is
+    evidence of non-seed factors (input edits, calibration drift,
+    infrastructure) rather than sampling noise.
+    """
+    source = (
+        db.query(Simulation)
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(Simulation.id == simulation_id, Project.user_id == current_user.id)
+        # Lock the source row so two concurrent reruns of the same sim
+        # serialise: only the first passes the "no in-flight run" check
+        # and consumes a tier-quota slot.
+        .with_for_update()
+        .first()
+    )
+    if not source:
+        raise HTTPException(status_code=404, detail="Simulation not found")
+    if source.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Simulation is {source.status} — rerun requires completed results.",
+        )
+
+    try:
+        enforce_simulation_limit(current_user, db)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(
+            "[API] Tier quota pre-check failed for user_id=%s; deferring to worker",
+            current_user.id,
+        )
+
+    running = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == source.project_id,
+            Simulation.status.in_(["QUEUED", "RUNNING"]),
+        )
+        .first()
+    )
+    if running:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Simulation {running.id} is already {running.status} for this project.",
+        )
+
+    environment = (
+        db.query(Environment)
+        .filter(Environment.project_id == source.project_id)
+        .first()
+    )
+    if not environment:
+        raise HTTPException(
+            status_code=400,
+            detail="Environment not configured. POST /api/v1/projects/{id}/environments first.",
+        )
+
+    env_snapshot = (
+        copy.deepcopy(source.env_snapshot_json)
+        if isinstance(source.env_snapshot_json, dict)
+        else build_environment_snapshot(environment, source.consumer_volume)
+    )
+    sim = Simulation(
+        project_id=source.project_id,
+        environment_id=source.environment_id or environment.id,
+        status="QUEUED",
+        consumer_volume=source.consumer_volume,
+        seed=resolve_simulation_seed(source.seed, source.id),
+        env_snapshot_json=env_snapshot,
+    )
+    db.add(sim)
+    db.commit()
+    db.refresh(sim)
+
+    task = run_full_simulation.delay(sim.id)
+    sim.task_id = task.id
+    db.commit()
+    db.refresh(sim)
+
+    logger.info(
+        "[API] Simulation rerun enqueued - source_id=%s simulation_id=%s "
+        "task_id=%s seed=%s",
+        source.id,
+        sim.id,
+        task.id,
+        sim.seed,
+    )
+
+    _invalidate_simulation_caches(current_user.id)
+
+    return SimulationStatusOut.model_validate(sim)
 
 
 @router.get(

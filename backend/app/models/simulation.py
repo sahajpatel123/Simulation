@@ -33,6 +33,8 @@ class Simulation(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(50), default="QUEUED", nullable=False)
     consumer_volume: Mapped[int] = mapped_column(Integer, default=10000, nullable=False)
     task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    seed: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    env_snapshot_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     results_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

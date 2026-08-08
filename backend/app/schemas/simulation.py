@@ -7,6 +7,15 @@ from pydantic import BaseModel, Field
 class SimulationCreate(BaseModel):
     project_id: int
     consumer_volume: int = Field(default=10000, ge=100, le=100000)
+    seed: int | None = Field(
+        default=None,
+        ge=0,
+        le=2_147_483_647,
+        description=(
+            "Optional RNG seed for a reproducible run. When omitted the "
+            "legacy per-simulation scheme (simulation_id * 37) is used."
+        ),
+    )
 
 
 class SimulationOut(BaseModel):
@@ -14,6 +23,7 @@ class SimulationOut(BaseModel):
     project_id: int
     status: str
     consumer_volume: int
+    seed: int | None = None
     results_json: dict | None
     error_message: str | None
     created_at: datetime
@@ -27,6 +37,7 @@ class SimulationStatusOut(BaseModel):
     project_id: int
     status: str
     consumer_volume: int
+    seed: int | None = None
     task_id: str | None
     error_message: str | None
     created_at: datetime

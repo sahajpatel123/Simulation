@@ -1420,6 +1420,8 @@ def duplicate_project(
                     environment_id=None,  # don't retarget to the new env
                     status="COMPLETED",
                     consumer_volume=sim.consumer_volume,
+                    seed=sim.seed,
+                    env_snapshot_json=sim.env_snapshot_json,
                     results_json=sim.results_json,
                     confidence_score=sim.confidence_score,
                     signal_quality=sim.signal_quality,

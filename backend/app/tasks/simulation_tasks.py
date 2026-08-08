@@ -67,6 +67,78 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+def resolve_simulation_seed(seed: int | None, simulation_id: int) -> int:
+    """Return the RNG seed a simulation run should use.
+
+    An explicit persisted seed wins; legacy rows fall back to the
+    historical ``simulation_id * 37`` scheme so pre-seed behavior is
+    unchanged.
+    """
+    return seed if seed is not None else simulation_id * 37
+
+
+def build_environment_snapshot(
+    environment: Environment,
+    consumer_volume: int,
+) -> dict:
+    """Freeze the environment inputs a run depends on at enqueue time.
+
+    The worker used to read the live ``environments`` row when the task
+    started, so an edit made after enqueue silently changed the queued
+    run. Snapshotted runs are self-contained: they reproduce the exact
+    inputs the founder saw when they clicked run.
+    """
+    manual = environment.manual_params_json
+    base_env = (
+        manual
+        if isinstance(manual, dict)
+        else {
+            "consumer_volume": consumer_volume,
+            "growth_rate_per_month": environment.growth_rate_per_month,
+            "average_order_value": environment.average_order_value,
+            "price_sensitivity": environment.price_sensitivity,
+            "market_maturity": environment.market_maturity,
+        }
+    )
+    return {
+        "base_env": base_env,
+        "scenario_type": environment.scenario_type,
+    }
+
+
+def resolve_run_environment(
+    sim: Simulation,
+    environment: Environment,
+) -> tuple[dict, str | None]:
+    """Return ``(base_env, scenario_type)`` for a simulation run.
+
+    Prefers the frozen ``env_snapshot_json`` captured at enqueue time;
+    falls back to the live environment row for legacy runs.
+    """
+    snapshot = (
+        sim.env_snapshot_json if isinstance(sim.env_snapshot_json, dict) else None
+    )
+    if snapshot is not None:
+        base = snapshot.get("base_env")
+        return (
+            {**base} if isinstance(base, dict) else {},
+            snapshot.get("scenario_type"),
+        )
+    manual = environment.manual_params_json
+    base_env = (
+        manual
+        if isinstance(manual, dict)
+        else {
+            "consumer_volume": sim.consumer_volume,
+            "growth_rate_per_month": environment.growth_rate_per_month,
+            "average_order_value": environment.average_order_value,
+            "price_sensitivity": environment.price_sensitivity,
+            "market_maturity": environment.market_maturity,
+        }
+    )
+    return base_env, environment.scenario_type
+
+
 def _transition_count(result: object) -> int:
     """Rowcount of a terminal-state UPDATE, defaulting to 1 for fakes.
 
@@ -470,13 +542,7 @@ def run_full_simulation(self, simulation_id: int) -> dict:
             .all()
         )
 
-        base_env = environment.manual_params_json or {
-            "consumer_volume": sim.consumer_volume,
-            "growth_rate_per_month": environment.growth_rate_per_month,
-            "average_order_value": environment.average_order_value,
-            "price_sensitivity": environment.price_sensitivity,
-            "market_maturity": environment.market_maturity,
-        }
+        base_env, scenario_type = resolve_run_environment(sim, environment)
         env_params = {**base_env, "description": project.description or ""}
 
         assumption_dicts = [
@@ -531,8 +597,8 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         agents = generator.generate_population(
             volume=sim.consumer_volume,
             env_params=env_params,
-            scenario_type=environment.scenario_type,
-            seed=simulation_id * 37,
+            scenario_type=scenario_type,
+            seed=resolve_simulation_seed(sim.seed, simulation_id),
         )
 
         logger.info(f"[Simulation] Population generated - n={len(agents)}")
@@ -540,7 +606,7 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         self.update_state(state="PROGRESS", meta={"stage": "Running cluster simulation", "pct": 25})
         sync_broadcast(simulation_id, "RUNNING", "Running cluster simulation", 25, 0, sim.consumer_volume)
 
-        seed = simulation_id * 37
+        seed = resolve_simulation_seed(sim.seed, simulation_id)
         conductor = Conductor()
         product_type = conductor.detect_product_type(
             project.description or "",
@@ -611,6 +677,7 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         }
         results_dict["domain_findings"] = [f.to_dict() for f in ranked[:10]]
         results_dict["primary_failure_domain"] = accountability.primary_failure_domain(ranked)
+        results_dict["seed_used"] = seed
         results_dict["highest_value_cluster"] = {
             "name": hv_name,
             "conversion_rate": hv_cr,
