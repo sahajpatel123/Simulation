@@ -910,6 +910,50 @@ def run_migrations():
             conn.rollback()
             print(f"⚠️ processed_webhooks skip: {e}")
 
+        # Webhook delivery audit history: durable per-attempt records for
+        # simulation webhooks. Base.metadata.create_all() creates this when
+        # the model is imported; this explicit block keeps the schema
+        # documented in the migration file and idempotent for existing DBs.
+        try:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS simulation_webhook_deliveries (
+                        id                      SERIAL PRIMARY KEY,
+                        webhook_subscription_id INTEGER NOT NULL
+                            REFERENCES simulation_webhook_subscriptions(id)
+                            ON DELETE CASCADE,
+                        simulation_id           INTEGER,
+                        event_type              VARCHAR(40) NOT NULL,
+                        status                  VARCHAR(20) NOT NULL,
+                        http_status             INTEGER,
+                        error                   TEXT,
+                        conversion_rate         FLOAT,
+                        request_body            JSONB,
+                        retry_count             INTEGER NOT NULL DEFAULT 0,
+                        delivered_at            TIMESTAMP WITH TIME ZONE NOT NULL,
+                        created_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        updated_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    );
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    CREATE INDEX IF NOT EXISTS
+                        ix_sim_webhook_delivery_sub_id_created
+                    ON simulation_webhook_deliveries
+                        (webhook_subscription_id, created_at);
+                    """
+                )
+            )
+            conn.commit()
+            print("✅ simulation_webhook_deliveries table created")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ simulation_webhook_deliveries skip: {e}")
+
         # Step 88: refresh tokens (opaque, hashed)
         try:
             conn.execute(

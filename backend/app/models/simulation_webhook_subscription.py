@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.simulation_webhook_delivery import SimulationWebhookDelivery
 
 
 class SimulationWebhookSubscription(Base, TimestampMixin):
@@ -40,3 +44,10 @@ class SimulationWebhookSubscription(Base, TimestampMixin):
     )
     last_delivery_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     last_delivery_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    deliveries: Mapped[list["SimulationWebhookDelivery"]] = relationship(
+        "SimulationWebhookDelivery",
+        back_populates="subscription",
+        cascade="all, delete-orphan",
+        order_by="SimulationWebhookDelivery.created_at.desc()",
+    )

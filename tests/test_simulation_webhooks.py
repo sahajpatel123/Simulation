@@ -54,10 +54,46 @@ class _Subscription:
         self.updated_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
+class _Delivery:
+    def __init__(
+        self,
+        *,
+        id: int = 1,
+        webhook_subscription_id: int = 10,
+        simulation_id: int | None = 11,
+        event_type: str = "simulation.completed",
+        status: str = "FAILED",
+        http_status: int | None = 500,
+        error: str | None = "webhook endpoint returned HTTP 500",
+        conversion_rate: float | None = 0.012,
+        request_body: dict | None = None,
+        retry_count: int = 0,
+        delivered_at: datetime | None = None,
+        subscription: _Subscription | None = None,
+    ) -> None:
+        self.id = id
+        self.webhook_subscription_id = webhook_subscription_id
+        self.simulation_id = simulation_id
+        self.event_type = event_type
+        self.status = status
+        self.http_status = http_status
+        self.error = error
+        self.conversion_rate = conversion_rate
+        self.request_body = request_body
+        self.retry_count = retry_count
+        self.delivered_at = delivered_at or datetime(
+            2026, 1, 2, tzinfo=timezone.utc
+        )
+        self.created_at = self.delivered_at
+        self.updated_at = self.delivered_at
+        self.subscription = subscription
+
+
 class _FakeQuery:
     def __init__(self, items: list | None = None) -> None:
         self.items = items if items is not None else []
         self._filters: list[tuple] = []
+        self._limit: int | None = None
 
     def filter(self, *args, **kwargs):
         for arg in args:
@@ -72,6 +108,10 @@ class _FakeQuery:
     def order_by(self, *args, **kwargs):
         return self
 
+    def limit(self, value: int):
+        self._limit = int(value)
+        return self
+
     def _matches(self, item: object) -> bool:
         for left, right in self._filters:
             attr = getattr(left, "key", None)
@@ -82,7 +122,15 @@ class _FakeQuery:
         return True
 
     def all(self):
-        return [item for item in self.items if self._matches(item)]
+        items = [item for item in self.items if self._matches(item)]
+        return sorted(
+            items,
+            key=lambda item: (
+                getattr(item, "created_at", None),
+                getattr(item, "id", 0),
+            ),
+            reverse=True,
+        )
 
     def first(self):
         return next((item for item in self.items if self._matches(item)), None)
@@ -93,9 +141,11 @@ class _FakeSession:
         self,
         project: object | None = None,
         subscriptions: list[_Subscription] | None = None,
+        deliveries: list[_Delivery] | None = None,
     ) -> None:
         self.project = project if project is not None else _Project()
         self.subscriptions = subscriptions if subscriptions is not None else []
+        self.deliveries = deliveries if deliveries is not None else []
         self.commits = 0
         self.deleted: list[object] = []
         self.added: list[object] = []
@@ -106,14 +156,26 @@ class _FakeSession:
             return _FakeQuery([self.project])
         if name == "SimulationWebhookSubscription":
             return _FakeQuery(self.subscriptions)
+        if name == "SimulationWebhookDelivery":
+            return _FakeQuery(self.deliveries)
         return _FakeQuery([])
 
     def add(self, obj) -> None:
         if getattr(obj, "id", None) is None:
-            obj.id = max(
-                [sub.id for sub in self.subscriptions],
-                default=0,
-            ) + 1
+            if isinstance(obj, _Delivery) or hasattr(obj, "webhook_subscription_id"):
+                obj.id = max(
+                    [d.id for d in self.deliveries],
+                    default=0,
+                ) + 1
+                if hasattr(obj, "webhook_subscription_id") and not isinstance(
+                    obj, _Delivery
+                ):
+                    self.deliveries.append(obj)
+            else:
+                obj.id = max(
+                    [sub.id for sub in self.subscriptions],
+                    default=0,
+                ) + 1
         if getattr(obj, "created_at", None) is None:
             obj.created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
         if getattr(obj, "updated_at", None) is None:
@@ -127,6 +189,10 @@ class _FakeSession:
         self.commits += 1
 
     def refresh(self, obj) -> None:
+        if isinstance(obj, _Delivery):
+            obj.created_at = getattr(obj, "created_at", None) or datetime(
+                2026, 1, 3, tzinfo=timezone.utc
+            )
         return None
 
     def execute(self, stmt, params=None):
@@ -568,6 +634,174 @@ def test_deliver_simulation_webhook_task_success() -> None:
             conversion_rate=0.05,
         )
     assert result["ok"] is True
+
+
+def test_record_webhook_delivery_creates_history_and_updates_subscription() -> None:
+    from app.simulation import webhook_delivery_history as history
+
+    sub = _Subscription()
+    session = _FakeSession(subscriptions=[sub])
+    delivery = history.record_webhook_delivery(
+        session,
+        subscription=sub,
+        simulation_id=11,
+        event_type="simulation.completed",
+        status="COMPLETED",
+        conversion_rate=0.013,
+        error=None,
+        result={"ok": False, "error": "nope"},
+        payload={"event": "simulation.completed"},
+    )
+    assert session.commits == 1
+    assert delivery.id == 1
+    assert delivery.status == "FAILED"
+    assert delivery.error == "nope"
+    assert delivery.request_body == {"event": "simulation.completed"}
+    assert sub.last_delivery_status == "FAILED"
+    assert sub.last_delivery_error == "nope"
+
+
+def test_list_simulation_webhook_deliveries() -> None:
+    from app.api.v1 import simulation_webhooks as mod
+
+    sub = _Subscription(id=1)
+    deliveries = [
+        _Delivery(id=1, webhook_subscription_id=1, status="FAILED"),
+        _Delivery(id=2, webhook_subscription_id=1, status="SUCCESS"),
+    ]
+    session = _FakeSession(subscriptions=[sub], deliveries=deliveries)
+    out = mod.list_simulation_webhook_deliveries(
+        project_id=10,
+        webhook_id=1,
+        limit=50,
+        db=session,
+        current_user=_current_user(),
+    )
+    assert [item.id for item in out.items] == [2, 1]
+    assert out.items[0].status == "SUCCESS"
+    assert out.items[1].status == "FAILED"
+
+
+def test_retry_delivery_route_returns_new_delivery() -> None:
+    from app.api.v1 import simulation_webhooks as mod
+
+    sub = _Subscription(id=1, status="ACTIVE")
+    original = _Delivery(
+        id=7,
+        webhook_subscription_id=1,
+        status="FAILED",
+        subscription=sub,
+    )
+    retried = _Delivery(
+        id=8,
+        webhook_subscription_id=1,
+        status="FAILED",
+        retry_count=1,
+        subscription=sub,
+    )
+    session = _FakeSession(subscriptions=[sub], deliveries=[original])
+    with patch.object(mod, "retry_failed_delivery", return_value=retried):
+        out = mod.retry_simulation_webhook_delivery(
+            project_id=10,
+            webhook_id=1,
+            delivery_id=7,
+            db=session,
+            current_user=_current_user(),
+        )
+    assert out.delivery.id == 8
+    assert out.delivery.retry_count == 1
+
+
+def test_retry_delivery_route_rejects_successful_delivery() -> None:
+    from app.api.v1 import simulation_webhooks as mod
+
+    sub = _Subscription(id=1)
+    successful = _Delivery(
+        id=9,
+        webhook_subscription_id=1,
+        status="SUCCESS",
+        subscription=sub,
+    )
+    session = _FakeSession(subscriptions=[sub], deliveries=[successful])
+    with pytest.raises(HTTPException) as exc:
+        mod.retry_simulation_webhook_delivery(
+            project_id=10,
+            webhook_id=1,
+            delivery_id=9,
+            db=session,
+            current_user=_current_user(),
+        )
+    assert exc.value.status_code == 409
+
+
+def test_retry_delivery_route_rejects_disabled_webhook() -> None:
+    from app.api.v1 import simulation_webhooks as mod
+
+    sub = _Subscription(id=1, status="DISABLED")
+    failed = _Delivery(
+        id=10,
+        webhook_subscription_id=1,
+        status="FAILED",
+        subscription=sub,
+    )
+    session = _FakeSession(subscriptions=[sub], deliveries=[failed])
+    with pytest.raises(HTTPException) as exc:
+        mod.retry_simulation_webhook_delivery(
+            project_id=10,
+            webhook_id=1,
+            delivery_id=10,
+            db=session,
+            current_user=_current_user(),
+        )
+    assert exc.value.status_code == 409
+
+
+def test_retry_delivery_route_404_when_not_owned() -> None:
+    from app.api.v1 import simulation_webhooks as mod
+
+    session = _FakeSession(subscriptions=[], deliveries=[])
+    with pytest.raises(HTTPException) as exc:
+        mod.retry_simulation_webhook_delivery(
+            project_id=10,
+            webhook_id=1,
+            delivery_id=99,
+            db=session,
+            current_user=_current_user(),
+        )
+    assert exc.value.status_code == 404
+
+
+def test_retry_failed_delivery_uses_stored_event_and_increments_retry() -> None:
+    from app.simulation import webhook_delivery_history as history
+
+    sub = _Subscription(id=1, url="https://example.com/hooks/cee")
+    original = _Delivery(
+        id=11,
+        webhook_subscription_id=1,
+        status="FAILED",
+        retry_count=2,
+        subscription=sub,
+    )
+    session = _FakeSession(subscriptions=[sub], deliveries=[original])
+
+    captured: dict = {}
+
+    def _fake_deliver(**kwargs):
+        captured.update(kwargs)
+        return {"ok": True, "status_code": 200}
+
+    with patch.object(history, "deliver_webhook_event", _fake_deliver):
+        new_delivery = history.retry_failed_delivery(
+            session,
+            delivery=original,
+        )
+
+    assert captured["payload"]["event"] == "simulation.completed"
+    assert captured["payload"]["status"] == "COMPLETED"
+    assert new_delivery.retry_count == 3
+    assert new_delivery.status == "SUCCESS"
+    assert new_delivery.webhook_subscription_id == 1
+    assert session.commits == 1
     assert sub.last_delivery_status == "SUCCESS"
     assert session.commits >= 1
 

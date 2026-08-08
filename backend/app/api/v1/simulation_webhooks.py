@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.v1.common import get_owned_project
 from app.core.deps import get_current_user, get_db
 from app.models.simulation_webhook_subscription import SimulationWebhookSubscription
+from app.models.simulation_webhook_delivery import SimulationWebhookDelivery
 from app.models.user import User
+from app.schemas.simulation_webhook_delivery import (
+    SimulationWebhookDeliveryListOut,
+    SimulationWebhookDeliveryOut,
+    SimulationWebhookRetryOut,
+)
 from app.schemas.simulation_webhooks import (
     SimulationWebhookCreate,
     SimulationWebhookListOut,
@@ -21,6 +26,10 @@ from app.schemas.simulation_webhooks import (
 from app.simulation.simulation_webhook_delivery import (
     build_webhook_payload,
     deliver_webhook_event,
+)
+from app.simulation.webhook_delivery_history import (
+    record_webhook_delivery,
+    retry_failed_delivery,
 )
 
 router = APIRouter(prefix="/projects", tags=["simulation-webhooks"])
@@ -51,6 +60,27 @@ def _get_owned_webhook(
     if not webhook:
         raise HTTPException(status_code=404, detail="Webhook not found")
     return webhook
+
+
+def _get_owned_delivery(
+    db: Session,
+    user_id: int,
+    project_id: int,
+    webhook_id: int,
+    delivery_id: int,
+) -> SimulationWebhookDelivery:
+    webhook = _get_owned_webhook(db, user_id, project_id, webhook_id)
+    delivery = (
+        db.query(SimulationWebhookDelivery)
+        .filter(
+            SimulationWebhookDelivery.id == delivery_id,
+            SimulationWebhookDelivery.webhook_subscription_id == webhook.id,
+        )
+        .first()
+    )
+    if not delivery:
+        raise HTTPException(status_code=404, detail="Webhook delivery not found")
+    return delivery
 
 
 @router.post(
@@ -174,13 +204,86 @@ def ping_simulation_webhook(
         payload=payload,
         timeout_seconds=8.0,
     )
-    now = datetime.now(timezone.utc)
-    webhook.last_delivery_at = now
-    webhook.last_delivery_status = "SUCCESS" if result["ok"] else "FAILED"
-    webhook.last_delivery_error = None if result["ok"] else result.get("error")
-    db.commit()
+    record_webhook_delivery(
+        db,
+        subscription=webhook,
+        simulation_id=None,
+        event_type=payload["event"],
+        status="PING",
+        conversion_rate=None,
+        error=None,
+        result=result,
+        payload=payload,
+    )
     db.refresh(webhook)
     return _without_secret(webhook)
+
+
+@router.get(
+    "/{project_id}/webhooks/{webhook_id}/deliveries",
+    response_model=SimulationWebhookDeliveryListOut,
+    summary="List simulation webhook delivery history",
+)
+def list_simulation_webhook_deliveries(
+    project_id: int,
+    webhook_id: int,
+    limit: int = Query(default=50, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SimulationWebhookDeliveryListOut:
+    """Return recent delivery attempts for one webhook, newest first."""
+    webhook = _get_owned_webhook(db, current_user.id, project_id, webhook_id)
+    items = (
+        db.query(SimulationWebhookDelivery)
+        .filter(
+            SimulationWebhookDelivery.webhook_subscription_id == webhook.id,
+        )
+        .order_by(
+            SimulationWebhookDelivery.created_at.desc(),
+            SimulationWebhookDelivery.id.desc(),
+        )
+        .limit(limit)
+        .all()
+    )
+    return SimulationWebhookDeliveryListOut(
+        items=[SimulationWebhookDeliveryOut.model_validate(item) for item in items]
+    )
+
+
+@router.post(
+    "/{project_id}/webhooks/{webhook_id}/deliveries/{delivery_id}/retry",
+    response_model=SimulationWebhookRetryOut,
+    summary="Retry a failed simulation webhook delivery",
+)
+def retry_simulation_webhook_delivery(
+    project_id: int,
+    webhook_id: int,
+    delivery_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SimulationWebhookRetryOut:
+    """Re-deliver a failed webhook event and record a new delivery attempt."""
+    delivery = _get_owned_delivery(
+        db,
+        current_user.id,
+        project_id,
+        webhook_id,
+        delivery_id,
+    )
+    if delivery.status == "SUCCESS":
+        raise HTTPException(
+            status_code=409,
+            detail="Only failed deliveries can be retried",
+        )
+    if delivery.subscription.status != "ACTIVE":
+        raise HTTPException(
+            status_code=409,
+            detail="Webhook subscription must be ACTIVE to retry",
+        )
+    new_delivery = retry_failed_delivery(db, delivery=delivery)
+    return SimulationWebhookRetryOut(
+        delivery=SimulationWebhookDeliveryOut.model_validate(new_delivery)
+    )
 
 
 __all__ = [
@@ -189,4 +292,6 @@ __all__ = [
     "update_simulation_webhook",
     "delete_simulation_webhook",
     "ping_simulation_webhook",
+    "list_simulation_webhook_deliveries",
+    "retry_simulation_webhook_delivery",
 ]

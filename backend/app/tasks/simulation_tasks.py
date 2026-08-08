@@ -22,6 +22,7 @@ from app.simulation.simulation_webhook_delivery import (
     build_webhook_payload,
     deliver_webhook_event,
 )
+from app.simulation.webhook_delivery_history import record_webhook_delivery
 from app.simulation.accountability import AccountabilityEngine
 from app.simulation.aggregation import ResultsAggregator
 from app.simulation.conductor import Conductor, ConductorResult
@@ -647,11 +648,17 @@ def deliver_simulation_webhook(
         secret=subscription.secret,
         payload=payload,
     )
-    now = _utcnow()
-    subscription.last_delivery_at = now
-    subscription.last_delivery_status = "SUCCESS" if result["ok"] else "FAILED"
-    subscription.last_delivery_error = None if result["ok"] else result.get("error")
-    self.db.commit()
+    record_webhook_delivery(
+        self.db,
+        subscription=subscription,
+        simulation_id=simulation_id,
+        event_type=payload["event"],
+        status=status,
+        conversion_rate=conversion_rate,
+        error=error,
+        result=result,
+        payload=payload,
+    )
 
     if not result["ok"]:
         try:

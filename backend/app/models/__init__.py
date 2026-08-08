@@ -18,6 +18,7 @@ from app.models.project_hardware import Hardware3DModel, HardwareProduct
 from app.models.audit_log import ApiAuditLog
 from app.models.assumption_evidence import AssumptionEvidence
 from app.models.simulation_webhook_subscription import SimulationWebhookSubscription
+from app.models.simulation_webhook_delivery import SimulationWebhookDelivery
 
 __all__ = [
     "Base",
@@ -44,4 +45,5 @@ __all__ = [
     "ApiAuditLog",
     "AssumptionEvidence",
     "SimulationWebhookSubscription",
+    "SimulationWebhookDelivery",
 ]
