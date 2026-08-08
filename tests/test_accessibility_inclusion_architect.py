@@ -205,6 +205,70 @@ def test_intent_language_is_not_evidence() -> None:
     assert out.metrics["inclusive_advantage_lift"] == 0.0
 
 
+def test_contracted_negations_are_not_evidence() -> None:
+    for text in (
+        "We aren't WCAG compliant yet",
+        "The app doesn't have screen reader support",
+        "We haven't captioned our videos",
+        "We won't ship captioned videos this quarter",
+    ):
+        out = _compute(assumptions=[{"text": text}])
+        assert out.metrics["accessibility_credibility"] < 1.0, text
+        assert out.flags["inclusive_advantage"] is False, text
+
+
+def test_discourse_negation_does_not_void_evidence() -> None:
+    for text in (
+        "No, our app is captioned and WCAG compliant",
+        "No. Our app is captioned and WCAG compliant",
+        "Not only is the app captioned, it is also WCAG compliant",
+        "No doubt our app is captioned",
+    ):
+        out = _compute(assumptions=[{"text": text}])
+        assert out.metrics["accessibility_credibility"] == 1.0, text
+        assert out.flags["inclusive_advantage"] is True, text
+
+
+def test_unrelated_intent_after_evidence_does_not_void_it() -> None:
+    out = _compute(
+        assumptions=[
+            {"text": "We have captioned videos and will add translation support"},
+        ]
+    )
+    assert out.metrics["accessibility_credibility"] == 1.0
+    assert out.flags["inclusive_advantage"] is True
+
+
+def test_after_markers_that_qualify_the_phrase_are_gaps() -> None:
+    for text in (
+        "An accessibility audit is scheduled for next quarter",
+        "WCAG compliance is on our roadmap",
+        "Translation support is planned for Q3",
+        "WCAG status unclear",
+        "captioned videos no longer available",
+        "WCAG compliance to be completed by Q3",
+    ):
+        out = _compute(assumptions=[{"text": text}])
+        assert out.metrics["accessibility_credibility"] < 1.0, text
+        assert out.flags["inclusive_advantage"] is False, text
+
+
+def test_connectivity_keeps_unrelated_plan_from_voiding_evidence() -> None:
+    out = _compute(
+        assumptions=[{"text": "We have a plan and the app is captioned"}],
+    )
+    assert out.metrics["accessibility_credibility"] == 1.0
+    assert out.flags["inclusive_advantage"] is True
+
+
+def test_plan_to_make_phrase_is_a_gap() -> None:
+    out = _compute(
+        assumptions=[{"text": "We plan to make the app WCAG compliant"}],
+    )
+    assert out.metrics["accessibility_credibility"] < 1.0
+    assert out.flags["inclusive_advantage"] is False
+
+
 # ---------------------------------------------------------------------------
 # Language and age barriers
 # ---------------------------------------------------------------------------
@@ -356,6 +420,38 @@ def test_evidence_softens_suppressor_and_adds_purchase_lift() -> None:
         > bare_overrides[("BROWSE", "CONSIDER")]
     )
     assert evidenced_overrides[("DECIDE", "PURCHASE")] > 1.0
+
+
+def test_transition_overrides_skip_suppression_when_suppressor_is_one() -> None:
+    from app.simulation.architects.accessibility_inclusion import (
+        AccessibilityInclusionArchitect,
+    )
+
+    architect = AccessibilityInclusionArchitect()
+    # Perfectly literate, risk-tolerant, young, patient cluster: the gap is
+    # active but the funnel suppressor rounds to 1.0, so no suppression
+    # multiplier (which would otherwise shave a tiny bit off conversion).
+    gap_only = _compute(
+        literacy=1.0,
+        risk=0.0,
+        patience=1.0,
+        assumptions=[{"text": "Screen reader users are a target segment"}],
+    )
+    assert gap_only.metrics["accessibility_gap"] == 0.30
+    assert gap_only.metrics["funnel_suppressor"] == 1.0
+    assert architect.transition_overrides(gap_only) == {}
+
+    evidenced = _compute(
+        literacy=1.0,
+        risk=0.0,
+        patience=1.0,
+        assumptions=[{"text": "WCAG compliant and captioned"}],
+    )
+    assert evidenced.metrics["funnel_suppressor"] == 1.0
+    overrides = architect.transition_overrides(evidenced)
+    assert ("BROWSE", "CONSIDER") not in overrides
+    assert ("CONSIDER", "DECIDE") not in overrides
+    assert overrides[("DECIDE", "PURCHASE")] > 1.0
 
 
 # ---------------------------------------------------------------------------

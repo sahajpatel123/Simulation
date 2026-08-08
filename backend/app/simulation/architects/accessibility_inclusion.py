@@ -27,6 +27,12 @@ What this architect does:
   ``inclusive_advantage_lift``. Detection is negation- and intent-aware:
   "not yet accessible", "no captions", "unclear WCAG status", "plan to
   translate" or "need to add alt text" are treated as gaps, never evidence.
+  Gap detection is phrase-aware: contracted negations ("isn't", "haven't",
+  "doesn't") are expanded, discourse negation ("No, we already have
+  captions", "Not only is the app compliant") does not void evidence, and
+  intent words after a claim ("audit scheduled", "will add translation")
+  only count when they qualify the matched phrase rather than a sibling
+  one.
 * **Markov overrides** — only when the inclusion gap is active:
   BROWSE→CONSIDER / CONSIDER→DECIDE are multiplied by the suppressor,
   DECIDE→PURCHASE by ``1 + inclusive_advantage_lift`` when evidence exists.
@@ -39,6 +45,7 @@ from __future__ import annotations
 
 import math
 import re
+from functools import lru_cache
 from typing import Any
 
 from app.simulation.architects.base import ArchitectOutput, BaseArchitect, DomainReport
@@ -50,7 +57,10 @@ _DISABILITY_KEYWORDS: tuple[str, ...] = (
     "accessibility", "accessible", "screen reader", "screen-reader",
     "voiceover", "voice-over", "narrator", "wcag", "section 508", "ada",
     "alt text", "alternative text", "captions", "captioning", "subtitles",
-    "sign language", "braille", "keyboard navigation", "keyboard accessible",
+    "captioned", "subtitled", "sign language", "braille",
+    "keyboard navigation", "keyboard navigation support",
+    "keyboard accessible",
+    "screen reader support", "screen-reader support", "voiceover support",
     "high contrast", "colour contrast", "color contrast", "dyslexia",
     "low vision", "visual impairment", "hearing impairment",
     "hard of hearing", "deaf", "motor impairment", "one-handed",
@@ -64,14 +74,14 @@ _LANGUAGE_KEYWORDS: tuple[str, ...] = (
     "regional language", "regional languages", "language support",
     "hindi", "tamil", "bengali", "marathi", "telugu", "kannada",
     "malayalam", "gujarati", "punjabi", "urdu", "vernacular",
-    "english-only", "english only",
+    "english-only", "english only", "translated", "localized", "localised",
 )
 
 _AGE_KEYWORDS: tuple[str, ...] = (
     "elderly", "older users", "older adults", "senior citizens", "seniors",
     "aging population", "ageing population", "retirees", "grandparents",
     "over 60", "over 55", "60 and above", "55 and above", "65 and above",
-    "large text", "easy to read",
+    "large text", "easy to read", "senior friendly", "senior-friendly",
 )
 
 _LITERACY_KEYWORDS: tuple[str, ...] = (
@@ -79,7 +89,7 @@ _LITERACY_KEYWORDS: tuple[str, ...] = (
     "first time smartphone", "beginner friendly", "beginner-friendly",
     "simple interface", "simple mode", "voice guidance", "voice-first",
     "guided onboarding", "step-by-step", "step by step", "tutorial",
-    "non-technical users", "non technical users", "easy mode",
+    "guided mode", "non-technical users", "non technical users", "easy mode",
 )
 
 _EVIDENCE_KEYWORDS: tuple[str, ...] = (
@@ -99,19 +109,123 @@ _EVIDENCE_KEYWORDS: tuple[str, ...] = (
     "voice guidance", "guided mode", "large text mode", "accessibility mode",
 )
 
-# Negation / absence / intent markers that void an evidence keyword when
-# they appear within a few words of the match. Aspirational language ("we
-# plan to add captions", "must be WCAG compliant") is a gap, not proof.
-_GAP_MARKERS: frozenset[str] = frozenset({
+# Absence markers void evidence only when they directly qualify the
+# matched phrase: "no captions", "captions missing", "not WCAG compliant",
+# "WCAG status unclear". Discourse negations ("No, we already have
+# captions") are handled separately so they never void real evidence.
+_ABSENCE_MARKERS: frozenset[str] = frozenset({
     "no", "not", "never", "non", "without", "lack", "lacks", "lacking",
     "missing", "absent", "absence", "unclear", "uncertain", "unknown",
     "unverified", "pending", "awaiting", "awaited", "outstanding",
     "incomplete", "suspended", "expired", "revoked", "rejected", "denied",
-    "withdrawn", "plan", "planned", "planning", "roadmap", "future",
-    "eventually", "todo", "need", "needs", "needed", "require", "requires",
-    "required", "must", "should", "will", "going to", "intend", "intends",
-    "intended", "add", "adding", "build", "building",
+    "withdrawn", "unavailable", "unreleased", "unimplemented",
+    "unsupported", "unconfirmed", "undelivered", "dormant", "inactive",
 })
+
+# Aspirational markers: a plan, requirement or roadmap is not evidence.
+# Past-tense completions ("added", "built", "shipped", "implemented") are
+# deliberately absent — they are proof, not intent.
+_INTENT_MARKERS: frozenset[str] = frozenset({
+    "plan", "planned", "planning", "roadmap", "future", "eventually",
+    "todo", "need", "needs", "needed", "require", "requires", "required",
+    "must", "should", "will", "intend", "intends", "intended", "add",
+    "adding", "build", "building", "aim", "aims", "hoping", "hope",
+    "hopes", "want", "wants", "wanted", "working", "scheduled",
+    "upcoming", "due",
+})
+
+# Words that can sit between a marker and the matched phrase without
+# breaking the qualification ("we plan to make the app WCAG compliant",
+# "we do not have screen reader support", "no doubt our app is captioned"
+# is NOT gapped because "doubt" breaks the chain).
+_PRE_CHAIN: frozenset[str] = frozenset({
+    "to", "add", "adding", "make", "making", "ensure", "ensuring",
+    "build", "building", "provide", "providing", "support", "supporting",
+    "be", "being", "get", "getting", "become", "becoming", "implement",
+    "implementing", "ship", "shipping", "include", "including",
+    "includes", "covers", "covering", "outlines", "details",
+    "introduce", "introducing", "offer", "offering", "deliver",
+    "delivering", "roll", "out", "have", "has", "had", "having", "do",
+    "does", "did", "are", "is", "was", "were", "been", "start", "begin",
+    "begun", "working", "on", "way", "the", "a", "an", "our", "their",
+    "its", "his", "her", "my", "your", "app", "product", "service",
+    "site", "website", "platform", "interface", "experience", "fully",
+    "completely", "entirely", "very", "really", "actually", "currently",
+    "still", "yet", "already", "now", "eventually", "soon", "next",
+    "quarter", "year", "month", "phase", "longer", "long", "any", "more",
+    "all", "just", "only", "also", "too", "then", "so", "that", "which",
+    "who", "we", "they", "it", "there", "this", "these", "those", "not",
+    "no", "never", "definitely", "certainly", "absolutely", "clearly",
+    "obviously", "simply", "truly", "genuinely", "for",
+})
+
+# Words that may sit between the matched phrase and a marker after it
+# ("captions are missing", "WCAG status unclear", "translation support is
+# not included") without breaking the qualification.
+_AFTER_BRIDGES: frozenset[str] = frozenset({
+    "is", "are", "was", "were", "be", "been", "being", "has", "have",
+    "had", "remain", "remains", "remained", "stay", "stays", "still",
+    "yet", "currently", "now", "but", "or", "and", "status", "support",
+    "compliance", "implementation", "availability", "accessibility",
+    "quality", "content", "videos", "video", "experience", "product",
+    "app", "service", "site", "website", "media", "assets", "features",
+    "screens", "flow", "onboarding", "checkout", "pages", "page", "all",
+    "the", "a", "an", "our", "their", "its", "his", "her", "my", "your",
+    "fully", "completely", "entirely", "very", "really", "actually",
+    "already", "always", "then", "so", "just", "only", "also", "too",
+    "longer", "long", "any", "more", "at", "in", "on", "for", "with",
+    "not", "no", "never", "without",
+})
+
+# Absence markers that are themselves a state ("captions missing",
+# "WCAG status unclear", "support unavailable").
+_ABSENCE_STATE: frozenset[str] = frozenset({
+    "missing", "absent", "unavailable", "unverified", "unclear",
+    "unknown", "uncertain", "pending", "outstanding", "incomplete",
+    "suspended", "revoked", "rejected", "denied", "expired", "withdrawn",
+    "unreleased", "unimplemented", "unsupported", "unconfirmed",
+    "lacking", "lack", "lacks", "undelivered", "dormant", "inactive",
+})
+
+# Positive states that become gaps when negated ("not included",
+# "no longer available", "without captions").
+_NEGATED_STATE: frozenset[str] = frozenset({
+    "available", "present", "supported", "included", "implemented",
+    "added", "captioned", "subtitled", "translated", "localized",
+    "provided", "offered", "shipped", "live", "enabled", "ready",
+    "working", "compliant", "done", "finished", "there", "place",
+})
+
+# Noun-form intent markers that void evidence when they follow the phrase
+# ("audit scheduled", "WCAG compliance is on our roadmap").
+_AFTER_INTENT_NOUN: frozenset[str] = frozenset({
+    "scheduled", "planned", "plan", "roadmap", "upcoming", "pending",
+    "todo", "due",
+})
+
+# Modal intent markers that void evidence only when they directly follow
+# the phrase ("translation support will be available" is a gap, but
+# "captioned videos and will add translation" is not).
+_AFTER_INTENT_MODAL: frozenset[str] = frozenset({
+    "should", "must", "will", "need", "needs", "needed", "require",
+    "requires", "required", "intend", "intends", "intended",
+})
+
+# Common contracted negations ("isn't", "haven't", "won't") plus their
+# no-apostrophe spellings. Expanded before matching so "we aren't WCAG
+# compliant" or "we haven't captioned our videos" are treated as gaps.
+_CONTRACTION_SUFFIXES: dict[str, str] = {
+    "isn": "is not", "aren": "are not", "wasn": "was not",
+    "weren": "were not", "don": "do not", "doesn": "does not",
+    "didn": "did not", "haven": "have not", "hasn": "has not",
+    "hadn": "had not", "won": "will not", "wouldn": "would not",
+    "can": "cannot", "couldn": "could not", "shouldn": "should not",
+    "mustn": "must not", "needn": "need not", "ain": "is not",
+}
+_CONTRACTION_PATTERN = re.compile(
+    r"\b((?:isn|aren|wasn|weren|don|doesn|didn|haven|hasn|hadn|won|"
+    r"wouldn|can|couldn|shouldn|mustn|needn|ain))'?t\b"
+)
 
 # Neutral baseline so runs that never mention inclusion stay unchanged.
 _BASELINE_GAP: float = 0.05
@@ -144,6 +258,23 @@ _LANGUAGE_INTENSITY: dict[str, float] = {
 }
 
 
+@lru_cache(maxsize=8)
+def _keyword_pattern(keywords: tuple[str, ...]) -> re.Pattern[str]:
+    """Compile one word-boundary pattern per keyword group (cached)."""
+    return re.compile(
+        r"\b(?:" + "|".join(re.escape(k) for k in keywords) + r")\b",
+        re.IGNORECASE,
+    )
+
+
+def _normalize(text: str) -> str:
+    """Lowercase and expand contracted negations for gap detection."""
+    text = text.lower().replace("’", "'")
+    return _CONTRACTION_PATTERN.sub(
+        lambda m: _CONTRACTION_SUFFIXES[m.group(1)], text
+    )
+
+
 def _has_any_keyword(
     assumptions: list[dict[str, Any]] | None,
     keywords: tuple[str, ...],
@@ -154,22 +285,19 @@ def _has_any_keyword(
     True when any assumption text contains any keyword (word-boundary).
 
     With ``guard_negation``, a match is ignored when negation/absence/intent
-    markers appear within a few words around it, so "no captions" or "plan
-    to localize" never counts as inclusion evidence.
+    markers qualify it, so "no captions" or "plan to localize" never counts
+    as inclusion evidence — while "No, we already have captions" does.
     """
     if not assumptions:
         return False
-    pattern = re.compile(
-        r"\b(?:" + "|".join(re.escape(k) for k in keywords) + r")\b",
-        re.IGNORECASE,
-    )
+    pattern = _keyword_pattern(keywords)
     for assumption in assumptions:
         if isinstance(assumption, dict):
-            text = str(
-                assumption.get("text", assumption.get("assumption", ""))
-            ).lower()
+            text = _normalize(
+                str(assumption.get("text", assumption.get("assumption", "")))
+            )
         else:
-            text = str(assumption).lower()
+            text = _normalize(str(assumption))
         if not guard_negation:
             if pattern.search(text):
                 return True
@@ -181,10 +309,110 @@ def _has_any_keyword(
 
 
 def _is_gapped(text: str, start: int, end: int) -> bool:
-    """True when a gap/intent marker sits within ~5 words of a match."""
+    """
+    True when the matched phrase is qualified by an absence or intent
+    marker ("no captions", "WCAG status unclear", "plan to add captions").
+
+    Directional and phrase-aware: discourse negation before the phrase and
+    unrelated intent after it ("captioned videos, no issues found", "we
+    have captions and will add translation") do not void the evidence.
+    """
+    return _before_gap(text, start) or _after_gap(text, end)
+
+
+def _discourse_marker(text: str, start: int) -> str | None:
+    """
+    Return the clause-leading absence marker when it is discourse rather
+    than a qualifier: "No, we already have captions" or "Not only is the
+    app captioned". Otherwise return None.
+    """
+    prefix = text[:start]
+    boundary = max(prefix.rfind(c) for c in ".!?;")
+    clause = text[boundary + 1:start]
+    words = re.findall(r"[a-z]+", clause)
+    if not words or words[0] not in _ABSENCE_MARKERS:
+        return None
+    match = re.match(r"\s*[a-z']+", clause)
+    if match is None:
+        return None
+    tail = clause[match.end():]
+    if tail.lstrip()[:1] in {",", ".", ":", ";", "—", "–"}:
+        return words[0]
+    if (
+        len(words) >= 2
+        and words[0] in {"no", "not", "never"}
+        and words[1] in {"only", "just", "merely", "simply"}
+    ):
+        return words[0]
+    return None
+
+
+def _before_gap(text: str, start: int) -> bool:
+    """True when a marker before the phrase qualifies it as a gap."""
     before = re.findall(r"[a-z]+", text[max(0, start - 120):start])[-5:]
+    if not before:
+        return False
+    discourse = _discourse_marker(text, start)
+    for i, token in enumerate(before):
+        between = before[i + 1:]
+        if not all(t in _PRE_CHAIN for t in between):
+            continue
+        if token in _ABSENCE_MARKERS:
+            if token == discourse and i == 0:
+                continue
+            return True
+        if token in _INTENT_MARKERS:
+            return True
+    return False
+
+
+def _after_gap(text: str, end: int) -> bool:
+    """True when a marker after the phrase qualifies it as a gap."""
     after = re.findall(r"[a-z]+", text[end:end + 120])[:5]
-    return bool(set(before + after) & _GAP_MARKERS)
+    if not after:
+        return False
+    # "to be completed", "to do", "to add" — future work, not evidence.
+    for i in range(min(3, len(after) - 1)):
+        if (
+            after[i] == "to"
+            and after[i + 1]
+            in {"be", "do", "add", "implement", "build", "make", "provide", "ship", "include"}
+            and all(t in _AFTER_BRIDGES for t in after[:i])
+        ):
+            return True
+    for i, token in enumerate(after[:5]):
+        if token not in _AFTER_INTENT_NOUN:
+            continue
+        if not all(t in _AFTER_BRIDGES for t in after[:i]):
+            continue
+        return True
+    for i, token in enumerate(after[:2]):
+        if token not in _AFTER_INTENT_MODAL:
+            continue
+        if not all(t in _AFTER_BRIDGES for t in after[:i]):
+            continue
+        nxt = after[i + 1:i + 3]
+        if not nxt or any(t in _PRE_CHAIN for t in nxt):
+            return True
+    for i, token in enumerate(after[:3]):
+        if token not in _ABSENCE_MARKERS:
+            continue
+        if not all(t in _AFTER_BRIDGES for t in after[:i]):
+            continue
+        if token in _ABSENCE_STATE:
+            return True
+        if token in {"no", "not", "never", "without"}:
+            nxt = after[i + 1:i + 3]
+            if any(t in _NEGATED_STATE for t in nxt):
+                return True
+            if (
+                nxt
+                and nxt[0] in {"longer", "more", "long", "now", "currently", "still", "yet"}
+                and len(nxt) > 1
+                and nxt[1] in _NEGATED_STATE
+            ):
+                return True
+    return False
 
 
 def _trait(traits: dict[str, Any], key: str, default: float = 0.5) -> float:
@@ -381,10 +609,14 @@ class AccessibilityInclusionArchitect(BaseArchitect):
             return {}
         suppressor = float(output.metrics.get("funnel_suppressor", 1.0))
         lift = float(output.metrics.get("inclusive_advantage_lift", 0.0))
-        overrides: dict[tuple[str, str], float] = {
-            ("BROWSE", "CONSIDER"): _clamp(suppressor, 0.55, 0.999),
-            ("CONSIDER", "DECIDE"): _clamp(suppressor + 0.06, 0.60, 0.999),
-        }
+        overrides: dict[tuple[str, str], float] = {}
+        if suppressor < 1.0:
+            overrides[("BROWSE", "CONSIDER")] = _clamp(
+                suppressor, 0.55, 0.999
+            )
+            overrides[("CONSIDER", "DECIDE")] = _clamp(
+                suppressor + 0.06, 0.60, 1.0
+            )
         if lift > 0.0:
             overrides[("DECIDE", "PURCHASE")] = _clamp(
                 1.0 + lift, 0.55, 1.15
