@@ -69,6 +69,27 @@ def test_webhook_deliveries_to_csv_renders_rows_newest_first() -> None:
     assert "1" in lines[-1]
 
 
+def test_webhook_deliveries_to_csv_sorts_by_created_at_matching_list_order() -> None:
+    # delivered_at intentionally disagrees with created_at; the list/JSON
+    # export order is created_at desc, so CSV must not silently reorder.
+    older = _row(
+        id=1,
+        delivered_at=datetime(2026, 1, 5, tzinfo=timezone.utc),
+        created_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+    )
+    newer = _row(
+        id=2,
+        delivered_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        created_at=datetime(2026, 1, 3, tzinfo=timezone.utc),
+    )
+
+    csv_text = webhook_deliveries_to_csv([older, newer])
+    lines = csv_text.strip().splitlines()
+
+    assert lines[-2].startswith("2,")
+    assert lines[-1].startswith("1,")
+
+
 def test_webhook_deliveries_to_csv_handles_json_body_and_blanks() -> None:
     row = _row(
         id=3,
@@ -90,6 +111,14 @@ def test_webhook_deliveries_to_csv_guards_spreadsheet_formulas() -> None:
     csv_text = webhook_deliveries_to_csv([row])
 
     assert "'=HYPERLINK" in csv_text
+
+
+def test_webhook_deliveries_to_csv_guards_formula_after_leading_whitespace() -> None:
+    row = _row(id=6, delivered_at=datetime(2026, 1, 7, tzinfo=timezone.utc))
+    row["error"] = " \t=2+2"
+    csv_text = webhook_deliveries_to_csv([row])
+
+    assert "' \t=2+2" in csv_text
 
 
 def test_webhook_deliveries_to_json_renders_envelope() -> None:

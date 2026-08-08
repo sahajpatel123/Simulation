@@ -6,8 +6,8 @@ spreadsheet-friendly CSV (default) or an indented JSON document so operators
 can bring the audit trail into Sheets/Excel, a SIEM, or a debugging workflow
 without writing a parser.
 
-Rows are sorted newest-first by ``delivered_at`` (then ``id``) so the export
-matches the list endpoint and manual-retry flow. The JSON request body is
+Rows are sorted newest-first by ``created_at`` (then ``id``) so the export
+matches the list endpoint and the JSON export. The JSON request body is
 stored as a compact JSON string in CSV exports so every delivery attempt stays
 reproducible from a single row.
 """
@@ -57,30 +57,36 @@ def _text(value: Any) -> str:
 
 def _safe_csv_cell(value: Any) -> object:
     """Neutralise spreadsheet formula injection while leaving data intact."""
-    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
+    # Excel/Sheets also treat values with leading whitespace as formulas once
+    # they are trimmed, so guard the first non-whitespace character too.
+    if isinstance(value, str) and value.lstrip()[:1] in ("=", "+", "-", "@"):
         return f"'{value}"
     return value
 
 
 def _sort_key(row: dict[str, Any]) -> tuple[datetime, int]:
-    """Newest-first sort using ``delivered_at`` then ``id``."""
-    delivered = row.get("delivered_at")
-    if isinstance(delivered, datetime):
-        if delivered.tzinfo is None:
-            delivered = delivered.replace(tzinfo=timezone.utc)
+    """Newest-first sort using ``created_at`` then ``id``.
+
+    Matches the delivery-list query (``created_at DESC, id DESC``) and the
+    JSON export, so CSV exports do not silently reorder rows.
+    """
+    created = row.get("created_at")
+    if isinstance(created, datetime):
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
         else:
-            delivered = delivered.astimezone(timezone.utc)
-    elif delivered is not None:
+            created = created.astimezone(timezone.utc)
+    elif created is not None:
         try:
-            parsed = datetime.fromisoformat(str(delivered))
+            parsed = datetime.fromisoformat(str(created))
             if parsed.tzinfo is None:
                 parsed = parsed.replace(tzinfo=timezone.utc)
-            delivered = parsed.astimezone(timezone.utc)
+            created = parsed.astimezone(timezone.utc)
         except (TypeError, ValueError):
-            delivered = datetime.min.replace(tzinfo=timezone.utc)
+            created = datetime.min.replace(tzinfo=timezone.utc)
     else:
-        delivered = datetime.min.replace(tzinfo=timezone.utc)
-    return delivered, int(row.get("id") or 0)
+        created = datetime.min.replace(tzinfo=timezone.utc)
+    return created, int(row.get("id") or 0)
 
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
