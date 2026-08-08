@@ -124,6 +124,18 @@ def test_format_json_returns_findings_payload() -> None:
     assert '"PricingArchitect"' in body
 
 
+def test_format_md_returns_founder_markdown_brief() -> None:
+    resp = _call_route(format="md")
+
+    assert resp.media_type == "text/markdown; charset=utf-8"
+    assert 'filename="findings-1.md"' in resp.headers["Content-Disposition"]
+    body = _body(resp).decode("utf-8")
+    assert body.startswith("# TheCee — Findings Brief")
+    assert "## Top Findings" in body
+    assert "PricingArchitect" in body
+    assert "price ceiling too low" in body
+
+
 def test_failed_simulation_raises_422() -> None:
     session = _FakeSession(_FakeSimulation(status="FAILED", error_message="boom"))
     with pytest.raises(HTTPException) as exc:

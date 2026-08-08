@@ -1,7 +1,11 @@
 """Tests for the pure findings-export helpers."""
 from __future__ import annotations
 
-from app.simulation.findings_export import extract_findings, findings_to_csv
+from app.simulation.findings_export import (
+    extract_findings,
+    findings_to_csv,
+    findings_to_markdown,
+)
 
 
 def _finding() -> dict:
@@ -49,3 +53,71 @@ def test_findings_to_csv_handles_missing_fields() -> None:
     assert "WARNING" in csv_text
     assert "0.0000" in csv_text
     assert ",,WARNING" in csv_text
+
+
+def test_findings_to_markdown_renders_summary_table_and_findings() -> None:
+    findings = [
+        {
+            "severity": "CRITICAL",
+            "architect_name": "PricingArchitect",
+            "cluster_name": "Metro Pro",
+            "finding": "price ceiling too low for affluent professionals",
+            "metric_affected": "will_pay_probability",
+            "recommended_action": "Lower price, add EMI option, or add free tier",
+            "conversion_impact": 0.042,
+        },
+        {
+            "severity": "WARNING",
+            "architect_name": "RetentionArchitect",
+            "cluster_name": "Budget Families",
+            "finding": "day-30 survival is weak",
+            "metric_affected": "day30_survival",
+            "recommended_action": "Add gamification, content freshness, re-engagement",
+            "conversion_impact": 0.011,
+        },
+    ]
+
+    md = findings_to_markdown(
+        findings,
+        simulation_id=7,
+        project_id=10,
+        primary_failure_domain="PricingArchitect",
+        metadata={"generated_at": "now"},
+    )
+
+    assert md.startswith("# TheCee — Findings Brief")
+    assert "| Total findings | 2 |" in md
+    assert "| Critical | 1 |" in md
+    assert "| Warning | 1 |" in md
+    assert "| Combined conversion impact | 5.30% |" in md
+    assert "| Primary failure domain | PricingArchitect |" in md
+    assert "| 1 | 🔴 Critical | PricingArchitect | Metro Pro |" in md
+    assert "price ceiling too low" in md
+    assert "| 2 | 🟠 Warning | RetentionArchitect | Budget Families |" in md
+    assert "## Recommended Actions" in md
+    assert "**Lower price, add EMI option, or add free tier**" in md
+    assert "**Add gamification, content freshness, re-engagement**" in md
+    assert "`Metro Pro`" in md
+
+
+def test_findings_to_markdown_escapes_pipes_and_handles_empty() -> None:
+    md = findings_to_markdown(
+        [
+            {
+                "severity": "CRITICAL",
+                "architect_name": "Pricing|Architect",
+                "cluster_name": "Metro Pro",
+                "finding": "two | pipes",
+                "recommended_action": "Act",
+                "conversion_impact": 0.01,
+            }
+        ],
+        project_id=1,
+    )
+
+    assert "Pricing\\|Architect" in md
+    assert "two \\| pipes" in md
+
+    empty_md = findings_to_markdown([], project_id=1)
+    assert "No domain findings available." in empty_md
+    assert "| Total findings | 0 |" in empty_md

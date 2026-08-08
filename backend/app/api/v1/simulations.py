@@ -165,6 +165,7 @@ from app.simulation.simulation_export import (
 from app.simulation.findings_export import (
     extract_findings,
     findings_to_csv,
+    findings_to_markdown,
 )
 from app.simulation.launch_checklist import build_launch_checklist
 from app.simulation.founder_brief import build_founder_brief
@@ -8012,8 +8013,8 @@ def get_simulation_export(
 @router.get(
     "/{simulation_id}/findings/export",
     summary=(
-        "Export one simulation's domain findings as CSV (or JSON "
-        "with ?format=json)"
+        "Export one simulation's domain findings as CSV, JSON, or a "
+        "founder-facing Markdown brief"
     ),
     response_class=StreamingResponse,
 )
@@ -8025,7 +8026,7 @@ def get_findings_export(
         description=(
             "Output format. ``csv`` (default) returns the "
             "spreadsheet-friendly table; ``json`` returns the raw "
-            "findings list."
+            "findings list; ``md`` returns a Markdown founder brief."
         ),
     ),
     db: Session = Depends(get_db),
@@ -8079,6 +8080,30 @@ def get_findings_export(
             headers={
                 "Content-Disposition": (
                     f'attachment; filename="findings-{simulation_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    if fmt == "md":
+        md_text = findings_to_markdown(
+            findings,
+            simulation_id=simulation_id,
+            project_id=sim.project_id,
+            primary_failure_domain=(
+                sim.results_json.get("primary_failure_domain")
+                if isinstance(sim.results_json, dict)
+                else None
+            ),
+            metadata=metadata,
+        )
+        body = md_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="findings-{simulation_id}.md"'
                 ),
                 "Content-Length": str(len(body)),
             },
