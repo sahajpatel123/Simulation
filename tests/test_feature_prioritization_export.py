@@ -257,6 +257,71 @@ def test_markdown_handles_empty_items() -> None:
     assert "No recommendations are currently available." in md
 
 
+def test_csv_ignores_scalar_list_sections() -> None:
+    """Scalar section values must not be iterated as if they were lists."""
+    csv_text = feature_prioritization_to_csv(
+        {
+            "simulation_id": 1,
+            "project_id": 2,
+            "dimensions": "not-a-list",
+            "cluster_profiles": None,
+            "brief_features": 42,
+            "flags": "risky",
+            "recommendations": "build now",
+        }
+    )
+
+    assert "flags_count,0" in csv_text
+    assert "recommendations_count,0" in csv_text
+    assert "dimension_count,0" in csv_text
+    assert "section,Flags" in csv_text
+    assert "section,Recommendations" in csv_text
+    # Scalar values must not be split into per-character rows.
+    assert "r,risky" not in csv_text
+    assert "b,build" not in csv_text
+    assert "d,not-a-list" not in csv_text
+
+
+def test_markdown_ignores_scalar_list_sections() -> None:
+    """Markdown serialization must tolerate malformed scalar sections."""
+    md = feature_prioritization_to_markdown(
+        {
+            "simulation_id": 1,
+            "project_id": 2,
+            "dimensions": "not-a-list",
+            "flags": "risky",
+            "recommendations": "build now",
+        }
+    )
+
+    assert "No modeled feature dimensions are available." in md
+    assert "No risk flags detected." in md
+    assert "No recommendations are currently available." in md
+    assert "r,risky" not in md
+    assert "b,build" not in md
+
+
+def test_markdown_renders_zero_ids() -> None:
+    """A simulation/project id of 0 must be shown, not collapsed to '—'."""
+    md = feature_prioritization_to_markdown(
+        {
+            "simulation_id": 0,
+            "project_id": 0,
+            "dimensions": [],
+            "cluster_profiles": [],
+            "brief_features": [],
+            "flags": [],
+            "recommendations": [],
+        },
+        simulation_id=0,
+        project_id=0,
+    )
+
+    assert "- Simulation: 0" in md
+    assert "- Project: 0" in md
+    assert "- Simulation: —" not in md
+
+
 # ---------------------------------------------------------------------------
 # Route tests
 # ---------------------------------------------------------------------------

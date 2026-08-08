@@ -34,6 +34,21 @@ def _as_dict(payload: Any) -> dict[str, Any]:
     return {}
 
 
+def _as_list(value: Any) -> list[Any]:
+    """Coerce an optional sequence to a list, dropping malformed scalars.
+
+    The export path is deliberately tolerant of hand-constructed payloads:
+    a missing section is ``[]``, a real list is passed through, and a
+    scalar (or other non-sequence) is ignored instead of being iterated
+    character-by-character or raising on ``len()``.
+    """
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return []
+
+
 def _safe_text(value: Any) -> str:
     if value is None:
         return ""
@@ -97,11 +112,11 @@ def _summary_dict(data: dict[str, Any]) -> dict[str, Any]:
         "top_dimension": meta.get("top_dimension"),
         "top_priority_score": meta.get("top_priority_score"),
         "product_type_supported": meta.get("product_type_supported"),
-        "dimension_count": len(data.get("dimensions") or []),
-        "cluster_profiles_count": len(data.get("cluster_profiles") or []),
-        "brief_features_count": len(data.get("brief_features") or []),
-        "flags_count": len(data.get("flags") or []),
-        "recommendations_count": len(data.get("recommendations") or []),
+        "dimension_count": len(_as_list(data.get("dimensions"))),
+        "cluster_profiles_count": len(_as_list(data.get("cluster_profiles"))),
+        "brief_features_count": len(_as_list(data.get("brief_features"))),
+        "flags_count": len(_as_list(data.get("flags"))),
+        "recommendations_count": len(_as_list(data.get("recommendations"))),
     }
 
 
@@ -142,7 +157,7 @@ def feature_prioritization_to_csv(
             "recommendation",
         ],
     )
-    for item in data.get("dimensions") or []:
+    for item in _as_list(data.get("dimensions")):
         if not isinstance(item, dict):
             continue
         _write_row(
@@ -175,7 +190,7 @@ def feature_prioritization_to_csv(
             "segment_tier",
         ],
     )
-    for item in data.get("cluster_profiles") or []:
+    for item in _as_list(data.get("cluster_profiles")):
         if not isinstance(item, dict):
             continue
         _write_row(
@@ -206,7 +221,7 @@ def feature_prioritization_to_csv(
             "note",
         ],
     )
-    for item in data.get("brief_features") or []:
+    for item in _as_list(data.get("brief_features")):
         if not isinstance(item, dict):
             continue
         _write_row(
@@ -225,7 +240,7 @@ def feature_prioritization_to_csv(
     # Flags.
     _write_row(writer, ["section", "Flags"])
     _write_row(writer, ["flag"])
-    flags = data.get("flags") or []
+    flags = _as_list(data.get("flags"))
     if flags:
         for flag in flags:
             _write_row(writer, [_safe_text(flag)])
@@ -236,7 +251,7 @@ def feature_prioritization_to_csv(
     # Recommendations.
     _write_row(writer, ["section", "Recommendations"])
     _write_row(writer, ["recommendation"])
-    recommendations = data.get("recommendations") or []
+    recommendations = _as_list(data.get("recommendations"))
     if recommendations:
         for recommendation in recommendations:
             _write_row(writer, [_safe_text(recommendation)])
@@ -312,8 +327,14 @@ def feature_prioritization_to_markdown(
     if metadata:
         generated_at = metadata.get("generated_at", "")
         lines.append(f"- Generated: {_escape_md_cell(generated_at)}")
-    lines.append(f"- Simulation: {simulation_id or '—'}")
-    lines.append(f"- Project: {project_id or '—'}")
+    lines.append(
+        f"- Simulation: "
+        f"{simulation_id if simulation_id is not None else '—'}"
+    )
+    lines.append(
+        f"- Project: "
+        f"{project_id if project_id is not None else '—'}"
+    )
     lines.append("")
 
     lines.append("## Summary")
@@ -327,7 +348,7 @@ def feature_prioritization_to_markdown(
 
     lines.append("## Prioritized Dimensions")
     lines.append("")
-    dimensions = data.get("dimensions") or []
+    dimensions = _as_list(data.get("dimensions"))
     if dimensions:
         lines.append(
             "| Dimension | Adoption | Reach | Upside | Score | Tier | Recommendation |"
@@ -354,7 +375,7 @@ def feature_prioritization_to_markdown(
 
     lines.append("## Cluster Feature Profiles")
     lines.append("")
-    profiles = data.get("cluster_profiles") or []
+    profiles = _as_list(data.get("cluster_profiles"))
     if profiles:
         lines.append(
             "| Cluster | Weight | Depth | Core DAU | Power Discovery | "
@@ -382,7 +403,7 @@ def feature_prioritization_to_markdown(
 
     lines.append("## Brief Feature Mapping")
     lines.append("")
-    brief = data.get("brief_features") or []
+    brief = _as_list(data.get("brief_features"))
     if brief:
         lines.append(
             "| Feature | Dimension | Adoption | Tier | Note |"
@@ -410,7 +431,7 @@ def feature_prioritization_to_markdown(
 
     lines.append("## Flags")
     lines.append("")
-    flags = data.get("flags") or []
+    flags = _as_list(data.get("flags"))
     if flags:
         for flag in flags:
             lines.append(f"- {_escape_md_cell(flag)}")
@@ -420,7 +441,7 @@ def feature_prioritization_to_markdown(
 
     lines.append("## Recommendations")
     lines.append("")
-    recommendations = data.get("recommendations") or []
+    recommendations = _as_list(data.get("recommendations"))
     if recommendations:
         for index, recommendation in enumerate(recommendations, start=1):
             lines.append(f"{index}. {_escape_md_cell(recommendation)}")
