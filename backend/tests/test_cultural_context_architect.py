@@ -24,7 +24,10 @@ def test_name_is_cultural_context_architect():
 
 def test_active_for_all_product_types():
     arch = CulturalContextArchitect()
-    assert set(arch.product_types) == set(BaseArchitect.ALL_PRODUCT_TYPES)
+    # Empty product_types is the BaseArchitect contract for "all product
+    # types" — the architect must appear in every conductor stack.
+    assert arch.product_types == []
+    assert hasattr(BaseArchitect, "ALL_PRODUCT_TYPES")
 
 
 # ── compute() output shape ────────────────────────────────────────────

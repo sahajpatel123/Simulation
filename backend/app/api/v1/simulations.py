@@ -263,6 +263,10 @@ from app.simulation.conductor import _ARCHITECTS as _architect_registry
 from app.simulation.comparison import build_simulation_comparison
 from app.simulation.cohort_retention import build_cohort_retention
 from app.simulation.funnel_diagnosis import build_funnel_diagnosis
+from app.simulation.funnel_diagnosis_export import (
+    funnel_diagnosis_to_csv,
+    funnel_diagnosis_to_json,
+)
 from app.simulation.founder_action_plan import build_founder_action_plan
 from app.simulation.scored_assumption import (
     ClaimConfidence,
@@ -4222,6 +4226,89 @@ def get_funnel_diagnosis(
         else None,
         cluster_summaries=summaries or None,
         cluster_limit=limit,
+    )
+
+
+@router.get(
+    "/{simulation_id}/funnel-diagnosis/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export the funnel diagnosis as CSV (or JSON with ?format=json)"
+    ),
+    # Same DB read cost as the JSON funnel-diagnosis endpoint; cap polling
+    # so a dashboard loop can't drive repeated reads.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_funnel_diagnosis(
+    simulation_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "funnel-diagnosis payload. Unsupported values return a 400 "
+            "response."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a simulation's funnel diagnosis.
+
+    Default ``format=csv`` renders the summary, per-stage diagnosis,
+    cluster drag, drop triggers, and recommendations as a multi-section
+    spreadsheet. ``format=json`` returns the raw payload for machine
+    consumers.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unsupported export format {format!r}; expected 'csv' or 'json'",
+        )
+
+    payload = get_funnel_diagnosis(
+        simulation_id=simulation_id,
+        db=db,
+        current_user=current_user,
+    )
+
+    metadata = {
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "user_id": current_user.id,
+        "format_version": "1",
+        "simulation_id": simulation_id,
+        "project_id": payload.project_id,
+    }
+
+    if fmt == "json":
+        body = funnel_diagnosis_to_json(
+            payload,
+            metadata=metadata,
+        ).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="funnel-diagnosis.json"'
+                ),
+                "Content-Length": str(len(body)),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    csv_text = funnel_diagnosis_to_csv(payload, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="funnel-diagnosis.csv"',
+            "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
+        },
     )
 
 
