@@ -7,6 +7,8 @@ cases, and the endpoint response model.
 """
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from app.schemas.journey_analytics import JourneyAnalyticsOut
@@ -236,6 +238,44 @@ def test_aggregation_ignores_zero_weight_clusters() -> None:
     assert [item["cluster_id"] for item in payload["per_cluster"]] == ["c0"]
 
 
+def test_malformed_weights_fall_back_to_uniform() -> None:
+    payload = build_journey_analytics(
+        {"c0": OVERRIDES, "c1": {}},
+        {"c0": float("inf"), "c1": float("nan")},
+    )
+
+    # Both weights sanitise to zero -> uniform aggregation, no NaN leakage.
+    assert payload["purchase_probability"] == pytest.approx(
+        (0.040245 + 0.091964) / 2.0, abs=1e-5
+    )
+    assert math.isfinite(payload["purchase_probability"])
+    assert math.isfinite(payload["abandon_probability"])
+    assert math.isfinite(payload["expected_steps_to_absorb"])
+    assert all(math.isfinite(p["probability"]) for p in payload["top_paths"])
+
+
+def test_negative_and_non_numeric_weights_are_clamped() -> None:
+    payload = build_journey_analytics(
+        {"c0": OVERRIDES, "c1": {}},
+        {"c0": -5.0, "c1": "0.4", "c2": "not-a-number"},
+    )
+
+    # c0 clamps to zero; only c1 contributes.
+    assert payload["purchase_probability"] == pytest.approx(0.091964, abs=1e-5)
+    assert payload["purchase_probability"] >= 0.0
+    assert [item["cluster_id"] for item in payload["per_cluster"]] == ["c1"]
+
+
+def test_non_dict_cluster_weights_are_ignored() -> None:
+    payload = build_journey_analytics({"c0": OVERRIDES, "c1": {}}, [0.6, 0.4])
+
+    assert payload["meta"]["weighted"] is False
+    assert payload["meta"]["matrix_count"] == 2
+    assert payload["purchase_probability"] == pytest.approx(
+        (0.040245 + 0.091964) / 2.0, abs=1e-5
+    )
+
+
 def test_no_weights_uses_uniform_aggregation() -> None:
     payload = build_journey_analytics({"c0": OVERRIDES})
 
@@ -293,4 +333,3 @@ def test_schema_validates_full_payload() -> None:
     assert out.key_insights
     assert 0.0 <= out.purchase_probability <= 1.0
     assert all(0.0 <= p.probability <= 1.0 for p in out.top_paths)
-

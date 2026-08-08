@@ -334,11 +334,17 @@ def _weighted_cluster_metrics(
     list[tuple[str, np.ndarray, float]],
     float,
     list[dict[str, Any]] | None,
+    bool,
 ]:
-    """Return ``(cluster_id, matrix, weight)`` triples and a weighted baseline."""
-    weights = cluster_weights or {}
+    """Return ``(triples, baseline, metrics, weighted)`` aggregation state.
+
+    ``weighted`` is True only when at least one usable (finite, positive)
+    weight was supplied; all-zero or malformed weights fall back to uniform
+    aggregation, which the caller reflects in ``meta``.
+    """
+    weights = cluster_weights if isinstance(cluster_weights, dict) else {}
     total_weight = sum(
-        max(0.0, float(weights.get(cid, 0.0)))
+        _sanitise_weight(weights.get(cid, 0.0))
         for cid in per_cluster_matrices
     )
     uniform = total_weight <= 0.0
@@ -349,7 +355,7 @@ def _weighted_cluster_metrics(
     triples: list[tuple[str, np.ndarray, float]] = []
     for cluster_id, overrides in per_cluster_matrices.items():
         matrix = build_cluster_matrix(overrides)
-        raw_weight = float(weights.get(cluster_id, 0.0))
+        raw_weight = _sanitise_weight(weights.get(cluster_id, 0.0))
         if uniform:
             weight = 1.0 / total_weight if total_weight > 0 else 0.0
         else:
@@ -360,12 +366,31 @@ def _weighted_cluster_metrics(
             triples.append((cluster_id, matrix, weight))
 
     if not weighted_metrics:
-        return triples, 0.0, None
+        return triples, 0.0, None, not uniform
 
     total = sum(float(m["purchase_probability"]) * w for m, (_, _, w) in zip(weighted_metrics, triples))
     weight_sum = sum(w for _, _, w in triples)
     baseline = total / weight_sum if weight_sum > 0 else 0.0
-    return triples, baseline, weighted_metrics
+    return triples, baseline, weighted_metrics, not uniform
+
+
+def _sanitise_weight(value: Any) -> float:
+    """Coerce a persisted cluster weight to a finite, non-negative float.
+
+    ``results_json`` is user-facing persisted JSONB and can hold malformed
+    values (infinities, NaN, negative numbers, or non-numeric junk) if a run
+    was interrupted or the payload was edited. Such values must never leak
+    into the response: a NaN weight would poison every aggregate metric and
+    violate the Pydantic response contract. Invalid entries are treated as
+    zero, and all-zero weights fall back to uniform aggregation.
+    """
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(parsed) or parsed < 0.0:
+        return 0.0
+    return parsed
 
 
 def build_journey_analytics(
@@ -377,7 +402,7 @@ def build_journey_analytics(
 ) -> dict[str, Any]:
     """Compose the full journey-analytics payload for a simulation."""
     matrices = deserialise_per_cluster_matrices(per_cluster_matrices)
-    triples, baseline_purchase, weighted_metrics = _weighted_cluster_metrics(
+    triples, baseline_purchase, weighted_metrics, weighted = _weighted_cluster_metrics(
         matrices,
         cluster_weights,
     )
@@ -521,7 +546,7 @@ def build_journey_analytics(
         "key_insights": key_insights,
         "meta": {
             "matrix_count": len(triples),
-            "weighted": bool(cluster_weights),
+            "weighted": weighted,
             "path_budget": {
                 "max_paths": max_paths,
                 "max_length": max_length,

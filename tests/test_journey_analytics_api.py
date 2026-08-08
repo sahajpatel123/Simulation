@@ -180,3 +180,21 @@ def test_missing_owned_simulation_raises_404() -> None:
         _call_route(simulation_id=999, session=session)
     assert exc.value.status_code == 404
     assert "Simulation not found" in exc.value.detail
+
+
+def test_malformed_weights_still_yield_valid_response_model() -> None:
+    results = _results()
+    results["cluster_weights"] = {
+        "c0": float("inf"),
+        "c1": float("nan"),
+    }
+    session = _FakeSession(_FakeSimulation(results=results))
+
+    out = _call_route(session=session)
+
+    assert isinstance(out, JourneyAnalyticsOut)
+    assert 0.0 <= out.purchase_probability <= 1.0
+    assert 0.0 <= out.abandon_probability <= 1.0
+    assert out.expected_steps_to_absorb >= 0.0
+    assert all(0.0 <= p.probability <= 1.0 for p in out.top_paths)
+    assert out.meta["weighted"] is False
