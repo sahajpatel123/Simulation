@@ -3830,7 +3830,7 @@ def post_what_if_batch(
         base_results=sim.results_json,
         env_params=env_params,
         existing_assumptions=assumptions,
-        scenarios=[scenario.model_dump() for scenario in payload.scenarios],
+        scenarios=payload.scenarios,
     )
 
 
