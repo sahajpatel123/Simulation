@@ -134,3 +134,18 @@ def test_export_brief_positioning_format_json_returns_payload() -> None:
     body = _body(resp).decode("utf-8")
     assert '"brief_positioning"' in body
     assert '"brief_positioning": "premium saas"' in body
+
+
+def test_export_brief_features_returns_csv() -> None:
+    from app.api.v1 import projects as proj_mod
+
+    resp = proj_mod.export_brief_features(
+        project_id=10,
+        db=_FakeSession(),
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+    assert resp.media_type == "text/csv; charset=utf-8"
+    body = _body(resp).decode("utf-8")
+    assert "project_id,brief_features_json" in body
+    assert "billing" in body

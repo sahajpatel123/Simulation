@@ -1,7 +1,7 @@
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -11,16 +11,14 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.core.claude_client import claude_call_with_fallback
-from app.core.intake_processor import adjust_assumption_confidence
-from app.core.deps import get_current_user, get_db
-from app.core.rate_limiter import rate_limit
-from app.core.response_cache import (
-    cache_get_json,
-    cache_invalidate,
-    cache_set_json,
+from app.api.v1.common import get_owned_project
+from app.api.v1.users import (
+    _USER_INSIGHTS_CACHE_NAMESPACE,
+    _USER_TAG_TAXONOMY_CACHE_NAMESPACE,
 )
-from app.core.sanitiser import sanitise_assumption, sanitise_description, sanitise_text
+from app.core.claude_client import claude_call_with_fallback
+from app.core.deps import get_current_user, get_db
+from app.core.intake_processor import adjust_assumption_confidence
 from app.core.prompts import (
     ASSUMPTION_EXTRACTION_PROMPT,
     COMPETITIVE_ANALYSIS_PROMPT,
@@ -28,6 +26,14 @@ from app.core.prompts import (
     PREMORTEM_PROMPT,
     PROTOTYPE_GENERATION_PROMPT,
 )
+from app.core.rate_limiter import rate_limit
+from app.core.response_cache import (
+    cache_get_json,
+    cache_invalidate,
+    cache_set_json,
+)
+from app.core.sanitiser import sanitise_assumption, sanitise_description, sanitise_text
+from app.core.utils import extract_json_from_markdown
 from app.models.assumption import Assumption
 from app.models.assumption_evidence import AssumptionEvidence
 from app.models.decision import Decision
@@ -37,6 +43,11 @@ from app.models.project import Project
 from app.models.prototype import Prototype
 from app.models.simulation import Simulation
 from app.models.user import User
+from app.schemas.accountability import (
+    VALID_SEVERITIES,
+    FindingsListOut,
+    FindingsSummaryOut,
+)
 from app.schemas.assumption import (
     AssumptionDigestOut,
     AssumptionExtractRequest,
@@ -44,18 +55,18 @@ from app.schemas.assumption import (
     AssumptionOut,
 )
 from app.schemas.competitive import (
+    VALID_POSITIONS,
     CompetitiveAnalysisOut,
     CompetitiveAnalysisRequest,
     Competitor,
     GapAnalysis,
     MarketMap,
-    VALID_POSITIONS,
 )
 from app.schemas.environment import (
+    SCENARIO_PRESETS,
     EnvironmentCreate,
     EnvironmentOut,
     ManualParams,
-    SCENARIO_PRESETS,
 )
 from app.schemas.intervention import Intervention, InterventionOut, InterventionRequest
 from app.schemas.premortem import FailureMode, PremortemOut, PremortemRequest
@@ -65,153 +76,152 @@ from app.schemas.project import (
     BriefAssistRequest,
     BriefSave,
     ClusterCohortDriftOut,
+    ConfidenceExplainerOut,
     ConvergenceCheckOut,
     InterventionDigestOut,
     LatestSnapshotOut,
     NextBestActionOut,
     NextBestActionSource,
     PremortemDigestOut,
-    ProjectExportOut,
-    StaleCheckOut,
+    ProjectCoverageGapsOut,
     ProjectDuplicateIn,
     ProjectDuplicateOut,
+    ProjectExportOut,
     ProjectHealthOut,
     ProjectListResponse,
     ProjectOut,
     ProjectPatch,
     ProjectSearchListResponse,
-    RecommendationsDigestOut,
     ProjectTagBulkDeleteOut,
     ProjectTagRenameIn,
     ProjectTagRenameOut,
     ProjectTagsOut,
     ProjectTagsPatch,
+    RecommendationsDigestOut,
+    StaleCheckOut,
     StatusBannerOut,
-    ConfidenceExplainerOut,
-    ProjectCoverageGapsOut,
 )
 from app.schemas.project_comparison import (
     ProjectCompareRequest,
     ProjectComparisonOut,
 )
 from app.schemas.prototype import FunnelEdge, FunnelGraph, FunnelNode, PrototypeOut
+from app.schemas.reweighting import ReweightingPreviewOut
+from app.schemas.simulation_evolution import SimulationEvolutionOut
+from app.schemas.simulation_trend import SimulationTrendOut
 from app.schemas.stress_test import (
     AssumptionStressResult,
     StressTestOut,
     StressTestStatusOut,
 )
-from app.schemas.accountability import (
-    FindingsListOut,
-    FindingsSummaryOut,
-    VALID_SEVERITIES,
-)
-from app.schemas.reweighting import ReweightingPreviewOut
-from app.schemas.simulation_trend import SimulationTrendOut
-from app.simulation.project_simulations_export import simulations_to_csv
-from app.simulation.assumptions_export import assumptions_to_csv
-from app.simulation.evidence_export import evidence_to_csv
-from app.simulation.prototypes_export import prototypes_to_csv
-from app.simulation.premortem_export import premortem_to_csv
-from app.simulation.interventions_export import interventions_to_csv
-from app.simulation.competitive_export import competitors_to_csv
-from app.simulation.mvp_features_export import features_to_csv
-from app.simulation.brief_export import brief_positioning_to_csv, brief_to_csv
-from app.simulation.tags_export import tags_to_csv
-from app.simulation.readings_export import readings_payload, readings_to_csv
-from app.simulation.precis_export import precis_to_csv
-from app.simulation.project_meta_export import project_meta_to_csv
-from app.simulation.landing_export import landing_to_csv
-from app.simulation.environment_export import environment_to_csv
-from app.simulation.description_export import description_to_csv
-from app.simulation.tag_suggestions import suggest_tags
-from app.simulation.dossier_axis_export import dossier_axis_to_csv
-from app.simulation.similar_projects import find_similar_projects
-from app.simulation.intake_mode_export import intake_mode_to_csv
-from app.simulation.title_export import title_to_csv
-from app.simulation.is_archived_export import is_archived_to_csv
-from app.simulation.created_at_export import created_at_to_csv
-from app.simulation.status_export import status_to_csv
-from app.simulation.duplicate_title import find_duplicate_titles
-from app.simulation.readiness_score import compute_readiness
-from app.simulation.landing_url_export import landing_url_to_csv
-from app.simulation.existing_product_export import existing_product_to_csv
-from app.simulation.precis_fingerprint_export import precis_fingerprint_to_csv
-from app.simulation.brief_hook_export import brief_hook_to_csv
-from app.simulation.activity_feed_export import activity_feed_to_csv
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
+)
+from app.simulation.accountability_summary import (
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
+)
+from app.simulation.accountability_summary import (
     build_findings_summary as _build_findings_summary,
+)
+from app.simulation.accountability_summary import (
     filter_findings as _filter_findings,
 )
-from app.simulation.reweighting_preview import (
-    summarise_rule_bundle as _summarise_rule_bundle,
-)
-from app.simulation.simulation_trend import (
-    build_simulation_trend as _build_simulation_trend,
-)
-from app.schemas.simulation_evolution import SimulationEvolutionOut
-from app.simulation.simulation_evolution import build_simulation_evolution
-from app.api.v1.common import get_owned_project
-from app.api.v1.users import (
-    _USER_INSIGHTS_CACHE_NAMESPACE,
-    _USER_TAG_TAXONOMY_CACHE_NAMESPACE,
-)
-from app.core.utils import extract_json_from_markdown
-from app.simulation.clusters.registry import ClusterRegistry
-from app.simulation.competitive_software import CompetitiveSoftwareAnalyser
-from app.simulation.conductor import Conductor
-from app.simulation.product_type import ProductType
-from app.simulation.project_duplicate import duplicate_project_payload
-from app.simulation.project_search import build_search_filters
-from app.simulation.project_tags import (
-    normalise_tags,
-    remove_tag_from_list,
-    rename_tag_in_list,
-)
-from app.simulation.scored_assumption import score_assumptions, signal_quality_tier
 from app.simulation.activity_feed import build_activity_feed
+from app.simulation.activity_feed_export import activity_feed_to_csv
 from app.simulation.adoption_milestones import (
     build_adoption_milestones,
 )
 from app.simulation.assumption_digest import build_assumption_digest
+from app.simulation.assumptions_export import assumptions_to_csv
+from app.simulation.brief_export import (
+    brief_features_to_csv,
+    brief_positioning_to_csv,
+    brief_to_csv,
+)
+from app.simulation.brief_hook_export import brief_hook_to_csv
+from app.simulation.cluster_cohort_drift import (
+    compute_cluster_cohort_drift,
+)
+from app.simulation.clusters.registry import ClusterRegistry
+from app.simulation.competitive_export import competitors_to_csv
+from app.simulation.competitive_software import CompetitiveSoftwareAnalyser
+from app.simulation.conductor import Conductor
+from app.simulation.confidence_explainer import (
+    build_confidence_explainer,
+)
+from app.simulation.convergence_check import build_convergence_check
 from app.simulation.coverage_gaps import build_coverage_gaps
 from app.simulation.coverage_gaps_export import (
     coverage_gaps_to_csv,
     coverage_gaps_to_json,
 )
+from app.simulation.created_at_export import created_at_to_csv
+from app.simulation.description_export import description_to_csv
+from app.simulation.dossier_axis_export import dossier_axis_to_csv
+from app.simulation.duplicate_title import find_duplicate_titles
+from app.simulation.environment_export import environment_to_csv
+from app.simulation.evidence_export import evidence_to_csv
+from app.simulation.existing_product_export import existing_product_to_csv
+from app.simulation.intake_mode_export import intake_mode_to_csv
+from app.simulation.intervention_digest import (
+    build_intervention_digest,
+)
+from app.simulation.interventions_export import interventions_to_csv
+from app.simulation.is_archived_export import is_archived_to_csv
+from app.simulation.landing_export import landing_to_csv
+from app.simulation.landing_url_export import landing_url_to_csv
+from app.simulation.latest_snapshot import build_latest_snapshot
+from app.simulation.mvp_features_export import features_to_csv
+from app.simulation.next_best_action import build_next_best_action
+from app.simulation.precis_export import precis_to_csv
+from app.simulation.precis_fingerprint_export import precis_fingerprint_to_csv
+from app.simulation.premortem_digest import build_premortem_digest
+from app.simulation.premortem_export import premortem_to_csv
+from app.simulation.product_type import ProductType
+from app.simulation.project_comparison import (
+    build_project_comparison,
+    normalise_confidence_score,
+)
+from app.simulation.project_duplicate import duplicate_project_payload
+from app.simulation.project_export import build_project_export
+from app.simulation.project_health import build_project_health
 from app.simulation.project_health_export import (
     project_health_to_csv,
     project_health_to_json,
+)
+from app.simulation.project_meta_export import project_meta_to_csv
+from app.simulation.project_search import build_search_filters
+from app.simulation.project_simulations_export import simulations_to_csv
+from app.simulation.project_tags import (
+    normalise_tags,
+    remove_tag_from_list,
+    rename_tag_in_list,
+)
+from app.simulation.prototypes_export import prototypes_to_csv
+from app.simulation.readiness_score import compute_readiness
+from app.simulation.readings_export import readings_payload, readings_to_csv
+from app.simulation.recommendations_digest import (
+    build_recommendations_digest,
 )
 from app.simulation.recommendations_export import (
     recommendations_to_csv,
     recommendations_to_json,
 )
-from app.simulation.confidence_explainer import (
-    build_confidence_explainer,
+from app.simulation.reweighting_preview import (
+    summarise_rule_bundle as _summarise_rule_bundle,
 )
-from app.simulation.cluster_cohort_drift import (
-    compute_cluster_cohort_drift,
-)
-from app.simulation.convergence_check import build_convergence_check
-from app.simulation.intervention_digest import (
-    build_intervention_digest,
-)
-from app.simulation.latest_snapshot import build_latest_snapshot
-from app.simulation.next_best_action import build_next_best_action
-from app.simulation.premortem_digest import build_premortem_digest
-from app.simulation.project_comparison import (
-    build_project_comparison,
-    normalise_confidence_score,
-)
-from app.simulation.project_export import build_project_export
-from app.simulation.project_health import build_project_health
-from app.simulation.recommendations_digest import (
-    build_recommendations_digest,
+from app.simulation.scored_assumption import score_assumptions, signal_quality_tier
+from app.simulation.similar_projects import find_similar_projects
+from app.simulation.simulation_evolution import build_simulation_evolution
+from app.simulation.simulation_trend import (
+    build_simulation_trend as _build_simulation_trend,
 )
 from app.simulation.stale_check import build_stale_check
 from app.simulation.status_banner import build_status_banner
+from app.simulation.status_export import status_to_csv
+from app.simulation.tag_suggestions import suggest_tags
+from app.simulation.tags_export import tags_to_csv
+from app.simulation.title_export import title_to_csv
 from app.tasks.simulation_tasks import run_full_simulation
 from app.tasks.stress_test_tasks import run_assumption_stress_test
 
@@ -597,7 +607,7 @@ def save_brief(
     project.brief_hook = hook
 
     if mark_complete and positioning and hook:
-        project.brief_completed_at = datetime.now(timezone.utc)
+        project.brief_completed_at = datetime.now(UTC)
 
     db.commit()
     db.refresh(project)
@@ -1210,11 +1220,11 @@ def patch_project(
     if title_changed or payload.description is not None:
         from app.api.v1.users import (
             _USER_DASHBOARD_CACHE_NAMESPACE,
+            _USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
+            _USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
+            _USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
             _USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
             _USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
-            _USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
-            _USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
-            _USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
         )
         for _ns in (
             _USER_DASHBOARD_CACHE_NAMESPACE,
@@ -1454,7 +1464,7 @@ def get_project_clusters(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     latest_sim = (
         db.query(Simulation)
@@ -1504,8 +1514,8 @@ def get_reweighting_preview(
     no DB writes, no Celery dispatch.
     """
     from app.simulation.cluster_reweighting import (
-        ClusterReweightingEngine,
         REWEIGHTING_RULES,
+        ClusterReweightingEngine,
     )
 
     project = get_owned_project(db, current_user.id, project_id)
@@ -1584,7 +1594,7 @@ def get_domain_findings(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     if severity is not None and severity.strip().upper() not in VALID_SEVERITIES:
         raise HTTPException(
@@ -1657,7 +1667,7 @@ def get_findings_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     latest_sim = (
         db.query(Simulation)
@@ -1691,7 +1701,7 @@ def get_assumptions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     assumptions = (
         db.query(Assumption)
@@ -1755,7 +1765,7 @@ def export_assumptions(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "project_id": project_id,
                 "assumptions": rows,
             },
@@ -1777,7 +1787,7 @@ def export_assumptions(
     csv_text = assumptions_to_csv(
         rows,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -1841,7 +1851,7 @@ def export_evidence(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "project_id": project_id,
                 "evidence": rows,
             },
@@ -1863,7 +1873,7 @@ def export_evidence(
     csv_text = evidence_to_csv(
         rows,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -2080,11 +2090,10 @@ def extract_assumptions(
     # project-level stale-check (latest assumption
     # created_at changes).
     from app.api.v1.users import (
-    _USER_COVERAGE_GAPS_CACHE_NAMESPACE,
-    _USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
-    _USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
-    _CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
-)
+        _CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
+        _USER_COVERAGE_GAPS_CACHE_NAMESPACE,
+        _USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
+    )
     cache_invalidate(
         namespace=_USER_COVERAGE_GAPS_CACHE_NAMESPACE,
         user_id=current_user.id,
@@ -2254,7 +2263,7 @@ def get_prototype(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     prototype = (
         db.query(Prototype).filter(Prototype.project_id == project_id).first()
@@ -2327,7 +2336,7 @@ def export_prototypes(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "project_id": project_id,
                 "prototypes": rows,
             },
@@ -2349,7 +2358,7 @@ def export_prototypes(
     csv_text = prototypes_to_csv(
         rows,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -2408,7 +2417,7 @@ def run_premortem(
         .first()
     )
 
-    assumptions_text = "\n".join(
+    "\n".join(
         f"- [{a.sensitivity}] {a.text} (impact: {a.impact_score}/10)" for a in assumptions
     ) or "No assumptions extracted yet."
 
@@ -2520,7 +2529,7 @@ def run_premortem(
 
     failure_modes.sort(key=lambda f: f.probability, reverse=True)
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     premortem_data = {
         "failure_modes": [fm.model_dump() for fm in failure_modes],
         "generated_at": now,
@@ -2651,7 +2660,7 @@ def export_premortem(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "project_id": project_id,
                 "premortem": rows,
             },
@@ -2673,7 +2682,7 @@ def export_premortem(
     csv_text = premortem_to_csv(
         rows,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -2704,7 +2713,7 @@ def start_stress_test(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     environment = db.query(Environment).filter(Environment.project_id == project_id).first()
     if not environment:
@@ -2805,7 +2814,7 @@ def clear_stress_test(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     db.execute(
         text("UPDATE projects SET stress_test_json = NULL WHERE id = :id"),
@@ -2986,7 +2995,7 @@ def generate_interventions(
         item for item in interventions if item.difficulty == "LOW" and item.priority_score > 0.70
     ]
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     interventions_data = {
         "interventions": [iv.model_dump() for iv in interventions],
         "quick_wins": [qw.model_dump() for qw in quick_wins],
@@ -3121,7 +3130,7 @@ def export_interventions(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "project_id": project_id,
                 "interventions": rows,
             },
@@ -3143,7 +3152,7 @@ def export_interventions(
     csv_text = interventions_to_csv(
         rows,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -3308,7 +3317,7 @@ def run_competitive_analysis(
     direct_count = sum(1 for competitor in competitors if competitor.category == "DIRECT")
     high_threat_count = sum(1 for competitor in competitors if competitor.threat_level == "HIGH")
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     competitive_data = {
         "competitors": [competitor.model_dump() for competitor in competitors],
         "gap_analysis": gap_analysis.model_dump(),
@@ -3403,7 +3412,7 @@ def export_competitive_analysis(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "project_id": project_id,
                 "competitors": rows,
             },
@@ -3425,7 +3434,7 @@ def export_competitive_analysis(
     csv_text = competitors_to_csv(
         rows,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -3471,7 +3480,7 @@ def export_mvp_features(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "project_id": project_id,
                 "features": features,
             },
@@ -3493,7 +3502,7 @@ def export_mvp_features(
     csv_text = features_to_csv(
         features,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -3545,7 +3554,7 @@ def export_brief(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "brief": row,
             },
             default=str,
@@ -3566,7 +3575,7 @@ def export_brief(
     csv_text = brief_to_csv(
         row,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -3615,7 +3624,7 @@ def export_brief_positioning(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "brief_positioning": row,
             },
             default=str,
@@ -3636,7 +3645,7 @@ def export_brief_positioning(
     csv_text = brief_positioning_to_csv(
         row,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -3648,6 +3657,44 @@ def export_brief_positioning(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="brief-positioning-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/brief-features/export",
+    summary="Export a project's brief features as CSV",
+    response_class=StreamingResponse,
+)
+def export_brief_features(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's brief features field."""
+    project = get_owned_project(db, current_user.id, project_id)
+
+    row = {
+        "project_id": project.id,
+        "brief_features_json": getattr(project, "brief_features_json", None),
+    }
+    csv_text = brief_features_to_csv(
+        row,
+        metadata={
+            "generated_at": datetime.now(UTC).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="brief-features-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },
@@ -3682,7 +3729,7 @@ def export_tags(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "project_id": project_id,
                 "tags": tags,
             },
@@ -3704,7 +3751,7 @@ def export_tags(
     csv_text = tags_to_csv(
         tags,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -3754,7 +3801,7 @@ def export_readings(
         normalized = readings_payload(row.get("readings_json"))
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "project_id": project_id,
                 "readings": normalized["readings"],
                 "ledger": normalized["ledger"],
@@ -3777,7 +3824,7 @@ def export_readings(
     csv_text = readings_to_csv(
         row,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "2",
         },
@@ -3826,7 +3873,7 @@ def export_precis(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "precis": row,
             },
             default=str,
@@ -3847,7 +3894,7 @@ def export_precis(
     csv_text = precis_to_csv(
         row,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -3901,7 +3948,7 @@ def export_project_metadata(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "metadata": row,
             },
             default=str,
@@ -3922,7 +3969,7 @@ def export_project_metadata(
     csv_text = project_meta_to_csv(
         row,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -3974,7 +4021,7 @@ def export_landing(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "landing": row,
             },
             default=str,
@@ -3995,7 +4042,7 @@ def export_landing(
     csv_text = landing_to_csv(
         row,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -4070,7 +4117,7 @@ def export_environment(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "environment": row,
             },
             default=str,
@@ -4091,7 +4138,7 @@ def export_environment(
     csv_text = environment_to_csv(
         row,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -4140,7 +4187,7 @@ def export_description(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "description": row,
             },
             default=str,
@@ -4161,7 +4208,7 @@ def export_description(
     csv_text = description_to_csv(
         row,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -4210,7 +4257,7 @@ def export_dossier_axis(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "dossier_axis": row,
             },
             default=str,
@@ -4231,7 +4278,7 @@ def export_dossier_axis(
     csv_text = dossier_axis_to_csv(
         row,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -4280,7 +4327,7 @@ def export_intake_mode(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "intake_mode": row,
             },
             default=str,
@@ -4301,7 +4348,7 @@ def export_intake_mode(
     csv_text = intake_mode_to_csv(
         row,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -4350,7 +4397,7 @@ def export_title(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "title": row,
             },
             default=str,
@@ -4371,7 +4418,7 @@ def export_title(
     csv_text = title_to_csv(
         row,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -4420,7 +4467,7 @@ def export_is_archived(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "is_archived": row,
             },
             default=str,
@@ -4441,7 +4488,7 @@ def export_is_archived(
     csv_text = is_archived_to_csv(
         row,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -4490,7 +4537,7 @@ def export_created_at(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "created_at": row,
             },
             default=str,
@@ -4511,7 +4558,7 @@ def export_created_at(
     csv_text = created_at_to_csv(
         row,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -4560,7 +4607,7 @@ def export_status(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "status": row,
             },
             default=str,
@@ -4581,7 +4628,7 @@ def export_status(
     csv_text = status_to_csv(
         row,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -4700,7 +4747,7 @@ def export_landing_url(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "landing_page_url": row,
             },
             default=str,
@@ -4721,7 +4768,7 @@ def export_landing_url(
     csv_text = landing_url_to_csv(
         row,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -4772,7 +4819,7 @@ def export_existing_product(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "existing_product": row,
             },
             default=str,
@@ -4793,7 +4840,7 @@ def export_existing_product(
     csv_text = existing_product_to_csv(
         row,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -4844,7 +4891,7 @@ def export_precis_fingerprint(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "precis_fingerprint": row,
             },
             default=str,
@@ -4865,7 +4912,7 @@ def export_precis_fingerprint(
     csv_text = precis_fingerprint_to_csv(
         row,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -4914,7 +4961,7 @@ def export_brief_hook(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "brief_hook": row,
             },
             default=str,
@@ -4935,7 +4982,7 @@ def export_brief_hook(
     csv_text = brief_hook_to_csv(
         row,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -5029,7 +5076,7 @@ def get_environment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     env = db.query(Environment).filter(Environment.project_id == project_id).first()
     if not env:
@@ -5054,7 +5101,7 @@ def get_scenario_presets(
     Returns all scenario preset configs so the frontend
     can display them to the user before they choose.
     """
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     return {name: preset.model_dump() for name, preset in SCENARIO_PRESETS.items()}
 
@@ -5093,7 +5140,7 @@ def re_simulate(
     Compares the two most recent completed runs (newest vs prior).
     Returns delta metrics immediately after queuing.
     """
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     sims = (
         db.query(Simulation)
@@ -5240,7 +5287,7 @@ def get_simulation_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     sims = (
         db.query(Simulation)
@@ -5314,9 +5361,9 @@ def get_simulation_trend(
       * ``stability_score`` — ``1 / (1 + cv)`` where ``cv = std / mean``
         (None when fewer than 2 completed runs or mean == 0).
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
     sims = (
         db.query(Simulation)
         .filter(Simulation.project_id == project_id)
@@ -5334,7 +5381,7 @@ def get_simulation_trend(
         for s in sims
     ]
     trend = _build_simulation_trend(rows, project_id=project_id)
-    trend["generated_at"] = datetime.now(timezone.utc).isoformat()
+    trend["generated_at"] = datetime.now(UTC).isoformat()
     return SimulationTrendOut(**trend)
 
 
@@ -5498,7 +5545,7 @@ def get_competitive_software_analysis(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     sim = (
         db.query(Simulation)
@@ -5603,7 +5650,7 @@ def get_next_action(
        :func:`build_calibration_health`.
     4. Fallback nudge for brand-new projects.
     """
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     # Cache hit → short-circuit the three child queries.
     # Key is namespaced by user + project so tenants and
@@ -5968,7 +6015,7 @@ def export_activity_feed(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "project_id": project_id,
                 "event_count": payload.get("event_count", 0),
                 "events": payload.get("events", []),
@@ -5993,7 +6040,7 @@ def export_activity_feed(
     csv_text = activity_feed_to_csv(
         payload.get("events", []),
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "project_id": project_id,
             "user_id": current_user.id,
             "format_version": "1",
@@ -6214,7 +6261,7 @@ def export_project_coverage_gaps(
     )
 
     metadata = {
-        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "generated_at": datetime.now(tz=UTC).isoformat(),
         "user_id": current_user.id,
         "format_version": "1",
         "project_id": project_id,
@@ -6406,7 +6453,7 @@ def get_project_health(
     Use case: the project-list view sorts projects by this
     score, surfacing the worst first.
     """
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     # Cache hit → short-circuit.
     cached = cache_get_json(
@@ -6557,7 +6604,7 @@ def export_project_health(
         current_user=current_user,
     )
     metadata = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "user_id": current_user.id,
         "format_version": "1",
         "project_id": project_id,
@@ -6744,7 +6791,7 @@ def export_project_recommendations(
         current_user=current_user,
     )
     metadata = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "user_id": current_user.id,
         "format_version": "1",
         "project_id": project_id,
@@ -7290,8 +7337,8 @@ def get_status_banner(
     if has_completed_sim and latest_completed_sim.created_at is not None:
         ts = latest_completed_sim.created_at
         if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
-        delta = datetime.now(timezone.utc) - ts
+            ts = ts.replace(tzinfo=UTC)
+        delta = datetime.now(UTC) - ts
         days_since_latest_sim = max(0, delta.days)
 
     # Pending decisions count.
@@ -7330,8 +7377,8 @@ def get_status_banner(
         ):
             ts = latest_assumption.created_at
             if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
-            delta = datetime.now(timezone.utc) - ts
+                ts = ts.replace(tzinfo=UTC)
+            delta = datetime.now(UTC) - ts
             days_since_latest_assumption_extraction = max(
                 0, delta.days,
             )
@@ -7393,7 +7440,7 @@ def get_confidence_explainer(
     if cached is not None:
         return ConfidenceExplainerOut(**cached)
 
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     # Latest completed sim.
     latest_sim = (
@@ -7467,8 +7514,8 @@ def get_confidence_explainer(
         ):
             ts = latest_assumption.created_at
             if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
-            delta = datetime.now(timezone.utc) - ts
+                ts = ts.replace(tzinfo=UTC)
+            delta = datetime.now(UTC) - ts
             days_since_latest_assumption = max(0, delta.days)
 
     # Outcome history depth = count of past outcomes for
@@ -7541,7 +7588,7 @@ def get_cluster_cohort_drift(
     Compares conversion rates across consumer archetypes between two
     simulation runs (defaults to oldest vs newest completed simulation).
     """
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     cache_params = {
         "project_id": project_id,
@@ -7658,7 +7705,7 @@ def export_project_simulations(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "project_id": project_id,
                 "simulations": rows,
             },
