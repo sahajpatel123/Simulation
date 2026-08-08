@@ -16,6 +16,7 @@ from app.api.v1.websocket import router as ws_router
 from app.api.v1.analytics import router as analytics_router
 from app.api.v1.assumption_evidence import router as assumption_evidence_router
 from app.api.v1.system_health import router as system_health_router
+from app.api.v1.simulation_webhooks import router as simulation_webhooks_router
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(auth_router)
@@ -34,3 +35,4 @@ api_router.include_router(ws_router)
 api_router.include_router(analytics_router)
 api_router.include_router(assumption_evidence_router)
 api_router.include_router(system_health_router)
+api_router.include_router(simulation_webhooks_router)

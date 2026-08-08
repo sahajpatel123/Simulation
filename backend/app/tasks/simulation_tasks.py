@@ -16,7 +16,12 @@ from app.models.assumption import Assumption
 from app.models.environment import Environment
 from app.models.project import Project
 from app.models.simulation import Simulation
+from app.models.simulation_webhook_subscription import SimulationWebhookSubscription
 from app.models.user import User
+from app.simulation.simulation_webhook_delivery import (
+    build_webhook_payload,
+    deliver_webhook_event,
+)
 from app.simulation.accountability import AccountabilityEngine
 from app.simulation.aggregation import ResultsAggregator
 from app.simulation.conductor import Conductor, ConductorResult
@@ -88,6 +93,53 @@ def _mark_failed(db: Session, sim: Simulation, exc: Exception) -> None:
                 __name__,
                 _exc,
             )
+    try:
+        _enqueue_simulation_webhooks(
+            db,
+            project_id=sim.project_id,
+            simulation_id=sim.id,
+            status="FAILED",
+            conversion_rate=None,
+            error=msg,
+        )
+    except Exception as _exc:
+        logger.debug(
+            "[Simulation] webhook enqueue on failure skipped: %s",
+            _exc,
+        )
+
+
+def _enqueue_simulation_webhooks(
+    db: Session,
+    *,
+    project_id: int | None,
+    simulation_id: int,
+    status: str,
+    conversion_rate: float | None,
+    error: str | None,
+) -> None:
+    """Enqueue one Celery delivery task per ACTIVE project webhook."""
+    if not project_id:
+        return
+    subscriptions = (
+        db.query(SimulationWebhookSubscription)
+        .filter(
+            SimulationWebhookSubscription.project_id == project_id,
+            SimulationWebhookSubscription.status == "ACTIVE",
+        )
+        .all()
+    )
+    event_type = f"simulation.{status.lower()}"
+    for subscription in subscriptions:
+        if subscription.event_type not in {"simulation.*", event_type}:
+            continue
+        deliver_simulation_webhook.delay(
+            webhook_id=subscription.id,
+            simulation_id=simulation_id,
+            status=status,
+            conversion_rate=conversion_rate,
+            error=error,
+        )
 
 
 def _derive_chain_scalars(conductor_result: ConductorResult) -> tuple[float, float, float, float]:
@@ -520,6 +572,21 @@ def run_full_simulation(self, simulation_id: int) -> dict:
             extra={"conversion_rate": funnel_result.conversion_rate},
         )
 
+        try:
+            _enqueue_simulation_webhooks(
+                self.db,
+                project_id=sim.project_id,
+                simulation_id=simulation_id,
+                status="COMPLETED",
+                conversion_rate=funnel_result.conversion_rate,
+                error=None,
+            )
+        except Exception as _exc:
+            logger.debug(
+                "[Simulation] webhook enqueue skipped: %s",
+                _exc,
+            )
+
         logger.info(f"[Simulation] Persisted - simulation_id={simulation_id}")
 
         return {
@@ -537,6 +604,61 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         if sim is not None and retries >= max_retries:
             _mark_failed(self.db, sim, exc)
         raise self.retry(exc=exc)
+
+
+@celery_app.task(
+    bind=True,
+    base=SimulationTask,
+    name="simulation.deliver_webhook",
+    max_retries=3,
+    default_retry_delay=30,
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
+def deliver_simulation_webhook(
+    self: SimulationTask,
+    webhook_id: int,
+    simulation_id: int,
+    status: str,
+    conversion_rate: float | None = None,
+    error: str | None = None,
+) -> dict[str, object]:
+    """Deliver one signed simulation event to a subscribed endpoint."""
+    subscription = (
+        self.db.query(SimulationWebhookSubscription)
+        .filter(SimulationWebhookSubscription.id == webhook_id)
+        .first()
+    )
+    if subscription is None:
+        return {"ok": False, "error": "subscription not found"}
+    if subscription.status != "ACTIVE":
+        return {"ok": False, "error": "subscription disabled"}
+
+    payload = build_webhook_payload(
+        event_type=f"simulation.{status.lower()}",
+        simulation_id=simulation_id,
+        project_id=subscription.project_id,
+        status=status,
+        conversion_rate=conversion_rate,
+        error=error,
+    )
+    result = deliver_webhook_event(
+        url=subscription.url,
+        secret=subscription.secret,
+        payload=payload,
+    )
+    now = _utcnow()
+    subscription.last_delivery_at = now
+    subscription.last_delivery_status = "SUCCESS" if result["ok"] else "FAILED"
+    subscription.last_delivery_error = None if result["ok"] else result.get("error")
+    self.db.commit()
+
+    if not result["ok"]:
+        try:
+            raise self.retry(exc=RuntimeError(result.get("error", "webhook delivery failed")))
+        except Exception:
+            pass
+    return result
 
 
 @celery_app.task(name="simulation.health_check")
