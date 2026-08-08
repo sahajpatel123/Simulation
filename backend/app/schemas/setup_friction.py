@@ -20,7 +20,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 VERDICT_FAST: str = "FAST"
 VERDICT_ACCEPTABLE: str = "ACCEPTABLE"
 VERDICT_SLOW: str = "SLOW"

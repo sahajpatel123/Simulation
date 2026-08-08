@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -298,7 +298,7 @@ def export_founder_outcomes(
             }
         )
 
-    generated_at = datetime.now(timezone.utc).isoformat()
+    generated_at = datetime.now(UTC).isoformat()
     fmt = format.strip().lower() if format else "csv"
     if fmt == "json":
         payload = {
@@ -537,7 +537,7 @@ def my_portfolio(
             "with_outcome": int(outcome_with or 0),
         },
         recent_projects=build_recent_projects([dict(r) for r in recent_rows]),
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
     )
 
 
@@ -618,5 +618,5 @@ def calibration_status(
         under_calibrated_architects=summary["under_calibrated_architects"],
         under_calibrated_list=summary["under_calibrated_list"],
         weighted_drift=drift_summary,
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
     )

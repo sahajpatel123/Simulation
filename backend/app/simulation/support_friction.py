@@ -54,7 +54,6 @@ import math
 from typing import Any, Callable
 
 from app.schemas.support_friction import (
-    ClusterFrictionProfile,
     DRIVER_BUG,
     DRIVER_DOCS,
     DRIVER_DOWNTIME,
@@ -67,8 +66,6 @@ from app.schemas.support_friction import (
     LEVER_QUALITY,
     LEVER_RELIABILITY,
     LEVER_SELF_SERVE,
-    SupportFrictionOut,
-    SupportLever,
     TIER_CRITICAL,
     TIER_HIGH,
     TIER_LOW,
@@ -78,6 +75,9 @@ from app.schemas.support_friction import (
     VERDICT_INSUFFICIENT,
     VERDICT_LOW_BURDEN,
     VERDICT_MODERATE,
+    ClusterFrictionProfile,
+    SupportFrictionOut,
+    SupportLever,
 )
 
 # Ordered driver keys — used for tie-breaking and market aggregation so

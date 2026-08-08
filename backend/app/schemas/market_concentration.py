@@ -8,7 +8,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 VALID_VERDICTS: frozenset[str] = frozenset(
     {"DIVERSIFIED", "MODERATE", "CONCENTRATED", "INSUFFICIENT_DATA"}
 )

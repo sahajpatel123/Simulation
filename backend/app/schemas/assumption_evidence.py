@@ -21,7 +21,6 @@ from pydantic import BaseModel, Field
 from app.schemas.validation_experiment import METHOD_ID_LITERAL
 from app.schemas.validation_roi import CONFIDENCE_TIER_LITERAL, ROI_TIER_LITERAL
 
-
 EVIDENCE_RESULT_LITERAL = Literal["PASS", "FAIL", "INCONCLUSIVE"]
 
 

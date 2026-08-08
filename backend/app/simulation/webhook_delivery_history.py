@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -16,7 +16,7 @@ from app.simulation.simulation_webhook_delivery import (
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _default_attempt_status(event_type: str) -> str:

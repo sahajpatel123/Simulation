@@ -38,13 +38,13 @@ import math
 from typing import Any
 
 from app.schemas.pricing_optimization import (
-    ClusterPriceProfile,
-    PricePoint,
-    PricingOptimizationOut,
     VERDICT_INSUFFICIENT,
     VERDICT_OVERPRICED,
     VERDICT_PRICE_OPTIMAL,
     VERDICT_UNDERPRICED,
+    ClusterPriceProfile,
+    PricePoint,
+    PricingOptimizationOut,
 )
 
 # Cohort size the simulation pipeline models (10,000 consumers).

@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import random
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import text
 
 from app.browser.pool import BrowserPool
 from app.browser.utils import cluster_to_agent_profile
 from app.core.database import SessionLocal
-from app.models.ui_simulation_session import UISimulationSession
 from app.models.ui_simulation_run import UISimulationRun
+from app.models.ui_simulation_session import UISimulationSession
 from app.simulation.agent_hierarchy import AgentHierarchyRouter, AgentTier
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.conductor import Conductor
@@ -275,7 +275,7 @@ def run_ui_simulation(
                 "architect_accountability": conductor_result.architect_accountability,
                 "product_type": conductor_result.product_type.value,
             }
-            run_row.completed_at = datetime.now(timezone.utc)
+            run_row.completed_at = datetime.now(UTC)
         db.commit()
         return {"status": "completed", "overall_conversion_rate": overall_cr}
 

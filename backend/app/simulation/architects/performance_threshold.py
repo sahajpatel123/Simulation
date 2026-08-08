@@ -50,7 +50,6 @@ class PerformanceThresholdArchitect(BaseArchitect):
 
         # ── Extract specs from assumptions ────────────────────────────────
         stated_battery_h  = 0
-        stated_uptime_pct = 99.0
         for a in assumptions:
             text = str(a.get("text", a.get("assumption", ""))).lower()
             battery_match = re.search(r"(\d+)\s*(?:hour|day)", text)
@@ -63,7 +62,7 @@ class PerformanceThresholdArchitect(BaseArchitect):
                     stated_battery_h = raw
             uptime_match = re.search(r"(\d+\.?\d*)\s*%\s*uptime", text)
             if uptime_match:
-                stated_uptime_pct = float(uptime_match.group(1))
+                float(uptime_match.group(1))
 
         # ── Minimum speed threshold ───────────────────────────────────────
         speed_thresh = max(0.10, criticality * (1.5 - literacy * 0.5))

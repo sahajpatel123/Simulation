@@ -22,7 +22,7 @@ Output shape
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 MAX_NOTIFICATIONS: int = 25
 
@@ -61,7 +61,7 @@ def _ensure_dt(value: object) -> datetime:
             return datetime.fromisoformat(value)
         except Exception:
             pass
-    return datetime.fromtimestamp(0, tz=timezone.utc)
+    return datetime.fromtimestamp(0, tz=UTC)
 
 
 def build_notifications(

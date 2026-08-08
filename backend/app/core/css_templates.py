@@ -22,7 +22,6 @@ _LAYOUT_MAP: dict[str, LayoutArchetype] = {
     "iot_hardware":      "showcase",
     "wearable":          "showcase",
     "b2b_hardware":      "dashboard",
-    "mobile_app":        "wizard",
     "fintech":           "utility",
     "ecommerce":         "luxe",
     "d2c":               "luxe",

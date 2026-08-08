@@ -61,9 +61,6 @@ from app.schemas.cultural_fit import (
     BARRIER_LANGUAGE,
     BARRIER_RELIGIOUS,
     BARRIER_SEASONAL,
-    ClusterCulturalProfile,
-    CulturalFitOut,
-    CulturalLever,
     LEVER_COMPLIANCE,
     LEVER_FAMILY,
     LEVER_GEO,
@@ -79,6 +76,9 @@ from app.schemas.cultural_fit import (
     VERDICT_MODERATE_FIT,
     VERDICT_STRONG_FIT,
     VERDICT_WEAK_FIT,
+    ClusterCulturalProfile,
+    CulturalFitOut,
+    CulturalLever,
 )
 
 # Ordered barrier keys — used for tie-breaking and market aggregation so

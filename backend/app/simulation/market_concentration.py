@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import json
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.schemas.market_concentration import (
@@ -340,7 +340,7 @@ def build_market_concentration(
         ),
         segment_shares=items,
         meta={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "cluster_summaries_used": bool(cluster_summaries),
             "cluster_count": len(items),
             "demand_weighting": (

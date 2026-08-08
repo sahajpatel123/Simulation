@@ -21,7 +21,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 VERDICT_SEAMLESS: str = "SEAMLESS"
 VERDICT_WORKABLE: str = "WORKABLE"
 VERDICT_FRAGILE: str = "FRAGILE"

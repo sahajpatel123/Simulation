@@ -12,7 +12,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-
 VALID_ROI_TIERS: frozenset[str] = frozenset(
     {"VALIDATE_FIRST", "HIGH_VALUE", "MONITOR", "LOW_VALUE"}
 )

@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import razorpay
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -195,11 +195,11 @@ async def razorpay_webhook(
             db.commit()
         return {"status": "ignored", "reason": "no subscription entity"}
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     if event == "subscription.activated":
         current_end = entity.get("current_end")
-        expires_at = datetime.fromtimestamp(int(current_end), tz=timezone.utc) if current_end else now + timedelta(days=30)
+        expires_at = datetime.fromtimestamp(int(current_end), tz=UTC) if current_end else now + timedelta(days=30)
         db.execute(
             text("""
             UPDATE users
@@ -213,7 +213,7 @@ async def razorpay_webhook(
 
     elif event == "subscription.charged":
         current_end = entity.get("current_end")
-        expires_at = datetime.fromtimestamp(int(current_end), tz=timezone.utc) if current_end else now + timedelta(days=32)
+        expires_at = datetime.fromtimestamp(int(current_end), tz=UTC) if current_end else now + timedelta(days=32)
         db.execute(
             text("""
             UPDATE users
@@ -291,9 +291,9 @@ async def get_subscription_status(
         tier = "free"
     expires = row["subscription_expires_at"]
     if expires and expires.tzinfo is None:
-        expires = expires.replace(tzinfo=timezone.utc)
+        expires = expires.replace(tzinfo=UTC)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     is_active = tier == "free" or (expires is not None and now < expires)
     limits = TIER_LIMITS.get(tier, TIER_LIMITS["free"])
 

@@ -1,9 +1,15 @@
+from __future__ import annotations
+
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.project import Project
 
 
 class OutcomeTracker(Base, TimestampMixin):
@@ -21,4 +27,4 @@ class OutcomeTracker(Base, TimestampMixin):
     notes: Mapped[str | None] = mapped_column(Text)
     recorded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    project: Mapped["Project"] = relationship("Project", back_populates="outcome_trackers")
+    project: Mapped[Project] = relationship("Project", back_populates="outcome_trackers")

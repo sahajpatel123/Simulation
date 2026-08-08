@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -16,6 +16,7 @@ from app.api.v1.projects import (
     _NEXT_ACTION_CACHE_NAMESPACE,
     _PROJECT_HEALTH_CACHE_NAMESPACE,
     _STALE_CHECK_CACHE_NAMESPACE,
+    _STATUS_BANNER_CACHE_NAMESPACE,
 )
 from app.api.v1.users import (
     _USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
@@ -27,19 +28,17 @@ from app.api.v1.users import (
     _USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
     _USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
     _USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
+    _USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
     _USER_NOTIFICATIONS_CACHE_NAMESPACE,
+    _USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
     _USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
-    _USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
-    _USER_RECENT_DECISIONS_CACHE_NAMESPACE,
     _USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
     _USER_PROJECTS_SUMMARY_CACHE_NAMESPACE,
-    _USER_RUNS_PER_WEEK_CACHE_NAMESPACE,
     _USER_QUICK_STATS_CACHE_NAMESPACE,
+    _USER_RECENT_DECISIONS_CACHE_NAMESPACE,
+    _USER_RUNS_PER_WEEK_CACHE_NAMESPACE,
     _USER_USAGE_BY_WEEK_CACHE_NAMESPACE,
     _USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
-)
-from app.api.v1.projects import (
-    _STATUS_BANNER_CACHE_NAMESPACE,
 )
 from app.core.deps import get_current_user, get_db
 from app.core.rate_limiter import rate_limit
@@ -59,8 +58,8 @@ from app.schemas.decision import (
     DecisionStatusOut,
     ScenarioResult,
 )
-from app.simulation.decisions_export import decisions_to_csv
 from app.simulation.decision_digest import build_decision_digest
+from app.simulation.decisions_export import decisions_to_csv
 from app.tasks.decision_tasks import run_decision_comparison
 
 logger = logging.getLogger(__name__)
@@ -110,7 +109,7 @@ def create_decision_comparison(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     environment = db.query(Environment).filter(Environment.project_id == project_id).first()
     if not environment:
@@ -389,7 +388,7 @@ def export_decisions(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "project_id": project_id,
                 "format_version": "1",
                 "decisions": rows,
@@ -412,7 +411,7 @@ def export_decisions(
     csv_text = decisions_to_csv(
         rows,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },

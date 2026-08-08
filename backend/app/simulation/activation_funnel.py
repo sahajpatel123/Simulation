@@ -44,8 +44,6 @@ import math
 from typing import Any, Callable
 
 from app.schemas.activation_funnel import (
-    ActivationFunnelOut,
-    ActivationLever,
     BLOCKER_COMPLETION,
     BLOCKER_EMPTY_STATE,
     BLOCKER_IDENTITY,
@@ -53,7 +51,6 @@ from app.schemas.activation_funnel import (
     BLOCKER_MOBILE_GAP,
     BLOCKER_PERMISSION_TIMING,
     BLOCKER_TIME_TO_VALUE,
-    ClusterActivationProfile,
     LEVER_DISCLOSURE,
     LEVER_IDENTITY,
     LEVER_MOBILE,
@@ -69,6 +66,9 @@ from app.schemas.activation_funnel import (
     VERDICT_BLOCKED,
     VERDICT_INSUFFICIENT,
     VERDICT_READY,
+    ActivationFunnelOut,
+    ActivationLever,
+    ClusterActivationProfile,
 )
 
 # Product types whose conductor stack runs OnboardingArchitect.

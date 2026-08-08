@@ -202,7 +202,7 @@ class ClusterReweightingEngine:
         age_target: str,
     ) -> str:
         seg = segment.strip().upper()
-        geo = geography.strip().upper()
+        geography.strip().upper()
 
         if product_type == ProductType.ENTERPRISE_SOFTWARE:
             return "B2B_ENTERPRISE"

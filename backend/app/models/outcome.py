@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import Float, ForeignKey, Index, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.project import Project
 
 
 class Outcome(Base, TimestampMixin):
@@ -34,4 +39,4 @@ class Outcome(Base, TimestampMixin):
 
     calibration_score: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    project: Mapped["Project"] = relationship("Project", back_populates="outcomes")
+    project: Mapped[Project] = relationship("Project", back_populates="outcomes")

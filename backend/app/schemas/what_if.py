@@ -223,7 +223,7 @@ class WhatIfOut(BaseModel):
     def __str__(self) -> str:
         return self.to_log_line()
 
-    def top_recommendation(self) -> "WhatIfRecommendation | None":
+    def top_recommendation(self) -> WhatIfRecommendation | None:
         """Return the highest-priority recommendation, or ``None`` if empty.
 
         Priority is numeric and lower means more important. Stable order is

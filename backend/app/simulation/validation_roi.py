@@ -25,7 +25,7 @@ so the transition engine stays in one place.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.schemas.validation_roi import (
@@ -301,7 +301,7 @@ def build_validation_roi(
         assumptions=rows,
         recommendations=recs,
         meta={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "model": "validation_roi_v1",
             "confidence_source": (
                 "text-heuristic classify_confidence, overridden by explicit "

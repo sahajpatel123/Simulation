@@ -22,7 +22,7 @@ from __future__ import annotations
 import csv
 import io
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 FORMAT_VERSION = "1"
@@ -75,7 +75,7 @@ def _sort_key(recorded_at: Any) -> tuple[int, datetime]:
             return (1, datetime.max.replace(tzinfo=None))
     if dt.tzinfo is None:
         return (0, dt)
-    return (0, dt.astimezone(timezone.utc).replace(tzinfo=None))
+    return (0, dt.astimezone(UTC).replace(tzinfo=None))
 
 
 def outcome_tracker_to_csv(

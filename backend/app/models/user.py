@@ -1,9 +1,15 @@
+from __future__ import annotations
+
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.project import Project
 
 
 class User(Base, TimestampMixin):
@@ -39,6 +45,6 @@ class User(Base, TimestampMixin):
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     retention_email_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    projects: Mapped[list["Project"]] = relationship(
+    projects: Mapped[list[Project]] = relationship(
         "Project", back_populates="user", cascade="all, delete-orphan"
     )

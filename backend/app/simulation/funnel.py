@@ -9,7 +9,7 @@ from typing import Any
 
 import numpy as np
 
-from app.simulation.markov import MarkovBehaviourModel, STATES
+from app.simulation.markov import STATES, MarkovBehaviourModel
 from app.simulation.profiles import AgentProfile
 from app.simulation.sampling import BetaSamplingEngine, MultiRunResult
 

@@ -15,7 +15,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-
 STATUS_LITERAL = Literal["PASS", "WARN", "FAIL", "INFO", "SKIP"]
 VERDICT_LITERAL = Literal[
     "READY",

@@ -36,7 +36,7 @@ class MacroeconomicArchitect(BaseArchitect):
         calendar     = str(env_params.get("calendar_period", "NORMAL"))
 
         # ── Extract signals from assumptions ──────────────────────────────
-        signals = extract_assumption_signals(assumptions)
+        extract_assumption_signals(assumptions)
         # USD pricing is opt-in: applies only when the founder explicitly
         # mentions USD / dollar pricing in their assumptions. The previous
         # 0.5 default made the penalty fire on every run without any USD

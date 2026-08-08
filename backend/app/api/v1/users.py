@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.api.v1.projects import _CONFIDENCE_EXPLAINER_CACHE_NAMESPACE
 from app.core.deps import get_current_user, get_db
 from app.core.rate_limiter import rate_limit
 from app.core.response_cache import (
     cache_get_json,
+    cache_invalidate,
     cache_set_json,
 )
 from app.core.tier_enforcement import TIER_LIMITS
@@ -22,12 +24,6 @@ from app.models.outcome import Outcome
 from app.models.project import Project
 from app.models.simulation import Simulation
 from app.models.user import User
-from app.simulation.user_projects_export import user_projects_to_csv
-from app.simulation.user_account_export import user_account_to_csv
-from app.simulation.user_simulations_export import user_simulations_to_csv
-from app.simulation.user_decisions_export import user_decisions_to_csv
-from app.simulation.user_outcomes_export import user_outcomes_to_csv
-from app.simulation.quick_stats_export import quick_stats_to_csv
 from app.schemas.audit_log import AuditLogListOut, AuditLogOut
 from app.schemas.auth import MessageResponse
 from app.schemas.project import (
@@ -69,18 +65,6 @@ from app.simulation.calibration_health import (
 )
 from app.simulation.coverage_gaps import build_coverage_gaps
 from app.simulation.decision_rate import build_decision_rate
-from app.simulation.most_active_weekday import (
-    build_most_active_weekday,
-)
-from app.simulation.oldest_open_item import (
-    build_oldest_open_item,
-)
-from app.simulation.recent_decisions import build_recent_decisions
-from app.simulation.recent_outcomes import build_recent_outcomes
-from app.simulation.runs_per_week import build_runs_per_week
-from app.simulation.sim_failure_rate import (
-    build_sim_failure_rate,
-)
 from app.simulation.decision_to_outcome_delay import (
     build_decision_to_outcome_delay,
 )
@@ -99,7 +83,13 @@ from app.simulation.last_week_stats import (
 from app.simulation.most_active_project import (
     build_most_active_project,
 )
+from app.simulation.most_active_weekday import (
+    build_most_active_weekday,
+)
 from app.simulation.notifications import build_notifications
+from app.simulation.oldest_open_item import (
+    build_oldest_open_item,
+)
 from app.simulation.outcome_rate import build_outcome_rate
 from app.simulation.outcome_velocity import (
     build_outcome_velocity,
@@ -116,14 +106,26 @@ from app.simulation.projects_needing_attention import (
 )
 from app.simulation.projects_summary import build_projects_summary
 from app.simulation.quick_stats import build_quick_stats
+from app.simulation.quick_stats_export import quick_stats_to_csv
+from app.simulation.recent_decisions import build_recent_decisions
+from app.simulation.recent_outcomes import build_recent_outcomes
+from app.simulation.runs_per_week import build_runs_per_week
 from app.simulation.runs_this_month import (
     build_runs_this_month,
 )
+from app.simulation.sim_failure_rate import (
+    build_sim_failure_rate,
+)
 from app.simulation.tag_taxonomy import build_tag_taxonomy
 from app.simulation.usage_by_week import build_usage_by_week
+from app.simulation.user_account_export import user_account_to_csv
 from app.simulation.user_dashboard import (
     build_user_dashboard,
 )
+from app.simulation.user_decisions_export import user_decisions_to_csv
+from app.simulation.user_outcomes_export import user_outcomes_to_csv
+from app.simulation.user_projects_export import user_projects_to_csv
+from app.simulation.user_simulations_export import user_simulations_to_csv
 from app.simulation.weekly_digest import build_weekly_digest
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -533,7 +535,7 @@ def export_archive(
             },
         },
         "dossiers": [_project_row(p) for p in projects],
-        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "exported_at": datetime.now(UTC).isoformat(),
     }
 
 
@@ -608,7 +610,7 @@ def get_blindspots(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
+    cutoff = datetime.now(UTC) - timedelta(hours=72)
     rows = db.execute(
         text("""
         SELECT blindspot_type, blindspot_value, occurrence_count,
@@ -694,7 +696,7 @@ def get_my_dashboard(
     # Count simulations created this calendar month for the
     # monthly-quota tile. Uses a single indexed SELECT — the
     # WHERE clause matches the enforcement layer's window.
-    month_start = datetime.now(timezone.utc).replace(
+    month_start = datetime.now(UTC).replace(
         day=1, hour=0, minute=0, second=0, microsecond=0,
     )
     owned_project_ids = [
@@ -753,11 +755,11 @@ def get_my_dashboard(
         last = (
             db.query(model_cls.created_at)
             .filter(
-                (
+
                     model_cls.user_id == current_user.id
                     if hasattr(model_cls, "user_id")
                     else model_cls.project_id.in_(owned_project_ids)
-                )
+
             )
             .order_by(model_cls.created_at.desc())
             .first()
@@ -819,7 +821,7 @@ def get_my_dashboard(
             calibration_health = build_calibration_health(health_input)
 
     # ---- Blindspot count (recent window) ------------------------
-    blindspot_cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
+    blindspot_cutoff = datetime.now(UTC) - timedelta(hours=72)
     blindspot_count = (
         db.execute(
             text(
@@ -1006,7 +1008,7 @@ def get_account_health(
                 pass
 
     # ---- Blindspot count --------------------------------------------
-    blindspot_cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
+    blindspot_cutoff = datetime.now(UTC) - timedelta(hours=72)
     blindspot_count = (
         db.execute(
             text(
@@ -1038,7 +1040,7 @@ def get_account_health(
     account_age_days = 0
     if current_user.created_at is not None:
         ts = current_user.created_at
-        delta = datetime.now(timezone.utc) - ts
+        delta = datetime.now(UTC) - ts
         account_age_days = max(0, delta.days)
 
     payload = build_account_health(
@@ -1196,7 +1198,7 @@ def get_notifications(
         return NotificationsOut(**cached)
 
     # ---- Blindspots ------------------------------------------------
-    blindspot_cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
+    blindspot_cutoff = datetime.now(UTC) - timedelta(hours=72)
     bs_rows = db.execute(
         text(
             """
@@ -1302,7 +1304,7 @@ def get_weekly_digest(
     if cached is not None:
         return WeeklyDigestOut(**cached)
 
-    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    seven_days_ago = datetime.now(UTC) - timedelta(days=7)
 
     owned_project_ids = [
         pid for (pid,) in
@@ -1537,7 +1539,7 @@ def get_digest_snapshot(
 
     # Tier + monthly usage.
     tier = (current_user.tier or "FREE").upper()
-    month_start = datetime.now(timezone.utc).replace(
+    month_start = datetime.now(UTC).replace(
         day=1, hour=0, minute=0, second=0, microsecond=0,
     )
     monthly_sim_used = 0
@@ -1657,7 +1659,7 @@ def get_digest_snapshot(
             except Exception:
                 pass
 
-    blindspot_cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
+    blindspot_cutoff = datetime.now(UTC) - timedelta(hours=72)
     blindspot_count = (
         db.execute(
             text(
@@ -1673,7 +1675,7 @@ def get_digest_snapshot(
 
     account_age_days = 0
     if current_user.created_at is not None:
-        delta = datetime.now(timezone.utc) - current_user.created_at
+        delta = datetime.now(UTC) - current_user.created_at
         account_age_days = max(0, delta.days)
 
     failed_outcome_count = 0
@@ -1795,7 +1797,7 @@ def get_digest_snapshot(
     )
 
     # weekly_digest (last 7d)
-    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    seven_days_ago = datetime.now(UTC) - timedelta(days=7)
     sim_count_week = completed_sim_count_week = (
         decision_count_week
     ) = outcome_count_week = 0
@@ -1937,7 +1939,7 @@ def export_my_projects(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "user_id": current_user.id,
                 "projects": rows,
             },
@@ -1957,7 +1959,7 @@ def export_my_projects(
     csv_text = user_projects_to_csv(
         rows,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -2019,7 +2021,7 @@ def export_my_simulations(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "user_id": current_user.id,
                 "simulations": simulation_rows,
             },
@@ -2039,7 +2041,7 @@ def export_my_simulations(
     csv_text = user_simulations_to_csv(
         simulation_rows,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -2096,7 +2098,7 @@ def export_my_decisions(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "user_id": current_user.id,
                 "decisions": decision_rows,
             },
@@ -2116,7 +2118,7 @@ def export_my_decisions(
     csv_text = user_decisions_to_csv(
         decision_rows,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -2175,7 +2177,7 @@ def export_my_outcomes(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "user_id": current_user.id,
                 "outcomes": outcome_rows,
             },
@@ -2195,7 +2197,7 @@ def export_my_outcomes(
     csv_text = user_outcomes_to_csv(
         outcome_rows,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -2250,7 +2252,7 @@ def export_my_quick_stats(
         .count()
     )
     account_age_days = (
-        datetime.now(timezone.utc) - current_user.created_at
+        datetime.now(UTC) - current_user.created_at
     ).days if current_user.created_at else 0
     row = {
         "user_id": current_user.id,
@@ -2265,7 +2267,7 @@ def export_my_quick_stats(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "quick_stats": row,
             },
             default=str,
@@ -2284,7 +2286,7 @@ def export_my_quick_stats(
     csv_text = quick_stats_to_csv(
         row,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -2334,7 +2336,7 @@ def export_my_account(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "account": row,
             },
             default=str,
@@ -2353,7 +2355,7 @@ def export_my_account(
     csv_text = user_account_to_csv(
         row,
         metadata={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
             "format_version": "1",
         },
@@ -2523,6 +2525,7 @@ def get_projects_summary(
     # Compute portfolio health score from completed sims
     # Average conversion rate across completed simulations
     portfolio_health_score: float | None = None
+    owned_project_ids = [p.id for p in project_rows]
     if owned_project_ids:
         completed_sim_rates = (
             db.query(Simulation.predicted_conversion_rate)
@@ -2575,10 +2578,11 @@ def get_usage_by_week(
     per week. Output is suitable for a usage-over-time
     bar chart on the dashboard.
     """
+    from sqlalchemy import func as _sqlfunc
+
     from app.simulation.usage_by_week import (
         MAX_WEEKS as _UBW_MAX,
     )
-    from sqlalchemy import func as _sqlfunc
 
     # Cache hit - short-circuit the 3 GROUP BY queries.
     cached = cache_get_json(
@@ -2589,7 +2593,7 @@ def get_usage_by_week(
     if cached is not None:
         return UsageByWeekOut(**cached)
 
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(UTC).date()
     # Week starts: weeks 11, 10, ..., 0 (oldest first).
     week_starts: list = []
     for w in range(_UBW_MAX - 1, -1, -1):
@@ -2625,7 +2629,7 @@ def get_usage_by_week(
 
     earliest = datetime.combine(
         week_starts[0], datetime.min.time(),
-        tzinfo=timezone.utc,
+        tzinfo=UTC,
     )
 
     # Per-week sim + outcome counts in a single batch via
@@ -2859,7 +2863,7 @@ def get_most_active_project(
     if cached is not None:
         return MostActiveProjectOut(**cached)
 
-    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    seven_days_ago = datetime.now(UTC) - timedelta(days=7)
 
     owned_project_ids = [
         pid for (pid,) in
@@ -3024,8 +3028,8 @@ def get_quick_stats(
     if current_user.created_at is not None:
         ts = current_user.created_at
         if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
-        delta = datetime.now(timezone.utc) - ts
+            ts = ts.replace(tzinfo=UTC)
+        delta = datetime.now(UTC) - ts
         account_age_days = max(0, delta.days)
 
     payload = build_quick_stats(
@@ -3404,7 +3408,7 @@ def get_runs_this_month(
         tier.lower(), TIER_LIMITS["free"],
     )["simulations_per_month"]
 
-    month_start = datetime.now(timezone.utc).replace(
+    month_start = datetime.now(UTC).replace(
         day=1, hour=0, minute=0, second=0, microsecond=0,
     )
 
@@ -3977,7 +3981,7 @@ def get_insights(
             .filter(Outcome.project_id.in_(owned_project_ids))
             .count()
         )
-        seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+        seven_days_ago = datetime.now(UTC) - timedelta(days=7)
         weekly_sim_count = (
             db.query(Simulation)
             .filter(
@@ -4122,11 +4126,11 @@ def get_last_week_stats(
         return LastWeekStatsOut(**empty_payload)
 
     this_week_start = datetime.now(
-        timezone.utc,
+        UTC,
     ) - timedelta(days=7)
     last_week_end = this_week_start
     last_week_start = datetime.now(
-        timezone.utc,
+        UTC,
     ) - timedelta(days=14)
 
     this_week_counts = {
@@ -4328,8 +4332,8 @@ def get_projects_needing_attention(
             ):
                 ts = latest_assumption.created_at
                 if ts.tzinfo is None:
-                    ts = ts.replace(tzinfo=timezone.utc)
-                delta = datetime.now(timezone.utc) - ts
+                    ts = ts.replace(tzinfo=UTC)
+                delta = datetime.now(UTC) - ts
                 days_since_latest_assumption = max(0, delta.days)
 
         sim_confidence = None
@@ -4340,9 +4344,7 @@ def get_projects_needing_attention(
             if sim_confidence is not None:
                 sim_confidence = float(sim_confidence) / 100.0
         has_completed_sim = latest_sim is not None
-        has_outcome = outcome_count > 0
 
-        weak_link_count = 0
         if assumption_count > 0:
             from app.simulation.assumption_digest import (
                 build_assumption_digest,
@@ -4365,7 +4367,7 @@ def get_projects_needing_attention(
                 }
                 for a in assumption_rows
             ])
-            weak_link_count = digest["weak_link_count"]
+            digest["weak_link_count"]
 
         banner_payload = build_status_banner(
             brief_completed=getattr(
@@ -4408,8 +4410,8 @@ def _days_since(ts):
     if ts is None:
         return None
     if ts.tzinfo is None:
-        ts = ts.replace(tzinfo=timezone.utc)
-    return max(0, (datetime.now(timezone.utc) - ts).days)
+        ts = ts.replace(tzinfo=UTC)
+    return max(0, (datetime.now(UTC) - ts).days)
 
 
 @router.get(
@@ -4540,7 +4542,7 @@ def get_runs_per_week(
         return RunsPerWeekOut(**empty_payload)
 
     four_weeks_ago = (
-        datetime.now(timezone.utc) - timedelta(weeks=4)
+        datetime.now(UTC) - timedelta(weeks=4)
     )
 
     rows = (

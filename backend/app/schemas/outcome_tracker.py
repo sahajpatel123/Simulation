@@ -31,7 +31,7 @@ class OutcomeTrackerCreate(BaseModel):
     notes: str | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")
-    def _require_a_signal(self) -> "OutcomeTrackerCreate":
+    def _require_a_signal(self) -> OutcomeTrackerCreate:
         if (
             self.actual_conversion_rate is None
             and self.actual_revenue is None

@@ -25,14 +25,13 @@ import json
 from typing import Any
 
 from app.schemas.founder_action_plan import (
-    ActionPlanItem,
-    ActionPlanSummary,
     EFFORT_HIGH,
     EFFORT_LOW,
     EFFORT_MEDIUM,
+    ActionPlanItem,
+    ActionPlanSummary,
     FounderActionPlanOut,
 )
-
 
 MAX_ACTIONS: int = 8
 

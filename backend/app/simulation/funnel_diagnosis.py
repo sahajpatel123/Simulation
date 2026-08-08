@@ -16,7 +16,7 @@ No DB / I/O — verifiable without FastAPI or PostgreSQL.
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.schemas.funnel_diagnosis import (
@@ -559,7 +559,7 @@ def build_funnel_diagnosis(
         product_type_detected=product_type,
         signal_quality=signal_quality,
         meta={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "recovery_fraction": RECOVERY_FRACTION,
             "stages_source": (
                 "stage_metrics"

@@ -4,19 +4,18 @@ import json
 import logging
 import math
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, get_db
-from app.core.redis_client import get_redis_client
 from app.api.v1.common import get_owned_project
 from app.api.v1.projects import (
     _ACTIVITY_FEED_CACHE_NAMESPACE,
     _ADOPTION_MILESTONES_CACHE_NAMESPACE,
+    _CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
     _LATEST_SNAPSHOT_CACHE_NAMESPACE,
     _NEXT_ACTION_CACHE_NAMESPACE,
     _PROJECT_EXPORT_CACHE_NAMESPACE,
@@ -33,36 +32,70 @@ from app.api.v1.users import (
     _USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
     _USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
     _USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
+    _USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
     _USER_NOTIFICATIONS_CACHE_NAMESPACE,
+    _USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
     _USER_OUTCOME_RATE_CACHE_NAMESPACE,
     _USER_OUTCOME_VELOCITY_CACHE_NAMESPACE,
     _USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
+    _USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
     _USER_PROJECTS_SUMMARY_CACHE_NAMESPACE,
     _USER_QUICK_STATS_CACHE_NAMESPACE,
+    _USER_RUNS_PER_WEEK_CACHE_NAMESPACE,
     _USER_RUNS_THIS_MONTH_CACHE_NAMESPACE,
+    _USER_SIM_FAILURE_RATE_CACHE_NAMESPACE,
     _USER_USAGE_BY_WEEK_CACHE_NAMESPACE,
     _USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
 )
-from app.api.v1.projects import (
-    _CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
-)
-from app.core.rate_limiter import rate_limit
-from app.core.tier_enforcement import enforce_simulation_limit
+from app.core.deps import get_current_user, get_db
 from app.core.progress_bridge import progress_bridge
+from app.core.rate_limiter import rate_limit
+from app.core.redis_client import get_redis_client
+from app.core.response_cache import (
+    cache_get_json,
+    cache_invalidate,
+    cache_set_json,
+)
+from app.core.tier_enforcement import enforce_simulation_limit
 from app.models.assumption import Assumption
+from app.models.cluster_run_summary import ClusterRunSummary
 from app.models.environment import Environment
 from app.models.outcome import Outcome
 from app.models.project import Project
 from app.models.simulation import Simulation
 from app.models.user import User
-from app.models.cluster_run_summary import ClusterRunSummary
+from app.schemas.activation_funnel import ActivationFunnelOut
+from app.schemas.after_sales import AfterSalesOut
+from app.schemas.agent_routing import (
+    TIER_RELATIVE_COST,
+    AgentRoutingDecisionOut,
+    AgentRoutingRegistryOut,
+    AgentTierEnum,
+    TierCounts,
+)
+from app.schemas.assumption_cascade import AssumptionCascadeOut
+from app.schemas.assumption_postmortem import AssumptionPostmortemOut
 from app.schemas.channel_attribution import ChannelAttributionOut
 from app.schemas.cluster_opportunity import ClusterOpportunityMatrixOut
-from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
-from app.schemas.founder_action_plan import FounderActionPlanOut
+from app.schemas.cohort_retention import CohortRetentionOut
+from app.schemas.competitive_moat import CompetitiveMoatOut
+from app.schemas.cultural_fit import CulturalFitOut
+from app.schemas.distribution_channels import DistributionChannelsOut
+from app.schemas.ecosystem_compatibility import EcosystemCompatibilityOut
+from app.schemas.feature_prioritization import FeaturePrioritizationOut
 from app.schemas.fix_leverage import FixLeverageOut
+from app.schemas.founder_action_plan import FounderActionPlanOut
+from app.schemas.founder_brief import FounderBriefOut
+from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
+from app.schemas.launch_checklist import LaunchChecklistOut
 from app.schemas.market_concentration import MarketConcentrationOut
 from app.schemas.market_sizing import MarketSizingOut
+from app.schemas.market_timing import MarketTimingOut
+from app.schemas.prediction_range import PredictionRangeOut
+from app.schemas.pricing_optimization import PricingOptimizationOut
+from app.schemas.retention_churn import RetentionChurnOut
+from app.schemas.sensitivity import SensitivityOut
+from app.schemas.setup_friction import SetupFrictionOut
 from app.schemas.simulation import (
     ArchitectAccuracyBridgeOut,
     ArchitectBiasTrendOut,
@@ -72,10 +105,9 @@ from app.schemas.simulation import (
     ClusterDiffOut,
     ClusterDrillDownOut,
     ClusterOverlapMatrixOut,
-    ClusterTrendOut,
     ClustersAggregateOut,
+    ClusterTrendOut,
     DatabaseHealthOut,
-    RedisHealthOut,
     FindingsAggregateOut,
     FindingsTrendOut,
     OutcomesDigestOut,
@@ -84,60 +116,114 @@ from app.schemas.simulation import (
     PortfolioSummaryOut,
     PortfolioTrendOut,
     ProjectPortfolioRollupOut,
+    RedisHealthOut,
     SimDiffOut,
     SimulationAnomaliesOut,
-    SimulationSensitivityMatrixOut,
     SimulationBatchStatusOut,
     SimulationCreate,
     SimulationResultOut,
+    SimulationSensitivityMatrixOut,
     SimulationStatusOut,
 )
 from app.schemas.simulation_comparison import (
     SimulationCompareRequest,
     SimulationComparisonOut,
 )
-from app.schemas.agent_routing import (
-    AgentRoutingDecisionOut,
-    AgentRoutingRegistryOut,
-    AgentTierEnum,
-    TIER_RELATIVE_COST,
-    TierCounts,
-)
-from app.schemas.cohort_retention import CohortRetentionOut
-from app.schemas.sensitivity import SensitivityOut
-from app.schemas.pricing_optimization import PricingOptimizationOut
-from app.schemas.feature_prioritization import FeaturePrioritizationOut
-from app.schemas.activation_funnel import ActivationFunnelOut
-from app.schemas.virality_growth import ViralityGrowthOut
-from app.schemas.trust_barriers import TrustBarriersOut
-from app.schemas.support_friction import SupportFrictionOut
-from app.schemas.cultural_fit import CulturalFitOut
-from app.schemas.ecosystem_compatibility import EcosystemCompatibilityOut
-from app.schemas.setup_friction import SetupFrictionOut
-from app.schemas.after_sales import AfterSalesOut
-from app.schemas.assumption_cascade import AssumptionCascadeOut
-from app.schemas.assumption_postmortem import AssumptionPostmortemOut
-from app.schemas.prediction_range import PredictionRangeOut
-from app.schemas.launch_checklist import LaunchChecklistOut
-from app.schemas.founder_brief import FounderBriefOut
-from app.schemas.retention_churn import RetentionChurnOut
-from app.schemas.distribution_channels import DistributionChannelsOut
-from app.schemas.market_timing import MarketTimingOut
-from app.schemas.competitive_moat import CompetitiveMoatOut
-from app.schemas.sustainability_positioning import SustainabilityPositioningOut
 from app.schemas.simulation_quality import SimulationQualityOut
+from app.schemas.support_friction import SupportFrictionOut
+from app.schemas.sustainability_positioning import SustainabilityPositioningOut
+from app.schemas.trust_barriers import TrustBarriersOut
 from app.schemas.unit_economics import UnitEconomicsOut
 from app.schemas.validation_experiment import ValidationExperimentPlanOut
 from app.schemas.validation_roi import ValidationRoiOut
+from app.schemas.virality_growth import ViralityGrowthOut
 from app.schemas.what_if import WhatIfOut, WhatIfRequest
 from app.schemas.what_if_batch import WhatIfBatchOut, WhatIfBatchRequest
+from app.simulation.activation_funnel import build_activation_funnel
+from app.simulation.after_sales_read import build_after_sales_read
 from app.simulation.agent_hierarchy import AgentHierarchyRouter
 from app.simulation.anomaly_detector import detect_simulation_anomalies
+from app.simulation.architect_bias_trend import (
+    build_architect_bias_trend,
+)
+from app.simulation.architect_bias_trend import (
+    normalise_bin as normalise_bias_bin,
+)
+from app.simulation.architect_drill_down import (
+    build_architect_drill_down,
+)
+from app.simulation.architect_leaderboard import (
+    build_architect_leaderboard,
+)
+from app.simulation.assumption_cascade_read import build_assumption_cascade
+from app.simulation.assumption_postmortem import build_assumption_postmortem
+from app.simulation.calibration_health import (
+    build_calibration_health,
+)
+from app.simulation.calibration_health_export import calibration_health_to_csv
 from app.simulation.channel_attribution_read import build_channel_attribution
-from app.simulation.conductor import Conductor
-from app.simulation.sensitivity_matrix import compute_simulation_sensitivity_matrix
-from app.simulation.clusters.registry import ClusterRegistry
+from app.simulation.cluster_diff import build_cluster_diff
+from app.simulation.cluster_drill_down import (
+    build_cluster_drill_down,
+)
+from app.simulation.cluster_drill_down import (
+    normalise_outlier_threshold as normalise_drill_outlier,
+)
 from app.simulation.cluster_opportunity import build_cluster_opportunity_matrix
+from app.simulation.cluster_overlap_export import (
+    cluster_overlap_to_csv,
+    cluster_overlap_to_json,
+)
+from app.simulation.cluster_overlap_matrix import (
+    MAX_CLUSTERS as _MAX_MATRIX_CLUSTERS,
+)
+from app.simulation.cluster_overlap_matrix import (
+    build_cluster_overlap_matrix,
+)
+from app.simulation.cluster_trend import (
+    build_cluster_trend,
+)
+from app.simulation.cluster_trend import (
+    normalise_bin as normalise_trend_bin,
+)
+from app.simulation.clusters.registry import ClusterRegistry
+from app.simulation.competitive_moat import build_competitive_moat
+from app.simulation.conductor import Conductor
+from app.simulation.cultural_fit import build_cultural_fit
+from app.simulation.distribution_channels import build_distribution_channels
+from app.simulation.ecosystem_compatibility import build_ecosystem_compatibility
+from app.simulation.feature_prioritization import build_feature_prioritization
+from app.simulation.feature_prioritization_export import (
+    feature_prioritization_to_csv,
+    feature_prioritization_to_json,
+    feature_prioritization_to_markdown,
+)
+from app.simulation.findings_export import (
+    extract_findings,
+    findings_to_csv,
+    findings_to_markdown,
+)
+from app.simulation.findings_trend import (
+    build_findings_trend,
+)
+from app.simulation.findings_trend import (
+    normalise_bin as normalise_findings_bin,
+)
+from app.simulation.findings_trend import (
+    normalise_severity as normalise_findings_severity,
+)
+from app.simulation.fix_leverage import build_fix_leverage
+from app.simulation.founder_action_plan_export import (
+    founder_action_plan_to_csv,
+    founder_action_plan_to_json,
+)
+from app.simulation.founder_brief import build_founder_brief
+from app.simulation.launch_checklist import build_launch_checklist
+from app.simulation.launch_checklist_export import (
+    launch_checklist_to_csv,
+    launch_checklist_to_json,
+    launch_checklist_to_markdown,
+)
 from app.simulation.market_concentration import build_market_concentration
 from app.simulation.market_sizing import (
     DEFAULT_AVERAGE_ORDER_VALUE,
@@ -150,121 +236,50 @@ from app.simulation.market_sizing import (
     MIN_TARGET_MARKET_FRACTION,
     build_market_sizing,
 )
-from app.simulation.pricing_optimization import build_pricing_optimization
-from app.simulation.feature_prioritization import build_feature_prioritization
-from app.simulation.feature_prioritization_export import (
-    feature_prioritization_to_csv,
-    feature_prioritization_to_json,
-    feature_prioritization_to_markdown,
+from app.simulation.market_timing_read import build_market_timing
+from app.simulation.outlier_detection import (
+    build_outlier_detection,
+    normalise_z_threshold,
 )
-from app.simulation.activation_funnel import build_activation_funnel
-from app.simulation.virality_growth import build_virality_growth
-from app.simulation.trust_barriers import build_trust_barriers
-from app.simulation.support_friction import build_support_friction
-from app.simulation.cultural_fit import build_cultural_fit
-from app.simulation.ecosystem_compatibility import build_ecosystem_compatibility
-from app.simulation.setup_friction import build_setup_friction
-from app.simulation.after_sales_read import build_after_sales_read
-from app.simulation.what_if_batch_export import (
-    what_if_batch_to_csv,
-    what_if_batch_to_json,
-    what_if_batch_to_markdown,
+from app.simulation.portfolio_narrative import (
+    build_portfolio_narrative,
 )
-from app.simulation.assumption_cascade_read import build_assumption_cascade
-from app.simulation.assumption_postmortem import build_assumption_postmortem
 from app.simulation.prediction_range import (
     MIN_OUTCOMES_FOR_RANGE,
     build_prediction_range,
     extract_predicted_conversion,
 )
-from app.simulation.simulation_export import (
-    build_simulation_export,
-    simulation_to_csv,
-)
-from app.simulation.findings_export import (
-    extract_findings,
-    findings_to_csv,
-    findings_to_markdown,
-)
-from app.simulation.launch_checklist import build_launch_checklist
-from app.simulation.launch_checklist_export import (
-    launch_checklist_to_csv,
-    launch_checklist_to_json,
-    launch_checklist_to_markdown,
-)
-from app.simulation.founder_brief import build_founder_brief
-from app.simulation.retention_churn_read import build_retention_churn
-from app.simulation.distribution_channels import build_distribution_channels
-from app.simulation.market_timing_read import build_market_timing
-from app.simulation.competitive_moat import build_competitive_moat
-from app.simulation.sustainability_positioning import (
-    build_sustainability_positioning,
-)
+from app.simulation.pricing_optimization import build_pricing_optimization
 from app.simulation.product_type import ProductType
-from app.simulation.unit_economics import build_unit_economics
-from app.simulation.unit_economics_export import unit_economics_to_csv
-from app.simulation.founder_action_plan_export import (
-    founder_action_plan_to_csv,
-    founder_action_plan_to_json,
+from app.simulation.project_rollup import (
+    build_project_portfolio_rollup,
 )
-from app.simulation.fix_leverage import build_fix_leverage
+from app.simulation.retention_churn_read import build_retention_churn
 from app.simulation.sensitivity_export import (
     sensitivity_to_csv,
     sensitivity_to_json,
 )
-from app.simulation.validation_roi import build_validation_roi
-from app.simulation.validation_experiment_planner import build_validation_experiment_plan
-from app.simulation.cluster_drill_down import (
-    build_cluster_drill_down,
-    normalise_outlier_threshold as normalise_drill_outlier,
-)
-from app.simulation.architect_drill_down import (
-    build_architect_drill_down,
-)
-from app.simulation.cluster_diff import build_cluster_diff
-from app.simulation.cluster_overlap_matrix import (
-    MAX_CLUSTERS as _MAX_MATRIX_CLUSTERS,
-    build_cluster_overlap_matrix,
-)
-from app.simulation.cluster_overlap_export import (
-    cluster_overlap_to_csv,
-    cluster_overlap_to_json,
-)
-from app.simulation.cluster_trend import (
-    build_cluster_trend,
-    normalise_bin as normalise_trend_bin,
-)
-from app.simulation.architect_leaderboard import (
-    build_architect_leaderboard,
-)
-from app.simulation.architect_bias_trend import (
-    build_architect_bias_trend,
-    normalise_bin as normalise_bias_bin,
-)
-from app.simulation.findings_trend import (
-    build_findings_trend,
-    normalise_bin as normalise_findings_bin,
-    normalise_severity as normalise_findings_severity,
-)
-from app.simulation.project_rollup import (
-    build_project_portfolio_rollup,
-)
+from app.simulation.sensitivity_matrix import compute_simulation_sensitivity_matrix
+from app.simulation.setup_friction import build_setup_friction
 from app.simulation.sim_diff import build_sim_diff
-from app.simulation.outlier_detection import (
-    build_outlier_detection,
-    normalise_z_threshold,
+from app.simulation.simulation_export import (
+    build_simulation_export,
+    simulation_to_csv,
 )
-from app.core.response_cache import (
-    cache_get_json,
-    cache_invalidate,
-    cache_set_json,
+from app.simulation.support_friction import build_support_friction
+from app.simulation.sustainability_positioning import (
+    build_sustainability_positioning,
 )
-from app.simulation.calibration_health import (
-    build_calibration_health,
-)
-from app.simulation.calibration_health_export import calibration_health_to_csv
-from app.simulation.portfolio_narrative import (
-    build_portfolio_narrative,
+from app.simulation.trust_barriers import build_trust_barriers
+from app.simulation.unit_economics import build_unit_economics
+from app.simulation.unit_economics_export import unit_economics_to_csv
+from app.simulation.validation_experiment_planner import build_validation_experiment_plan
+from app.simulation.validation_roi import build_validation_roi
+from app.simulation.virality_growth import build_virality_growth
+from app.simulation.what_if_batch_export import (
+    what_if_batch_to_csv,
+    what_if_batch_to_json,
+    what_if_batch_to_markdown,
 )
 
 # Short TTL — the dashboard polls /portfolio-narrative
@@ -272,48 +287,36 @@ from app.simulation.portfolio_narrative import (
 # reflected promptly so we don't exceed ~30s of staleness.
 _PORTFOLIO_NARRATIVE_CACHE_TTL_S: int = 30
 _PORTFOLIO_NARRATIVE_CACHE_NAMESPACE: str = "portfolio-narrative"
-from app.simulation.conductor import _ARCHITECTS as _architect_registry
-from app.simulation.comparison import build_simulation_comparison
-from app.simulation.simulation_comparison_export import (
-    simulation_comparison_to_csv,
-    simulation_comparison_to_json,
-    simulation_comparison_to_markdown,
+from app.simulation.architect_accuracy_bridge import (
+    bridge_architect_accuracy,
+)
+from app.simulation.architect_accuracy_bridge import (
+    normalise_severity as normalise_bridge_severity,
+)
+from app.simulation.architect_accuracy_bridge import (
+    normalise_top_n as normalise_bridge_top_n,
+)
+from app.simulation.clusters_aggregate import (
+    aggregate_clusters,
+)
+from app.simulation.clusters_aggregate import (
+    normalise_top_n as normalise_clusters_top_n,
 )
 from app.simulation.cohort_retention import build_cohort_retention
-from app.simulation.funnel_diagnosis import build_funnel_diagnosis
-from app.simulation.funnel_diagnosis_export import (
-    funnel_diagnosis_to_csv,
-    funnel_diagnosis_to_json,
-    funnel_diagnosis_to_markdown,
-)
-from app.simulation.founder_action_plan import build_founder_action_plan
-from app.simulation.scored_assumption import (
-    ClaimConfidence,
-    score_assumptions,
-    signal_quality_tier,
-)
-from app.simulation.scenario_stress import ScenarioStressAnalyzer
-from app.simulation.sensitivity_analysis import build_sensitivity_analysis
-from app.simulation.simulation_quality import build_simulation_quality
-from app.simulation.sim_batch import (
-    parse_id_list,
-    parse_since,
-    summarise_statuses,
-)
+from app.simulation.comparison import build_simulation_comparison
+from app.simulation.conductor import _ARCHITECTS as _architect_registry
 from app.simulation.findings_aggregate import (
     aggregate_findings,
     normalise_architect_filter,
     normalise_severity,
     normalise_top_n,
 )
-from app.simulation.clusters_aggregate import (
-    aggregate_clusters,
-    normalise_top_n as normalise_clusters_top_n,
-)
-from app.simulation.architect_accuracy_bridge import (
-    bridge_architect_accuracy,
-    normalise_severity as normalise_bridge_severity,
-    normalise_top_n as normalise_bridge_top_n,
+from app.simulation.founder_action_plan import build_founder_action_plan
+from app.simulation.funnel_diagnosis import build_funnel_diagnosis
+from app.simulation.funnel_diagnosis_export import (
+    funnel_diagnosis_to_csv,
+    funnel_diagnosis_to_json,
+    funnel_diagnosis_to_markdown,
 )
 from app.simulation.outcomes_digest import (
     aggregate_outcomes,
@@ -324,6 +327,24 @@ from app.simulation.portfolio_summary import (
     portfolio_to_csv,
 )
 from app.simulation.portfolio_trend import compute_portfolio_trend
+from app.simulation.scenario_stress import ScenarioStressAnalyzer
+from app.simulation.scored_assumption import (
+    ClaimConfidence,
+    score_assumptions,
+    signal_quality_tier,
+)
+from app.simulation.sensitivity_analysis import build_sensitivity_analysis
+from app.simulation.sim_batch import (
+    parse_id_list,
+    parse_since,
+    summarise_statuses,
+)
+from app.simulation.simulation_comparison_export import (
+    simulation_comparison_to_csv,
+    simulation_comparison_to_json,
+    simulation_comparison_to_markdown,
+)
+from app.simulation.simulation_quality import build_simulation_quality
 from app.simulation.what_if import build_what_if_scenario
 from app.simulation.what_if_batch import build_what_if_batch
 from app.tasks.simulation_tasks import run_full_simulation
@@ -625,7 +646,7 @@ def db_health(
     return DatabaseHealthOut(
         database="reachable",
         latency_ms=round(max(0.0, latency_ms), 3),
-        checked_at=datetime.now(timezone.utc).isoformat(),
+        checked_at=datetime.now(UTC).isoformat(),
     )
 
 
@@ -662,7 +683,7 @@ def redis_health() -> RedisHealthOut:
     return RedisHealthOut(
         redis="reachable",
         latency_ms=round(max(0.0, latency_ms), 3),
-        checked_at=datetime.now(timezone.utc).isoformat(),
+        checked_at=datetime.now(UTC).isoformat(),
     )
 
 
@@ -767,7 +788,7 @@ def export_simulation_comparison(
     )
 
     metadata = {
-        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "generated_at": datetime.now(tz=UTC).isoformat(),
         "user_id": current_user.id,
         "format_version": "1",
         "project_id": result.project_id,
@@ -1042,6 +1063,8 @@ def get_simulation_batch_status(
         since_dt = parse_since(since)
         from app.simulation.sim_batch import (
             _normalise_order as _nb_order,
+        )
+        from app.simulation.sim_batch import (
             _normalise_sort as _nb_sort,
         )
         sort_key = _nb_sort(sort)
@@ -1879,7 +1902,7 @@ def get_portfolio_export_csv(
     # Metadata header — provenance so the file is self-
     # describing when reopened later.
     metadata = {
-        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "generated_at": datetime.now(tz=UTC).isoformat(),
         "user_id": current_user.id,
         "simulation_count": summary.get("simulation_count", 0),
         "format_version": "1",
@@ -2095,7 +2118,7 @@ def get_portfolio_trend(
             detail=str(exc),
         )
 
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     later_until = until_dt or now
 
     cluster_names = {
@@ -2509,7 +2532,7 @@ def export_cluster_overlap_matrix(
         )
 
     metadata = {
-        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "generated_at": datetime.now(tz=UTC).isoformat(),
         "user_id": current_user.id,
         "format_version": "1",
         "requested_ids": canonical_ids,
@@ -3394,7 +3417,7 @@ def export_calibration_health(
         payload = build_calibration_health([])
 
     metadata = {
-        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "generated_at": datetime.now(tz=UTC).isoformat(),
         "user_id": current_user.id,
         "format_version": "1",
         "requested_ids": canonical_ids,
@@ -3855,7 +3878,7 @@ def get_simulation_results(
         for cid, cr in sorted(cluster_breakdown_raw.items(), key=lambda x: -x[1])
     ]
 
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
+    cutoff = datetime.now(UTC) - timedelta(hours=72)
     blindspots_to_surface = db.execute(
         text("""
             SELECT blindspot_type, blindspot_value, occurrence_count
@@ -4180,7 +4203,7 @@ def export_what_if_batch(
     )
 
     metadata = {
-        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "generated_at": datetime.now(tz=UTC).isoformat(),
         "user_id": current_user.id,
         "format_version": "1",
         "simulation_id": simulation_id,
@@ -4453,7 +4476,7 @@ def export_funnel_diagnosis(
     project_name = project.title if project else None
 
     metadata = {
-        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "generated_at": datetime.now(tz=UTC).isoformat(),
         "user_id": current_user.id,
         "format_version": "1",
         "simulation_id": simulation_id,
@@ -4855,7 +4878,7 @@ def export_unit_economics(
     )
 
     metadata = {
-        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "generated_at": datetime.now(tz=UTC).isoformat(),
         "user_id": current_user.id,
         "format_version": "1",
         "simulation_id": simulation_id,
@@ -5123,7 +5146,7 @@ def export_sensitivity_analysis(
     )
 
     metadata = {
-        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "generated_at": datetime.now(tz=UTC).isoformat(),
         "user_id": current_user.id,
         "format_version": "1",
         "simulation_id": simulation_id,
@@ -5342,7 +5365,7 @@ def export_feature_prioritization(
     project_name = project.title if project else None
 
     metadata = {
-        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "generated_at": datetime.now(tz=UTC).isoformat(),
         "user_id": current_user.id,
         "format_version": "1",
         "simulation_id": simulation_id,
@@ -7212,7 +7235,7 @@ def list_project_simulations(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     sims = (
         db.query(Simulation)
@@ -7427,7 +7450,7 @@ def get_agent_routing_registry(
     }
 
     return AgentRoutingRegistryOut(
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
         tier_counts=tier_counts,
         cost_summary=cost_summary,
         clusters=clusters_out,
@@ -7948,7 +7971,7 @@ def export_launch_checklist(
     project_name = project.title if project else None
 
     metadata = {
-        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "generated_at": datetime.now(tz=UTC).isoformat(),
         "user_id": current_user.id,
         "format_version": "1",
         "simulation_id": simulation_id,
@@ -8282,7 +8305,7 @@ def export_founder_action_plan(
     )
 
     metadata = {
-        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "generated_at": datetime.now(tz=UTC).isoformat(),
         "user_id": current_user.id,
         "format_version": "1",
         "simulation_id": simulation_id,
@@ -8984,7 +9007,7 @@ def get_simulation_export(
     )
 
     metadata = {
-        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "generated_at": datetime.now(tz=UTC).isoformat(),
         "user_id": current_user.id,
         "format_version": "1",
     }
@@ -9068,7 +9091,7 @@ def get_findings_export(
 
     findings = extract_findings(sim.results_json)
     metadata = {
-        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "generated_at": datetime.now(tz=UTC).isoformat(),
         "user_id": current_user.id,
         "format_version": "1",
     }

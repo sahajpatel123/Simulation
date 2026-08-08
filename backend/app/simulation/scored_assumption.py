@@ -10,14 +10,13 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from enum import Enum
-
+from enum import StrEnum
 
 # ---------------------------------------------------------------------------
 # Enumerations and multipliers
 # ---------------------------------------------------------------------------
 
-class ClaimConfidence(str, Enum):
+class ClaimConfidence(StrEnum):
     VALIDATED_EXTERNAL = "VALIDATED_EXTERNAL"   # real user data / cited research
     VALIDATED_INTERNAL = "VALIDATED_INTERNAL"   # founder-run test / pilot
     DESIGN_INTENT      = "DESIGN_INTENT"        # planned feature, not yet tested

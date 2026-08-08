@@ -8,8 +8,6 @@ conversion rates), overall trend slope, and a 0..1 stability score.
 """
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import BaseModel, Field
 
 

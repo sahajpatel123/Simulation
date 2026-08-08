@@ -17,7 +17,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 VERDICT_READY: str = "READY"
 VERDICT_FOCUSED: str = "FOCUSED"
 VERDICT_INSUFFICIENT: str = "INSUFFICIENT_DATA"

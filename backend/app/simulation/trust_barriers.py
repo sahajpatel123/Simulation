@@ -61,7 +61,6 @@ from app.schemas.trust_barriers import (
     BARRIER_RECOVERY,
     BARRIER_SECURITY,
     BARRIER_SOCIAL_PROOF,
-    ClusterTrustProfile,
     LEVER_BRAND,
     LEVER_COMMUNITY,
     LEVER_FREE_TRIAL,
@@ -72,13 +71,14 @@ from app.schemas.trust_barriers import (
     TIER_HIGH,
     TIER_LOW,
     TIER_MODERATE,
-    TrustBarriersOut,
-    TrustLever,
     VERDICT_CRITICAL,
     VERDICT_HIGH,
     VERDICT_INSUFFICIENT,
     VERDICT_LOW_BARRIER,
     VERDICT_MODERATE,
+    ClusterTrustProfile,
+    TrustBarriersOut,
+    TrustLever,
 )
 
 # Ordered barrier keys — used for tie-breaking and market aggregation so

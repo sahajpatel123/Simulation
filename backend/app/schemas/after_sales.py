@@ -19,7 +19,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 VERDICT_HEALTHY: str = "HEALTHY"
 VERDICT_WATCH: str = "WATCH"
 VERDICT_STRAINED: str = "STRAINED"

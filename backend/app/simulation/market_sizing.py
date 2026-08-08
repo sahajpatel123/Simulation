@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import json as _json
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.schemas.market_sizing import (
@@ -458,13 +458,13 @@ def build_market_sizing(
         ]
         if annual_revenue > 0:
             sentences.append(
-                (
+
                     f"At {effective_aov:.2f} AOV x "
                     f"{effective_frequency:g} purchase(s)/year, that "
                     f"projects ${annual_revenue:,.0f} annual revenue "
                     f"(${revenue_per_1000_visitors:,.0f} per 1,000 "
                     "visitors)."
-                )
+
             )
         else:
             sentences.append(
@@ -500,7 +500,7 @@ def build_market_sizing(
         "signals": [s.model_dump() for s in signals],
         "narrative": narrative,
         "meta": {
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "conversion_benchmark": CONVERSION_BENCHMARK,
             "reachable_min_conversion": REACHABLE_MIN_CONVERSION,
             "cluster_count": len(breakdown),

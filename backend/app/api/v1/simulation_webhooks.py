@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -12,8 +12,8 @@ from sqlalchemy.orm import Session
 from app.api.v1.common import get_owned_project
 from app.core.deps import get_current_user, get_db
 from app.core.rate_limiter import rate_limit
-from app.models.simulation_webhook_subscription import SimulationWebhookSubscription
 from app.models.simulation_webhook_delivery import SimulationWebhookDelivery
+from app.models.simulation_webhook_subscription import SimulationWebhookSubscription
 from app.models.user import User
 from app.schemas.simulation_webhook_delivery import (
     SimulationWebhookDeliveryListOut,
@@ -309,7 +309,7 @@ def export_simulation_webhook_deliveries(
     ]
 
     metadata = {
-        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "generated_at": datetime.now(tz=UTC).isoformat(),
         "user_id": current_user.id,
         "project_id": project_id,
         "webhook_id": webhook_id,

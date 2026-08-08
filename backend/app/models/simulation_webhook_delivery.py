@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.simulation_webhook_subscription import (
+        SimulationWebhookSubscription,
+    )
 
 
 class SimulationWebhookDelivery(Base, TimestampMixin):
@@ -57,7 +63,7 @@ class SimulationWebhookDelivery(Base, TimestampMixin):
         nullable=False,
     )
 
-    subscription: Mapped["SimulationWebhookSubscription"] = relationship(
+    subscription: Mapped[SimulationWebhookSubscription] = relationship(
         "SimulationWebhookSubscription",
         back_populates="deliveries",
     )

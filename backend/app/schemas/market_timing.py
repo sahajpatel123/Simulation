@@ -18,7 +18,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 VERDICT_GO: str = "GO"
 VERDICT_CAUTIOUS: str = "CAUTIOUS"
 VERDICT_WAIT: str = "WAIT"

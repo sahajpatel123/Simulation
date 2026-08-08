@@ -14,6 +14,9 @@ from sqlalchemy.orm import Session
 from app.api.v1.common import get_owned_project
 from app.api.v1.users import (
     _USER_INSIGHTS_CACHE_NAMESPACE,
+    _USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
+    _USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
+    _USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
     _USER_TAG_TAXONOMY_CACHE_NAMESPACE,
 )
 from app.core.claude_client import claude_call_with_fallback

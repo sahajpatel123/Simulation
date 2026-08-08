@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 
+
 def _assumption_text(a: dict) -> str:
     """Pull and lower-case the text field from an assumption dict."""
     return str(a.get("text", a.get("assumption", ""))).lower()

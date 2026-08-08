@@ -135,7 +135,6 @@ def build_outlier_detection(
     threshold = normalise_z_threshold(z_threshold)
 
     abs_variances: list[float] = []
-    per_row: list[dict] = []
     sim_to_data: dict[int, dict] = {}
 
     for sim_id, predicted, actual in rows:

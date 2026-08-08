@@ -14,7 +14,7 @@ No DB / I/O — verifiable without FastAPI or PostgreSQL.
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.schemas.cohort_retention import (
@@ -493,7 +493,6 @@ def build_cohort_retention(
 
         # Build curve points
         curve: list[RetentionCurvePoint] = []
-        prev_survival = 1.0
         for i, day in enumerate(RETENTION_DAYS):
             s = survival_rates[i]
             churn = round(1.0 - s, 4)
@@ -506,7 +505,6 @@ def build_cohort_retention(
                     active_users=active,
                 )
             )
-            prev_survival = s
 
         d30 = survival_rates[2] if len(survival_rates) > 2 else 0.0
         d90 = survival_rates[3] if len(survival_rates) > 3 else 0.0
@@ -627,7 +625,7 @@ def build_cohort_retention(
         primary_failure_domain=str(data.get("primary_failure_domain") or "unknown"),
         signal_quality=signal_quality,
         meta={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "retention_days": RETENTION_DAYS,
             "benchmark_cr": benchmark_cr,
             "cluster_count": len(profiles),

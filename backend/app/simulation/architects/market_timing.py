@@ -6,10 +6,10 @@ of these outputs. No LLM, no DB, no randomness.
 """
 from __future__ import annotations
 
+from app.core.utils import geo_tier
 from app.simulation.architects.base import ArchitectOutput, BaseArchitect, DomainReport
 from app.simulation.architects.utils import extract_assumption_signals
 from app.simulation.clusters.definitions import ClusterDefinition
-from app.core.utils import geo_tier
 
 
 class MarketTimingArchitect(BaseArchitect):
@@ -32,14 +32,14 @@ class MarketTimingArchitect(BaseArchitect):
         t = cluster.base_traits
         literacy   = t["digital_literacy"]
         motivation = t["motivation"]
-        income     = t["income_level"]
+        t["income_level"]
         risk_av    = t["risk_aversion"]
-        age        = cluster.demographic_profile.get("age_bracket", "25-35")
-        geo        = geo_tier(cluster.demographic_profile.get("geography", "metro"))
+        cluster.demographic_profile.get("age_bracket", "25-35")
+        geo_tier(cluster.demographic_profile.get("geography", "metro"))
 
         market_maturity = float(env_params.get("market_maturity", 0.5))
         scenario        = str(env_params.get("scenario_type", "NORMAL"))
-        product_type    = str(env_params.get("product_type", "saas"))
+        str(env_params.get("product_type", "saas"))
 
         # ── Extract signals from assumptions ──────────────────────────────
         signals = extract_assumption_signals(assumptions)

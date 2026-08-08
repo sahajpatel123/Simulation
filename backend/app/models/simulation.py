@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.environment import Environment
+    from app.models.project import Project
 
 
 class Simulation(Base, TimestampMixin):
@@ -33,7 +39,7 @@ class Simulation(Base, TimestampMixin):
     signal_quality: Mapped[float | None] = mapped_column(Float, nullable=True)
     claim_confidence_distribution: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
-    project: Mapped["Project"] = relationship("Project", back_populates="simulations")
-    environment: Mapped["Environment | None"] = relationship(
+    project: Mapped[Project] = relationship("Project", back_populates="simulations")
+    environment: Mapped[Environment | None] = relationship(
         "Environment", back_populates="simulations"
     )

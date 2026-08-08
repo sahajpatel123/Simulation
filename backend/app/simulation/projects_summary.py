@@ -44,8 +44,6 @@ Output shape
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 MAX_PROJECTS: int = 50
 
 SIGNAL_OK: str = "ok"

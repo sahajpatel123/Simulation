@@ -8,7 +8,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 EFFORT_LOW: str = "LOW"
 EFFORT_MEDIUM: str = "MEDIUM"
 EFFORT_HIGH: str = "HIGH"

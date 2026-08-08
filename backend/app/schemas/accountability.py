@@ -17,7 +17,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 # Mirror of AccountabilityEngine ranking output. We keep severity as a free
 # string here (rather than enum) because new severities may be introduced by
 # future architect additions without requiring a coordinated schema bump.
@@ -42,7 +41,7 @@ class DomainFindingOut(BaseModel):
     severity: str
 
     @classmethod
-    def from_raw(cls, raw: dict[str, Any]) -> "DomainFindingOut":
+    def from_raw(cls, raw: dict[str, Any]) -> DomainFindingOut:
         """
         Build a DomainFindingOut from the dict produced by
         ``DomainFinding.to_dict()``. Defensive defaults keep us resilient to

@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.project import Project
 
 
 class Decision(Base, TimestampMixin):
@@ -23,4 +28,4 @@ class Decision(Base, TimestampMixin):
     results_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    project: Mapped["Project"] = relationship("Project", back_populates="decisions")
+    project: Mapped[Project] = relationship("Project", back_populates="decisions")

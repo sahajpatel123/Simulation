@@ -19,7 +19,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 VERDICT_STRONG_FIT: str = "STRONG_FIT"
 VERDICT_MODERATE_FIT: str = "MODERATE_FIT"
 VERDICT_WEAK_FIT: str = "WEAK_FIT"

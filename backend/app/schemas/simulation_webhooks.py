@@ -7,7 +7,6 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator
 
-
 VALID_EVENT_TYPES: frozenset[str] = frozenset(
     {"simulation.completed", "simulation.failed", "simulation.*"}
 )

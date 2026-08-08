@@ -13,7 +13,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-
 VERDICT_LITERAL = Literal[
     "READY",
     "NEEDS_WORK",

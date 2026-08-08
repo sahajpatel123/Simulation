@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import re
 
+from app.core.utils import geo_tier
 from app.simulation.architects.base import ArchitectOutput, BaseArchitect, DomainReport
 from app.simulation.clusters.definitions import ClusterDefinition
-from app.core.utils import geo_tier
 
 
 class PurchaseDecisionArchitect(BaseArchitect):
@@ -38,9 +38,9 @@ class PurchaseDecisionArchitect(BaseArchitect):
         price_s    = t["price_sensitivity"]
         risk_av    = t["risk_aversion"]
         literacy   = t["digital_literacy"]
-        patience   = t["patience_score"]
-        motivation = t["motivation"]
-        trust      = t["trust"]
+        t["patience_score"]
+        t["motivation"]
+        t["trust"]
         age        = cluster.demographic_profile.get("age_bracket", "25-35")
         geo        = geo_tier(cluster.demographic_profile.get("geography", "metro"))
         AOV        = float(env_params.get("average_order_value", 3000))
@@ -53,7 +53,6 @@ class PurchaseDecisionArchitect(BaseArchitect):
         has_emi    = False
         has_bnpl   = False
         return_days = 7
-        warranty_y  = 1
         for a in assumptions:
             text = str(a.get("text", a.get("assumption", ""))).lower()
             if re.search(r"\b(?:emis?|installments?)\b", text):
@@ -65,9 +64,9 @@ class PurchaseDecisionArchitect(BaseArchitect):
             elif "15 day" in text:
                 return_days = 15
             if "2 year" in text or "2-year warranty" in text:
-                warranty_y = 2
+                pass
             elif "3 year" in text:
-                warranty_y = 3
+                pass
 
         # ── Upfront cost ceiling ──────────────────────────────────────────
         geo_mult = {"metro": 1.0, "tier2": 0.75, "tier3": 0.55}.get(geo, 1.0)

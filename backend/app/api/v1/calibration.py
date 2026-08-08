@@ -252,10 +252,9 @@ def submit_outcome(
 
     eng = LayerCalibrationEngine()
     try:
-        will_learn = bool(eng.validate_outcome(fo, sim, db))
+        bool(eng.validate_outcome(fo, sim, db))
     except Exception as exc:  # noqa: BLE001
         logger.warning("validate_outcome failed: %s", exc)
-        will_learn = False
 
     fo2 = db.execute(
         text("SELECT * FROM founder_outcomes WHERE id = :id"),

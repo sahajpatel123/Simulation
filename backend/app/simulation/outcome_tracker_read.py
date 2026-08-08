@@ -40,7 +40,7 @@ Output shape
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -87,7 +87,7 @@ def _sort_timestamp(recorded_at: Any) -> datetime | None:
 
     if dt.tzinfo is None:
         return dt
-    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt.astimezone(UTC).replace(tzinfo=None)
 
 
 def build_outcome_tracker_timeline(

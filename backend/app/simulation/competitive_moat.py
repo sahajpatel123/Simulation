@@ -53,9 +53,6 @@ from app.schemas.competitive_moat import (
     LEVER_LABELS,
     LEVER_LOCK_IN,
     LEVER_PRICING_POWER,
-    ClusterMoatProfile,
-    CompetitiveMoatOut,
-    MoatOpportunity,
     TIER_MODERATE,
     TIER_STRONG,
     TIER_WEAK,
@@ -64,6 +61,9 @@ from app.schemas.competitive_moat import (
     VERDICT_MODERATE,
     VERDICT_STRONG,
     VERDICT_WEAK,
+    ClusterMoatProfile,
+    CompetitiveMoatOut,
+    MoatOpportunity,
 )
 from app.simulation.product_type import ProductType
 

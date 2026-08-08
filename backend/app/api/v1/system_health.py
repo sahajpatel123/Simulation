@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.core.redis_client import get_redis_client
-from app.worker import celery_app
 from app.schemas.system_health import SystemHealthOut
+from app.worker import celery_app
 
 router = APIRouter(prefix="/system", tags=["system"])
 
@@ -32,7 +32,7 @@ def build_health_summary(
     return {
         "status": "ok" if healthy else "degraded",
         "healthy": healthy,
-        "checked_at": checked_at or datetime.now(timezone.utc).isoformat(),
+        "checked_at": checked_at or datetime.now(UTC).isoformat(),
         "checks": {
             "database": database,
             "redis": redis,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 from sqlalchemy.orm import Session
@@ -294,7 +294,7 @@ class CalibrationEngine:
                 trend_delta=0.0,
                 markov_adjustments=[],
                 sampling_adjustments=[],
-                last_computed_at=datetime.now(timezone.utc).isoformat(),
+                last_computed_at=datetime.now(UTC).isoformat(),
                 data_sufficient=False,
             )
 
@@ -329,7 +329,7 @@ class CalibrationEngine:
             trend_delta=delta,
             markov_adjustments=markov_adj,
             sampling_adjustments=sampling_adj,
-            last_computed_at=datetime.now(timezone.utc).isoformat(),
+            last_computed_at=datetime.now(UTC).isoformat(),
             data_sufficient=True,
         )
 

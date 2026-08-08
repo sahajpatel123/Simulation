@@ -9,10 +9,10 @@ environment params, and the project's existing assumptions.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
-from app.schemas.what_if import WhatIfOut, WhatIfSummary
+from app.schemas.what_if import WhatIfOut
 from app.schemas.what_if_batch import (
     WhatIfBatchOut,
     WhatIfBatchScenarioOut,
@@ -154,7 +154,7 @@ def build_what_if_batch(
         best_scenario=best_scenario,
         worst_scenario=worst_scenario,
         meta={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "scenario_count": len(ranked_scenarios),
             "labels": [label for label, _ in built],
         },

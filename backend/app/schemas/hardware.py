@@ -5,7 +5,6 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 VALID_PRODUCT_TYPES = frozenset(
     {
         "consumer_hardware",

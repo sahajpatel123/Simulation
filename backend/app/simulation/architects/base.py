@@ -91,7 +91,7 @@ class BaseArchitect(ABC):
     @abstractmethod
     def compute(
         self,
-        cluster:       "ClusterDefinition",
+        cluster:       ClusterDefinition,
         agent_profile: dict[str, Any],
         assumptions:   list[dict[str, Any]],
         env_params:    dict[str, Any],

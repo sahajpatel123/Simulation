@@ -6,9 +6,9 @@ No LLM, no DB, no randomness.
 """
 from __future__ import annotations
 
+from app.core.utils import geo_tier
 from app.simulation.architects.base import ArchitectOutput, BaseArchitect, DomainReport
 from app.simulation.clusters.definitions import ClusterDefinition
-from app.core.utils import geo_tier
 
 
 class SetupFirstUseArchitect(BaseArchitect):
@@ -38,7 +38,7 @@ class SetupFirstUseArchitect(BaseArchitect):
         motivation   = t["motivation"]
         age          = cluster.demographic_profile.get("age_bracket", "25-35")
         geo          = geo_tier(cluster.demographic_profile.get("geography", "metro"))
-        product_type = str(env_params.get("product_type", "consumer_hardware"))
+        str(env_params.get("product_type", "consumer_hardware"))
 
         # ── Extract signals from assumptions ──────────────────────────────
         complexity        = 0.5

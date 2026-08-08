@@ -6,9 +6,9 @@ No LLM, no DB, no randomness.
 """
 from __future__ import annotations
 
+from app.core.utils import geo_tier
 from app.simulation.architects.base import ArchitectOutput, BaseArchitect, DomainReport
 from app.simulation.clusters.definitions import ClusterDefinition
-from app.core.utils import geo_tier
 
 
 def _patience_from(traits: dict) -> float:
@@ -46,7 +46,7 @@ class DistributionChannelArchitect(BaseArchitect):
         age          = cluster.demographic_profile.get("age_bracket", "25-35")
         geo          = geo_tier(cluster.demographic_profile.get("geography", "metro"))
         AOV          = float(env_params.get("average_order_value", 3000))
-        product_type = str(env_params.get("product_type", "consumer_hardware"))
+        str(env_params.get("product_type", "consumer_hardware"))
         urgency      = float(agent_profile.get("problem_urgency_intensity", 0.5))
 
         # ── Extract assumptions ───────────────────────────────────────────

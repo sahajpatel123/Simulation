@@ -1,16 +1,16 @@
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field, model_validator
 
 
-class EnvironmentMode(str, Enum):
+class EnvironmentMode(StrEnum):
     MANUAL = "MANUAL"
     SCENARIO = "SCENARIO"
     TREND = "TREND"
 
 
-class ScenarioType(str, Enum):
+class ScenarioType(StrEnum):
     EARLY_ADOPTER = "EARLY_ADOPTER"
     SATURATED = "SATURATED"
     RECESSION = "RECESSION"

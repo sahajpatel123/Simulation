@@ -23,8 +23,6 @@ Standard milestones
 """
 from __future__ import annotations
 
-from typing import Iterable
-
 # Ordered list of standard onboarding milestones. The
 # order is significant - the dashboard renders the
 # progress bar in this exact sequence.

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import json
+import logging
 import os
 import random
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -496,7 +496,7 @@ def run_hardware_consumer_simulation(
             "domain_findings": findings_top,
             "primary_failure_domain": primary_domain,
             "architect_accountability": conductor_result.architect_accountability,
-            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "completed_at": datetime.now(UTC).isoformat(),
         }
 
         conductor_blob = _conductor_result_jsonable(conductor_result)

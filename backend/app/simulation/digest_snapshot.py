@@ -24,7 +24,7 @@ Output shape
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def _iso(value: object) -> str | None:
@@ -66,7 +66,7 @@ def build_digest_snapshot(
     """
     snapshot_at = (
         now if isinstance(now, datetime) else (
-            datetime.now(timezone.utc)
+            datetime.now(UTC)
         )
     )
     iso = (

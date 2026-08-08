@@ -65,9 +65,6 @@ from app.schemas.ecosystem_compatibility import (
     BLOCKER_SMART_HOME,
     BLOCKER_SUBSCRIPTION,
     BLOCKER_VOICE,
-    ClusterEcosystemProfile,
-    EcosystemCompatibilityOut,
-    EcosystemLever,
     LEVER_API,
     LEVER_HOUSEHOLD,
     LEVER_MATTER,
@@ -83,6 +80,9 @@ from app.schemas.ecosystem_compatibility import (
     VERDICT_INSUFFICIENT,
     VERDICT_SEAMLESS,
     VERDICT_WORKABLE,
+    ClusterEcosystemProfile,
+    EcosystemCompatibilityOut,
+    EcosystemLever,
 )
 
 # Ordered blocker keys — used for tie-breaking and market aggregation so

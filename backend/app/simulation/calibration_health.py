@@ -14,15 +14,15 @@ simulations + outcomes + domain_findings before invoking.
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 # Reuse the per-architect bridge's calibration
 # bucketing for the top-miscalibrated-architect ranking.
 from app.simulation.architect_accuracy_bridge import (
-    LABEL_TIGHTEN,
-    LABEL_LOOSEN,
-    LABEL_TRUSTED,
     LABEL_INSUFFICIENT_DATA,
+    LABEL_LOOSEN,
+    LABEL_TIGHTEN,
+    LABEL_TRUSTED,
     bridge_architect_accuracy,
 )
 
@@ -31,7 +31,6 @@ from app.simulation.architect_accuracy_bridge import (
 LABEL_WELL_CALIBRATED: str = "WELL_CALIBRATED"
 LABEL_NEEDS_ATTENTION: str = "NEEDS_ATTENTION"
 LABEL_POORLY_CALIBRATED: str = "POORLY_CALIBRATED"
-LABEL_INSUFFICIENT_DATA: str = "INSUFFICIENT_DATA"
 VALID_HEALTH_LABELS: frozenset[str] = frozenset({
     LABEL_WELL_CALIBRATED,
     LABEL_NEEDS_ATTENTION,
@@ -106,8 +105,8 @@ def _iso_to_dt(raw: object) -> datetime | None:
     failure."""
     if isinstance(raw, datetime):
         if raw.tzinfo is None:
-            return raw.replace(tzinfo=timezone.utc)
-        return raw.astimezone(timezone.utc)
+            return raw.replace(tzinfo=UTC)
+        return raw.astimezone(UTC)
     if isinstance(raw, str):
         candidate = raw.strip()
         if not candidate:
@@ -119,8 +118,8 @@ def _iso_to_dt(raw: object) -> datetime | None:
         except ValueError:
             return None
         if dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
+            return dt.replace(tzinfo=UTC)
+        return dt.astimezone(UTC)
     return None
 
 
@@ -278,11 +277,11 @@ def build_calibration_health(
           (7d / 30d / 90d) with mean_abs_variance.
         * ``summary`` — one-line headline.
     """
-    effective_now = now or datetime.now(tz=timezone.utc)
+    effective_now = now or datetime.now(tz=UTC)
     if effective_now.tzinfo is None:
-        effective_now = effective_now.replace(tzinfo=timezone.utc)
+        effective_now = effective_now.replace(tzinfo=UTC)
     else:
-        effective_now = effective_now.astimezone(timezone.utc)
+        effective_now = effective_now.astimezone(UTC)
 
     abs_variances: list[float] = []
     trend_rows: list[tuple[datetime, float]] = []

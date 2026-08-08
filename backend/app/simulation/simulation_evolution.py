@@ -15,7 +15,7 @@ deterministic helper style as ``simulation_trend`` and ``sim_diff``.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.schemas.simulation_evolution import (
@@ -27,7 +27,6 @@ from app.schemas.simulation_evolution import (
     EvolutionSummary,
     SimulationEvolutionOut,
 )
-
 
 # Healthy drop-off rates derived from the base Markov transition matrix
 # (see app.simulation.markov). Used to identify the funnel bottleneck when
@@ -105,9 +104,9 @@ def _sort_key(row: dict[str, Any]) -> tuple[str, int]:
     if hasattr(created_at, "isoformat"):
         try:
             if getattr(created_at, "tzinfo", None) is None:
-                created_at = created_at.replace(tzinfo=timezone.utc)
+                created_at = created_at.replace(tzinfo=UTC)
             else:
-                created_at = created_at.astimezone(timezone.utc)
+                created_at = created_at.astimezone(UTC)
             return (created_at.isoformat(), _safe_int(row.get("id")))
         except Exception:
             pass
@@ -238,7 +237,6 @@ def _build_narrative(
     bottleneck: EvolutionBottleneck,
 ) -> tuple[str, str]:
     direction = conversion.direction
-    verdict = direction
     if direction == "NO_DATA":
         return "NO_DATA", (
             "Could not compute a conversion comparison — one or both runs "
@@ -319,7 +317,7 @@ def build_simulation_evolution(
             bottleneck=EvolutionBottleneck(),
             summary=EvolutionSummary(),
             recommendations=[],
-            generated_at=datetime.now(timezone.utc).isoformat(),
+            generated_at=datetime.now(UTC).isoformat(),
         ).model_dump()
 
     previous_row, latest_row = completed[-2], completed[-1]
@@ -423,7 +421,7 @@ def build_simulation_evolution(
         bottleneck=bottleneck,
         summary=summary,
         recommendations=_top_recommendations(latest_results),
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
     ).model_dump()
 
 

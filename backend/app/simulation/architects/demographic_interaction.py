@@ -41,12 +41,12 @@ class DemographicInteractionArchitect(BaseArchitect):
         env_params: dict,
     ) -> ArchitectOutput:
         t           = cluster.base_traits
-        income      = t["income_level"]
+        t["income_level"]
         motivation  = t["motivation"]
         price_s     = t["price_sensitivity"]
         literacy    = t["digital_literacy"]
-        trust       = t["trust"]
-        social      = t["social_orientation"]
+        t["trust"]
+        t["social_orientation"]
         family_ori  = (
             0.7 if any(x in cluster.cluster_id for x in ["couple", "family", "parent", "joint"]) else
             0.3

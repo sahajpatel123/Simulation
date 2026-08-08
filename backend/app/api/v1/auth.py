@@ -1,5 +1,5 @@
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
@@ -46,7 +46,7 @@ def _store_refresh_token(db: Session, user_id: int, raw_token: str) -> None:
         {
             "uid": user_id,
             "hash": token_hash,
-            "expires_at": datetime.now(timezone.utc)
+            "expires_at": datetime.now(UTC)
             + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         },
     )

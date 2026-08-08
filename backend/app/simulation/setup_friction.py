@@ -79,7 +79,6 @@ from app.schemas.setup_friction import (
     BLOCKER_PHYSICAL_ASSEMBLY,
     BLOCKER_SETUP_COMPLETION,
     BLOCKER_TIME_TO_VALUE,
-    ClusterSetupProfile,
     LEVER_ACCOUNT_OPTIONAL,
     LEVER_COMPANION_APP,
     LEVER_GUIDED_SETUP,
@@ -88,8 +87,6 @@ from app.schemas.setup_friction import (
     LEVER_PREFLASHED_FIRMWARE,
     LEVER_PRINTED_GUIDE,
     LEVER_SIMPLIFIED_ASSEMBLY,
-    SetupFrictionOut,
-    SetupLever,
     SUPPORTED_PRODUCT_TYPES,
     TIER_BLOCKED,
     TIER_ROUGH,
@@ -100,6 +97,9 @@ from app.schemas.setup_friction import (
     VERDICT_FAST,
     VERDICT_INSUFFICIENT,
     VERDICT_SLOW,
+    ClusterSetupProfile,
+    SetupFrictionOut,
+    SetupLever,
 )
 
 # Ordered blocker keys — used for tie-breaking and market aggregation so

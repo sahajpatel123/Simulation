@@ -47,7 +47,6 @@ class CompetitiveDynamicsArchitect(BaseArchitect):
 
         # ── Extract competitive signals from assumptions ───────────────────
         competitor_type       = "paid_only"
-        differentiation_level = 0.5
         feature_completion    = 0.5
 
         for a in assumptions:
@@ -57,9 +56,9 @@ class CompetitiveDynamicsArchitect(BaseArchitect):
             elif any(w in text for w in ["no competitor", "no alternative", "new category"]):
                 competitor_type = "none"
             if any(w in text for w in ["unique", "differentiated", "10x better", "only one"]):
-                differentiation_level = 0.85
+                pass
             elif any(w in text for w in ["similar to", "like", "alternative to"]):
-                differentiation_level = 0.35
+                pass
             if any(w in text for w in ["feature complete", "full featured", "all features"]):
                 feature_completion = 0.90
             elif any(w in text for w in ["mvp", "basic", "limited", "early"]):

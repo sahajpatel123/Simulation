@@ -11,7 +11,6 @@ from __future__ import annotations
 import statistics
 from typing import Any
 
-
 # Architect names must have effective_sample_count >= this to be considered
 # "calibrated" — matches the layer-2 threshold used by the calibration engine.
 _CALIBRATED_SAMPLE_THRESHOLD: float = 10.0

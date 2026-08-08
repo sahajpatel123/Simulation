@@ -40,7 +40,6 @@ from app.simulation.architects.base import ArchitectOutput, BaseArchitect, Domai
 from app.simulation.clusters.definitions import ClusterDefinition
 from app.simulation.clusters.registry import ClusterRegistry
 
-
 # ── Keyword groups ────────────────────────────────────────────────────
 # Word-boundary matching (not substring) avoids false positives like
 # "greenhouse" (matches "green") or "community manager" (matches "community").
@@ -157,11 +156,11 @@ class SustainabilityArchitect(BaseArchitect):
     ) -> ArchitectOutput:
         traits = {**cluster.base_traits, **agent_profile}
         income = _trait(traits, "income_level")
-        literacy = _trait(traits, "digital_literacy")
-        motivation = _trait(traits, "motivation")
-        trust = _trait(traits, "trust")
+        _trait(traits, "digital_literacy")
+        _trait(traits, "motivation")
+        _trait(traits, "trust")
         price_sens = _trait(traits, "price_sensitivity")
-        social = _trait(traits, "social_orientation")
+        _trait(traits, "social_orientation")
 
         env_claim = _has_keyword(assumptions, _ENV_KEYWORDS)
         social_claim = _has_keyword(assumptions, _SOCIAL_KEYWORDS)
@@ -220,7 +219,7 @@ class SustainabilityArchitect(BaseArchitect):
             "strong_esg_affinity": esg_affinity >= 0.65,
             "low_esg_reach": has_claims and esg_affinity < 0.40,
         }
-        active_flags = [k for k, v in flags.items() if v]
+        [k for k, v in flags.items() if v]
         severity = (
             "CRITICAL"
             if flags["greenwashing_risk"] and flags["premium_friction"]

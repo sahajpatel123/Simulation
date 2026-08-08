@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import io
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from reportlab.lib import colors
@@ -205,7 +205,7 @@ def _cover_section(data: dict[str, Any], st: dict[str, ParagraphStyle]) -> list[
     title = data.get("title") or "Untitled Project"
     story.append(Paragraph(title, st["cover_title"]))
     story.append(Paragraph("Simulation Intelligence Report", st["cover_sub"]))
-    generated = datetime.now(timezone.utc).strftime("%B %d, %Y")
+    generated = datetime.now(UTC).strftime("%B %d, %Y")
     story.append(Paragraph(f"Generated · {generated}", st["cover_meta"]))
 
     desc = str(data.get("description") or "")[:300]

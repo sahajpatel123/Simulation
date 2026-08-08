@@ -23,7 +23,7 @@ Output shape
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 # Signal severity buckets.
 SIGNAL_OK: str = "ok"
@@ -48,9 +48,9 @@ def _age_days(value: object, now: object | None = None) -> int | None:
     if not hasattr(value, "timestamp"):
         return None
     if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
+        value = value.replace(tzinfo=UTC)
     ref = now if isinstance(now, datetime) else (
-        datetime.now(timezone.utc)
+        datetime.now(UTC)
     )
     delta = ref - value
     return max(0, delta.days)

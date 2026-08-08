@@ -12,7 +12,7 @@ be used to mint live links.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
@@ -148,7 +148,7 @@ def revoke_share_tokens(
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     live_rows = (
         db.query(ShareToken)
         .filter(
@@ -204,7 +204,7 @@ def read_shared_simulation(
         )
 
     token_hash = hash_token(token)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     row = (
         db.query(ShareToken)
@@ -290,7 +290,7 @@ def list_share_tokens(
         .all()
     )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     items: list[ShareTokenListItem] = []
     active_count = revoked_count = expired_count = 0
     for row in rows:

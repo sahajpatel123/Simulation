@@ -1,7 +1,14 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from sqlalchemy import Boolean, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.project import Project
 
 
 class Assumption(Base, TimestampMixin):
@@ -16,4 +23,4 @@ class Assumption(Base, TimestampMixin):
     impact_score: Mapped[float] = mapped_column(Float, default=5.0)
     is_hidden: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    project: Mapped["Project"] = relationship("Project", back_populates="assumptions")
+    project: Mapped[Project] = relationship("Project", back_populates="assumptions")

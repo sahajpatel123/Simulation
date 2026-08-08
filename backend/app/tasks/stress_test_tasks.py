@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import traceback
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from celery import Task
@@ -33,7 +33,7 @@ BASE_SEED: int = 7777
 
 
 def _utcnow() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class StressTask(Task):

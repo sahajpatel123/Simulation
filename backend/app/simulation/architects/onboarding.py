@@ -7,10 +7,10 @@ No LLM, no DB, no randomness.
 """
 from __future__ import annotations
 
+from app.core.utils import geo_tier
 from app.simulation.architects.base import ArchitectOutput, BaseArchitect, DomainReport
 from app.simulation.architects.utils import extract_complexity
 from app.simulation.clusters.definitions import ClusterDefinition
-from app.core.utils import geo_tier
 
 
 class OnboardingArchitect(BaseArchitect):

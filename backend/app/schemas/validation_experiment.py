@@ -18,7 +18,6 @@ from app.schemas.validation_roi import (
     ROI_TIER_LITERAL,
 )
 
-
 COST_TIER_LITERAL = Literal["FREE", "LOW", "MEDIUM"]
 
 METHOD_ID_LITERAL = Literal[

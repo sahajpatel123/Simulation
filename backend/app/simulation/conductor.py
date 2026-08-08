@@ -6,6 +6,7 @@ for the learning system.
 from __future__ import annotations
 
 import logging
+
 logger = logging.getLogger(__name__)
 from dataclasses import dataclass, replace
 from typing import Any
@@ -14,12 +15,11 @@ from sqlalchemy import delete
 
 from app.simulation.architects.base import ArchitectOutput, DomainReport
 from app.simulation.cluster_reweighting import ClusterReweightingEngine
-from app.simulation.cognitive_state import CognitiveStateMutator
 from app.simulation.clusters.definitions import ClusterDefinition
 from app.simulation.clusters.registry import ClusterRegistry
+from app.simulation.cognitive_state import CognitiveStateMutator
 from app.simulation.markov import MarkovBehaviourModel
 from app.simulation.product_type import ProductType
-
 
 # Keyword → ProductType scoring
 PRODUCT_TYPE_KEYWORDS: dict[ProductType, list[str]] = {

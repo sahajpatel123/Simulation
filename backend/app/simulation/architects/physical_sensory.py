@@ -30,8 +30,8 @@ class PhysicalSensoryArchitect(BaseArchitect):
         t        = cluster.base_traits
         income   = t["income_level"]
         social   = t["social_orientation"]
-        risk_av  = t["risk_aversion"]
-        patience = t["patience_score"]
+        t["risk_aversion"]
+        t["patience_score"]
         age      = cluster.demographic_profile.get("age_bracket", "25-35")
         AOV      = float(env_params.get("average_order_value", 3000))
         product_type = str(env_params.get("product_type", "consumer_hardware"))

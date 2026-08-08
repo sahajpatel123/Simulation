@@ -41,21 +41,20 @@ import re
 from typing import Any
 
 from app.schemas.feature_prioritization import (
-    BriefFeatureScore,
-    ClusterFeatureProfile,
-    FeatureDimension,
-    FeaturePrioritizationOut,
     SEGMENT_ADVANCED,
     SEGMENT_LAGGING,
     SEGMENT_MAINSTREAM,
     TIER_BUILD_FIRST,
     TIER_DEPRIORITIZE,
     TIER_GROW,
-    TIER_UNMAPPED,
     TIER_WATCH,
     VERDICT_FOCUSED,
     VERDICT_INSUFFICIENT,
     VERDICT_READY,
+    BriefFeatureScore,
+    ClusterFeatureProfile,
+    FeatureDimension,
+    FeaturePrioritizationOut,
 )
 
 # Product types whose conductor stack runs FeatureAdoptionArchitect.

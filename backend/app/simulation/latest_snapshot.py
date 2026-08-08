@@ -28,7 +28,7 @@ Output shape
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 # Signal severity buckets.
 SIGNAL_OK: str = "ok"
@@ -191,7 +191,7 @@ def build_latest_snapshot(
         "latest_assumption_extraction": (
             latest_assumption_extraction
         ),
-        "snapshot_at": datetime.now(timezone.utc).isoformat(),
+        "snapshot_at": datetime.now(UTC).isoformat(),
         "narrative": narrative,
         "key_signals": key_signals,
     }

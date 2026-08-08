@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import HTTPException
 from sqlalchemy import text
@@ -32,8 +32,8 @@ TIER_LIMITS = {
 
 def _as_utc(expires: datetime) -> datetime:
     if expires.tzinfo is None:
-        return expires.replace(tzinfo=timezone.utc)
-    return expires.astimezone(timezone.utc)
+        return expires.replace(tzinfo=UTC)
+    return expires.astimezone(UTC)
 
 
 def get_user_tier(user, db: Session) -> str:
@@ -42,7 +42,7 @@ def get_user_tier(user, db: Session) -> str:
     tier = (st or "free").lower()
     expires = getattr(user, "subscription_expires_at", None)
     if expires and tier != "free":
-        if datetime.now(timezone.utc) > _as_utc(expires):
+        if datetime.now(UTC) > _as_utc(expires):
             db.execute(
                 text("UPDATE users SET subscription_tier = 'free' WHERE id = :uid"),
                 {"uid": user.id},
@@ -55,9 +55,9 @@ def get_user_tier(user, db: Session) -> str:
 def reset_monthly_usage_if_needed(user, db: Session) -> None:
     """Resets simulations_used_this_month if calendar month changed."""
     reset_at = getattr(user, "usage_reset_at", None)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if reset_at is not None and reset_at.tzinfo is None:
-        reset_at = reset_at.replace(tzinfo=timezone.utc)
+        reset_at = reset_at.replace(tzinfo=UTC)
     if reset_at is None or (now.year, now.month) != (reset_at.year, reset_at.month):
         db.execute(
             text("""

@@ -13,7 +13,6 @@ from app.simulation.architects.base import ArchitectOutput, BaseArchitect, Domai
 from app.simulation.clusters.definitions import ClusterDefinition
 from app.simulation.clusters.registry import ClusterRegistry
 
-
 # Keyword groups detected from assumption text. These are the cultural
 # signal vectors that the rest of the simulation engine cannot infer
 # from cluster traits alone.
@@ -100,7 +99,7 @@ class CulturalContextArchitect(BaseArchitect):
         trust    = t["trust"]
         social   = t["social_orientation"]
 
-        age = cluster.demographic_profile.get("age_bracket", "25-35")
+        cluster.demographic_profile.get("age_bracket", "25-35")
         geo = cluster.demographic_profile.get("geography", "metro")
         tier3 = _is_tier3(geo)
         tier2 = _is_tier2(geo)

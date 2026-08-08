@@ -15,7 +15,6 @@ from app.simulation.architects.base import ArchitectOutput, BaseArchitect, Domai
 from app.simulation.architects.utils import contains_word, extract_complexity
 from app.simulation.clusters.definitions import ClusterDefinition
 
-
 SUPPORTED_PRODUCT_TYPES: list[str] = [
     "saas", "marketplace", "mobile_app",
     "developer_tool", "enterprise_software",

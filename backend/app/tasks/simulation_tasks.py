@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from celery import Task
 from sqlalchemy import text
@@ -18,11 +18,6 @@ from app.models.project import Project
 from app.models.simulation import Simulation
 from app.models.simulation_webhook_subscription import SimulationWebhookSubscription
 from app.models.user import User
-from app.simulation.simulation_webhook_delivery import (
-    build_webhook_payload,
-    deliver_webhook_event,
-)
-from app.simulation.webhook_delivery_history import record_webhook_delivery
 from app.simulation.accountability import AccountabilityEngine
 from app.simulation.aggregation import ResultsAggregator
 from app.simulation.conductor import Conductor, ConductorResult
@@ -33,6 +28,11 @@ from app.simulation.funnel import (
 )
 from app.simulation.markov import STATES
 from app.simulation.profiles import AgentProfileGenerator
+from app.simulation.simulation_webhook_delivery import (
+    build_webhook_payload,
+    deliver_webhook_event,
+)
+from app.simulation.webhook_delivery_history import record_webhook_delivery
 from app.worker import celery_app
 
 logger = logging.getLogger(__name__)
@@ -62,7 +62,7 @@ class SimulationTask(Task):
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _mark_failed(db: Session, sim: Simulation, exc: Exception) -> None:

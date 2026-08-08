@@ -21,7 +21,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 VERDICT_OMNICHANNEL: str = "OMNICHANNEL"
 VERDICT_ONLINE_FIRST: str = "ONLINE_FIRST"
 VERDICT_ACCESS_GAP: str = "ACCESS_GAP"

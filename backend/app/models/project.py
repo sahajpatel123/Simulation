@@ -8,10 +8,13 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
+    from app.models.assumption import Assumption
     from app.models.decision import Decision
     from app.models.environment import Environment
     from app.models.outcome import Outcome
     from app.models.outcome_tracker import OutcomeTracker
+    from app.models.simulation import Simulation
+    from app.models.user import User
 
 
 class Project(Base, TimestampMixin):

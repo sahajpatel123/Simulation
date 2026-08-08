@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import text
 
@@ -20,7 +20,7 @@ def send_week4_retention_emails() -> dict:
     """
     db = SessionLocal()
     try:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         four_weeks_ago_start = now - timedelta(days=30)
         four_weeks_ago_end = now - timedelta(days=25)
 
@@ -49,7 +49,7 @@ def send_week4_retention_emails() -> dict:
             _send_retention_email(str(row["email"]), int(row["sim_id"]), int(row["project_id"]))
             db.execute(
                 text("UPDATE users SET retention_email_sent_at = :now WHERE id = :uid"),
-                {"now": datetime.now(timezone.utc), "uid": int(row["user_id"])},
+                {"now": datetime.now(UTC), "uid": int(row["user_id"])},
             )
             sent += 1
 
@@ -67,17 +67,6 @@ def _send_retention_email(email: str, sim_id: int, project_id: int) -> None:
     """
     try:
         subject = "Did you launch? Your prediction gap is waiting."
-        body = (
-            f"Hey,\n\n"
-            f"4 weeks ago you ran a simulation on TheCee.\n\n"
-            f"If you launched — even a soft launch, a waitlist, a demo — "
-            f"your real-world results are sitting next to your predicted ones.\n\n"
-            f"Tell us how it went. It takes 2 minutes and makes your next "
-            f"simulation significantly more accurate.\n\n"
-            f"Return with your results →\n"
-            f"https://thecee.app/project/{project_id}/results?sim={sim_id}&outcome=true\n\n"
-            f"— TheCee"
-        )
         logger.info(
             "[RETENTION EMAIL] To: %s | sim=%s project=%s | Subject: %s",
             email,

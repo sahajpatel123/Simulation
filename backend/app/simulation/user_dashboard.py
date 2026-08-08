@@ -39,6 +39,8 @@ Output shape
 """
 from __future__ import annotations
 
+from datetime import UTC
+
 # Cap on monthly sim runs for the FREE tier. Higher
 # tiers are enforced elsewhere; this is the dashboard's
 # baseline reference.
@@ -149,7 +151,7 @@ def build_user_dashboard(
         Dict matching the output shape described in the
         module docstring.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     used = _safe_int(monthly_sim_used)
     cap = (
@@ -171,17 +173,17 @@ def build_user_dashboard(
                 ts = None
         if isinstance(ts, datetime):
             if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
+                ts = ts.replace(tzinfo=UTC)
             ref = now if isinstance(now, datetime) else (
-                datetime.now(timezone.utc)
+                datetime.now(UTC)
             )
             if isinstance(ref, str):
                 try:
                     ref = datetime.fromisoformat(ref)
                 except Exception:
-                    ref = datetime.now(timezone.utc)
+                    ref = datetime.now(UTC)
             if isinstance(ref, datetime) and ref.tzinfo is None:
-                ref = ref.replace(tzinfo=timezone.utc)
+                ref = ref.replace(tzinfo=UTC)
             try:
                 delta = ref - ts
                 account_age_days = max(0, delta.days)

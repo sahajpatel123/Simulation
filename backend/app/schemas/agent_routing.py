@@ -9,12 +9,12 @@ the raw dataclass.
 """
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class AgentTierEnum(str, Enum):
+class AgentTierEnum(StrEnum):
     """Public mirror of ``app.simulation.agent_hierarchy.AgentTier``."""
 
     MICRO = "MICRO"

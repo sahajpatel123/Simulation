@@ -27,7 +27,7 @@ Output shape
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def _iso(value: object) -> str | None:
@@ -89,7 +89,7 @@ def build_project_export(
         Dict matching the output shape described in the
         module docstring.
     """
-    exported_at = datetime.now(timezone.utc).isoformat()
+    exported_at = datetime.now(UTC).isoformat()
 
     # ---- Project meta -----------------------------------------------
     project_meta = {}

@@ -25,7 +25,7 @@ Output shape
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 # Signal severity buckets.
 SIGNAL_OK: str = "ok"
@@ -75,7 +75,7 @@ def build_last_touched_project(
         else:
             continue
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         if best_dt is None or dt > best_dt:
             best_dt = dt
             best = entry

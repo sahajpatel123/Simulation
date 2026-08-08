@@ -1,4 +1,3 @@
-from typing import Any, Optional
 
 from pydantic import BaseModel
 
@@ -7,8 +6,8 @@ class UIGenerateRequest(BaseModel):
     prompt: str
     product_type: str = "saas"
     pages_required: list[str] = ["home", "product", "checkout"]
-    target_demographic: Optional[str] = None
-    price_point: Optional[str] = None
+    target_demographic: str | None = None
+    price_point: str | None = None
 
 
 class UIRefineRequest(BaseModel):

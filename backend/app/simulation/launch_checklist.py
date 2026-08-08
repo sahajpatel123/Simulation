@@ -43,7 +43,6 @@ from app.schemas.launch_checklist import (
 )
 from app.simulation.clusters.registry import ClusterRegistry
 
-
 STATUS_PASS: str = "PASS"
 STATUS_WARN: str = "WARN"
 STATUS_FAIL: str = "FAIL"

@@ -18,7 +18,6 @@ from typing import Any
 
 from app.simulation.clusters.definitions import ClusterDefinition
 
-
 # ---------------------------------------------------------------------------
 # Helper: default variance block (reused across many clusters)
 # ---------------------------------------------------------------------------

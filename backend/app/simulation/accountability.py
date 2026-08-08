@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.simulation.conductor import ConductorResult
 from app.simulation.clusters.registry import ClusterRegistry
+from app.simulation.conductor import ConductorResult
 
 
 @dataclass

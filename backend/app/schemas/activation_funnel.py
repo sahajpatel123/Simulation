@@ -16,7 +16,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 VERDICT_READY: str = "READY"
 VERDICT_AT_RISK: str = "AT_RISK"
 VERDICT_BLOCKED: str = "BLOCKED"

@@ -13,7 +13,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 VERDICT_STRONG: str = "STRONG"
 VERDICT_MODERATE: str = "MODERATE"
 VERDICT_WEAK: str = "WEAK"

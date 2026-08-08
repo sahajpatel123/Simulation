@@ -17,7 +17,7 @@ from __future__ import annotations
 import csv
 import io
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 FORMAT_VERSION = "1"
@@ -73,19 +73,19 @@ def _sort_key(row: dict[str, Any]) -> tuple[datetime, int]:
     created = row.get("created_at")
     if isinstance(created, datetime):
         if created.tzinfo is None:
-            created = created.replace(tzinfo=timezone.utc)
+            created = created.replace(tzinfo=UTC)
         else:
-            created = created.astimezone(timezone.utc)
+            created = created.astimezone(UTC)
     elif created is not None:
         try:
             parsed = datetime.fromisoformat(str(created))
             if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            created = parsed.astimezone(timezone.utc)
+                parsed = parsed.replace(tzinfo=UTC)
+            created = parsed.astimezone(UTC)
         except (TypeError, ValueError):
-            created = datetime.min.replace(tzinfo=timezone.utc)
+            created = datetime.min.replace(tzinfo=UTC)
     else:
-        created = datetime.min.replace(tzinfo=timezone.utc)
+        created = datetime.min.replace(tzinfo=UTC)
     return created, int(row.get("id") or 0)
 
 

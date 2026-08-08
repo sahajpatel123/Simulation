@@ -14,7 +14,7 @@ Keeping this layer pure (no DB, no HTTP) makes the math verifiable in tests.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.schemas.simulation_comparison import (
@@ -167,7 +167,7 @@ def build_simulation_comparison(
             created_at_str = (
                 str(created_at)
                 if created_at
-                else datetime.now(timezone.utc).isoformat()
+                else datetime.now(UTC).isoformat()
             )
 
         sim_refs.append(
@@ -260,7 +260,7 @@ def build_simulation_comparison(
         cluster_comparison=cluster_comparison,
         domain_finding_comparison=domain_comparison,
         metadata=metadata,
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
     )
 
 

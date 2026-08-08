@@ -25,7 +25,7 @@ handler can splat the parsed kwargs into a single SQLAlchemy query:
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 MAX_BATCH_SIZE: int = 100
 MIN_ID: int = 1
@@ -158,7 +158,7 @@ def parse_since(raw: str | None) -> datetime | None:
             "include a UTC offset (e.g. '...Z' or '+00:00')"
         )
     # Coerce to UTC for consistent DB comparison regardless of source tz.
-    return parsed.astimezone(timezone.utc)
+    return parsed.astimezone(UTC)
 
 
 def summarise_statuses(statuses: list[str]) -> dict[str, int]:

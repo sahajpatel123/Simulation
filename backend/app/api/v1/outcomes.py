@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -10,16 +10,10 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, get_db
-from app.core.rate_limiter import rate_limit
-from app.core.response_cache import (
-    cache_get_json,
-    cache_invalidate,
-    cache_set_json,
-)
 from app.api.v1.common import get_owned_project
 from app.api.v1.projects import (
     _ACTIVITY_FEED_CACHE_NAMESPACE,
+    _CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
     _LATEST_SNAPSHOT_CACHE_NAMESPACE,
     _NEXT_ACTION_CACHE_NAMESPACE,
     _PROJECT_HEALTH_CACHE_NAMESPACE,
@@ -28,21 +22,30 @@ from app.api.v1.projects import (
 from app.api.v1.users import (
     _USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
     _USER_DASHBOARD_CACHE_NAMESPACE,
+    _USER_DECISION_TO_OUTCOME_DELAY_CACHE_NAMESPACE,
     _USER_INSIGHTS_CACHE_NAMESPACE,
     _USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
     _USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
     _USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
     _USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
+    _USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
+    _USER_OUTCOME_RATE_CACHE_NAMESPACE,
     _USER_OUTCOME_VELOCITY_CACHE_NAMESPACE,
     _USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
+    _USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
     _USER_PROJECTS_SUMMARY_CACHE_NAMESPACE,
     _USER_QUICK_STATS_CACHE_NAMESPACE,
+    _USER_RECENT_OUTCOMES_CACHE_NAMESPACE,
     _USER_RUNS_PER_WEEK_CACHE_NAMESPACE,
     _USER_USAGE_BY_WEEK_CACHE_NAMESPACE,
     _USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
 )
-from app.api.v1.projects import (
-    _CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
+from app.core.deps import get_current_user, get_db
+from app.core.rate_limiter import rate_limit
+from app.core.response_cache import (
+    cache_get_json,
+    cache_invalidate,
+    cache_set_json,
 )
 from app.models.outcome import Outcome
 from app.models.outcome_tracker import OutcomeTracker
@@ -75,16 +78,16 @@ from app.simulation.calibration_health import (
 from app.simulation.funnel_calibration import (
     build_funnel_calibration_digest,
 )
-from app.simulation.outcome_tracker_read import (
-    build_outcome_tracker_timeline,
-)
 from app.simulation.outcome_tracker_export import (
     outcome_tracker_to_csv,
 )
-from app.simulation.outcomes_export import outcomes_to_csv
+from app.simulation.outcome_tracker_read import (
+    build_outcome_tracker_timeline,
+)
 from app.simulation.outcomes_digest_v2 import (
     build_outcomes_digest,
 )
+from app.simulation.outcomes_export import outcomes_to_csv
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/projects", tags=["outcomes"])
@@ -196,8 +199,8 @@ def _as_utc(value: datetime | None) -> datetime | None:
     if value is None:
         return None
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _hydrate_record(outcome: Outcome) -> OutcomeRecord:
@@ -297,7 +300,7 @@ def submit_outcome_feedback(
     simulation_id = body.simulation_id
     actual_cr = body.actual_conversion_rate
 
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     sim = (
         db.query(Simulation)
@@ -688,7 +691,7 @@ def log_outcome_tracker_point(
         predicted_revenue=pred_rev,
         variance=variance,
         notes=payload.notes,
-        recorded_at=payload.recorded_at or datetime.now(timezone.utc),
+        recorded_at=payload.recorded_at or datetime.now(UTC),
     )
     db.add(row)
     db.commit()
@@ -766,7 +769,7 @@ def export_outcome_tracker(
         for row in trackers
     ]
 
-    generated_at = datetime.now(timezone.utc).isoformat()
+    generated_at = datetime.now(UTC).isoformat()
     fmt = format.strip().lower() if format else "csv"
     if fmt == "json":
         json_text = json.dumps(
@@ -1094,7 +1097,7 @@ def get_outcome_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     start_date = _as_utc(start_date)
     end_date = _as_utc(end_date)
@@ -1219,7 +1222,7 @@ def export_outcomes(
     if fmt == "json":
         json_text = json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "project_id": project_id,
                 "outcomes": rows,
             },

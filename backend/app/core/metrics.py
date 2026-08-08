@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import threading
 import time
-from collections import defaultdict
 from typing import Iterable
 
 
@@ -246,9 +245,9 @@ class _Metrics:
 
         # Process metrics — cheap to compute, useful for sanity.
         lines.append(
-            f"# HELP thecee_process_uptime_seconds Seconds since process start."
+            "# HELP thecee_process_uptime_seconds Seconds since process start."
         )
-        lines.append(f"# TYPE thecee_process_uptime_seconds gauge")
+        lines.append("# TYPE thecee_process_uptime_seconds gauge")
         lines.append(
             f"thecee_process_uptime_seconds {_process_uptime_seconds():.3f}"
         )

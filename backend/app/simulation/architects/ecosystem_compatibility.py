@@ -38,7 +38,7 @@ class EcosystemCompatibilityArchitect(BaseArchitect):
         trust        = t["trust"]
         literacy     = t["digital_literacy"]
         price_s      = t["price_sensitivity"]
-        social       = t["social_orientation"]
+        t["social_orientation"]
         risk_av      = t["risk_aversion"]
         age          = cluster.demographic_profile.get("age_bracket", "25-35")
         family_ori   = (

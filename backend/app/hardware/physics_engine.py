@@ -602,7 +602,6 @@ class PhysicsSimulationEngine:
             mat_name = comp.get("material", "ABS").lower()
             is_metal = any(m in mat_name for m in ["steel", "copper", "iron"])
             is_pcb = "pcb" in mat_name or "electronic" in comp.get("name", "").lower()
-            is_seal = "rubber" in mat_name
 
             corrosion_threshold = 0.6 if is_metal else (0.9 if is_pcb else 1.5)
             oxidation_risk = corrosion_factor > 0.7 and is_pcb

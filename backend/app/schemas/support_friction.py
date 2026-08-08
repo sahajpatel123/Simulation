@@ -20,7 +20,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 VERDICT_LOW_BURDEN: str = "LOW_BURDEN"
 VERDICT_MODERATE: str = "MODERATE"
 VERDICT_HIGH: str = "HIGH"

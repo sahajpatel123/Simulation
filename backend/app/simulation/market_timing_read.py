@@ -59,17 +59,17 @@ from app.schemas.market_timing import (
     GATE_REGULATORY,
     GATE_SWITCHING,
     GATE_URGENCY,
-    ClusterTimingProfile,
-    MarketTimingOut,
     TIER_ALMOST,
     TIER_BLOCKED,
     TIER_EARLY,
     TIER_READY,
-    TopOpportunity,
     VERDICT_CAUTIOUS,
     VERDICT_GO,
     VERDICT_INSUFFICIENT,
     VERDICT_WAIT,
+    ClusterTimingProfile,
+    MarketTimingOut,
+    TopOpportunity,
 )
 
 # Ordered gate keys — used for tie-breaking and market aggregation so the

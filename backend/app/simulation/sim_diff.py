@@ -22,7 +22,7 @@ and passes two dicts through.
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 # Severity ordering — higher rank = more severe.
 _SEVERITY_RANK: dict[str, int] = {
@@ -64,9 +64,9 @@ def _iso(ts: object) -> str | None:
         return None
     if isinstance(ts, datetime):
         if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
+            ts = ts.replace(tzinfo=UTC)
         else:
-            ts = ts.astimezone(timezone.utc)
+            ts = ts.astimezone(UTC)
         return ts.isoformat()
     return str(ts)
 

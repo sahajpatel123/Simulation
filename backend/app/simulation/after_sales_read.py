@@ -66,9 +66,6 @@ import math
 from typing import Any, Callable
 
 from app.schemas.after_sales import (
-    AfterSalesLever,
-    AfterSalesOut,
-    ClusterAfterSalesProfile,
     LEVER_ACCESSORY_BUNDLES,
     LEVER_EXTENDED_WARRANTY,
     LEVER_LIFESPAN_ROADMAP,
@@ -94,6 +91,9 @@ from app.schemas.after_sales import (
     VERDICT_INSUFFICIENT,
     VERDICT_STRAINED,
     VERDICT_WATCH,
+    AfterSalesLever,
+    AfterSalesOut,
+    ClusterAfterSalesProfile,
 )
 
 # Ordered risk keys — used for tie-breaking and market aggregation so

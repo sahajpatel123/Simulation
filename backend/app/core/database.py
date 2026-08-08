@@ -2,8 +2,6 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
-from app.models.base import Base
-
 
 _connect_args: dict[str, object] = {}
 if settings.DATABASE_URL.startswith("postgresql"):

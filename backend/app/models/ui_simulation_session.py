@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-
 from typing import Any
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func

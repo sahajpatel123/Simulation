@@ -13,7 +13,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 LABEL_INSUFFICIENT_DATA: str = "INSUFFICIENT_DATA"
 LABEL_WELL_CALIBRATED: str = "WELL_CALIBRATED"
 LABEL_NEEDS_ATTENTION: str = "NEEDS_ATTENTION"

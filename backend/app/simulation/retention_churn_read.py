@@ -45,18 +45,15 @@ import math
 from typing import Any, Callable
 
 from app.schemas.retention_churn import (
-    ClusterRetentionProfile,
     LEVER_FEATURE,
     LEVER_HABIT,
     LEVER_ONBOARDING,
     LEVER_PRICING,
     LEVER_SUPPORT,
     LEVER_WINBACK,
-    RetentionChurnOut,
-    RetentionLever,
     STAGE_DAY1,
-    STAGE_DAY30,
     STAGE_DAY7,
+    STAGE_DAY30,
     STAGE_DAY90,
     TIER_FADING,
     TIER_HIGH_CHURN,
@@ -71,6 +68,9 @@ from app.schemas.retention_churn import (
     VERDICT_MODERATE,
     VERDICT_STRONG,
     VERDICT_WEAK,
+    ClusterRetentionProfile,
+    RetentionChurnOut,
+    RetentionLever,
 )
 
 # Product types whose conductor stack runs RetentionArchitect. Keep in
@@ -555,10 +555,10 @@ def build_retention_churn(
     reeng_avg = _weighted_average(rows, "reeng_30")
     notif_avg = _weighted_average(rows, "notif")
     pause_avg = _weighted_average(rows, "pause")
-    onboarding_avg = _weighted_average(rows, "onboarding_rate")
-    feature_avg = _weighted_average(rows, "feature_depth")
+    _weighted_average(rows, "onboarding_rate")
+    _weighted_average(rows, "feature_depth")
     will_pay_avg = _weighted_average(rows, "will_pay")
-    support_avg = _weighted_average(rows, "support_ticket")
+    _weighted_average(rows, "support_ticket")
     deep_work_weight = sum(
         row["population_weight"]
         for row in rows

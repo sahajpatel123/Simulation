@@ -10,19 +10,11 @@ No DB / I/O — verifiable without FastAPI or PostgreSQL.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
 
-from app.simulation.markov import (
-    BASE_TRANSITIONS,
-    KEYWORD_RULES,
-    SENSITIVITY_WEIGHTS,
-    STATES,
-    STATE_INDEX,
-    State,
-)
 from app.schemas.what_if import (
     StageImpact,
     WhatIfAssumption,
@@ -31,6 +23,14 @@ from app.schemas.what_if import (
     WhatIfRecommendation,
     WhatIfSummary,
     WhatIfSummaryCategory,
+)
+from app.simulation.markov import (
+    BASE_TRANSITIONS,
+    KEYWORD_RULES,
+    SENSITIVITY_WEIGHTS,
+    STATE_INDEX,
+    STATES,
+    State,
 )
 
 
@@ -611,7 +611,7 @@ def build_what_if_scenario(
         assumptions_applied=assumptions_applied,
         env_overrides=env_overrides,
         meta={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "base_matrix_conversion": round(base_matrix_cr, 6),
             "projected_matrix_conversion": round(projected_matrix_cr, 6),
             "existing_assumptions_count": len(base_assumptions),
@@ -827,7 +827,7 @@ def format_categories(categories: list[str] | None, *, empty: str = "none") -> s
     return ",".join(categories)
 
 
-def format_stage_impact(impact: "StageImpact") -> str:
+def format_stage_impact(impact: StageImpact) -> str:
     """Return a one-line summary for a StageImpact.
 
     Example output: ``"BROWSE→CONSIDER 0.6200→0.5500 (-0.0700)"``.
@@ -839,7 +839,7 @@ def format_stage_impact(impact: "StageImpact") -> str:
     )
 
 
-def format_stage_impact_label(impact: "StageImpact") -> str:
+def format_stage_impact_label(impact: StageImpact) -> str:
     """Return a compact "BASE → PROJECTED (Δ)" label for a StageImpact.
 
     Example output: ``"0.6200 → 0.5500 (-0.0700)"``.

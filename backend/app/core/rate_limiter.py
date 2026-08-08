@@ -5,7 +5,7 @@ import threading
 import time
 import uuid
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, Request
 
@@ -31,7 +31,7 @@ class InMemoryRateLimiter:
         limit: int,
         window_s: int,
     ) -> bool:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         cutoff = now - timedelta(seconds=window_s)
         with self._lock:
             self._requests[key] = [t for t in self._requests[key] if t > cutoff]

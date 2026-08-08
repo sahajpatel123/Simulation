@@ -36,6 +36,8 @@ Output shape
 """
 from __future__ import annotations
 
+from datetime import UTC
+
 # Cap on top_interventions — dashboard tile stays readable.
 MAX_TOP: int = 5
 
@@ -90,7 +92,7 @@ def _is_quick_win(item: dict) -> bool:
 def _format_stale_flag(generated_at: object | None, now: object) -> bool:
     if not generated_at:
         return True
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     gen = generated_at
     if isinstance(gen, str):
@@ -101,15 +103,15 @@ def _format_stale_flag(generated_at: object | None, now: object) -> bool:
     if not isinstance(gen, datetime):
         return True
     if gen.tzinfo is None:
-        gen = gen.replace(tzinfo=timezone.utc)
+        gen = gen.replace(tzinfo=UTC)
     ref = now
     if isinstance(ref, str):
         try:
             ref = datetime.fromisoformat(ref)
         except Exception:
-            ref = datetime.now(timezone.utc)
+            ref = datetime.now(UTC)
     if isinstance(ref, datetime) and ref.tzinfo is None:
-        ref = ref.replace(tzinfo=timezone.utc)
+        ref = ref.replace(tzinfo=UTC)
     try:
         delta = ref - gen
     except Exception:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 GROWTH_STAGES = {
     "launch": {"users": 100, "label": "Launch (Day 1)"},

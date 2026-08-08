@@ -41,7 +41,6 @@ from app.schemas.fix_leverage import (
 )
 from app.simulation.markov import BASE_TRANSITIONS, State
 
-
 # Forward funnel transitions used by the Markov chain. Keys are the
 # transition labels used in responses and the API surface.
 FORWARD_TRANSITIONS: tuple[tuple[str, str, str], ...] = (
@@ -225,11 +224,11 @@ def _parse_findings(results: dict[str, Any]) -> list[dict[str, Any]]:
                 "conversion_impact": max(
                     0.0,
                     _safe_float(
-                        (
+
                             item.get("conversion_impact")
                             if item.get("conversion_impact") is not None
                             else item.get("impact_on_overall_conversion")
-                        )
+
                     ),
                 ),
             }

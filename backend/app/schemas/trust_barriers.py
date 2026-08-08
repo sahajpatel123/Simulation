@@ -17,7 +17,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 VERDICT_LOW_BARRIER: str = "LOW_BARRIER"
 VERDICT_MODERATE: str = "MODERATE"
 VERDICT_HIGH: str = "HIGH"

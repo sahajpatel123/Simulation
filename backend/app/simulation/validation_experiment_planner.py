@@ -14,7 +14,7 @@ Pure module — no DB, no I/O. Verifiable without FastAPI or PostgreSQL.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.schemas.validation_experiment import (
@@ -395,7 +395,7 @@ def build_validation_experiment_plan(
         experiments=experiments,
         narrative=_build_narrative(experiments, summary),
         meta={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "model": "validation_experiment_planner_v1",
             "source": "validation_roi_v1 ranking (sensitivity x uncertainty)",
             "method_mapping": "category-driven with deterministic per-method specs",

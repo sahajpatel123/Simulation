@@ -1,10 +1,10 @@
 """Product category enum shared by Conductor and ClusterReweightingEngine."""
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class ProductType(str, Enum):
+class ProductType(StrEnum):
     SAAS                = "saas"
     MARKETPLACE         = "marketplace"
     MOBILE_APP          = "mobile_app"

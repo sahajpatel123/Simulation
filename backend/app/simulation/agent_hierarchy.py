@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class AgentTier(str, Enum):
+class AgentTier(StrEnum):
     MICRO = "MICRO"  # stochastic outcome, no browser
     WORKER = "WORKER"  # full Playwright session
     SUPERVISOR = "SUPERVISOR"  # multi-step deliberation, ambiguity handling

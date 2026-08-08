@@ -28,9 +28,6 @@ import math
 from typing import Any, Callable
 
 from app.schemas.sustainability_positioning import (
-    ClusterSustainabilityProfile,
-    SustainabilityOpportunity,
-    SustainabilityPositioningOut,
     TIER_HIGH,
     TIER_LOW,
     TIER_MODERATE,
@@ -40,6 +37,9 @@ from app.schemas.sustainability_positioning import (
     VERDICT_NOT_POSITIONED,
     VERDICT_STRONG,
     VERDICT_WEAK,
+    ClusterSustainabilityProfile,
+    SustainabilityOpportunity,
+    SustainabilityPositioningOut,
 )
 
 ARCHITECT: str = "SustainabilityArchitect"

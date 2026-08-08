@@ -39,7 +39,6 @@ from app.simulation.outcomes_digest import (
     aggregate_outcomes,
 )
 
-
 # Minimum number of (predicted, actual) pairs before historical calibration
 # is considered real signal. Below this the payload is explicitly labelled
 # INSUFFICIENT_DATA even though a conservative range is still rendered.

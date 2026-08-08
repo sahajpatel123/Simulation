@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import html
 import io
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from reportlab.lib import colors
@@ -201,7 +201,7 @@ class HardwareReportGenerator:
             textColor=_verdict_color(verdict),
         )
 
-        gen_date = datetime.now(timezone.utc).strftime("%B %d, %Y")
+        gen_date = datetime.now(UTC).strftime("%B %d, %Y")
 
         # ══════════════ COVER PAGE ══════════════
         story += [

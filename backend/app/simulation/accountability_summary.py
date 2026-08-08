@@ -22,15 +22,14 @@ from __future__ import annotations
 from typing import Any
 
 from app.schemas.accountability import (
+    VALID_SEVERITIES,
     DomainFindingOut,
     FindingsByArchitect,
     FindingsByCluster,
     FindingsByMetric,
     FindingsSummaryOut,
     RecommendedActionCount,
-    VALID_SEVERITIES,
 )
-
 
 DEFAULT_LIMIT: int = 10
 MAX_LIMIT: int = 100

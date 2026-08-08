@@ -8,7 +8,7 @@ assumptions, outcomes, and risk signals. Keeping the composition pure
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.schemas.project_comparison import (
@@ -277,7 +277,7 @@ def build_project_comparison(
         projects=refs,
         dimensions=dims,
         summary=_summary_block(a, b, dims),
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
     )
 
 

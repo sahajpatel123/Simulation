@@ -9,24 +9,24 @@ No DB / I/O — verifiable without FastAPI or PostgreSQL.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
 
-from app.simulation.markov import (
-    BASE_TRANSITIONS,
-    KEYWORD_RULES,
-    SENSITIVITY_WEIGHTS,
-    STATES,
-    STATE_INDEX,
-    State,
-)
 from app.schemas.sensitivity import (
     AssumptionSensitivity,
     SensitivityOut,
     SensitivityPoint,
     SensitivitySummary,
+)
+from app.simulation.markov import (
+    BASE_TRANSITIONS,
+    KEYWORD_RULES,
+    SENSITIVITY_WEIGHTS,
+    STATE_INDEX,
+    STATES,
+    State,
 )
 
 # Impact score levels to test (0% to 100% of the original impact score).
@@ -293,7 +293,7 @@ def build_sensitivity_analysis(
                 else None
             ),
             meta={
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "impact_levels": IMPACT_LEVELS,
                 "assumption_count": 0,
             },
@@ -461,7 +461,7 @@ def build_sensitivity_analysis(
             else None
         ),
         meta={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "impact_levels": IMPACT_LEVELS,
             "assumption_count": len(results),
             "baseline_matrix_conversion": round(baseline_matrix_cr, 6),

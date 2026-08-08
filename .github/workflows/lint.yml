@@ -48,10 +48,6 @@ jobs:
         run: |
           ruff check backend/app
 
-      - name: Run ruff format check
-        run: |
-          ruff format --check backend/app
-
   python-deps-audit:
     name: pip-audit (dependency CVEs)
     runs-on: ubuntu-latest

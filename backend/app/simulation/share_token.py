@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 DEFAULT_TTL_DAYS = 30
@@ -39,20 +39,20 @@ def hash_token(token: str) -> str:
 
 def compute_expiry(now: datetime | None = None, ttl_days: int = DEFAULT_TTL_DAYS) -> datetime:
     """Return UTC expiry = now + ttl_days. Caller is responsible for tz."""
-    base = now or datetime.now(timezone.utc)
+    base = now or datetime.now(UTC)
     if base.tzinfo is None:
-        base = base.replace(tzinfo=timezone.utc)
+        base = base.replace(tzinfo=UTC)
     return base + timedelta(days=ttl_days)
 
 
 def is_expired(expires_at: datetime, now: datetime | None = None) -> bool:
     """True when ``expires_at`` is at or before ``now`` (UTC)."""
-    base = now or datetime.now(timezone.utc)
+    base = now or datetime.now(UTC)
     if base.tzinfo is None:
-        base = base.replace(tzinfo=timezone.utc)
+        base = base.replace(tzinfo=UTC)
     exp = expires_at
     if exp.tzinfo is None:
-        exp = exp.replace(tzinfo=timezone.utc)
+        exp = exp.replace(tzinfo=UTC)
     return exp <= base
 
 

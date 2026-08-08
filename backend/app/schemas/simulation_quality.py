@@ -14,7 +14,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-
 SEVERITY_LITERAL = Literal["CRITICAL", "MAJOR", "MINOR", "INFO"]
 VERDICT_LITERAL = Literal["PASS", "REVIEW", "FAIL"]
 

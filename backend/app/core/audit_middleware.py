@@ -125,7 +125,6 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
         session would risk committing a half-written transaction when
         the endpoint had already raised.
         """
-        from sqlalchemy import text
 
         from app.models.audit_log import ApiAuditLog
 

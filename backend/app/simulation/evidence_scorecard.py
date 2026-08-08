@@ -26,7 +26,7 @@ math and tier thresholds stay in one place.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.schemas.assumption_evidence import (
@@ -97,8 +97,8 @@ def _effective_confidence(before_tier: str, result: str) -> tuple[str, float]:
 def _as_utc(value: Any) -> datetime:
     """Coerce a timestamp to an aware UTC datetime for safe comparison."""
     if isinstance(value, datetime):
-        return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
-    return datetime.min.replace(tzinfo=timezone.utc)
+        return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    return datetime.min.replace(tzinfo=UTC)
 
 
 def _evidence_sort_key(row: Any) -> tuple[Any, int]:
@@ -257,7 +257,6 @@ def build_assumption_scorecard(
         )
 
     before_tier: CONFIDENCE_TIER_LITERAL = row.confidence_tier
-    before_score = row.confidence_score
     before_roi = row.validation_roi
     before_roi_tier = row.roi_tier
 
@@ -310,7 +309,7 @@ def build_assumption_scorecard(
 
 def _meta() -> dict[str, Any]:
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "model": "evidence_scorecard_v1",
         "evidence_mapping": {
             EVIDENCE_RESULT_PASS: (

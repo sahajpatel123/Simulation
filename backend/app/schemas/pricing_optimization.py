@@ -14,7 +14,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 VERDICT_UNDERPRICED: str = "UNDERPRICED"
 VERDICT_OVERPRICED: str = "OVERPRICED"
 VERDICT_PRICE_OPTIMAL: str = "PRICE_OPTIMAL"

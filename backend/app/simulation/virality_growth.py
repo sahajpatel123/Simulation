@@ -52,8 +52,6 @@ from app.schemas.virality_growth import (
     BLOCKER_INVITE,
     BLOCKER_TRIGGER,
     BLOCKER_WOM,
-    ClusterGrowthProfile,
-    GrowthLever,
     LEVER_COMMUNITY,
     LEVER_INCENTIVES,
     LEVER_ORGANIC,
@@ -68,6 +66,8 @@ from app.schemas.virality_growth import (
     VERDICT_LIMITED,
     VERDICT_MOMENTUM,
     VERDICT_VIRAL,
+    ClusterGrowthProfile,
+    GrowthLever,
     ViralityGrowthOut,
 )
 

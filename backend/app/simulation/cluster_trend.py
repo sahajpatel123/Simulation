@@ -19,7 +19,7 @@ disambiguate timezones.
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 # Bin granularity options. The route validates user input
 # against this allowlist so a typo ("mont") doesn't silently
@@ -235,9 +235,9 @@ def build_cluster_trend(
         if isinstance(created_at, datetime):
             dt = created_at
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             else:
-                dt = dt.astimezone(timezone.utc)
+                dt = dt.astimezone(UTC)
         elif isinstance(created_at, str):
             candidate = created_at.strip()
             if not candidate:
@@ -249,9 +249,9 @@ def build_cluster_trend(
             except ValueError:
                 continue
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             else:
-                dt = dt.astimezone(timezone.utc)
+                dt = dt.astimezone(UTC)
         else:
             continue
         # Pull cluster_breakdown from results.

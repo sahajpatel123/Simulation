@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import html
 import io
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from reportlab.lib import colors
@@ -10,7 +10,15 @@ from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.platypus import HRFlowable, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import (
+    HRFlowable,
+    PageBreak,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 
 THECEE_DARK = colors.HexColor("#0F172A")
 THECEE_BLUE = colors.HexColor("#3B82F6")
@@ -137,7 +145,7 @@ class SimulationReportGenerator:
         base, S = _styles()
         story = []
 
-        gen_ts = datetime.now(timezone.utc).strftime("%B %d, %Y")
+        gen_ts = datetime.now(UTC).strftime("%B %d, %Y")
         story += [
             Spacer(1, 30 * mm),
             Paragraph("TheCee", S["ReportTitle"]),

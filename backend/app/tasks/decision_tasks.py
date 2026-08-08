@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import traceback
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from celery import Task
@@ -26,7 +26,7 @@ SURVIVAL_THRESHOLD: float = 0.05
 
 
 def _utcnow() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class DecisionTask(Task):
@@ -325,7 +325,6 @@ def run_decision_comparison(self, decision_id: int) -> dict[str, Any]:
                 _NEXT_ACTION_CACHE_NAMESPACE,
             )
             from app.core.response_cache import cache_invalidate
-            from app.models.project import Project
 
             owner_id = (
                 self.db.query(Project.user_id)

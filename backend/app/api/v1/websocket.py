@@ -91,7 +91,7 @@ async def websocket_simulation_progress(
     await websocket.accept()
     try:
         raw = await asyncio.wait_for(websocket.receive_text(), timeout=20.0)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         await websocket.close(code=4001)
         return
     except Exception:

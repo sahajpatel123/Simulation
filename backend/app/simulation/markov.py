@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass as _dc
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -29,7 +29,7 @@ class ClusterTransitionMatrix:
 # ================================================================
 
 
-class State(str, Enum):
+class State(StrEnum):
     ARRIVE = "ARRIVE"
     BROWSE = "BROWSE"
     CONSIDER = "CONSIDER"
@@ -249,7 +249,7 @@ class MarkovBehaviourModel:
 
     def build_for_cluster(
         self,
-        cluster: "ClusterDefinition",
+        cluster: ClusterDefinition,
         architect_outputs: dict[str, Any],
         env_params: dict[str, Any],
         seed: int = 42,
@@ -332,7 +332,7 @@ class MarkovBehaviourModel:
         env_params: dict[str, Any],
         assumptions: list[Any],
         seed: int = 42,
-        cluster: "ClusterDefinition | None" = None,
+        cluster: ClusterDefinition | None = None,
         architect_outputs: dict[str, Any] | None = None,
     ) -> ClusterTransitionMatrix | np.ndarray:
         """

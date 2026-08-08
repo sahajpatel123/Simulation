@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import asdict, dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import numpy as np
@@ -17,13 +17,13 @@ logger = logging.getLogger(__name__)
 # ================================================================
 
 
-class DeviceType(str, Enum):
+class DeviceType(StrEnum):
     MOBILE = "MOBILE"
     DESKTOP = "DESKTOP"
     TABLET = "TABLET"
 
 
-class Region(str, Enum):
+class Region(StrEnum):
     METRO = "METRO"
     NORTH = "NORTH"
     SOUTH = "SOUTH"
@@ -34,7 +34,7 @@ class Region(str, Enum):
     TIER3 = "TIER3"
 
 
-class IncomeBracket(str, Enum):
+class IncomeBracket(StrEnum):
     LOW_INCOME = "LOW_INCOME"
     LOWER_MIDDLE = "LOWER_MIDDLE"
     MIDDLE = "MIDDLE"

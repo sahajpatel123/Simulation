@@ -23,8 +23,6 @@ Output shape
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 # Signal severity buckets.
 SIGNAL_OK: str = "ok"
 SIGNAL_WATCH: str = "watch"

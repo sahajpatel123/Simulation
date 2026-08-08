@@ -1,19 +1,19 @@
 from __future__ import annotations
 
-import logging
 import json
-from datetime import datetime, timezone
+import logging
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
 from sqlalchemy import text
 
 from app.core.database import SessionLocal
-from app.models.project import Project
-from app.models.user import User
 from app.core.tier_enforcement import enforce_hardware_access
 from app.hardware.physics_engine import PhysicsSimulationEngine
 from app.hardware.test_configs import TestConfigBuilder
+from app.models.project import Project
+from app.models.user import User
 from app.worker import celery_app
 
 engine = PhysicsSimulationEngine()
@@ -174,7 +174,7 @@ def run_hardware_tests(self, hardware_product_id: int, project_id: int):
             "critical_count": critical_count,
             "top_failure_points": top_failures,
             "test_result_ids": result_ids,
-            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "completed_at": datetime.now(UTC).isoformat(),
         }
 
         db.execute(

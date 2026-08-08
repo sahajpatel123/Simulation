@@ -15,7 +15,6 @@ import io
 import json
 from typing import Any, TypedDict
 
-
 FORMAT_VERSION = "2"
 
 

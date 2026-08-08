@@ -13,32 +13,32 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.rate_limiter import rate_limit
 from app.hardware.competitive_analysis import HardwareCompetitiveAnalyser
-from app.hardware.manufacturing_cost import ManufacturingCostAnalyser
-from app.reports.hardware_report import HardwareReportGenerator
 from app.hardware.engineering_plate import compute_engineering_plate_labels
+from app.hardware.manufacturing_cost import ManufacturingCostAnalyser
 from app.hardware.model_generator import HardwareModelGenerator
 from app.hardware.test_configs import TEST_DEFAULTS, TestConfigBuilder
 from app.models.project import Project
-from app.tasks.hardware_consumer_simulation import run_hardware_consumer_simulation
-from app.tasks.hardware_tasks import run_hardware_tests
 from app.models.project_hardware import Hardware3DModel, HardwareProduct
 from app.models.user import User
+from app.reports.hardware_report import HardwareReportGenerator
+from app.schemas.billing import (
+    HardwareCostAnalysisRequest,
+    HardwareTriggerConsumerSimRequest,
+)
 from app.schemas.hardware import (
     VALID_PRODUCT_TYPES,
-    HardwareGenerateSpecRequest,
+    HardwareCreateTestConfigsRequest,
     HardwareEngineeringPlateOut,
+    HardwareGenerateSpecRequest,
     HardwareGenerateSpecResponse,
     HardwareProductDetailResponse,
     HardwareProductListItem,
     HardwareRefineSpecRequest,
     HardwareRefineSpecResponse,
     HardwareRenderHintsOut,
-    HardwareCreateTestConfigsRequest,
 )
-from app.schemas.billing import (
-    HardwareCostAnalysisRequest,
-    HardwareTriggerConsumerSimRequest,
-)
+from app.tasks.hardware_consumer_simulation import run_hardware_consumer_simulation
+from app.tasks.hardware_tasks import run_hardware_tests
 
 router = APIRouter(tags=["hardware"])
 

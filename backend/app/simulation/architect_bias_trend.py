@@ -20,24 +20,20 @@ before invoking.
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 # Reuse the bin / trend constants from cluster_trend so the
 # dashboard's wording stays consistent.
 from app.simulation.cluster_trend import (
+    BIN_DAY,
     BIN_MONTH,
     BIN_WEEK,
-    BIN_DAY,
-    VALID_BINS,
     STABLE_DELTA_THRESHOLD,
-    TREND_UP,
-    TREND_DOWN,
     TREND_STABLE,
     TREND_UNKNOWN,
-    VALID_TREND_LABELS,
-    normalise_bin,
     _bin_key,
     _bin_sort_key,
+    normalise_bin,
 )
 
 # Bias-direction labels — distinct from the cluster trend
@@ -175,9 +171,9 @@ def build_architect_bias_trend(
         if isinstance(created_at, datetime):
             dt = created_at
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             else:
-                dt = dt.astimezone(timezone.utc)
+                dt = dt.astimezone(UTC)
         elif isinstance(created_at, str):
             candidate = created_at.strip()
             if not candidate:
@@ -189,9 +185,9 @@ def build_architect_bias_trend(
             except ValueError:
                 continue
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             else:
-                dt = dt.astimezone(timezone.utc)
+                dt = dt.astimezone(UTC)
         else:
             continue
 

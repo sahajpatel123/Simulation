@@ -33,12 +33,12 @@ class AftersalesLifecycleArchitect(BaseArchitect):
         t            = cluster.base_traits
         income       = t["income_level"]
         social       = t["social_orientation"]
-        patience     = t["patience_score"]
+        t["patience_score"]
         trust        = t["trust"]
         literacy     = t["digital_literacy"]
         age          = cluster.demographic_profile.get("age_bracket", "25-35")
         AOV          = float(env_params.get("average_order_value", 3000))
-        product_type = str(env_params.get("product_type", "consumer_hardware"))
+        str(env_params.get("product_type", "consumer_hardware"))
 
         oob_completion = float(agent_profile.get("oob_setup_completion_rate", 0.80))
         brand_mult     = float(agent_profile.get("brand_deficit_multiplier", 0.8))

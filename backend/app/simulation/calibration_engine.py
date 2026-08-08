@@ -6,7 +6,6 @@ from statistics import mean
 
 from sqlalchemy import text
 
-
 ALL_ARCHITECT_NAMES = [
     "MarketTimingArchitect",
     "CompetitiveDynamicsArchitect",

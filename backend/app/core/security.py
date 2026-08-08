@@ -1,7 +1,6 @@
 import secrets
 import string
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -34,8 +33,8 @@ def validate_password_strength(password: str) -> str:
     return password
 
 
-def create_access_token(subject: str, expires_delta: Optional[timedelta] = None) -> str:
-    expire = datetime.now(timezone.utc) + (
+def create_access_token(subject: str, expires_delta: timedelta | None = None) -> str:
+    expire = datetime.now(UTC) + (
         expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     payload = {"exp": expire, "sub": str(subject), "type": "access"}
@@ -47,7 +46,7 @@ def create_refresh_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-def decode_token(token: str, token_type: str = "access") -> Optional[str]:
+def decode_token(token: str, token_type: str = "access") -> str | None:
     """Decode and validate a JWT, returning the subject on success.
 
     Pins the allowed algorithm to ``settings.ALGORITHM`` to block the

@@ -20,8 +20,7 @@ Standard staleness thresholds (in days)
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
+from datetime import UTC, datetime
 
 # Per-source staleness thresholds (days).
 # Wider thresholds for sources that change less often.
@@ -49,7 +48,7 @@ def _diff_days(latest: datetime | None, now: datetime) -> int | None:
     if latest is None:
         return None
     if latest.tzinfo is None:
-        latest = latest.replace(tzinfo=timezone.utc)
+        latest = latest.replace(tzinfo=UTC)
     delta = now - latest
     return max(0, delta.days)
 
@@ -110,7 +109,7 @@ def build_stale_check(
         module docstring.
     """
     ref = now if isinstance(now, datetime) else (
-        datetime.now(timezone.utc)
+        datetime.now(UTC)
     )
 
     sources = [

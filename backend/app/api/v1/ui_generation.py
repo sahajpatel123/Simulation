@@ -9,12 +9,12 @@ from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
+from app.api.v1.common import get_owned_project
 from app.core.claude_client import claude_call_with_fallback
 from app.core.config import settings
 from app.core.css_templates import select_layout_archetype
 from app.core.database import get_db
 from app.core.deps import get_current_user
-from app.core.rate_limiter import rate_limit
 from app.core.prompts import (
     UI_GENERATION_PROMPT,
     UI_GENERATION_SYSTEM,
@@ -22,7 +22,7 @@ from app.core.prompts import (
     UI_REFINE_SYSTEM,
     validate_generated_html,
 )
-from app.api.v1.common import get_owned_project
+from app.core.rate_limiter import rate_limit
 from app.models.generated_ui import GeneratedUI
 from app.models.project import Project
 from app.models.ui_simulation_run import UISimulationRun
@@ -30,10 +30,11 @@ from app.models.user import User
 from app.schemas.ui_generation import (
     GeneratedUIResponse,
     UIDiffResponse,
-    UIVersionHistoryResponse,
-    UIRefineRequest,
     UIGenerateRequest,
+    UIRefineRequest,
     UIRollbackResponse,
+    UIVersionHistoryResponse,
+    UIVersionRow,
 )
 
 router = APIRouter(tags=["ui-generation"])
@@ -574,7 +575,7 @@ async def refine_ui(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     existing = (
         db.query(GeneratedUI)
@@ -656,7 +657,7 @@ async def list_generated_uis(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     uis = (
         db.query(GeneratedUI)
@@ -728,7 +729,7 @@ async def list_ui_versions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
     uis = (
         db.query(GeneratedUI)
         .filter(GeneratedUI.project_id == project_id)
@@ -766,7 +767,7 @@ async def diff_ui_versions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
     from_ui = (
         db.query(GeneratedUI)
         .filter(GeneratedUI.project_id == project_id, GeneratedUI.version == from_version)
@@ -812,7 +813,7 @@ async def rollback_ui(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
     source = (
         db.query(GeneratedUI)
         .filter(GeneratedUI.project_id == project_id, GeneratedUI.version == version)
@@ -915,7 +916,7 @@ async def start_ui_simulation(
 ):
     from app.tasks.ui_simulation_tasks import run_ui_simulation
 
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     ui = (
         db.query(GeneratedUI)
@@ -967,7 +968,7 @@ async def get_ui_simulation_run(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     run = (
         db.query(UISimulationRun)
@@ -1004,7 +1005,7 @@ async def get_heatmap(
 ):
     from app.simulation.heatmap import HeatmapEngine
 
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     run = (
         db.query(UISimulationRun)
@@ -1061,7 +1062,7 @@ async def get_funnel_analytics(
 ):
     from app.simulation.funnel_analytics import FunnelAnalyticsEngine
 
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     run = (
         db.query(UISimulationRun)
@@ -1116,7 +1117,7 @@ async def get_channel_attribution(
 ):
     from app.simulation.channel_attribution import ChannelAttributionEngine
 
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     run = (
         db.query(UISimulationRun)
@@ -1160,7 +1161,7 @@ async def get_retention_churn(
 ):
     from app.simulation.retention_churn import RetentionChurnEngine
 
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     run = (
         db.query(UISimulationRun)
@@ -1205,7 +1206,7 @@ async def get_infra_scaling(
     from app.simulation.infra_scaling import InfraScalingEngine
     from app.simulation.retention_churn import RetentionChurnEngine
 
-    project = get_owned_project(db, current_user.id, project_id)
+    get_owned_project(db, current_user.id, project_id)
 
     run = (
         db.query(UISimulationRun)

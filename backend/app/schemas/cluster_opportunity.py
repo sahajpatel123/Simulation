@@ -8,7 +8,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 VALID_SEGMENTS: frozenset[str] = frozenset(
     {"QUICK_WIN", "TRANSFORM", "NICHE", "DEPRIORITIZE"}
 )

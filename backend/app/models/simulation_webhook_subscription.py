@@ -45,7 +45,7 @@ class SimulationWebhookSubscription(Base, TimestampMixin):
     last_delivery_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     last_delivery_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    deliveries: Mapped[list["SimulationWebhookDelivery"]] = relationship(
+    deliveries: Mapped[list[SimulationWebhookDelivery]] = relationship(
         "SimulationWebhookDelivery",
         back_populates="subscription",
         cascade="all, delete-orphan",

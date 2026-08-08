@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
-    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -58,7 +57,7 @@ class ShareToken(Base):
 
     # Relationships — keep loose so the model can be loaded without the
     # full project/simulation graph being eagerly fetched.
-    simulation: Mapped["Simulation"] = relationship("Simulation", lazy="noload")  # type: ignore[name-defined]  # noqa: F821
+    simulation: Mapped[Simulation] = relationship("Simulation", lazy="noload")  # type: ignore[name-defined]  # noqa: F821
 
 
 __all__ = ["ShareToken"]

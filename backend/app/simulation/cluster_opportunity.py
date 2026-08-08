@@ -20,7 +20,7 @@ No DB / I/O — verifiable without FastAPI or PostgreSQL.
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.schemas.cluster_opportunity import (
@@ -382,7 +382,7 @@ def build_cluster_opportunity_matrix(
         primary_failure_domain=str(data.get("primary_failure_domain") or "unknown"),
         signal_quality=signal_quality,
         meta={
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "benchmark": benchmark,
             "lift_fraction": LIFT_FRACTION,
             "cluster_summaries_used": bool(cluster_summaries),

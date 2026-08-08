@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
-
+from pydantic import BaseModel, Field
 
 # Mirrors TIER_LIMITS keys in app/core/tier_enforcement.py — keep in sync.
 VALID_PLANS = ("pro", "enterprise")

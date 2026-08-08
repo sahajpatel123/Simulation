@@ -56,9 +56,6 @@ from app.schemas.distribution_channels import (
     BLOCKER_INFLUENCER,
     BLOCKER_PLATFORM,
     BLOCKER_TRY_BEFORE_BUY,
-    ClusterChannelProfile,
-    DistributionChannelsOut,
-    DistributionLever,
     LEVER_CASHBACK,
     LEVER_DELIVERY,
     LEVER_INFLUENCER,
@@ -73,6 +70,9 @@ from app.schemas.distribution_channels import (
     VERDICT_INSUFFICIENT,
     VERDICT_OMNICHANNEL,
     VERDICT_ONLINE_FIRST,
+    ClusterChannelProfile,
+    DistributionChannelsOut,
+    DistributionLever,
 )
 
 # Product types whose conductor stack runs DistributionChannelArchitect.

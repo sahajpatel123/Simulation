@@ -1,6 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import sentry_sdk
 from fastapi import FastAPI
@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse, Response
 from sqlalchemy import text
 
 from app.api.v1 import api_router
+from app.core.audit_middleware import AuditLogMiddleware
 from app.core.config import settings
 from app.core.database import engine, init_extensions
 from app.core.errors import TheCeeError, generic_error_handler, thecee_error_handler
@@ -17,7 +18,6 @@ from app.core.metrics import metrics
 from app.core.progress_bridge import progress_bridge
 from app.core.redis_client import get_redis_client
 from app.core.timing_middleware import TimingMiddleware
-from app.core.audit_middleware import AuditLogMiddleware
 from app.worker import celery_app as _celery_app
 
 logger = logging.getLogger(__name__)
@@ -40,8 +40,8 @@ async def lifespan(app: FastAPI):
     # the worker runs in a separate process. No-op-safe when Redis is down.
     await progress_bridge.ensure_running()
 
-    from app.simulation.clusters.registry import ClusterRegistry
     from app.core.database import SessionLocal
+    from app.simulation.clusters.registry import ClusterRegistry
     db = SessionLocal()
     try:
         ClusterRegistry().sync_to_db(db)
@@ -127,7 +127,7 @@ def _service_health() -> tuple[dict[str, object], int]:
     report: dict[str, object] = {
         "status": "healthy",
         "environment": settings.ENVIRONMENT,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "services": {},
     }
     status_code = 200
@@ -266,7 +266,7 @@ async def readyz() -> JSONResponse:
     body = {
         "ready": db_ok and redis_ok,
         "checks": checks,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
     code = 200 if body["ready"] else 503
     return JSONResponse(content=body, status_code=code)

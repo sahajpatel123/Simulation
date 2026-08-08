@@ -14,7 +14,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 VERDICT_INSUFFICIENT_DATA: str = "INSUFFICIENT_DATA"
 VERDICT_VALIDATED: str = "VALIDATED"
 VERDICT_MIXED: str = "MIXED"

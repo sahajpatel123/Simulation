@@ -18,7 +18,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 VERDICT_VIRAL: str = "VIRAL"
 VERDICT_MOMENTUM: str = "MOMENTUM"
 VERDICT_LIMITED: str = "LIMITED"
