@@ -91,8 +91,10 @@ jobs:
           except Exception as e:
               print(f'::error::pip-audit report is not valid JSON: {e}')
               sys.exit(1)
+          if isinstance(data, dict):
+              data = data.get('dependencies', [])
           if not isinstance(data, list):
-              print('::error::pip-audit report is not a list')
+              print('::error::pip-audit report is missing dependencies')
               sys.exit(1)
           print('✅ pip-audit report is valid JSON')
           PY
@@ -114,7 +116,11 @@ jobs:
           import json, sys
           try:
               with open('safety-report.json') as f:
-                  json.load(f)
+                  text = f.read()
+              idx = text.find('[')
+              if idx == -1:
+                  raise ValueError('no JSON array found in safety report')
+              json.loads(text[idx:])
           except Exception as e:
               print(f'::error::safety report is not valid JSON: {e}')
               sys.exit(1)
@@ -141,7 +147,8 @@ jobs:
           try:
               with open('pip-audit-report.json') as f:
                   data = json.load(f)
-              vulns = len(data) if isinstance(data, list) else 0
+              deps = data.get('dependencies', []) if isinstance(data, dict) else data
+              vulns = len(deps) if isinstance(deps, list) else 0
               print(f'::notice title=pip-audit:: {vulns} known vulnerabilities found in requirements.txt')
           except Exception as e:
               print(f'Summary failed: {e}', file=sys.stderr)

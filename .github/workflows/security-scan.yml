@@ -153,8 +153,10 @@ jobs:
           except Exception as e:
               print(f'::error::pip-audit report is not valid JSON: {e}')
               sys.exit(1)
+          if isinstance(data, dict):
+              data = data.get('dependencies', [])
           if not isinstance(data, list):
-              print('::error::pip-audit report is not a list')
+              print('::error::pip-audit report is missing dependencies')
               sys.exit(1)
           print('✅ pip-audit report is valid JSON')
           PY
@@ -177,10 +179,11 @@ jobs:
           try:
               with open('pip-audit-report.json') as f:
                   data = json.load(f)
-              if isinstance(data, list):
-                vulns = len(data)
+              deps = data.get('dependencies', []) if isinstance(data, dict) else data
+              if isinstance(deps, list):
+                vulns = len(deps)
                 print(f'::warning title=pip-audit:: {vulns} known vulnerabilities found')
-                for vuln in data[:10]:
+                for vuln in deps[:10]:
                   print(f'- {vuln.get(\"package_name\", \"?\")} {vuln.get(\"vulns\", [{}])[0].get(\"id\", \"?\")}')
               else:
                 print('No vulnerabilities found or unexpected format')
@@ -227,7 +230,11 @@ jobs:
           import json, sys
           try:
               with open('safety-report.json') as f:
-                  json.load(f)
+                  text = f.read()
+              idx = text.find('[')
+              if idx == -1:
+                  raise ValueError('no JSON array found in safety report')
+              json.loads(text[idx:])
           except Exception as e:
               print(f'::error::safety report is not valid JSON: {e}')
               sys.exit(1)
@@ -247,10 +254,14 @@ jobs:
         if: always()
         run: |
           python - <<'PY'
-          import json
+          import json, sys
           try:
               with open('safety-report.json') as f:
-                  data = json.load(f)
+                  text = f.read()
+              idx = text.find('[')
+              if idx == -1:
+                  raise ValueError('no JSON array found in safety report')
+              data = json.loads(text[idx:])
               count = len(data) if isinstance(data, list) else 0
               print(f'::notice title=safety:: {count} known vulnerabilities found')
           except Exception as e:

@@ -135,4 +135,7 @@ For security concerns, please contact the project maintainers.
   Python 3.11/scipy-compatible release, upgraded `safety` to a version
   compatible with `pip-audit`, and removed an invalid ruff `pyupgrade`
   config field.
+- 2026-08-08 - Cleared the pre-existing ruff lint backlog across `backend/app`,
+  fixed missing imports, and corrected the `projects.tags` JSONB server default
+  so migrations can run on a fresh PostgreSQL database.
 - [VERSION] - Initial security policy

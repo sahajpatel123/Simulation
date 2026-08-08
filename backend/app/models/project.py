@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -64,7 +64,12 @@ class Project(Base, TimestampMixin):
     # User-supplied project labels (lowercase, deduped, capped). Always a
     # list — the DB default is ``[]`` and the helper module enforces the
     # character + length contract on every write path.
-    tags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="'[]'::jsonb")
+    tags: Mapped[list] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
 
     user: Mapped["User"] = relationship("User", back_populates="projects")
     assumptions: Mapped[list["Assumption"]] = relationship(
