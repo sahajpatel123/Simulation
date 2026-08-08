@@ -137,6 +137,7 @@ from app.simulation.landing_url_export import landing_url_to_csv
 from app.simulation.existing_product_export import existing_product_to_csv
 from app.simulation.precis_fingerprint_export import precis_fingerprint_to_csv
 from app.simulation.brief_hook_export import brief_hook_to_csv
+from app.simulation.activity_feed_export import activity_feed_to_csv
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
     MAX_LIMIT as _FINDINGS_MAX_LIMIT,
@@ -5728,6 +5729,151 @@ def get_activity_feed(
         ttl_seconds=_ACTIVITY_FEED_CACHE_TTL_S,
     )
     return ActivityFeedOut(**payload)
+
+
+@router.get(
+    "/{project_id}/activity-feed/export",
+    summary="Export a project's activity feed as CSV or JSON",
+    response_class=StreamingResponse,
+    # Read-only; mirrors the activity-feed queries. Export is
+    # usually a manual handoff/audit action, so a lower cap
+    # than the feed endpoint is fine.
+    dependencies=[Depends(rate_limit(limit=20, window_s=60))],
+)
+def export_activity_feed(
+    project_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly event table; ``json`` returns "
+            "the full feed payload."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet/JSON export of a project's recent event timeline."""
+    get_owned_project(db, current_user.id, project_id)
+
+    sim_rows = (
+        db.query(
+            Simulation.id,
+            Simulation.status,
+            Simulation.created_at,
+            Simulation.updated_at,
+            Simulation.results_json,
+        )
+        .filter(Simulation.project_id == project_id)
+        .order_by(Simulation.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    decision_rows = (
+        db.query(
+            Decision.id,
+            Decision.status,
+            Decision.title,
+            Decision.created_at,
+            Decision.updated_at,
+            Decision.results_json,
+        )
+        .filter(Decision.project_id == project_id)
+        .order_by(Decision.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    outcome_rows = (
+        db.query(
+            Outcome.id,
+            Outcome.created_at,
+            Outcome.actual_conversion_rate,
+        )
+        .filter(Outcome.project_id == project_id)
+        .order_by(Outcome.created_at.desc())
+        .limit(50)
+        .all()
+    )
+
+    payload = build_activity_feed(
+        sims=[
+            {
+                "id": r.id,
+                "status": r.status,
+                "created_at": r.created_at,
+                "updated_at": r.updated_at,
+                "results_json": r.results_json,
+            }
+            for r in sim_rows
+        ],
+        decisions=[
+            {
+                "id": r.id,
+                "status": r.status,
+                "title": r.title,
+                "created_at": r.created_at,
+                "updated_at": r.updated_at,
+                "results_json": r.results_json,
+            }
+            for r in decision_rows
+        ],
+        outcomes=[
+            {
+                "id": r.id,
+                "created_at": r.created_at,
+                "actual_conversion_rate": r.actual_conversion_rate,
+            }
+            for r in outcome_rows
+        ],
+    )
+
+    fmt = format.strip().lower() if format else "csv"
+    if fmt == "json":
+        json_text = json.dumps(
+            {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "project_id": project_id,
+                "event_count": payload.get("event_count", 0),
+                "events": payload.get("events", []),
+                "narrative": payload.get("narrative", ""),
+                "key_signals": payload.get("key_signals", []),
+            },
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="activity-feed-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = activity_feed_to_csv(
+        payload.get("events", []),
+        metadata={
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "project_id": project_id,
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="activity-feed-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
 
 
 @router.get(
