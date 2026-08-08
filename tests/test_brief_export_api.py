@@ -109,6 +109,7 @@ def test_export_brief_positioning_returns_csv() -> None:
     db = _FakeSession()
     resp = proj_mod.export_brief_positioning(
         project_id=10,
+        format="csv",
         db=db,
         current_user=type("U", (), {"id": 42})(),
     )
@@ -117,3 +118,19 @@ def test_export_brief_positioning_returns_csv() -> None:
     body = _body(resp).decode("utf-8")
     assert "project_id,brief_positioning" in body
     assert "10,premium saas" in body
+
+
+def test_export_brief_positioning_format_json_returns_payload() -> None:
+    from app.api.v1 import projects as proj_mod
+
+    resp = proj_mod.export_brief_positioning(
+        project_id=10,
+        format="json",
+        db=_FakeSession(),
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+    assert resp.media_type == "application/json; charset=utf-8"
+    body = _body(resp).decode("utf-8")
+    assert '"brief_positioning"' in body
+    assert '"brief_positioning": "premium saas"' in body
