@@ -692,6 +692,7 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         results_dict["cluster_narrative"] = accountability.generate_cluster_breakdown_narrative(
             conductor_result
         )
+        results_dict["conductor_diagnostics"] = conductor_result.diagnostics.to_dict()
         results_fingerprint = stable_result_fingerprint(results_dict)
 
         if _simulation_is_cancelled(self.db, simulation_id):

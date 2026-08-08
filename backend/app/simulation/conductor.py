@@ -331,6 +331,83 @@ class ConductorResult:
     cluster_funnel_dropoffs:        dict[str, dict[str, float]] = None  # type: ignore
     signal_quality:                 float = 0.0
     cluster_weights:                dict[str, float] = field(default_factory=dict)
+    diagnostics:                    ConductorDiagnostics = field(
+        default_factory=lambda: ConductorDiagnostics()
+    )
+
+
+@dataclass
+class ArchitectDiagnostics:
+    """Per-architect execution accounting for one simulation run.
+
+    Tracks how many clusters each architect was asked to evaluate, how many
+    computations completed, how many raised (previously swallowed) exceptions,
+    and the severity distribution of the outputs it did produce. All fields are
+    deterministic for identical inputs, so the reproducibility fingerprint
+    stays meaningful.
+    """
+
+    architect_name: str
+    attempted_clusters: int = 0
+    completed_clusters: int = 0
+    failed_clusters: int = 0
+    first_failed_cluster: str | None = None
+    severity_counts: dict[str, int] = field(
+        default_factory=lambda: {"INFO": 0, "WARNING": 0, "CRITICAL": 0}
+    )
+
+    def record_success(self, output: ArchitectOutput) -> None:
+        """Record one completed ``compute()`` and its severity."""
+        self.attempted_clusters += 1
+        self.completed_clusters += 1
+        severity = str(output.severity or "INFO").upper()
+        self.severity_counts[severity] = self.severity_counts.get(severity, 0) + 1
+
+    def record_failure(self, cluster_id: str) -> None:
+        """Record one failed ``compute()`` for a cluster."""
+        self.attempted_clusters += 1
+        self.failed_clusters += 1
+        if self.first_failed_cluster is None:
+            self.first_failed_cluster = cluster_id
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "architect_name": self.architect_name,
+            "attempted_clusters": self.attempted_clusters,
+            "completed_clusters": self.completed_clusters,
+            "failed_clusters": self.failed_clusters,
+            "first_failed_cluster": self.first_failed_cluster,
+            "severity_counts": dict(sorted(self.severity_counts.items())),
+        }
+
+
+@dataclass
+class ConductorDiagnostics:
+    """Cross-architect execution health for one simulation run.
+
+    Surfaces the failures the Conductor used to absorb with a log line only:
+    an architect whose ``compute()`` raised for one or more clusters, or whose
+    cross-cluster ``generate_report()`` raised, now appears in the persisted
+    result payload instead of silently degrading the simulation.
+    """
+
+    architect_stats: list[ArchitectDiagnostics] = field(default_factory=list)
+    report_failures: int = 0
+    failed_report_architects: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        stats = sorted(self.architect_stats, key=lambda s: s.architect_name)
+        return {
+            "architect_stats": [s.to_dict() for s in stats],
+            "total_compute_failures": sum(
+                s.failed_clusters for s in self.architect_stats
+            ),
+            "architects_with_failures": sum(
+                1 for s in self.architect_stats if s.failed_clusters > 0
+            ),
+            "report_failures": self.report_failures,
+            "failed_report_architects": sorted(self.failed_report_architects),
+        }
 
 
 def _mean_metric(output: ArchitectOutput) -> float:
@@ -512,6 +589,8 @@ class Conductor:
         cluster_breakdown: dict[str, float] = {}
         per_cluster_matrices: dict[str, dict[tuple[str, str], float]] = {}
         cluster_mutation_logs: dict[str, dict[str, float]] = {}
+        diagnostics = ConductorDiagnostics()
+        stats_by_name: dict[str, ArchitectDiagnostics] = {}
 
         for cluster in all_clusters:
             if cancel_check is not None and cancel_check():
@@ -563,6 +642,9 @@ class Conductor:
                             **deps,
                         }
 
+                stats = stats_by_name.setdefault(
+                    arch_name, ArchitectDiagnostics(architect_name=arch_name)
+                )
                 try:
                     output = architect.compute(
                         cluster=cluster_working,
@@ -571,7 +653,9 @@ class Conductor:
                         env_params=env_params,
                     )
                     cluster_outputs[arch_name] = output
+                    stats.record_success(output)
                 except Exception:
+                    stats.record_failure(cluster.cluster_id)
                     logger.exception(
                         "Architect %s failed for cluster %s",
                         arch_name,
@@ -610,6 +694,8 @@ class Conductor:
                 try:
                     domain_reports.append(architect.generate_report(arch_outputs))
                 except Exception as _exc:
+                    diagnostics.report_failures += 1
+                    diagnostics.failed_report_architects.append(arch_name)
                     logger.debug(
                         "%s suppressed: %s",
                         __name__,
@@ -619,6 +705,7 @@ class Conductor:
         architect_accountability = self._compute_accountability(
             cluster_results, cluster_weights, all_clusters
         )
+        diagnostics.architect_stats = list(stats_by_name.values())
 
         cluster_funnel_dropoffs: dict[str, dict[str, float]] = {}
         markov_model = MarkovBehaviourModel()
@@ -643,6 +730,7 @@ class Conductor:
             cluster_funnel_dropoffs=cluster_funnel_dropoffs,
             signal_quality=sq,
             cluster_weights=cluster_weights,
+            diagnostics=diagnostics,
         )
 
         if db is not None and simulation_id is not None:
