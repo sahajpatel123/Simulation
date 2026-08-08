@@ -121,3 +121,51 @@ def test_findings_to_markdown_escapes_pipes_and_handles_empty() -> None:
     empty_md = findings_to_markdown([], project_id=1)
     assert "No domain findings available." in empty_md
     assert "| Total findings | 0 |" in empty_md
+
+
+def test_findings_to_markdown_suppresses_table_when_max_rows_zero() -> None:
+    md = findings_to_markdown(
+        [_finding(), _finding()],
+        project_id=1,
+        max_table_rows=0,
+    )
+
+    assert "| Total findings | 2 |" in md
+    assert "## Top Findings" in md
+    assert "| # | Severity | Architect | Cluster | Finding | Impact |" not in md
+    assert "PricingArchitect" not in md
+    assert "## Recommended Actions" in md
+    assert "**TIGHTEN**" in md
+
+
+def test_findings_to_markdown_negative_max_rows_is_safe() -> None:
+    md = findings_to_markdown(
+        [_finding()],
+        project_id=1,
+        max_table_rows=-3,
+    )
+
+    assert "| Total findings | 1 |" in md
+    assert "| # | Severity | Architect | Cluster | Finding | Impact |" not in md
+    assert "## Recommended Actions" in md
+
+
+def test_findings_to_markdown_counts_unknown_severities_in_summary() -> None:
+    md = findings_to_markdown(
+        [
+            {
+                "severity": "BLOCKER",
+                "architect_name": "PricingArchitect",
+                "cluster_name": "Metro Pro",
+                "finding": "edge case",
+                "recommended_action": "Review",
+                "conversion_impact": 0.01,
+            }
+        ],
+        project_id=1,
+    )
+
+    assert "| Total findings | 1 |" in md
+    assert "| Other | 1 |" in md
+    assert "🔴 Critical" not in md
+    assert "—" in md

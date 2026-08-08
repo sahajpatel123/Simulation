@@ -1,10 +1,11 @@
 """
-Pure helper for exporting a simulation's domain findings as CSV.
+Pure helpers for exporting a simulation's domain findings.
 
 The route layer pulls the owned simulation and passes its
 ``results_json`` here; this module stays deterministic and handles the
 versioned finding shapes (``domain_findings``, ``findings``, or a raw
-list) with safe defaults for missing fields.
+list) with safe defaults for missing fields. It supports both
+spreadsheet-friendly CSV and a founder-facing Markdown brief.
 """
 from __future__ import annotations
 
@@ -128,6 +129,8 @@ def findings_to_markdown(
     update. It includes a short header, a severity/impact roll-up, the primary
     failure domain (when the caller has one), the top findings in a table, and
     grouped recommended actions so the founder leaves with a next-steps list.
+    Pass ``max_table_rows=0`` to suppress the top-findings table entirely;
+    the summary and recommended actions are still emitted.
 
     The function stays pure and defensive: missing fields, malformed rows, and
     unsupported severities all degrade to safe defaults without raising.
@@ -136,8 +139,12 @@ def findings_to_markdown(
     critical = [row for row in rows if row["severity"] == "CRITICAL"]
     warning = [row for row in rows if row["severity"] == "WARNING"]
     info = [row for row in rows if row["severity"] == "INFO"]
+    other = [
+        row for row in rows if row["severity"] not in ("CRITICAL", "WARNING", "INFO")
+    ]
     total_impact = sum(_safe_float(row.get("conversion_impact")) for row in rows)
-    top_rows = rows[:max(1, int(max_table_rows))]
+    table_limit = max(0, int(max_table_rows))
+    top_rows = rows[:table_limit] if table_limit else []
 
     lines: list[str] = []
     title = (project_name or "TheCee").strip() or "TheCee"
@@ -163,6 +170,8 @@ def findings_to_markdown(
     lines.append(f"| Critical | {len(critical)} |")
     lines.append(f"| Warning | {len(warning)} |")
     lines.append(f"| Info | {len(info)} |")
+    if other:
+        lines.append(f"| Other | {len(other)} |")
     lines.append(f"| Combined conversion impact | {total_impact:.2%} |")
     if primary_failure_domain:
         lines.append(
@@ -173,24 +182,29 @@ def findings_to_markdown(
 
     lines.append("## Top Findings")
     lines.append("")
-    if not top_rows:
+    if not rows:
         lines.append("No domain findings available.")
         lines.append("")
         return "\n".join(lines).strip() + "\n"
 
-    lines.append("| # | Severity | Architect | Cluster | Finding | Impact |")
-    lines.append("| --- | --- | --- | --- | --- | ---: |")
-    for index, row in enumerate(top_rows, start=1):
-        severity = _severity_label(row["severity"])
-        architect = _escape_md_cell(_safe_text(row.get("architect_name")))
-        cluster = _escape_md_cell(_safe_text(row.get("cluster_name")))
-        finding = _escape_md_cell(_safe_text(row.get("finding")))
-        impact = _safe_float(row.get("conversion_impact"))
+    if top_rows:
+        lines.append("| # | Severity | Architect | Cluster | Finding | Impact |")
+        lines.append("| --- | --- | --- | --- | --- | ---: |")
+        for index, row in enumerate(top_rows, start=1):
+            severity = _severity_label(row["severity"])
+            architect = _escape_md_cell(_safe_text(row.get("architect_name")))
+            cluster = _escape_md_cell(_safe_text(row.get("cluster_name")))
+            finding = _escape_md_cell(_safe_text(row.get("finding")))
+            impact = _safe_float(row.get("conversion_impact"))
+            lines.append(
+                f"| {index} | {severity} | {architect} | {cluster} | {finding} | "
+                f"{impact:.2%} |"
+            )
         lines.append(
-            f"| {index} | {severity} | {architect} | {cluster} | {finding} | "
-            f"{impact:.2%} |"
+            ""
         )
-    lines.append("")
+    else:
+        lines.append("")
 
     actions = _group_recommended_actions(rows)
     lines.append("## Recommended Actions")
