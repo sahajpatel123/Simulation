@@ -206,6 +206,66 @@ def test_deserialise_skips_garbage() -> None:
     assert restored == {"c0": {("ARRIVE", "BROWSE"): 0.9}}
 
 
+def test_serialise_drops_non_finite_invalid_and_non_numeric_values() -> None:
+    raw = {
+        "c0": {
+            ("ARRIVE", "BROWSE"): 0.95,
+            ("BROWSE", "CONSIDER"): float("nan"),
+            ("CONSIDER", "DECIDE"): float("inf"),
+            ("DECIDE", "PURCHASE"): "0.31",
+            ("DECIDE", "NOPE"): 0.5,
+            ("NOPE", "DECIDE"): 0.5,
+        },
+        "c1": {("ARRIVE", "BROWSE"): "not-a-number"},
+        "c2": {("DECIDE", "PURCHASE"): -float("inf")},
+    }
+
+    serialised = serialise_per_cluster_matrices(raw)
+
+    assert serialised == {
+        "c0": {
+            "ARRIVE->BROWSE": 0.95,
+            "DECIDE->PURCHASE": 0.31,
+        },
+        "c1": {},
+        "c2": {},
+    }
+    # The write path must never emit values the reader would reject.
+    assert deserialise_per_cluster_matrices(serialised) == {
+        "c0": {
+            ("ARRIVE", "BROWSE"): 0.95,
+            ("DECIDE", "PURCHASE"): 0.31,
+        },
+        "c1": {},
+        "c2": {},
+    }
+
+
+def test_non_finite_overrides_never_poison_payload() -> None:
+    payload = build_journey_analytics(
+        {
+            "c0": {
+                ("ARRIVE", "BROWSE"): float("nan"),
+                ("BROWSE", "CONSIDER"): float("inf"),
+                ("CONSIDER", "DECIDE"): -float("inf"),
+                ("DECIDE", "PURCHASE"): 0.50,
+            },
+            "c1": {},
+        },
+        {"c0": 0.6, "c1": 0.4},
+    )
+
+    assert math.isfinite(payload["purchase_probability"])
+    assert math.isfinite(payload["abandon_probability"])
+    assert math.isfinite(payload["expected_steps_to_absorb"])
+    assert all(math.isfinite(p["probability"]) for p in payload["top_paths"])
+    assert all(
+        math.isfinite(item["gain_per_5pp"])
+        for item in payload["leverage_rankings"]
+    )
+    assert payload["meta"]["matrix_count"] == 2
+
+
 # ---------------------------------------------------------------------------
 # Aggregation and edge cases
 # ---------------------------------------------------------------------------

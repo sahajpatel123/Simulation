@@ -282,6 +282,23 @@ def _transition_leverage(
     return gains[:TOP_LEVERAGE]
 
 
+def _finite_override_value(value: Any) -> float | None:
+    """Parse an override multiplier to a finite float, or ``None`` when unusable.
+
+    Non-numeric values and JSON-unrepresentable floats (NaN, infinities)
+    must never reach ``results_json``: PostgreSQL JSONB rejects them and the
+    whole simulation persistence step would fail. ``None`` lets callers drop
+    the offending entry while keeping every remaining override intact.
+    """
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(parsed):
+        return None
+    return parsed
+
+
 def _describe_leverage(
     from_state: str,
     to_state: str,
@@ -303,14 +320,28 @@ def _describe_leverage(
 def serialise_per_cluster_matrices(
     per_cluster_matrices: dict[str, dict[tuple[str, str], float]],
 ) -> dict[str, dict[str, float]]:
-    """Convert tuple-keyed override maps to JSON-safe ``"FROM->TO"`` keys."""
-    return {
-        cluster_id: {
-            f"{from_state}->{to_state}": round(float(value), 6)
-            for (from_state, to_state), value in overrides.items()
-        }
-        for cluster_id, overrides in per_cluster_matrices.items()
-    }
+    """Convert tuple-keyed override maps to JSON-safe ``"FROM->TO"`` keys.
+
+    Overrides that cannot be represented in JSONB (NaN, infinities,
+    non-numeric values) or that reference unknown states are dropped so a
+    bad multiplier can never fail simulation persistence. This keeps the
+    write path consistent with :func:`deserialise_per_cluster_matrices`,
+    which applies the same filtering when the payload is read back.
+    """
+    serialised: dict[str, dict[str, float]] = {}
+    for cluster_id, overrides in per_cluster_matrices.items():
+        if not isinstance(overrides, dict):
+            continue
+        safe: dict[str, float] = {}
+        for (from_state, to_state), value in overrides.items():
+            parsed = _finite_override_value(value)
+            if parsed is None:
+                continue
+            if from_state not in STATE_INDEX or to_state not in STATE_INDEX:
+                continue
+            safe[f"{from_state}->{to_state}"] = round(parsed, 6)
+        serialised[str(cluster_id)] = safe
+    return serialised
 
 
 def deserialise_per_cluster_matrices(
