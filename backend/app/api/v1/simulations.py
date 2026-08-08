@@ -266,6 +266,7 @@ from app.simulation.funnel_diagnosis import build_funnel_diagnosis
 from app.simulation.funnel_diagnosis_export import (
     funnel_diagnosis_to_csv,
     funnel_diagnosis_to_json,
+    funnel_diagnosis_to_markdown,
 )
 from app.simulation.founder_action_plan import build_founder_action_plan
 from app.simulation.scored_assumption import (
@@ -4233,7 +4234,7 @@ def get_funnel_diagnosis(
     "/{simulation_id}/funnel-diagnosis/export",
     response_class=StreamingResponse,
     summary=(
-        "Export the funnel diagnosis as CSV (or JSON with ?format=json)"
+        "Export the funnel diagnosis as CSV, JSON, or Markdown"
     ),
     # Same DB read cost as the JSON funnel-diagnosis endpoint; cap polling
     # so a dashboard loop can't drive repeated reads.
@@ -4247,25 +4248,28 @@ def export_funnel_diagnosis(
         description=(
             "Output format. ``csv`` (default) returns the "
             "spreadsheet-friendly table; ``json`` returns the raw "
-            "funnel-diagnosis payload. Unsupported values return a 400 "
-            "response."
+            "funnel-diagnosis payload; ``md`` returns a founder-facing "
+            "Markdown brief. Unsupported values return a 400 response."
         ),
     ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
-    """Spreadsheet export of a simulation's funnel diagnosis.
+    """Export a simulation's funnel diagnosis as CSV, JSON, or Markdown.
 
     Default ``format=csv`` renders the summary, per-stage diagnosis,
     cluster drag, drop triggers, and recommendations as a multi-section
-    spreadsheet. ``format=json`` returns the raw payload for machine
-    consumers.
+    spreadsheet. ``json`` returns the raw payload for machine consumers,
+    and ``md`` returns a founder-facing Markdown brief.
     """
     fmt = (format or "csv").strip().lower()
-    if fmt not in {"csv", "json"}:
+    if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"unsupported export format {format!r}; expected 'csv' or 'json'",
+            detail=(
+                f"unsupported export format {format!r}; "
+                "expected 'csv', 'json', or 'md'"
+            ),
         )
 
     payload = get_funnel_diagnosis(
@@ -4274,6 +4278,13 @@ def export_funnel_diagnosis(
         current_user=current_user,
     )
 
+    project = (
+        db.query(Project)
+        .filter(Project.id == payload.project_id)
+        .first()
+    )
+    project_name = project.title if project else None
+
     metadata = {
         "generated_at": datetime.now(tz=timezone.utc).isoformat(),
         "user_id": current_user.id,
@@ -4281,6 +4292,27 @@ def export_funnel_diagnosis(
         "simulation_id": simulation_id,
         "project_id": payload.project_id,
     }
+
+    if fmt == "md":
+        md_text = funnel_diagnosis_to_markdown(
+            payload,
+            simulation_id=simulation_id,
+            project_id=payload.project_id,
+            project_name=project_name,
+            metadata=metadata,
+        )
+        body = md_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="funnel-diagnosis-{simulation_id}.md"'
+                ),
+                "Content-Length": str(len(body)),
+                "Cache-Control": "no-store",
+            },
+        )
 
     if fmt == "json":
         body = funnel_diagnosis_to_json(

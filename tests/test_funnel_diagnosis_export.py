@@ -160,3 +160,35 @@ def test_markdown_escapes_table_cells():
     md = funnel_diagnosis_to_markdown(payload)
     assert "PRIC\\|ING" in md
     assert "\nPRIC|ING" not in md
+
+
+def test_markdown_handles_empty_payload():
+    md = funnel_diagnosis_to_markdown(
+        FunnelDiagnosisOut(simulation_id=1, project_id=1)
+    )
+    assert "# TheCee — Funnel Diagnosis" in md
+    assert "No stage metrics are available." in md
+    assert "No recommendations are currently available." in md
+
+
+def test_markdown_accepts_plain_dict_payload():
+    md = funnel_diagnosis_to_markdown(
+        {
+            "simulation_id": 7,
+            "project_id": 3,
+            "overall_conversion": 0.031,
+            "total_agents": 10000,
+            "converted_agents": 310,
+            "primary_bottleneck": "DECIDE",
+            "bottleneck_severity": "CRITICAL",
+            "health_score": 52,
+            "stages": [],
+            "recommendations": [],
+        },
+        simulation_id=7,
+        project_id=3,
+        metadata={},
+    )
+    assert "| Overall conversion | 3.10% |" in md
+    assert "Simulation 7" in md
+    assert "Project 3" in md
