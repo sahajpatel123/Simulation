@@ -175,6 +175,11 @@ from app.simulation.findings_export import (
     findings_to_markdown,
 )
 from app.simulation.launch_checklist import build_launch_checklist
+from app.simulation.launch_checklist_export import (
+    launch_checklist_to_csv,
+    launch_checklist_to_json,
+    launch_checklist_to_markdown,
+)
 from app.simulation.founder_brief import build_founder_brief
 from app.simulation.retention_churn_read import build_retention_churn
 from app.simulation.distribution_channels import build_distribution_channels
@@ -7437,6 +7442,114 @@ def get_launch_checklist(
         visible_assumption_count=len(assumptions),
         product_type=product_type_name,
         cluster_registry=registry,
+    )
+
+
+@router.get(
+    "/{simulation_id}/launch-checklist/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export the launch readiness checklist as CSV, JSON, or Markdown"
+    ),
+)
+def export_launch_checklist(
+    simulation_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns a multi-section "
+            "spreadsheet; ``json`` returns the raw checklist payload; "
+            "``md`` returns a founder-facing Markdown brief."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Download the launch readiness checklist for a completed simulation."""
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — launch checklist export "
+                "requires completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    checklist = get_launch_checklist(simulation_id, db, current_user)
+
+    project = (
+        db.query(Project)
+        .filter(Project.id == sim.project_id)
+        .first()
+    )
+    project_name = project.title if project else None
+
+    metadata = {
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "user_id": current_user.id,
+        "format_version": "1",
+        "simulation_id": simulation_id,
+        "project_id": sim.project_id,
+    }
+
+    fmt = format.strip().lower() if format else "csv"
+    if fmt == "json":
+        body = launch_checklist_to_json(checklist, metadata=metadata).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="launch-checklist-{simulation_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    if fmt == "md":
+        md_text = launch_checklist_to_markdown(
+            checklist,
+            simulation_id=simulation_id,
+            project_id=sim.project_id,
+            project_name=project_name,
+            metadata=metadata,
+        )
+        body = md_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="launch-checklist-{simulation_id}.md"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = launch_checklist_to_csv(checklist, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="launch-checklist-{simulation_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
     )
 
 
