@@ -60,6 +60,7 @@ from app.schemas.channel_attribution import ChannelAttributionOut
 from app.schemas.cluster_opportunity import ClusterOpportunityMatrixOut
 from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
 from app.schemas.founder_action_plan import FounderActionPlanOut
+from app.schemas.fix_leverage import FixLeverageOut
 from app.schemas.market_concentration import MarketConcentrationOut
 from app.schemas.market_sizing import MarketSizingOut
 from app.schemas.simulation import (
@@ -206,6 +207,7 @@ from app.simulation.founder_action_plan_export import (
     founder_action_plan_to_csv,
     founder_action_plan_to_json,
 )
+from app.simulation.fix_leverage import build_fix_leverage
 from app.simulation.sensitivity_export import (
     sensitivity_to_csv,
     sensitivity_to_json,
@@ -8114,6 +8116,60 @@ def get_founder_brief(
         target_market_fraction=target_market_fraction,
         average_order_value=average_order_value,
         purchase_frequency_per_year=purchase_frequency_per_year,
+    )
+
+
+@router.get(
+    "/{simulation_id}/fix-leverage",
+    response_model=FixLeverageOut,
+    summary=(
+        "Fix-leverage projection: what conversion could look like if the "
+        "top domain findings were fixed"
+    ),
+    responses=_JSON_200,
+)
+def get_fix_leverage(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FixLeverageOut:
+    """
+    Deterministic conversion-update projection from a completed run.
+
+    Maps the persisted domain findings to the forward funnel transitions
+    they would improve and returns a capped projected conversion alongside
+    the baseline, absolute lift, and relative lift. Pure post-hoc analytics
+    — no Celery, no LLM, no DB writes.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — fix-leverage projection "
+                "requires completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    return build_fix_leverage(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        signal_quality=(
+            float(sim.signal_quality) if sim.signal_quality is not None else None
+        ),
     )
 
 
