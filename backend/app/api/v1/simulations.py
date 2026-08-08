@@ -115,6 +115,7 @@ from app.schemas.ecosystem_compatibility import EcosystemCompatibilityOut
 from app.schemas.setup_friction import SetupFrictionOut
 from app.schemas.after_sales import AfterSalesOut
 from app.schemas.assumption_cascade import AssumptionCascadeOut
+from app.schemas.assumption_postmortem import AssumptionPostmortemOut
 from app.schemas.launch_checklist import LaunchChecklistOut
 from app.schemas.founder_brief import FounderBriefOut
 from app.schemas.retention_churn import RetentionChurnOut
@@ -158,6 +159,7 @@ from app.simulation.ecosystem_compatibility import build_ecosystem_compatibility
 from app.simulation.setup_friction import build_setup_friction
 from app.simulation.after_sales_read import build_after_sales_read
 from app.simulation.assumption_cascade_read import build_assumption_cascade
+from app.simulation.assumption_postmortem import build_assumption_postmortem
 from app.simulation.simulation_export import (
     build_simulation_export,
     simulation_to_csv,
@@ -7473,6 +7475,109 @@ def export_founder_action_plan(
             "Content-Length": str(len(body)),
             "Cache-Control": "no-store",
         },
+    )
+
+
+@router.get(
+    "/{simulation_id}/assumption-postmortem",
+    response_model=AssumptionPostmortemOut,
+    summary=(
+        "Assumption postmortem: which assumptions did launch outcomes "
+        "invalidate or validate?"
+    ),
+    responses=_JSON_200,
+)
+def get_assumption_postmortem(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AssumptionPostmortemOut:
+    """
+    Assumption-level learning digest for a completed simulation.
+
+    Compares the run's predicted conversion against the recorded founder
+    outcome and scores each project assumption by sensitivity × conversion
+    gap, so the dashboard can show which assumptions reality most likely
+    invalidated (or validated) after launch. Pure post-hoc analytics — no
+    Celery, no LLM, no DB writes.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — assumption postmortem requires "
+                "completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    outcome = (
+        db.query(Outcome)
+        .filter(
+            Outcome.simulation_id == sim.id,
+            Outcome.actual_conversion_rate.isnot(None),
+        )
+        .order_by(Outcome.created_at.desc())
+        .first()
+    )
+    if outcome is None:
+        # Allow the project-level latest outcome as a fallback so founders
+        # who recorded outcomes before simulation linkage still get a read.
+        outcome = (
+            db.query(Outcome)
+            .filter(
+                Outcome.project_id == sim.project_id,
+                Outcome.actual_conversion_rate.isnot(None),
+            )
+            .order_by(Outcome.created_at.desc())
+            .first()
+        )
+
+    assumptions = (
+        db.query(Assumption)
+        .filter(
+            Assumption.project_id == sim.project_id,
+            Assumption.is_hidden.is_(False),
+        )
+        .all()
+    )
+
+    outcome_dict: dict[str, object] | None = None
+    if outcome is not None:
+        outcome_dict = {
+            "simulation_id": outcome.simulation_id,
+            "actual_conversion_rate": outcome.actual_conversion_rate,
+        }
+
+    assumption_dicts = [
+        {
+            "id": a.id,
+            "text": a.text,
+            "category": a.category,
+            "sensitivity": a.sensitivity,
+            "impact_score": a.impact_score,
+        }
+        for a in assumptions
+    ]
+
+    return build_assumption_postmortem(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        assumptions=assumption_dicts,
+        outcome=outcome_dict,
     )
 
 
