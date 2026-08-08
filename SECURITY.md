@@ -138,4 +138,6 @@ For security concerns, please contact the project maintainers.
 - 2026-08-08 - Cleared the pre-existing ruff lint backlog across `backend/app`,
   fixed missing imports, and corrected the `projects.tags` JSONB server default
   so migrations can run on a fresh PostgreSQL database.
+- 2026-08-08 - Made migrations create `pgcrypto` independently of `pgvector`
+  so token backfills work on PostgreSQL images without the vector extension.
 - [VERSION] - Initial security policy

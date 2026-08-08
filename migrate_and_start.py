@@ -32,12 +32,20 @@ def run_migrations():
     with engine.connect() as conn:
         try:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
-            conn.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto;"))
             conn.commit()
-            print("✅ pgvector and pgcrypto extensions ready")
+            print("✅ pgvector extension ready")
         except Exception as e:
             conn.rollback()
             print(f"⚠️ pgvector skip: {e}")
+
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto;"))
+            conn.commit()
+            print("✅ pgcrypto extension ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ pgcrypto skip: {e}")
 
     Base.metadata.create_all(bind=engine)
     print("✅ All tables created or verified")
