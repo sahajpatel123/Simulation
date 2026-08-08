@@ -10,7 +10,7 @@
 
 It is **NOT** a web frontend. The Next.js frontend in `src/` is deployed separately and should be ignored unless explicitly working on UI generation.
 
-**Core Purpose**: Simulate consumer decision-making through a Markov funnel, calibrated by 52 consumer clusters × 21 domain architects, to predict conversion rates, identify failure modes, and generate actionable business recommendations.
+**Core Purpose**: Simulate consumer decision-making through a Markov funnel, calibrated by 52 consumer clusters × 23 domain architects, to predict conversion rates, identify failure modes, and generate actionable business recommendations.
 
 ### Architecture Overview
 
@@ -119,7 +119,7 @@ Each architect evaluates one business domain for all 52 clusters:
 | `AftersalesLifecycleArchitect` | Post-purchase experience | Hardware |
 | `HealthSafetyHardwareArchitect` | Health/safety concerns | Health hardware |
 
-**Important**: All architects subclass `BaseArchitect` in `base.py`. **Never modify `base.py`** unless changing the architect interface — all 21 subclasses depend on it.
+**Important**: All architects subclass `BaseArchitect` in `base.py`. **Never modify `base.py`** unless changing the architect interface — all 23 subclasses depend on it.
 
 **Key architect methods**:
 ```python
@@ -450,7 +450,7 @@ thecee/
 │   │   └── ...
 │   │
 │   ├── simulation/          # Core simulation engine
-│   │   ├── architects/      # 21 domain architects
+│   │   ├── architects/      # 23 domain architects
 │   │   │   ├── base.py      # BaseArchitect (DO NOT MODIFY)
 │   │   │   ├── market_timing.py
 │   │   │   ├── pricing.py

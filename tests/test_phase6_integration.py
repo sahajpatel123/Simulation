@@ -97,7 +97,7 @@ def test_cluster_registry_integrity():
 
 def test_architect_registry_and_product_stacks_integrity():
     registry = _build_architect_registry()
-    assert len(registry) == 22
+    assert len(registry) == 23
     assert set(ARCHITECT_STACKS) == set(ProductType)
     for product_type, stack in ARCHITECT_STACKS.items():
         assert stack, f"{product_type.value} stack must not be empty"

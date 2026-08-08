@@ -31,7 +31,7 @@ flowchart LR
     F[👤 Founder Input] --> A[🤖 Assumption<br>Extraction]
     A --> S[🧮 Score<br>Assumptions]
     S --> G[👥 Generate<br>10K Agents]
-    G --> C[🎯 Conductor<br>52 Clusters × 20 Architects]
+    G --> C[🎯 Conductor<br>52 Clusters × 23 Architects]
     C --> M[📉 Markov<br>Funnel]
     M --> R[📊 Results<br>Aggregator]
     R --> E[⚖️ Accountability<br>Engine]
@@ -54,7 +54,7 @@ flowchart LR
 
 ## 🔮 **Forget Surveys. Forget Focus Groups.**
 
-TheCee replaces expensive user research with a **behavioral simulation engine** that pits your startup idea against **52 distinct consumer archetypes**, evaluated by **20 domain-specialist AI architects**, all flowing through a **Markov decision funnel**.
+TheCee replaces expensive user research with a **behavioral simulation engine** that pits your startup idea against **52 distinct consumer archetypes**, evaluated by **23 domain-specialist AI architects**, all flowing through a **Markov decision funnel**.
 
 **What you get:**
 - 🎯 **Predicted conversion rate** with confidence intervals
@@ -78,7 +78,7 @@ price_sensitivity │ risk_aversion │ patience_score │ social_orientation
 
 These aren't stereotypes. They're **data-calibrated behavioral vectors** that evolve as real founder outcomes flow back into the system.
 
-### 2. 🏛️ The 20 Architects
+### 2. 🏛️ The 23 Architects
 
 Domain specialists that evaluate one business dimension each:
 
@@ -92,6 +92,7 @@ Domain specialists that evaluate one business dimension each:
 | `ViralityArchitect` | Word-of-mouth potential |
 | `CompetitiveDynamicsArchitect` | Incumbent response & switching friction |
 | `MacroeconomicArchitect` | Economic headwinds/tailwinds |
+| `RegulatoryComplianceArchitect` | Privacy, certification & refund-policy exposure |
 | *+ 12 more domain specialists* | Hardware, health, ecosystem, etc. |
 
 Each architect calls `.compute()` per cluster — **1,040 evaluations per simulation** — then outputs override deltas to the Markov matrix.

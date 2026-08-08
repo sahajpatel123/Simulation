@@ -73,6 +73,11 @@ class AccountabilityEngine:
         "clinical_gate_multiplier": 1.0,
         "total_cascade_risk": 0.20,
         "blind_spot_score": 0.0,
+        "privacy_concern_intensity": 0.25,
+        "certification_barrier": 0.30,
+        "refund_liability_concern": 0.30,
+        "regulatory_suppressor": 1.0,
+        "compliance_credibility": 1.0,
     }
 
     LOWER_IS_BETTER: frozenset[str] = frozenset({
@@ -82,6 +87,9 @@ class AccountabilityEngine:
         "blind_spot_score",
         "empty_state_bounce_probability",
         "free_trial_as_trust_substitute",
+        "privacy_concern_intensity",
+        "certification_barrier",
+        "refund_liability_concern",
     })
 
     FINDING_TEMPLATES: dict[str, str] = {
@@ -127,6 +135,26 @@ class AccountabilityEngine:
         "social_proof_met_fraction": (
             "Only {pct:.0f}% of {cluster} social proof requirement met"
         ),
+        "privacy_concern_intensity": (
+            "{pct:.0f}% of {cluster} blocked by data-privacy concerns "
+            "(benchmark {bench:.0f}%)"
+        ),
+        "certification_barrier": (
+            "{cluster} faces certification/approval barrier {val:.2f} "
+            "(benchmark {bench:.2f})"
+        ),
+        "refund_liability_concern": (
+            "{pct:.0f}% of {cluster} worry about refunds/liability "
+            "(benchmark {bench:.0f}%)"
+        ),
+        "regulatory_suppressor": (
+            "Regulatory exposure leaves {cluster} at {pct:.0f}% funnel "
+            "strength (benchmark {bench:.0f}%)"
+        ),
+        "compliance_credibility": (
+            "{cluster} sees weak compliance credibility "
+            "({val:.2f} vs benchmark {bench:.2f})"
+        ),
     }
 
     RECOMMENDED_ACTIONS: dict[str, str] = {
@@ -144,6 +172,23 @@ class AccountabilityEngine:
         "total_cascade_risk": "Validate critical assumptions with real users",
         "viral_coefficient": "Build referral programme, create shareable outputs",
         "social_proof_met_fraction": "Collect reviews, publish case studies",
+        "privacy_concern_intensity": (
+            "Publish a clear privacy policy, add opt-in consent and "
+            "data minimisation"
+        ),
+        "certification_barrier": (
+            "Map and obtain required certifications/approvals before scaling"
+        ),
+        "refund_liability_concern": (
+            "Add a transparent refund/returns and warranty policy"
+        ),
+        "regulatory_suppressor": (
+            "Resolve the regulatory pathway: licences, approvals, "
+            "compliance filings"
+        ),
+        "compliance_credibility": (
+            "Publish compliance evidence: certifications, audits, policy pages"
+        ),
     }
 
     def __init__(self) -> None:

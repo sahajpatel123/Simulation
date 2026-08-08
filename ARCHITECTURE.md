@@ -18,7 +18,7 @@ Conductor.run()
      │       │     frustration  (will_pay < 0.20, steps < 4)
      │       │     intent_clarity (category_awareness < 0.35)
      │       │
-     │       ├── 20 Architects compute() in dependency order:
+     │       ├── 23 Architects compute() in dependency order:
      │       │     MarketTimingArchitect
      │       │     CompetitiveDynamicsArchitect
      │       │     TrustArchitect         ← mutations applied here
