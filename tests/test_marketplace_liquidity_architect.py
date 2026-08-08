@@ -216,6 +216,58 @@ def test_unconfirmed_preorders_are_not_evidence() -> None:
     assert out.flags["liquidity_advantage"] is False
 
 
+def test_contracted_negation_is_not_evidence() -> None:
+    out = _compute(
+        assumptions=[
+            {
+                "text": "We don't have a buyer waitlist and "
+                "we haven't signed up sellers"
+            }
+        ]
+    )
+    assert out.metrics["liquidity_credibility"] < 1.0
+    assert out.metrics["liquidity_advantage_lift"] == 0.0
+    assert out.flags["liquidity_advantage"] is False
+    assert out.flags["supply_side_gap"] is True
+    assert out.flags["demand_side_gap"] is True
+
+
+def test_contracted_negation_preorders_are_not_evidence() -> None:
+    out = _compute(
+        assumptions=[{"text": "Pre-orders aren't confirmed yet"}]
+    )
+    assert out.metrics["liquidity_credibility"] < 1.0
+    assert out.flags["liquidity_advantage"] is False
+    assert out.metrics["liquidity_advantage_lift"] == 0.0
+
+
+def test_discourse_negation_does_not_void_evidence() -> None:
+    out = _compute(
+        assumptions=[
+            {
+                "text": "No, we already have sellers signed up "
+                "and a buyer waitlist"
+            }
+        ]
+    )
+    assert out.metrics["liquidity_credibility"] == 1.0
+    assert out.flags["liquidity_advantage"] is True
+    assert out.metrics["liquidity_advantage_lift"] > 0.0
+    assert out.flags["supply_side_gap"] is False
+    assert out.flags["demand_side_gap"] is False
+
+
+def test_discourse_negation_with_real_gap_is_still_a_gap() -> None:
+    out = _compute(
+        assumptions=[
+            {"text": "No, we do not have sellers signed up or a waitlist"}
+        ]
+    )
+    assert out.metrics["liquidity_credibility"] < 1.0
+    assert out.flags["liquidity_advantage"] is False
+    assert out.metrics["liquidity_advantage_lift"] == 0.0
+
+
 # ---------------------------------------------------------------------------
 # Malformed inputs
 # ---------------------------------------------------------------------------

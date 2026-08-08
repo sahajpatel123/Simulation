@@ -25,7 +25,10 @@ What this architect does:
   1.0, softens the funnel suppressor and earns a small purchase-stage
   ``liquidity_advantage_lift``. Evidence detection is negation-aware:
   "no sellers signed up", "no buyer waitlist" or "pre-orders not confirmed"
-  are treated as gaps, never proof.
+  are treated as gaps, never proof. Contracted negations ("we haven't
+  signed up sellers", "pre-orders aren't confirmed") are expanded before
+  matching, while clause-leading discourse negation ("No, we already have
+  sellers signed up") does not void real evidence.
 * **Markov overrides** — only when liquidity exposure is active:
   BROWSE→CONSIDER / CONSIDER→DECIDE are multiplied by the suppressor,
   DECIDE→PURCHASE by ``1 + liquidity_advantage_lift`` when evidence exists.
@@ -90,6 +93,23 @@ _NEGATION_MARKERS: frozenset[str] = frozenset({
     "denied", "withdrawn", "incomplete", "suspended", "unavailable",
 })
 
+# Contracted negations are expanded before matching so "don't have a
+# buyer waitlist" and "pre-orders aren't confirmed" are treated as gaps,
+# never as liquidity evidence. The optional apostrophe also covers
+# no-apostrophe spellings ("dont", "havent").
+_CONTRACTION_SUFFIXES: dict[str, str] = {
+    "isn": "is not", "aren": "are not", "wasn": "was not",
+    "weren": "were not", "don": "do not", "doesn": "does not",
+    "didn": "did not", "haven": "have not", "hasn": "has not",
+    "hadn": "had not", "won": "will not", "wouldn": "would not",
+    "can": "cannot", "couldn": "could not", "shouldn": "should not",
+    "mustn": "must not", "needn": "need not", "ain": "is not",
+}
+_CONTRACTION_PATTERN = re.compile(
+    r"\b((?:isn|aren|wasn|weren|don|doesn|didn|haven|hasn|hadn|won|"
+    r"wouldn|can|couldn|shouldn|mustn|needn|ain))'?t\b"
+)
+
 # Neutral baseline so runs that never mention marketplace mechanics stay
 # unchanged; marketplaces always carry some liquidity risk, but below the
 # override threshold until an explicit signal appears.
@@ -113,6 +133,14 @@ def _keyword_pattern(keywords: tuple[str, ...]) -> re.Pattern[str]:
     )
 
 
+def _normalize(text: str) -> str:
+    """Lowercase and expand contracted negations for gap detection."""
+    text = text.lower().replace("’", "'")
+    return _CONTRACTION_PATTERN.sub(
+        lambda m: _CONTRACTION_SUFFIXES[m.group(1)], text
+    )
+
+
 def _has_any_keyword(
     assumptions: list[dict[str, Any]] | None,
     keywords: tuple[str, ...],
@@ -131,11 +159,11 @@ def _has_any_keyword(
     pattern = _keyword_pattern(keywords)
     for assumption in assumptions:
         if isinstance(assumption, dict):
-            text = str(
-                assumption.get("text", assumption.get("assumption", ""))
-            ).lower()
+            text = _normalize(
+                str(assumption.get("text", assumption.get("assumption", "")))
+            )
         else:
-            text = str(assumption).lower()
+            text = _normalize(str(assumption))
         if not guard_negation:
             if pattern.search(text):
                 return True
@@ -146,11 +174,49 @@ def _has_any_keyword(
     return False
 
 
+def _discourse_marker(text: str, start: int) -> str | None:
+    """
+    Return a clause-leading negation marker when it is discourse rather
+    than a qualifier: "No, we already have sellers signed up" or
+    "Not only do we have a buyer waitlist". Otherwise return None.
+    """
+    prefix = text[:start]
+    boundary = max(prefix.rfind(c) for c in ".!?;")
+    clause = text[boundary + 1:start]
+    words = re.findall(r"[a-z]+", clause)
+    if not words or words[0] not in _NEGATION_MARKERS:
+        return None
+    match = re.match(r"\s*[a-z']+", clause)
+    if match is None:
+        return None
+    tail = clause[match.end():]
+    if tail.lstrip()[:1] in {",", ".", ":", ";", "—", "–"}:
+        return words[0]
+    if (
+        len(words) >= 2
+        and words[0] in {"no", "not", "never"}
+        and words[1] in {"only", "just", "merely", "simply"}
+    ):
+        return words[0]
+    return None
+
+
 def _is_negated(text: str, start: int, end: int) -> bool:
-    """True when a negation/absence marker sits within ~5 words of a match."""
+    """
+    True when a negation/absence marker qualifies a match, ignoring a
+    leading discourse negation ("No, we already have sellers signed up")
+    while still catching qualifiers after it ("No, we do not have sellers
+    signed up").
+    """
+    discourse = _discourse_marker(text, start)
     before = re.findall(r"[a-z]+", text[max(0, start - 120):start])[-5:]
+    for i, token in enumerate(before):
+        if token == discourse and i == 0:
+            continue
+        if token in _NEGATION_MARKERS:
+            return True
     after = re.findall(r"[a-z]+", text[end:end + 120])[:5]
-    return bool(set(before + after) & _NEGATION_MARKERS)
+    return bool(set(after) & _NEGATION_MARKERS)
 
 
 def _trait(traits: dict[str, Any], key: str, default: float = 0.5) -> float:
