@@ -101,3 +101,19 @@ def test_export_brief_missing_project_raises_404() -> None:
     with pytest.raises(HTTPException) as exc:
         _call_route(session=NoProjectSession())
     assert exc.value.status_code == 404
+
+
+def test_export_brief_positioning_returns_csv() -> None:
+    from app.api.v1 import projects as proj_mod
+
+    db = _FakeSession()
+    resp = proj_mod.export_brief_positioning(
+        project_id=10,
+        db=db,
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+    assert resp.media_type == "text/csv; charset=utf-8"
+    body = _body(resp).decode("utf-8")
+    assert "project_id,brief_positioning" in body
+    assert "10,premium saas" in body
