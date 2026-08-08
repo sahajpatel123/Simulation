@@ -203,6 +203,51 @@ def test_rough_confidence_discounts_gap() -> None:
     assert exact_score > rough_score
 
 
+def test_zero_actual_conversion_is_usable_outcome() -> None:
+    out = build_assumption_postmortem(
+        _results(cr=0.06),
+        simulation_id=99,
+        project_id=2,
+        assumptions=_assumptions(),
+        outcome=_outcome(0.0),
+        outcome_confidence="EXACT",
+    )
+
+    assert out.actual_conversion_rate == 0.0
+    assert out.verdict == VERDICT_INVALIDATED
+    assert out.summary.insufficient_count == 0
+    assert out.summary.invalidated_count >= 1
+    assert out.summary.top_invalidated[0].verdict == VERDICT_INVALIDATED
+
+
+def test_predicted_conversion_falls_back_to_raw_funnel() -> None:
+    out = build_assumption_postmortem(
+        {"raw_funnel": {"conversion_rate": 0.07}},
+        simulation_id=99,
+        project_id=2,
+        assumptions=_assumptions(),
+        outcome=_outcome(0.01),
+        outcome_confidence="EXACT",
+    )
+
+    assert out.predicted_conversion_rate == pytest.approx(0.07)
+    assert out.verdict == VERDICT_INVALIDATED
+    assert out.summary.insufficient_count == 0
+
+
+def test_unparseable_conversion_rate_is_not_treated_as_zero() -> None:
+    out = build_assumption_postmortem(
+        {"population_weighted_conversion": "not-a-number"},
+        simulation_id=99,
+        project_id=2,
+        assumptions=_assumptions(),
+        outcome=_outcome(0.01),
+    )
+
+    assert out.predicted_conversion_rate is None
+    assert out.verdict == VERDICT_INSUFFICIENT_DATA
+
+
 def test_handles_malformed_assumptions_and_results() -> None:
     out = build_assumption_postmortem(
         "not-json",

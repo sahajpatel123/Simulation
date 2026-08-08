@@ -76,6 +76,24 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
     return parsed if math.isfinite(parsed) else default
 
 
+def _rate(value: Any) -> float | None:
+    """Parse a conversion rate to ``[0, 1]`` or ``None`` when unusable.
+
+    Unlike :func:`_safe_float`, a zero value is valid and a missing or
+    unparseable value is ``None`` — so an actual launch conversion of 0.0
+    still counts as a real outcome.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(parsed):
+        return None
+    return max(0.0, min(1.0, parsed))
+
+
 def _coerce_results(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
@@ -90,14 +108,18 @@ def _coerce_results(value: Any) -> dict[str, Any]:
 
 def _predicted_conversion(results: dict[str, Any]) -> float | None:
     """Pull the persisted predicted conversion rate, clamped to [0, 1]."""
-    raw = results.get(
+    for key in (
         "population_weighted_conversion",
-        results.get("conversion_rate", results.get("mean_conversion_rate")),
-    )
-    if raw is None or isinstance(raw, bool):
-        return None
-    value = _safe_float(raw)
-    return max(0.0, min(1.0, value))
+        "conversion_rate",
+        "mean_conversion_rate",
+    ):
+        value = _rate(results.get(key))
+        if value is not None:
+            return value
+    raw_funnel = results.get("raw_funnel")
+    if isinstance(raw_funnel, dict):
+        return _rate(raw_funnel.get("conversion_rate"))
+    return None
 
 
 def _sensitivity_weight(sensitivity: str | None) -> float:
@@ -195,10 +217,7 @@ def build_assumption_postmortem(
     actual: float | None = None
     outcome_source = _outcome_source_label(outcome)
     if outcome:
-        raw_actual = outcome.get("actual_conversion_rate")
-        value = _safe_float(raw_actual)
-        if value > 0.0:
-            actual = max(0.0, min(1.0, value))
+        actual = _rate(outcome.get("actual_conversion_rate"))
 
     conversion_delta: float | None = None
     if predicted is not None and actual is not None:
