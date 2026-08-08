@@ -33,12 +33,20 @@ class TransitionLeverageOut(BaseModel):
 
 
 class ClusterJourneyOut(BaseModel):
-    """Per-cluster journey summary."""
+    """Per-cluster journey summary.
+
+    Besides the headline conversion probability, each cluster carries its
+    expected per-stage leak distribution (where consumers in this segment
+    abandon) and expected visits per stage before absorption — the detail a
+    founder needs to see which segment's funnel is broken where.
+    """
 
     cluster_id: str
     purchase_probability: float = Field(ge=0.0, le=1.0)
     expected_steps_to_absorb: float = Field(ge=0.0)
     primary_exit_stage: str | None = None
+    exit_stage_distribution: dict[str, float] = Field(default_factory=dict)
+    expected_visits_by_stage: dict[str, float] = Field(default_factory=dict)
 
 
 class JourneyAnalyticsOut(BaseModel):

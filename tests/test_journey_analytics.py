@@ -346,6 +346,31 @@ def test_no_weights_uses_uniform_aggregation() -> None:
     assert payload["per_cluster"][0]["primary_exit_stage"] == "BROWSE"
 
 
+def test_per_cluster_exposes_stage_leaks_and_expected_visits() -> None:
+    payload = build_journey_analytics({"c0": OVERRIDES})
+    cluster = payload["per_cluster"][0]
+
+    # The per-cluster detail mirrors the analytic per-cluster metrics exactly,
+    # so founders can see where each segment leaks rather than one headline.
+    metrics = cluster_metrics(build_cluster_matrix(OVERRIDES))
+    assert metrics is not None
+    assert cluster["exit_stage_distribution"] == metrics["exit_stage_distribution"]
+    assert cluster["expected_visits_by_stage"] == metrics["visits_by_stage"]
+
+    # Leak shares across stages sum to that cluster's abandon probability, and
+    # every stage visit count is finite and non-negative (ARRIVE starts at 1).
+    assert sum(cluster["exit_stage_distribution"].values()) == pytest.approx(
+        1.0 - cluster["purchase_probability"],
+        abs=1e-5,
+    )
+    assert cluster["expected_visits_by_stage"]["ARRIVE"] == pytest.approx(1.0)
+    assert cluster["expected_visits_by_stage"]["RETURN"] == pytest.approx(0.0)
+    assert all(v >= 0.0 for v in cluster["expected_visits_by_stage"].values())
+    assert all(
+        v >= 0.0 for v in cluster["exit_stage_distribution"].values()
+    )
+
+
 def test_empty_input_returns_safe_payload() -> None:
     payload = build_journey_analytics({})
 
@@ -393,3 +418,5 @@ def test_schema_validates_full_payload() -> None:
     assert out.key_insights
     assert 0.0 <= out.purchase_probability <= 1.0
     assert all(0.0 <= p.probability <= 1.0 for p in out.top_paths)
+    assert out.per_cluster[0].exit_stage_distribution
+    assert out.per_cluster[0].expected_visits_by_stage["ARRIVE"] == pytest.approx(1.0)

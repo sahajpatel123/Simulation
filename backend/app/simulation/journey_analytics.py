@@ -542,6 +542,10 @@ def build_journey_analytics(
                 "expected_steps_to_absorb": float(
                     metrics["expected_steps_to_absorb"]
                 ),
+                "exit_stage_distribution": dict(
+                    metrics["exit_stage_distribution"]
+                ),
+                "expected_visits_by_stage": dict(metrics["visits_by_stage"]),
                 "primary_exit_stage": max(
                     metrics["exit_stage_distribution"],
                     key=lambda stage: metrics["exit_stage_distribution"][stage],
