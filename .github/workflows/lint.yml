@@ -120,7 +120,7 @@ jobs:
               idx = text.find('[')
               if idx == -1:
                   raise ValueError('no JSON array found in safety report')
-              json.loads(text[idx:])
+              json.JSONDecoder().raw_decode(text[idx:])
           except Exception as e:
               print(f'::error::safety report is not valid JSON: {e}')
               sys.exit(1)

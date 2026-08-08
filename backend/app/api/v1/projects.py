@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.api.v1.cache_namespaces import _CONFIDENCE_EXPLAINER_CACHE_NAMESPACE
 from app.api.v1.common import get_owned_project
 from app.api.v1.users import (
     _USER_INSIGHTS_CACHE_NAMESPACE,
@@ -298,13 +299,9 @@ _ADOPTION_MILESTONES_CACHE_NAMESPACE: str = (
 _STATUS_BANNER_CACHE_TTL_S: int = 60
 _STATUS_BANNER_CACHE_NAMESPACE: str = "project-status-banner"
 
-# Confidence explainer - "why is my confidence X?" tile.
 # 60s TTL: 4 cheap queries in the route, but the
 # dashboard's project-detail page refreshes often.
 _CONFIDENCE_EXPLAINER_CACHE_TTL_S: int = 60
-_CONFIDENCE_EXPLAINER_CACHE_NAMESPACE: str = (
-    "project-confidence-explainer"
-)
 
 # Project export (full bundle: brief + assumptions +
 # sims + decisions + outcomes + premortem + interventions).
