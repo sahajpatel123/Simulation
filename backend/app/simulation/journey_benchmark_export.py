@@ -62,7 +62,7 @@ def _safe_int(value: Any) -> int:
         return 0
     try:
         parsed = int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return 0
     return parsed if math.isfinite(parsed) else 0
 
@@ -81,7 +81,7 @@ def _write_row(writer: Any, row: list[object]) -> None:
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
     """Render the optional metadata block as ``(key, value)`` rows."""
-    if not metadata:
+    if not isinstance(metadata, dict) or not metadata:
         return []
     rows: list[tuple[str, str]] = []
     for key in (

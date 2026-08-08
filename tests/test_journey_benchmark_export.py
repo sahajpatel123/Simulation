@@ -162,9 +162,13 @@ def test_csv_handles_malformed_payload_without_raising() -> None:
             "current": "junk",
             "distribution": None,
             "percentile_rank": float("nan"),
-            "cohort_size": "many",
+            "cohort_size": float("inf"),
             "insights": None,
-            "meta": "junk",
+            "meta": {
+                "raw_completed_count": float("inf"),
+                "skipped_without_journey_data": 1e999,
+                "sample_limit": "n/a",
+            },
         }
     )
 
@@ -176,6 +180,18 @@ def test_csv_handles_malformed_payload_without_raising() -> None:
     assert "section,Insights" in csv_text
     assert "section,Meta" in csv_text
     assert "raw_completed_count,0" in csv_text
+    assert "skipped_without_journey_data,0" in csv_text
+    assert "sample_limit,0" in csv_text
+
+
+def test_csv_ignores_non_dict_metadata_without_raising() -> None:
+    csv_text = journey_benchmark_to_csv(_payload(), metadata=["not", "a", "dict"])
+
+    assert not csv_text.startswith("generated_at,")
+    assert "section,Current Funnel" in csv_text
+
+    no_metadata = journey_benchmark_to_csv(_payload(), metadata=None)
+    assert no_metadata.startswith("section,Current Funnel")
 
 
 # ---------------------------------------------------------------------------
