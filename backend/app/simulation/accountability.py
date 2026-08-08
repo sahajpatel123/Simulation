@@ -78,6 +78,11 @@ class AccountabilityEngine:
         "refund_liability_concern": 0.30,
         "regulatory_suppressor": 1.0,
         "compliance_credibility": 1.0,
+        "disability_barrier": 0.30,
+        "language_barrier": 0.25,
+        "age_friction": 0.35,
+        "accessibility_credibility": 1.0,
+        "funnel_suppressor": 1.0,
     }
 
     LOWER_IS_BETTER: frozenset[str] = frozenset({
@@ -90,6 +95,9 @@ class AccountabilityEngine:
         "privacy_concern_intensity",
         "certification_barrier",
         "refund_liability_concern",
+        "disability_barrier",
+        "language_barrier",
+        "age_friction",
     })
 
     FINDING_TEMPLATES: dict[str, str] = {
@@ -155,6 +163,26 @@ class AccountabilityEngine:
             "{cluster} sees weak compliance credibility "
             "({val:.2f} vs benchmark {bench:.2f})"
         ),
+        "disability_barrier": (
+            "{cluster} faces disability/accessibility barrier {val:.2f} "
+            "(benchmark {bench:.2f})"
+        ),
+        "language_barrier": (
+            "{cluster} faces language/localization barrier {val:.2f} "
+            "(benchmark {bench:.2f})"
+        ),
+        "age_friction": (
+            "{cluster} faces senior/age friction {val:.2f} "
+            "(benchmark {bench:.2f})"
+        ),
+        "accessibility_credibility": (
+            "{cluster} sees weak accessibility credibility "
+            "({val:.2f} vs benchmark {bench:.2f})"
+        ),
+        "funnel_suppressor": (
+            "Inclusion gaps leave {cluster} at {pct:.0f}% funnel "
+            "strength (benchmark {bench:.0f}%)"
+        ),
     }
 
     RECOMMENDED_ACTIONS: dict[str, str] = {
@@ -188,6 +216,21 @@ class AccountabilityEngine:
         ),
         "compliance_credibility": (
             "Publish compliance evidence: certifications, audits, policy pages"
+        ),
+        "disability_barrier": (
+            "Ship WCAG-aligned design, screen-reader/keyboard support and captions"
+        ),
+        "language_barrier": (
+            "Localize the product and onboarding into regional languages"
+        ),
+        "age_friction": (
+            "Add large-text, senior-friendly onboarding and simple mode"
+        ),
+        "accessibility_credibility": (
+            "Publish accessibility evidence: audits, statement, compliance notes"
+        ),
+        "funnel_suppressor": (
+            "Close inclusion gaps (disability, language, age) and publish evidence"
         ),
     }
 

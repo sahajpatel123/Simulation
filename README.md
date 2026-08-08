@@ -54,7 +54,7 @@ flowchart LR
 
 ## 🔮 **Forget Surveys. Forget Focus Groups.**
 
-TheCee replaces expensive user research with a **behavioral simulation engine** that pits your startup idea against **52 distinct consumer archetypes**, evaluated by **23 domain-specialist AI architects**, all flowing through a **Markov decision funnel**.
+TheCee replaces expensive user research with a **behavioral simulation engine** that pits your startup idea against **52 distinct consumer archetypes**, evaluated by **24 domain-specialist AI architects**, all flowing through a **Markov decision funnel**.
 
 **What you get:**
 - 🎯 **Predicted conversion rate** with confidence intervals
@@ -78,7 +78,7 @@ price_sensitivity │ risk_aversion │ patience_score │ social_orientation
 
 These aren't stereotypes. They're **data-calibrated behavioral vectors** that evolve as real founder outcomes flow back into the system.
 
-### 2. 🏛️ The 23 Architects
+### 2. 🏛️ The 24 Architects
 
 Domain specialists that evaluate one business dimension each:
 
@@ -93,9 +93,10 @@ Domain specialists that evaluate one business dimension each:
 | `CompetitiveDynamicsArchitect` | Incumbent response & switching friction |
 | `MacroeconomicArchitect` | Economic headwinds/tailwinds |
 | `RegulatoryComplianceArchitect` | Privacy, certification & refund-policy exposure |
+| `AccessibilityInclusionArchitect` | Disability, language, age & literacy inclusion gaps |
 | *+ 12 more domain specialists* | Hardware, health, ecosystem, etc. |
 
-Each architect calls `.compute()` per cluster — **1,040 evaluations per simulation** — then outputs override deltas to the Markov matrix.
+Each architect calls `.compute()` per cluster — **1,248 evaluations per simulation** — then outputs override deltas to the Markov matrix.
 
 ### 3. 📉 The Markov Funnel
 
