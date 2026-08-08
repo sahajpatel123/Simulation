@@ -201,7 +201,11 @@ def test_deliver_webhook_event_success() -> None:
             self._posts.append((args, kwargs))
             return _Response()
 
-    with patch.object(delivery.httpx, "Client", _Client):
+    with patch.object(
+        delivery,
+        "assert_safe_outbound_url",
+        return_value="https://example.com/hook",
+    ), patch.object(delivery.httpx, "Client", _Client):
         result = delivery.deliver_webhook_event(
             url="https://example.com/hook",
             secret="abc",
@@ -230,7 +234,11 @@ def test_deliver_webhook_event_returns_failure_without_raising() -> None:
         def post(self, *args, **kwargs):
             return _Response()
 
-    with patch.object(delivery.httpx, "Client", _Client):
+    with patch.object(
+        delivery,
+        "assert_safe_outbound_url",
+        return_value="https://example.com/hook",
+    ), patch.object(delivery.httpx, "Client", _Client):
         result = delivery.deliver_webhook_event(
             url="https://example.com/hook",
             secret="abc",
@@ -239,6 +247,100 @@ def test_deliver_webhook_event_returns_failure_without_raising() -> None:
     assert result["ok"] is False
     assert "500" in result["error"]
     assert "webhook endpoint" in result["error"]
+
+
+def test_deliver_webhook_event_rejects_http_url() -> None:
+    from app.simulation import simulation_webhook_delivery as delivery
+
+    class _Client:
+        def __init__(self, *args, **kwargs) -> None:
+            raise AssertionError("http URL should never reach httpx")
+
+    with patch.object(delivery.httpx, "Client", _Client):
+        result = delivery.deliver_webhook_event(
+            url="http://example.com/hook",
+            secret="abc",
+            payload={"event": "simulation.completed"},
+        )
+    assert result["ok"] is False
+    assert "HTTPS" in result["error"]
+
+
+def test_deliver_webhook_event_rejects_unsafe_url_without_request() -> None:
+    from app.core.ssrf_guard import UnsafeOutboundURLError
+    from app.simulation import simulation_webhook_delivery as delivery
+
+    class _Client:
+        def __init__(self, *args, **kwargs) -> None:
+            raise AssertionError("unsafe URL should never reach httpx")
+
+    def _raise_unsafe(_url: str) -> str:
+        raise UnsafeOutboundURLError("URL host is private/reserved")
+
+    with patch.object(
+        delivery,
+        "assert_safe_outbound_url",
+        side_effect=_raise_unsafe,
+    ), patch.object(delivery.httpx, "Client", _Client):
+        result = delivery.deliver_webhook_event(
+            url="https://169.254.169.254/latest/meta-data/",
+            secret="abc",
+            payload={"event": "simulation.completed"},
+        )
+    assert result["ok"] is False
+    assert "unsafe webhook url" in result["error"]
+
+
+def test_deliver_webhook_event_sends_canonical_signed_body() -> None:
+    import hashlib
+    import hmac
+
+    from app.simulation import simulation_webhook_delivery as delivery
+
+    class _Response:
+        status_code = 204
+
+    class _Client:
+        def __init__(self, *args, **kwargs) -> None:
+            self.posts: list[dict] = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def post(self, *args, **kwargs):
+            self.posts.append(kwargs)
+            return _Response()
+
+    client = _Client()
+    payload = {
+        "event": "simulation.completed",
+        "status": "COMPLETED",
+        "simulation_id": 7,
+    }
+    with patch.object(
+        delivery,
+        "assert_safe_outbound_url",
+        return_value="https://example.com/hook",
+    ), patch.object(delivery.httpx, "Client", lambda *a, **k: client):
+        result = delivery.deliver_webhook_event(
+            url="https://example.com/hook",
+            secret="abc",
+            payload=payload,
+        )
+    assert result["ok"] is True
+    assert len(client.posts) == 1
+    sent = client.posts[0]
+    signature_header = sent["headers"]["X-TheCee-Signature"]
+    expected_signature = hmac.new(
+        b"abc",
+        sent["content"],
+        hashlib.sha256,
+    ).hexdigest()
+    assert signature_header == f"sha256={expected_signature}"
+    assert sent["content"].decode() == delivery._serialise_webhook_payload(payload)
 
 
 def test_create_webhook_validates_https() -> None:
@@ -254,6 +356,21 @@ def test_create_webhook_validates_https() -> None:
         event_type="simulation.completed",
     )
     assert ok.url == "https://secure.example.com/hook"
+
+
+def test_create_webhook_rejects_malformed_urls() -> None:
+    from app.schemas.simulation_webhooks import SimulationWebhookCreate
+
+    for url in (
+        "https://",
+        "https:///path-only",
+        "https://user:pass@example.com/hook",
+    ):
+        with pytest.raises(Exception):
+            SimulationWebhookCreate(
+                url=url,
+                event_type="simulation.completed",
+            )
 
 
 def test_create_webhook_route_generates_secret() -> None:

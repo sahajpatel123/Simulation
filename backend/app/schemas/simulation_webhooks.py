@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -20,11 +21,22 @@ class SimulationWebhookCreate(BaseModel):
     @field_validator("url")
     @classmethod
     def validate_url(cls, value: str) -> str:
-        if not value.lower().startswith("https://"):
+        url = value.strip()
+        if not url.lower().startswith("https://"):
             raise ValueError("webhook url must be HTTPS")
-        if len(value) > 2048:
+        if len(url) > 2048:
             raise ValueError("webhook url is too long")
-        return value
+        try:
+            parsed = urlparse(url)
+        except ValueError:
+            raise ValueError("webhook url is invalid") from None
+        if parsed.scheme.lower() != "https":
+            raise ValueError("webhook url must be HTTPS")
+        if not parsed.hostname:
+            raise ValueError("webhook url must include a hostname")
+        if parsed.username or parsed.password:
+            raise ValueError("webhook url must not include credentials")
+        return url
 
     @field_validator("event_type")
     @classmethod

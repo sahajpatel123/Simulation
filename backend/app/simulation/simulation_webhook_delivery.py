@@ -14,10 +14,22 @@ import json
 import logging
 import time
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
+from app.core.ssrf_guard import UnsafeOutboundURLError, assert_safe_outbound_url
+
 logger = logging.getLogger(__name__)
+
+
+def _serialise_webhook_payload(payload: dict[str, Any]) -> str:
+    """Return the canonical JSON used for both signing and the HTTP body."""
+    return json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
 
 
 def build_webhook_payload(
@@ -45,12 +57,13 @@ def build_webhook_payload(
 
 
 def sign_webhook_payload(secret: str, payload: dict[str, Any]) -> str:
-    """Return an HMAC-SHA256 signature for a JSON payload."""
-    message = json.dumps(
-        payload,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
+    """Return an HMAC-SHA256 signature over the canonical payload bytes.
+
+    The exact bytes are the same ones :func:`deliver_webhook_event` sends
+    as the request body, so receivers can verify the signature directly
+    against ``request.body``.
+    """
+    message = _serialise_webhook_payload(payload).encode("utf-8")
     return hmac.new(
         secret.encode("utf-8"),
         message,
@@ -65,22 +78,41 @@ def deliver_webhook_event(
     payload: dict[str, Any],
     timeout_seconds: float = 8.0,
 ) -> dict[str, Any]:
-    """POST ``payload`` to ``url`` with an HMAC signature header.
+    """POST ``payload`` to a validated HTTPS ``url`` with an HMAC signature header.
 
-    Returns ``{"ok": True, "status_code": int}`` on 2xx and
+    The URL must be HTTPS and pass the SSRF guard before any connection is
+    opened, and the body sent is the exact canonical JSON that was signed
+    (so receivers can verify against ``request.body``). Redirects are not
+    followed. Returns ``{"ok": True, "status_code": int}`` on 2xx and
     ``{"ok": False, "error": str}`` otherwise. Never raises — the caller
     decides whether a delivery failure should surface (e.g. ping) or be
     swallowed (background delivery).
     """
+    try:
+        if urlparse(url.strip()).scheme.lower() != "https":
+            return {"ok": False, "error": "webhook url must be HTTPS"}
+        # Block private / loopback / cloud-metadata / unresolvable hosts
+        # before we ever open a connection. Webhooks are user-supplied
+        # outbound URLs, so this is the same SSRF guard the landing-page
+        # fetcher uses.
+        assert_safe_outbound_url(url)
+    except (UnsafeOutboundURLError, ValueError) as exc:
+        logger.warning(
+            "[Webhook] Rejected unsafe url=%s error=%s",
+            url,
+            str(exc)[:300],
+        )
+        return {"ok": False, "error": f"unsafe webhook url: {exc}"[:500]}
+
     signature = sign_webhook_payload(secret, payload)
     headers = {
         "Content-Type": "application/json",
         "X-TheCee-Signature": f"sha256={signature}",
         "User-Agent": "TheCee-Simulation-Webhook/1.0",
     }
-    body = json.dumps(payload).encode("utf-8")
+    body = _serialise_webhook_payload(payload).encode("utf-8")
     try:
-        with httpx.Client(timeout=timeout_seconds) as client:
+        with httpx.Client(timeout=timeout_seconds, follow_redirects=False) as client:
             response = client.post(url, content=body, headers=headers)
         status_code = int(response.status_code)
         if 200 <= status_code < 300:
