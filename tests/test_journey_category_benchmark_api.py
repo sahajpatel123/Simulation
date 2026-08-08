@@ -245,6 +245,71 @@ def test_category_benchmark_honours_simulation_id() -> None:
     assert out.simulation_id == 77
 
 
+def test_category_benchmark_cache_hit_returns_full_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A cached benchmark payload must rebuild the envelope and validate."""
+    from app.api.v1 import simulations as sim_mod
+
+    cached_value: dict | None = None
+
+    def fake_get(**kwargs):
+        return cached_value
+
+    def fake_set(**kwargs):
+        nonlocal cached_value
+        cached_value = kwargs["value"]
+
+    monkeypatch.setattr(sim_mod, "cache_get_json", fake_get)
+    monkeypatch.setattr(sim_mod, "cache_set_json", fake_set)
+
+    first = _call_route(session=_FakeSession(cohort_rows=_cohort_rows()))
+    second = _call_route(session=_FakeSession(cohort_rows=_cohort_rows()))
+
+    assert isinstance(first, JourneyCategoryBenchmarkOut)
+    assert isinstance(second, JourneyCategoryBenchmarkOut)
+    # The cache stores only the benchmark payload; the envelope fields come
+    # from the request context on every hit.
+    assert "simulation_id" not in cached_value
+    assert "project_id" not in cached_value
+    assert "category" not in cached_value
+    assert second == first
+    assert second.simulation_id == 1
+    assert second.project_id == 10
+    assert second.category == "saas"
+    assert second.cohort_size == 2
+    assert second.percentile_rank == pytest.approx(50.0)
+
+
+def test_category_benchmark_invalid_cached_payload_recomputes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A schema-invalid cached payload degrades to a fresh computation."""
+    from app.api.v1 import simulations as sim_mod
+
+    set_calls = 0
+
+    def fake_get(**kwargs):
+        return {"percentile_rank": 99.0, "current": "junk"}
+
+    def fake_set(**kwargs):
+        nonlocal set_calls
+        set_calls += 1
+
+    monkeypatch.setattr(sim_mod, "cache_get_json", fake_get)
+    monkeypatch.setattr(sim_mod, "cache_set_json", fake_set)
+
+    out = _call_route(session=_FakeSession(cohort_rows=_cohort_rows()))
+
+    assert isinstance(out, JourneyCategoryBenchmarkOut)
+    assert out.simulation_id == 1
+    assert out.project_id == 10
+    assert out.category == "saas"
+    assert out.cohort_size == 2
+    assert out.percentile_rank == pytest.approx(50.0)
+    assert set_calls == 1
+
+
 def test_category_benchmark_running_simulation_raises_409() -> None:
     session = _FakeSession(_FakeSimulation(status="RUNNING"))
     with pytest.raises(HTTPException) as exc:

@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
+from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -8903,7 +8904,24 @@ def get_simulation_journey_category_benchmark(
         user_id=current_user.id,
     )
     if cached is not None:
-        return JourneyCategoryBenchmarkOut(**cached)
+        # The cache stores only the benchmark payload (no simulation
+        # envelope), so the envelope is rebuilt from request context. A
+        # payload that no longer fits the response schema (e.g. written by
+        # an older version or corrupted in Redis) falls back to a fresh
+        # computation instead of turning into a 500.
+        try:
+            return JourneyCategoryBenchmarkOut(
+                simulation_id=sim.id,
+                project_id=sim.project_id,
+                category=category,
+                **cached,
+            )
+        except (TypeError, ValidationError):
+            logger.warning(
+                "journey-category-benchmark: discarding invalid cached "
+                "payload for simulation %s",
+                simulation_id,
+            )
 
     rows = (
         db.query(Simulation.id, Simulation.results_json)
