@@ -59,6 +59,7 @@ from app.core.response_cache import (
     cache_set_json,
 )
 from app.core.tier_enforcement import enforce_simulation_limit
+from app.core.websocket import sync_broadcast
 from app.models.assumption import Assumption
 from app.models.cluster_run_summary import ClusterRunSummary
 from app.models.environment import Environment
@@ -128,6 +129,7 @@ from app.schemas.simulation import (
     SimDiffOut,
     SimulationAnomaliesOut,
     SimulationBatchStatusOut,
+    SimulationCancelOut,
     SimulationCreate,
     SimulationResultOut,
     SimulationSensitivityMatrixOut,
@@ -381,7 +383,10 @@ from app.simulation.simulation_comparison_export import (
 from app.simulation.simulation_quality import build_simulation_quality
 from app.simulation.what_if import build_what_if_scenario
 from app.simulation.what_if_batch import build_what_if_batch
-from app.tasks.simulation_tasks import run_full_simulation
+from app.tasks.simulation_tasks import (
+    _enqueue_simulation_webhooks,
+    run_full_simulation,
+)
 from app.worker import celery_app
 
 logger = logging.getLogger(__name__)
@@ -391,6 +396,50 @@ _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}
 
 _registry = ClusterRegistry()
 _clusters_map = {c.cluster_id: c for c in _registry.all_clusters()}
+
+# Every user-scoped cache namespace that derives from simulation state.
+# Both enqueue and cancel bust the same set so stale dashboard widgets
+# can't outlive the lifecycle transition they describe.
+_SIMULATION_CACHE_NAMESPACES: tuple[str, ...] = (
+    _PORTFOLIO_NARRATIVE_CACHE_NAMESPACE,
+    _NEXT_ACTION_CACHE_NAMESPACE,
+    _ACTIVITY_FEED_CACHE_NAMESPACE,
+    _USER_DASHBOARD_CACHE_NAMESPACE,
+    _USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
+    _PROJECT_HEALTH_CACHE_NAMESPACE,
+    _USER_NOTIFICATIONS_CACHE_NAMESPACE,
+    _ADOPTION_MILESTONES_CACHE_NAMESPACE,
+    _PROJECT_EXPORT_CACHE_NAMESPACE,
+    _USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
+    _USER_PROJECTS_SUMMARY_CACHE_NAMESPACE,
+    _USER_USAGE_BY_WEEK_CACHE_NAMESPACE,
+    _USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
+    _USER_QUICK_STATS_CACHE_NAMESPACE,
+    _STATUS_BANNER_CACHE_NAMESPACE,
+    _USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
+    _USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
+    _CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
+    _USER_RUNS_THIS_MONTH_CACHE_NAMESPACE,
+    _USER_DECISION_VELOCITY_CACHE_NAMESPACE,
+    _USER_OUTCOME_VELOCITY_CACHE_NAMESPACE,
+    _USER_DECISION_RATE_CACHE_NAMESPACE,
+    _USER_OUTCOME_RATE_CACHE_NAMESPACE,
+    _USER_INSIGHTS_CACHE_NAMESPACE,
+    _USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
+    _USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
+    _USER_SIM_FAILURE_RATE_CACHE_NAMESPACE,
+    _USER_RUNS_PER_WEEK_CACHE_NAMESPACE,
+    _USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
+    _USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
+    _STALE_CHECK_CACHE_NAMESPACE,
+    _LATEST_SNAPSHOT_CACHE_NAMESPACE,
+)
+
+
+def _invalidate_simulation_caches(user_id: int) -> None:
+    """Bust every user-scoped cache that derives from simulation state."""
+    for namespace in _SIMULATION_CACHE_NAMESPACES:
+        cache_invalidate(namespace=namespace, user_id=user_id)
 
 
 def _signal_suggestions(sq: float, dist: dict) -> list[str]:
@@ -505,137 +554,9 @@ def create_simulation(
 
     logger.info(f"[API] Simulation enqueued - simulation_id={sim.id} task_id={task.id}")
 
-    # Bust the cached portfolio-narrative + the per-project
-    # next-action + the activity feed so the next GETs
-    # reflect the new sim rather than waiting out the TTL.
-    cache_invalidate(
-        namespace=_PORTFOLIO_NARRATIVE_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_NEXT_ACTION_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_ACTIVITY_FEED_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_DASHBOARD_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_PROJECT_HEALTH_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_NOTIFICATIONS_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_ADOPTION_MILESTONES_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_PROJECT_EXPORT_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_PROJECTS_SUMMARY_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_USAGE_BY_WEEK_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_QUICK_STATS_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_STATUS_BANNER_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_RUNS_THIS_MONTH_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_DECISION_VELOCITY_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_OUTCOME_VELOCITY_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_DECISION_RATE_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_OUTCOME_RATE_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_INSIGHTS_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_SIM_FAILURE_RATE_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_RUNS_PER_WEEK_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_STALE_CHECK_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_LATEST_SNAPSHOT_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
+    # Bust every user-scoped cache that derives from simulation state so
+    # the next GETs reflect the new sim rather than waiting out the TTL.
+    _invalidate_simulation_caches(current_user.id)
 
     return SimulationStatusOut.model_validate(sim)
 
@@ -3980,7 +3901,7 @@ def get_simulation_progress(
     if sim.updated_at and sim.created_at:
         elapsed = (sim.updated_at - sim.created_at).total_seconds()
 
-    pct_map = {"QUEUED": 0, "RUNNING": 50, "COMPLETED": 100, "FAILED": 0}
+    pct_map = {"QUEUED": 0, "RUNNING": 50, "COMPLETED": 100, "FAILED": 0, "CANCELLED": 0}
     pct = pct_map.get(sim.status, 0)
 
     if sim.status == "RUNNING" and sim.task_id:
@@ -4009,6 +3930,108 @@ def get_simulation_progress(
         "error": sim.error_message,
         "results": sim.results_json if sim.status == "COMPLETED" else None,
     }
+
+
+@router.post(
+    "/{simulation_id}/cancel",
+    response_model=SimulationCancelOut,
+    summary="Cancel a queued or running simulation",
+    responses={
+        200: {"description": "Simulation cancelled"},
+        404: {"description": "Simulation not found"},
+        409: {"description": "Simulation is not cancellable in its current state"},
+    },
+    # Mutating lifecycle endpoint — 10/min/IP is plenty for a human
+    # stopping a run and bounds accidental script loops.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
+)
+def cancel_simulation(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SimulationCancelOut:
+    """Stop a simulation the caller owns before it completes.
+
+    Queued tasks are revoked so they never start. Running tasks observe
+    the ``CANCELLED`` row at their next cluster boundary (via
+    ``Conductor.run(cancel_check=...)``) and unwind cleanly — no partial
+    results are persisted and no retries are burned. Completed or failed
+    simulations cannot be cancelled.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status not in {"QUEUED", "RUNNING"}:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation {simulation_id} is {sim.status} and "
+                "cannot be cancelled."
+            ),
+        )
+
+    was_queued = sim.status == "QUEUED"
+
+    if sim.task_id:
+        try:
+            celery_app.control.revoke(sim.task_id, terminate=False)
+        except Exception as exc:
+            logger.warning(
+                "[Simulation] revoke failed - simulation_id=%s task_id=%s error=%s",
+                simulation_id,
+                sim.task_id,
+                exc,
+            )
+
+    cancelled_at = datetime.now(UTC)
+    sim.status = "CANCELLED"
+    sim.error_message = "Cancelled by user"
+    sim.updated_at = cancelled_at
+    db.commit()
+    db.refresh(sim)
+
+    sync_broadcast(
+        simulation_id,
+        "CANCELLED",
+        "Cancelled by user",
+        0,
+    )
+
+    # A queued task will never run, so the API emits its lifecycle
+    # event. A running task observes CANCELLED and emits the webhook
+    # itself — this split avoids duplicate deliveries.
+    if was_queued:
+        try:
+            _enqueue_simulation_webhooks(
+                db,
+                project_id=sim.project_id,
+                simulation_id=simulation_id,
+                status="CANCELLED",
+                conversion_rate=None,
+                error="Cancelled by user",
+            )
+        except Exception as exc:
+            logger.warning(
+                "[Simulation] webhook enqueue on cancel skipped - "
+                "simulation_id=%s error=%s",
+                simulation_id,
+                exc,
+            )
+
+    _invalidate_simulation_caches(current_user.id)
+
+    logger.info(
+        "[Simulation] Cancelled by user - simulation_id=%s task_id=%s",
+        simulation_id,
+        sim.task_id,
+    )
+
+    return SimulationCancelOut(
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        task_id=sim.task_id,
+        cancelled_at=cancelled_at,
+    )
 
 
 @router.get(

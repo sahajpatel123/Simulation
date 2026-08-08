@@ -9,11 +9,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field, replace
-from typing import Any
+from typing import Any, Callable
 
 from sqlalchemy import delete
 
 from app.simulation.architects.base import ArchitectOutput, DomainReport
+from app.simulation.cancellation import SimulationCancelled
 from app.simulation.cluster_reweighting import ClusterReweightingEngine
 from app.simulation.clusters.definitions import ClusterDefinition
 from app.simulation.clusters.registry import ClusterRegistry
@@ -438,6 +439,7 @@ class Conductor:
         signal_quality: float = 0.0,
         db: Any = None,
         simulation: Any | None = None,
+        cancel_check: Callable[[], bool] | None = None,
     ) -> ConductorResult:
         if product_type is None:
             desc = str(env_params.get("description", ""))
@@ -474,6 +476,10 @@ class Conductor:
         cluster_mutation_logs: dict[str, dict[str, float]] = {}
 
         for cluster in all_clusters:
+            if cancel_check is not None and cancel_check():
+                raise SimulationCancelled(
+                    f"Simulation cancelled before cluster {cluster.cluster_id}"
+                )
             cluster_outputs: dict[str, ArchitectOutput] = {}
             _mutation_log: dict[str, float] = {}
             cluster_working = cluster

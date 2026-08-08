@@ -129,6 +129,9 @@ class _Metrics:
     def sim_failed(self) -> None:
         self.inc_counter("thecee_simulations_total", {"status": "failed"})
 
+    def sim_cancelled(self) -> None:
+        self.inc_counter("thecee_simulations_total", {"status": "cancelled"})
+
     def claude_call(self, model: str, task: str) -> None:
         self.inc_counter(
             "thecee_llm_calls_total",

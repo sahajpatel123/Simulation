@@ -20,6 +20,7 @@ from app.models.simulation_webhook_subscription import SimulationWebhookSubscrip
 from app.models.user import User
 from app.simulation.accountability import AccountabilityEngine
 from app.simulation.aggregation import ResultsAggregator
+from app.simulation.cancellation import SimulationCancelled
 from app.simulation.conductor import Conductor, ConductorResult
 from app.simulation.funnel import (
     DemographicBreakdown,
@@ -141,6 +142,81 @@ def _enqueue_simulation_webhooks(
             status=status,
             conversion_rate=conversion_rate,
             error=error,
+        )
+
+
+def _simulation_is_cancelled(db: Session, simulation_id: int) -> bool:
+    """Return True when the simulation row has been marked CANCELLED.
+
+    Uses a raw ``SELECT`` (not the ORM identity map) so a running task
+    sees the API process's cancellation immediately under READ COMMITTED.
+    """
+    try:
+        status = db.execute(
+            text("SELECT status FROM simulations WHERE id = :sid"),
+            {"sid": simulation_id},
+        ).scalar()
+    except Exception:
+        # If the check itself fails, prefer finishing the run over
+        # aborting it on a transient DB blip.
+        return False
+    return status == "CANCELLED"
+
+
+def _mark_cancelled(db: Session, sim: Simulation | None, simulation_id: int) -> None:
+    """Persist a user-initiated cancellation and notify listeners.
+
+    Cancellation is a terminal outcome, not a failure: no retry is
+    scheduled, no FAILED row is written, and the failure counter is not
+    bumped. Webhooks and the progress channel still hear about it.
+    """
+    message = "Cancelled by user"
+    try:
+        db.execute(
+            text(
+                """
+                UPDATE simulations
+                SET status = 'CANCELLED',
+                    error_message = COALESCE(error_message, :msg),
+                    updated_at = :u
+                WHERE id = :sid
+                """
+            ),
+            {"msg": message, "u": _utcnow(), "sid": simulation_id},
+        )
+        if sim is not None:
+            sim.status = "CANCELLED"
+            sim.error_message = sim.error_message or message
+            sim.updated_at = _utcnow()
+        db.commit()
+    except Exception as inner:
+        logger.error(f"[Simulation] Could not persist CANCELLED status: {inner}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+    metrics.sim_cancelled()
+    sync_broadcast(
+        simulation_id,
+        "CANCELLED",
+        message,
+        0,
+        extra={"error": message},
+    )
+    try:
+        _enqueue_simulation_webhooks(
+            db,
+            project_id=sim.project_id if sim is not None else None,
+            simulation_id=simulation_id,
+            status="CANCELLED",
+            conversion_rate=None,
+            error=message,
+        )
+    except Exception as _exc:
+        logger.debug(
+            "[Simulation] webhook enqueue on cancel skipped: %s",
+            _exc,
         )
 
 
@@ -334,6 +410,13 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         if not sim:
             raise ValueError(f"Simulation {simulation_id} not found in DB")
 
+        if _simulation_is_cancelled(self.db, simulation_id):
+            logger.info(
+                f"[Simulation] Cancelled before start - simulation_id={simulation_id}"
+            )
+            _mark_cancelled(self.db, sim, simulation_id)
+            return {"simulation_id": simulation_id, "status": "CANCELLED"}
+
         project = self.db.query(Project).filter(Project.id == sim.project_id).first()
         if not project:
             raise ValueError(f"Project {sim.project_id} not found")
@@ -460,6 +543,7 @@ def run_full_simulation(self, simulation_id: int) -> dict:
             db=self.db,
             simulation=sim,
             user_id=project.user_id,
+            cancel_check=lambda: _simulation_is_cancelled(self.db, simulation_id),
         )
         wall_s = time.perf_counter() - t0
 
@@ -522,6 +606,13 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         results_dict["cluster_narrative"] = accountability.generate_cluster_breakdown_narrative(
             conductor_result
         )
+
+        if _simulation_is_cancelled(self.db, simulation_id):
+            logger.info(
+                f"[Simulation] Cancelled before persist - simulation_id={simulation_id}"
+            )
+            _mark_cancelled(self.db, sim, simulation_id)
+            return {"simulation_id": simulation_id, "status": "CANCELLED"}
 
         sim.status = "COMPLETED"
         sim.results_json = results_dict
@@ -605,6 +696,11 @@ def run_full_simulation(self, simulation_id: int) -> dict:
             "converted": funnel_result.converted,
             "total_agents": funnel_result.total_agents,
         }
+
+    except SimulationCancelled:
+        logger.info(f"[Simulation] Cancelled - simulation_id={simulation_id}")
+        _mark_cancelled(self.db, sim, simulation_id)
+        return {"simulation_id": simulation_id, "status": "CANCELLED"}
 
     except Exception as exc:
         logger.exception(f"[Simulation] Failed - simulation_id={simulation_id}")

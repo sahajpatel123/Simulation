@@ -200,10 +200,10 @@ def test_activity_feed_namespace_consistency() -> None:
     matches every invalidation site so cache busts
     actually land.
     """
-    from app.api.v1 import projects as proj_mod
-    from app.api.v1 import simulations as sim_mod
     from app.api.v1 import decisions as dec_mod
     from app.api.v1 import outcomes as out_mod
+    from app.api.v1 import projects as proj_mod
+    from app.api.v1 import simulations as sim_mod
 
     namespace = proj_mod._ACTIVITY_FEED_CACHE_NAMESPACE
     assert namespace == "project-activity-feed"
@@ -221,6 +221,14 @@ def test_activity_feed_namespace_consistency() -> None:
         (src_decisions, "decisions.py (POST decisions)"),
         (src_outcomes, "outcomes.py (POST outcomes)"),
     ):
-        assert "namespace=_ACTIVITY_FEED_CACHE_NAMESPACE" in src, (
-            f"namespace mismatch in {label}"
-        )
+        if "_SIMULATION_CACHE_NAMESPACES" in src:
+            # simulations.py centralises its simulation-state busts in
+            # the _SIMULATION_CACHE_NAMESPACES tuple; the constant must
+            # still be wired into that tuple so the helper busts it.
+            assert "_ACTIVITY_FEED_CACHE_NAMESPACE," in src, (
+                f"namespace mismatch in {label}"
+            )
+        else:
+            assert "namespace=_ACTIVITY_FEED_CACHE_NAMESPACE" in src, (
+                f"namespace mismatch in {label}"
+            )

@@ -57,6 +57,22 @@ class SimulationBatchStatusOut(BaseModel):
     filtered_by_since: datetime | None = None
 
 
+class SimulationCancelOut(BaseModel):
+    """Response from ``POST /simulations/{id}/cancel``.
+
+    Confirms the terminal ``CANCELLED`` state so the frontend can flip
+    the progress widget immediately instead of polling for a status
+    that will never arrive from a revoked/stopped task.
+    """
+
+    simulation_id: int
+    project_id: int
+    status: str
+    task_id: str | None = None
+    cancelled_at: datetime
+    message: str = "Simulation cancelled"
+
+
 class DatabaseHealthOut(BaseModel):
     """Response from ``GET /simulations/db-health``.
 

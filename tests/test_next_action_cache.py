@@ -201,9 +201,9 @@ def test_cache_namespace_consistency() -> None:
     invalidation never lands."""
     # Read the namespace constant from projects.py and the
     # invalidation literal from each callsite.
+    from app.api.v1 import decisions as dec_mod
     from app.api.v1 import projects as proj_mod
     from app.api.v1 import simulations as sim_mod
-    from app.api.v1 import decisions as dec_mod
 
     namespace = proj_mod._NEXT_ACTION_CACHE_NAMESPACE
     assert namespace == "project-next-action"
@@ -224,6 +224,14 @@ def test_cache_namespace_consistency() -> None:
         (src_simulations, "simulations.py (POST)"),
         (src_decisions, "decisions.py (POST)"),
     ):
-        assert "namespace=_NEXT_ACTION_CACHE_NAMESPACE" in src, (
-            f"namespace mismatch in {label}"
-        )
+        if "_SIMULATION_CACHE_NAMESPACES" in src:
+            # simulations.py centralises its simulation-state busts in
+            # the _SIMULATION_CACHE_NAMESPACES tuple; the constant must
+            # still be wired into that tuple so the helper busts it.
+            assert "_NEXT_ACTION_CACHE_NAMESPACE," in src, (
+                f"namespace mismatch in {label}"
+            )
+        else:
+            assert "namespace=_NEXT_ACTION_CACHE_NAMESPACE" in src, (
+                f"namespace mismatch in {label}"
+            )
