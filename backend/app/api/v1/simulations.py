@@ -236,6 +236,11 @@ from app.simulation.journey_analytics_export import (
     journey_analytics_to_json,
 )
 from app.simulation.journey_benchmark import build_journey_benchmark
+from app.simulation.journey_benchmark_export import (
+    FORMAT_VERSION as JOURNEY_BENCHMARK_FORMAT_VERSION,
+    journey_benchmark_to_csv,
+    journey_benchmark_to_json,
+)
 from app.simulation.launch_checklist import build_launch_checklist
 from app.simulation.launch_checklist_export import (
     launch_checklist_to_csv,
@@ -8977,6 +8982,132 @@ def get_simulation_journey_category_benchmark(
         project_id=sim.project_id,
         category=category,
         **payload,
+    )
+
+
+@router.get(
+    "/{simulation_id}/journey/benchmark/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export a journey benchmark (portfolio or category) as CSV "
+        "(or JSON with ?format=json)"
+    ),
+    responses=_JSON_200,
+    # Both benchmark scopes scan completed simulations; cap path-spam at
+    # 20/min/IP so a runaway dashboard script can't drive repeated scans.
+    dependencies=[Depends(rate_limit(limit=20, window_s=60))],
+)
+def export_simulation_journey_benchmark(
+    simulation_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "benchmark payload. Unsupported values return a 400 response."
+        ),
+    ),
+    scope: str = Query(
+        default="portfolio",
+        max_length=16,
+        description=(
+            "Benchmark scope. ``portfolio`` (default) compares against "
+            "the founder's other completed simulations; ``category`` "
+            "compares against the latest same-category simulations "
+            "platform-wide. Unsupported values return a 400 response."
+        ),
+    ),
+    limit: int = Query(
+        default=200,
+        ge=10,
+        le=1000,
+        description=(
+            "Maximum number of same-category completed simulations to "
+            "include when ``scope=category``, newest first."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Download a journey benchmark in CSV (default) or JSON form.
+
+    Delegates to the same portfolio/category benchmark builders as the JSON
+    endpoints, so the exported comparison can never disagree with what the
+    API returns. The CSV mirrors the current funnel summary, cohort
+    distribution, per-stage leak comparison, and insights in one
+    spreadsheet. Pure post-hoc analytics — no Celery, no LLM, no DB writes.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; expected 'csv' or "
+                "'json'"
+            ),
+        )
+
+    scope_value = (scope or "portfolio").strip().lower()
+    if scope_value not in {"portfolio", "category"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported benchmark scope {scope!r}; expected "
+                "'portfolio' or 'category'"
+            ),
+        )
+
+    if scope_value == "category":
+        benchmark = get_simulation_journey_category_benchmark(
+            simulation_id=simulation_id,
+            limit=limit,
+            db=db,
+            current_user=current_user,
+        )
+    else:
+        benchmark = get_simulation_journey_benchmark(
+            simulation_id=simulation_id,
+            db=db,
+            current_user=current_user,
+        )
+
+    payload = benchmark.model_dump()
+    metadata = {
+        "generated_at": datetime.now(tz=UTC).isoformat(),
+        "user_id": current_user.id,
+        "simulation_id": simulation_id,
+        "project_id": benchmark.project_id,
+        "scope": scope_value,
+        "category": payload.get("category"),
+        "format_version": JOURNEY_BENCHMARK_FORMAT_VERSION,
+    }
+
+    if fmt == "json":
+        text = journey_benchmark_to_json(payload, metadata=metadata)
+        body = text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="journey-benchmark.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = journey_benchmark_to_csv(payload, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="journey-benchmark.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
     )
 
 
