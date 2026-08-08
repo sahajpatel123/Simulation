@@ -37,9 +37,11 @@ jobs:
         id: get_actionlint
         run: |
           set -euo pipefail
+          expected_sha256="3e6e0a832dfa0b5f027e6b8956aad2632d69b7cb778b1cff847b40279950a856"
           curl -fsSL \
             https://github.com/rhysd/actionlint/releases/download/v1.7.5/actionlint_1.7.5_linux_amd64.tar.gz \
             -o actionlint.tar.gz
+          echo "${expected_sha256}  actionlint.tar.gz" | sha256sum -c -
           tar -xzf actionlint.tar.gz actionlint
           ./actionlint -version
           echo "executable=$PWD/actionlint" >> "$GITHUB_OUTPUT"

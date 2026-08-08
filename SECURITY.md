@@ -45,7 +45,7 @@ This repository runs automated security scans:
 - **Dependency Review**: PR-time gate on high-severity dependency changes (`dependency-review.yml`)
 - **Gitleaks**: Git history and working-tree secret scanner (`backend-ci.yml`)
 - **Gitleaks (scheduled)**: Weekly full-history secret scan to catch pre-existing leaks (`secret-scan.yml`)
-- **Actionlint + YAML/TOML validation**: GitHub Actions workflow syntax and security-policy checks (`workflow-validation.yml` runs `tools/validate_ci.py`, which can also be run locally)
+- **Actionlint + YAML/TOML validation**: GitHub Actions workflow syntax and security-policy checks; actionlint is downloaded from a pinned release and checksum-verified (`workflow-validation.yml` runs `tools/validate_ci.py`, which can also be run locally)
 
 The `workflow-validation.yml` job also enforces that every GitHub Action ref is pinned
 to a full version tag, that every workflow declares least-privilege permissions,
@@ -125,4 +125,6 @@ For security concerns, please contact the project maintainers.
 - 2026-08-08 - Added a local `tools/validate_ci.py` parity checker for the
   workflow-validation CI job so pinning/permissions/YAML/TOML/security-policy
   checks can run before pushing, and wired the CI job to the same script.
+- 2026-08-08 - Added SHA-256 verification for the actionlint release download in
+  `workflow-validation.yml` so CI refuses a tampered or mismatched tool artifact.
 - [VERSION] - Initial security policy

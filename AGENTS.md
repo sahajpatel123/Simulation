@@ -56,6 +56,8 @@ Rules that keep CI green and secure:
 - Never commit `.env*` files (only `.env.example`); CI fails if one is tracked.
 - Pin every GitHub Action to a full version tag (e.g. `@v6.0.2`), never `@master`
   or a floating `@vN` — `workflow-validation.yml` enforces this.
+- When a workflow downloads a tool (actionlint, scanners, etc.), pin the exact
+  release and verify the artifact checksum before using it.
 - If a security scanner cannot run, fix the runner; do not silence it with `|| true`.
 - When adding a new workflow, declare explicit least-privilege `permissions`.
 - Do not grant `actions: write`; use `actions: read` or omit the scope.
