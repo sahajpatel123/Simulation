@@ -140,4 +140,6 @@ For security concerns, please contact the project maintainers.
   so migrations can run on a fresh PostgreSQL database.
 - 2026-08-08 - Made migrations create `pgcrypto` independently of `pgvector`
   so token backfills work on PostgreSQL images without the vector extension.
+- 2026-08-08 - Made app startup tolerant of a missing `pgvector` extension so
+  local/CI PostgreSQL instances without it can still start the backend.
 - [VERSION] - Initial security policy

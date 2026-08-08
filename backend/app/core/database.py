@@ -31,5 +31,18 @@ def get_db():
 
 def init_extensions():
     with engine.connect() as conn:
-        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
-        conn.commit()
+        try:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+            conn.commit()
+            print("✅ pgvector extension ready")
+        except Exception:
+            conn.rollback()
+            print("⚠️ pgvector extension unavailable; continuing without it")
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto;"))
+            conn.commit()
+            print("✅ pgcrypto extension ready")
+        except Exception:
+            conn.rollback()
+            print("⚠️ pgcrypto extension unavailable; continuing without it")
