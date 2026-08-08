@@ -127,6 +127,7 @@ from app.schemas.unit_economics import UnitEconomicsOut
 from app.schemas.validation_experiment import ValidationExperimentPlanOut
 from app.schemas.validation_roi import ValidationRoiOut
 from app.schemas.what_if import WhatIfOut, WhatIfRequest
+from app.schemas.what_if_batch import WhatIfBatchOut, WhatIfBatchRequest
 from app.simulation.agent_hierarchy import AgentHierarchyRouter
 from app.simulation.anomaly_detector import detect_simulation_anomalies
 from app.simulation.channel_attribution_read import build_channel_attribution
@@ -284,6 +285,7 @@ from app.simulation.portfolio_summary import (
 )
 from app.simulation.portfolio_trend import compute_portfolio_trend
 from app.simulation.what_if import build_what_if_scenario
+from app.simulation.what_if_batch import build_what_if_batch
 from app.tasks.simulation_tasks import run_full_simulation
 from app.worker import celery_app
 
@@ -3763,32 +3765,7 @@ def post_what_if(
             detail="Simulation completed but results_json is empty.",
         )
 
-    # Fetch environment params
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
-    env_params: dict = {}
-    if environment:
-        env_params = {
-            "average_order_value": float(environment.average_order_value or 999.0),
-            "price_sensitivity": float(environment.price_sensitivity or 0.5),
-            "market_maturity": float(environment.market_maturity or 0.3),
-            "consumer_volume": int(environment.consumer_volume or 10000),
-            "growth_rate_per_month": float(environment.growth_rate_per_month or 5.0),
-        }
-        if environment.mode == "SCENARIO" and environment.scenario_type:
-            env_params["scenario_type"] = environment.scenario_type
-        if environment.manual_params_json:
-            env_params.update(environment.manual_params_json)
-
-    # Fetch existing assumptions for the project
-    assumptions = (
-        db.query(Assumption)
-        .filter(Assumption.project_id == sim.project_id, Assumption.is_hidden.is_(False))
-        .all()
-    )
+    env_params, assumptions = _load_what_if_context(sim, db)
 
     # Build the what-if scenario
     return build_what_if_scenario(
@@ -3800,6 +3777,60 @@ def post_what_if(
         new_assumptions=[a.model_dump() for a in payload.assumptions],
         override_price_sensitivity=payload.override_price_sensitivity,
         override_market_maturity=payload.override_market_maturity,
+    )
+
+
+@router.post(
+    "/{simulation_id}/what-if/batch",
+    response_model=WhatIfBatchOut,
+    summary="Compare multiple what-if scenarios in one ranked call",
+    responses=_JSON_200,
+    # Heavy Markov recomputation over the existing results + N scenario
+    # inputs; cap at 10/min/IP so a single actor can't grind the endpoint.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
+)
+def post_what_if_batch(
+    payload: WhatIfBatchRequest,
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> WhatIfBatchOut:
+    """
+    Batch what-if scenario simulator.
+
+    Accepts one to twenty scenarios in a single request, projects each one
+    against the same completed simulation, and returns a ranked comparison
+    (best/worst deltas, aggregate summary, full per-scenario payloads).
+
+    Pure post-hoc analysis — no Celery dispatch, no LLM calls.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Simulation is {sim.status} — what-if analysis requires completed results.",
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    env_params, assumptions = _load_what_if_context(sim, db)
+
+    return build_what_if_batch(
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        base_results=sim.results_json,
+        env_params=env_params,
+        existing_assumptions=assumptions,
+        scenarios=[scenario.model_dump() for scenario in payload.scenarios],
     )
 
 
@@ -6582,6 +6613,38 @@ def _get_owned_simulation(
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
     return sim
+
+
+def _load_what_if_context(
+    sim: Simulation,
+    db: Session,
+) -> tuple[dict, list[Assumption]]:
+    """Load env params + visible assumptions needed to run what-if projections."""
+    environment = (
+        db.query(Environment)
+        .filter(Environment.id == sim.environment_id)
+        .first()
+    )
+    env_params: dict = {}
+    if environment:
+        env_params = {
+            "average_order_value": float(environment.average_order_value or 999.0),
+            "price_sensitivity": float(environment.price_sensitivity or 0.5),
+            "market_maturity": float(environment.market_maturity or 0.3),
+            "consumer_volume": int(environment.consumer_volume or 10000),
+            "growth_rate_per_month": float(environment.growth_rate_per_month or 5.0),
+        }
+        if environment.mode == "SCENARIO" and environment.scenario_type:
+            env_params["scenario_type"] = environment.scenario_type
+        if environment.manual_params_json:
+            env_params.update(environment.manual_params_json)
+
+    assumptions = (
+        db.query(Assumption)
+        .filter(Assumption.project_id == sim.project_id, Assumption.is_hidden.is_(False))
+        .all()
+    )
+    return env_params, assumptions
 
 
 # ---------------------------------------------------------------------------
