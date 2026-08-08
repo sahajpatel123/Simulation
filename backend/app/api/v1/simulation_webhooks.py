@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import secrets
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.v1.common import get_owned_project
 from app.core.deps import get_current_user, get_db
+from app.core.rate_limiter import rate_limit
 from app.models.simulation_webhook_subscription import SimulationWebhookSubscription
 from app.models.simulation_webhook_delivery import SimulationWebhookDelivery
 from app.models.user import User
@@ -30,6 +33,10 @@ from app.simulation.simulation_webhook_delivery import (
 from app.simulation.webhook_delivery_history import (
     record_webhook_delivery,
     retry_failed_delivery,
+)
+from app.simulation.webhook_delivery_history_export import (
+    webhook_deliveries_to_csv,
+    webhook_deliveries_to_json,
 )
 
 router = APIRouter(prefix="/projects", tags=["simulation-webhooks"])
@@ -250,6 +257,97 @@ def list_simulation_webhook_deliveries(
     )
 
 
+@router.get(
+    "/{project_id}/webhooks/{webhook_id}/deliveries/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export simulation webhook delivery history as CSV "
+        "(or JSON with ?format=json)"
+    ),
+    # Export can scan up to 5000 delivery rows; cap polling so a stray
+    # dashboard loop can't drive repeated per-webhook history scans.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_simulation_webhook_deliveries(
+    project_id: int,
+    webhook_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the "
+            "raw delivery rows. Unsupported values return a 400 response."
+        ),
+    ),
+    limit: int = Query(
+        default=1000,
+        ge=1,
+        le=5000,
+        description="Maximum number of delivery attempts to export.",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a webhook's delivery audit trail, newest first."""
+    webhook = _get_owned_webhook(db, current_user.id, project_id, webhook_id)
+    rows = (
+        db.query(SimulationWebhookDelivery)
+        .filter(
+            SimulationWebhookDelivery.webhook_subscription_id == webhook.id,
+        )
+        .order_by(
+            SimulationWebhookDelivery.created_at.desc(),
+            SimulationWebhookDelivery.id.desc(),
+        )
+        .limit(limit)
+        .all()
+    )
+    items = [
+        SimulationWebhookDeliveryOut.model_validate(row).model_dump(mode="json")
+        for row in rows
+    ]
+
+    metadata = {
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "user_id": current_user.id,
+        "project_id": project_id,
+        "webhook_id": webhook_id,
+        "limit": limit,
+        "total": len(items),
+        "format_version": "1",
+    }
+
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unsupported export format {format!r}; expected 'csv' or 'json'",
+        )
+    if fmt == "json":
+        body = webhook_deliveries_to_json(items, metadata=metadata).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="webhook-deliveries.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    body = webhook_deliveries_to_csv(items, metadata=metadata).encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="webhook-deliveries.csv"',
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
 @router.post(
     "/{project_id}/webhooks/{webhook_id}/deliveries/{delivery_id}/retry",
     response_model=SimulationWebhookRetryOut,
@@ -293,5 +391,6 @@ __all__ = [
     "delete_simulation_webhook",
     "ping_simulation_webhook",
     "list_simulation_webhook_deliveries",
+    "export_simulation_webhook_deliveries",
     "retry_simulation_webhook_delivery",
 ]
