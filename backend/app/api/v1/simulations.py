@@ -245,6 +245,13 @@ from app.simulation.journey_benchmark_export import (
     journey_benchmark_to_json,
 )
 from app.simulation.journey_trend import build_journey_trend
+from app.simulation.journey_trend_export import (
+    FORMAT_VERSION as JOURNEY_TREND_FORMAT_VERSION,
+)
+from app.simulation.journey_trend_export import (
+    journey_trend_to_csv,
+    journey_trend_to_json,
+)
 from app.simulation.launch_checklist import build_launch_checklist
 from app.simulation.launch_checklist_export import (
     launch_checklist_to_csv,
@@ -8908,6 +8915,90 @@ def get_simulation_journey_trend(
     )
     payload["generated_at"] = datetime.now(tz=UTC).isoformat()
     return JourneyTrendOut(**payload)
+
+
+@router.get(
+    "/{simulation_id}/journey/trend/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export the journey trend as CSV (or JSON with ?format=json)"
+    ),
+)
+def export_simulation_journey_trend(
+    simulation_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly multi-section table; ``json`` returns the "
+            "raw journey-trend payload. Unsupported values return a 400 "
+            "response."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Download the journey trend in CSV (default) or JSON form.
+
+    Delegates to :func:`get_simulation_journey_trend`, so the exported
+    portfolio series can never disagree with the JSON endpoint. The CSV
+    mirrors the headline trend statistics, purchase statistics, recent
+    momentum, best/worst runs, per-simulation points, stage-leak medians,
+    latest stage leaks, and insights in one spreadsheet. ``format=json``
+    returns the exact payload for machine consumers. Pure post-hoc
+    analytics — no Celery, no LLM, no DB writes.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; expected 'csv' or "
+                "'json'"
+            ),
+        )
+
+    trend = get_simulation_journey_trend(
+        simulation_id=simulation_id,
+        db=db,
+        current_user=current_user,
+    )
+    payload = trend.model_dump()
+    metadata = {
+        "generated_at": datetime.now(tz=UTC).isoformat(),
+        "user_id": current_user.id,
+        "simulation_id": simulation_id,
+        "project_id": payload.get("project_id"),
+        "format_version": JOURNEY_TREND_FORMAT_VERSION,
+    }
+
+    if fmt == "json":
+        text = journey_trend_to_json(payload, metadata=metadata)
+        body = text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="journey-trend.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = journey_trend_to_csv(payload, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="journey-trend.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
 
 
 # Category benchmark scans completed simulations across all users, so the
