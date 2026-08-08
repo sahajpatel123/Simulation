@@ -87,6 +87,7 @@ from app.schemas.fix_leverage import FixLeverageOut
 from app.schemas.founder_action_plan import FounderActionPlanOut
 from app.schemas.founder_brief import FounderBriefOut
 from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
+from app.schemas.journey_analytics import JourneyAnalyticsOut
 from app.schemas.launch_checklist import LaunchChecklistOut
 from app.schemas.market_concentration import MarketConcentrationOut
 from app.schemas.market_sizing import MarketSizingOut
@@ -218,6 +219,10 @@ from app.simulation.founder_action_plan_export import (
     founder_action_plan_to_json,
 )
 from app.simulation.founder_brief import build_founder_brief
+from app.simulation.journey_analytics import (
+    build_journey_analytics,
+    deserialise_per_cluster_matrices,
+)
 from app.simulation.launch_checklist import build_launch_checklist
 from app.simulation.launch_checklist_export import (
     launch_checklist_to_csv,
@@ -8508,6 +8513,76 @@ def get_prediction_range(
             project_id=sim.project_id,
             calibration_source=source,
         )
+    )
+
+
+@router.get(
+    "/{simulation_id}/journey",
+    response_model=JourneyAnalyticsOut,
+    summary=(
+        "Journey analytics: purchase/abandon probabilities, most probable "
+        "customer journeys, exit-stage leaks, and highest-leverage "
+        "funnel transitions"
+    ),
+    responses=_JSON_200,
+)
+def get_simulation_journey_analytics(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> JourneyAnalyticsOut:
+    """
+    Journey analytics for a completed simulation.
+
+    Derives absorbing-Markov-chain metrics from the per-cluster transition
+    matrices persisted with the run: purchase/abandon probability, expected
+    journey length and revisits, exit-stage distribution, most probable
+    journeys, and a ranked list of which 5pp transition improvements would
+    lift conversion the most. Pure post-hoc analytics — no Celery, no LLM,
+    no DB writes.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — journey analytics requires "
+                "completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    results = sim.results_json if isinstance(sim.results_json, dict) else {}
+    raw_matrices = results.get("per_cluster_matrices")
+    if not deserialise_per_cluster_matrices(raw_matrices):
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Journey analytics are unavailable for this simulation — "
+                "per-cluster journey data is persisted for runs started "
+                "after this version. Re-run the simulation to generate it."
+            ),
+        )
+
+    payload = build_journey_analytics(
+        raw_matrices,
+        results.get("cluster_weights"),
+    )
+    return JourneyAnalyticsOut(
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        **payload,
     )
 
 

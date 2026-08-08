@@ -26,6 +26,7 @@ from app.simulation.funnel import (
     FunnelResult,
     StageMetrics,
 )
+from app.simulation.journey_analytics import serialise_per_cluster_matrices
 from app.simulation.markov import STATES
 from app.simulation.profiles import AgentProfileGenerator
 from app.simulation.simulation_webhook_delivery import (
@@ -503,6 +504,13 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         results_dict = aggregator.to_dict(agg_result)
         results_dict["raw_funnel"] = _serialise_result(funnel_result)
         results_dict["cluster_breakdown"] = conductor_result.cluster_breakdown
+        results_dict["per_cluster_matrices"] = serialise_per_cluster_matrices(
+            conductor_result.per_cluster_matrices
+        )
+        results_dict["cluster_weights"] = {
+            cid: round(float(weight), 6)
+            for cid, weight in conductor_result.cluster_weights.items()
+        }
         results_dict["domain_findings"] = [f.to_dict() for f in ranked[:10]]
         results_dict["primary_failure_domain"] = accountability.primary_failure_domain(ranked)
         results_dict["highest_value_cluster"] = {

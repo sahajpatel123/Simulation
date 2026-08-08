@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 
 logger = logging.getLogger(__name__)
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from sqlalchemy import delete
@@ -299,6 +299,7 @@ class ConductorResult:
     per_cluster_matrices:           dict[str, dict[tuple[str, str], float]]
     cluster_funnel_dropoffs:        dict[str, dict[str, float]] = None  # type: ignore
     signal_quality:                 float = 0.0
+    cluster_weights:                dict[str, float] = field(default_factory=dict)
 
 
 def _mean_metric(output: ArchitectOutput) -> float:
@@ -597,6 +598,7 @@ class Conductor:
             per_cluster_matrices=per_cluster_matrices,
             cluster_funnel_dropoffs=cluster_funnel_dropoffs,
             signal_quality=sq,
+            cluster_weights=cluster_weights,
         )
 
         if db is not None and simulation_id is not None:
