@@ -11,9 +11,10 @@ can catch issues locally before pushing:
   - Every checkout sets persist-credentials: false.
   - Every workflow declares least-privilege permissions; no actions: write;
     id-token: write only in scorecard.yml.
+  - Every job declares a positive timeout-minutes so CI cannot hang indefinitely.
 
 Usage:
-    python3 scripts/validate_ci.py
+    python3 tools/validate_ci.py
 
 Exit status is non-zero if any check fails.
 """
@@ -167,6 +168,25 @@ def validate_permissions() -> list[str]:
     return errors
 
 
+def validate_timeouts() -> list[str]:
+    errors: list[str] = []
+    for path in sorted(glob.glob(str(ROOT / ".github" / "workflows" / "*.yml"))):
+        with open(path) as fh:
+            data = yaml.safe_load(fh) or {}
+        rel = Path(path).relative_to(ROOT)
+        for job_name, job in (data.get("jobs") or {}).items():
+            timeout = job.get("timeout-minutes")
+            if (
+                not isinstance(timeout, int)
+                or isinstance(timeout, bool)
+                or timeout <= 0
+            ):
+                errors.append(
+                    f"{rel} job {job_name}: missing a positive timeout-minutes"
+                )
+    return errors
+
+
 def main() -> int:
     checks = [
         ("YAML", validate_yaml),
@@ -175,6 +195,7 @@ def main() -> int:
         ("env-file tracking", validate_env_files),
         ("supply-chain pinning", validate_supply_chain),
         ("least-privilege permissions", validate_permissions),
+        ("job timeouts", validate_timeouts),
     ]
     errors: list[str] = []
     for label, func in checks:

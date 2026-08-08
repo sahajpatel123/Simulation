@@ -53,7 +53,8 @@ and that no workflow grants `actions: write`. YAML files are parsed and invalid
 workflow files fail the validator.
 
 Run `python3 tools/validate_ci.py` locally to check the same supply-chain,
-permissions, YAML/TOML, security-policy, and env-file tracking rules before pushing.
+permissions, YAML/TOML, security-policy, env-file tracking, and job-timeout
+rules before pushing.
 
 ### Running Security Checks Locally
 
@@ -127,4 +128,7 @@ For security concerns, please contact the project maintainers.
   checks can run before pushing, and wired the CI job to the same script.
 - 2026-08-08 - Added SHA-256 verification for the actionlint release download in
   `workflow-validation.yml` so CI refuses a tampered or mismatched tool artifact.
+- 2026-08-08 - Extended `tools/validate_ci.py` to require a positive
+  `timeout-minutes` on every CI job, preventing hung runs from burning runner
+  time without a bound.
 - [VERSION] - Initial security policy

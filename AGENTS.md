@@ -64,6 +64,8 @@ Rules that keep CI green and secure:
 - Do not grant `id-token: write` outside `scorecard.yml`.
 - Set `persist-credentials: false` on every checkout step.
 - Use `if-no-files-found: error` when uploading scanner/audit reports.
+- Set a positive `timeout-minutes` on every CI job so workflows cannot hang
+  indefinitely; `tools/validate_ci.py` enforces this.
 
 Local security scans:
 
