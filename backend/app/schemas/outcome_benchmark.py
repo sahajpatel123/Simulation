@@ -18,7 +18,10 @@ class OutcomeBenchmarkCurrentOut(BaseModel):
 
     outcome_id: int = Field(ge=1)
     simulation_id: int | None = None
-    project_id: int = Field(ge=1)
+    # ``None`` when the builder is fed a row without the project id (the
+    # endpoint always supplies it); kept optional so malformed rows never
+    # 500 the response schema.
+    project_id: int | None = Field(default=None, ge=1)
     actual_conversion_rate: float = Field(ge=0.0, le=1.0)
     predicted_conversion_rate: float | None = Field(
         default=None,

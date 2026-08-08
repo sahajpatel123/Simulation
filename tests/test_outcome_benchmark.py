@@ -263,6 +263,94 @@ def test_current_outcome_is_serialised_defensively() -> None:
     assert current["recorded_at"] is None
 
 
+def test_malformed_outcome_id_degrades_to_no_data() -> None:
+    """A non-integer outcome id must not raise or 500 the response."""
+    payload = build_outcome_benchmark(
+        {
+            "outcome_id": "abc",
+            "project_id": 10,
+            "actual_conversion_rate": 0.05,
+        },
+        _peers(0.01, 0.02),
+        category="saas",
+    )
+
+    assert payload["has_data"] is False
+    assert payload["current"] is None
+    assert payload["verdict"] == VERDICT_INSUFFICIENT_DATA
+    # The degraded payload must still satisfy the response contract.
+    out = OutcomeBenchmarkOut(**payload)
+    assert out.current is None
+
+
+def test_missing_or_malformed_project_id_is_tolerated() -> None:
+    """project_id is echoed defensively: absent or unparseable -> None."""
+    for project_id in (None, "abc", 1.5, True):
+        payload = build_outcome_benchmark(
+            {
+                "outcome_id": 12,
+                "project_id": project_id,
+                "simulation_id": 7,
+                "actual_conversion_rate": 0.05,
+                "predicted_conversion_rate": 0.04,
+                "days_since_launch": 30,
+                "launched": True,
+            },
+            _peers(0.04),
+            category="saas",
+        )
+
+        assert payload["has_data"] is True
+        assert payload["current"]["project_id"] is None
+        # The payload must validate end-to-end instead of raising ge=1.
+        out = OutcomeBenchmarkOut(**payload)
+        assert out.current is not None
+        assert out.current.project_id is None
+
+
+def test_non_integer_and_negative_counts_are_sanitised() -> None:
+    """simulation_id / days_since_launch never raise and never go negative."""
+    payload = build_outcome_benchmark(
+        {
+            "outcome_id": 12,
+            "project_id": 10,
+            "simulation_id": "abc",
+            "actual_conversion_rate": 0.05,
+            "predicted_conversion_rate": 0.04,
+            "days_since_launch": -3,
+            "launched": True,
+        },
+        _peers(0.04),
+        category="saas",
+    )
+
+    current = payload["current"]
+    assert current is not None
+    assert current["simulation_id"] is None
+    assert current["days_since_launch"] == 0
+
+    payload = build_outcome_benchmark(
+        {
+            "outcome_id": 12,
+            "project_id": 10,
+            "simulation_id": "7.5",
+            "actual_conversion_rate": 0.05,
+            "predicted_conversion_rate": 0.04,
+            "days_since_launch": "x",
+            "launched": True,
+        },
+        _peers(0.04),
+        category="saas",
+    )
+
+    current = payload["current"]
+    assert current is not None
+    assert current["simulation_id"] is None
+    assert current["days_since_launch"] == 0
+    # Both payloads must satisfy the response contract.
+    assert OutcomeBenchmarkOut(**payload).current is not None
+
+
 def test_schema_roundtrip_accepts_payload() -> None:
     payload = build_outcome_benchmark(
         _current(actual=0.06),

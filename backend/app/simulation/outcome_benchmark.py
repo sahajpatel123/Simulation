@@ -61,6 +61,24 @@ def _safe_rate(raw: Any) -> float | None:
     return value
 
 
+def _safe_int(raw: Any) -> int | None:
+    """Coerce a value to an int or return ``None``.
+
+    Rejects booleans, non-integral floats (``1.5`` would otherwise
+    silently truncate to ``1``) and values that cannot be parsed
+    (including floats encoded as strings such as ``"1.5"``), so a
+    malformed row can never raise inside the builder and 500 the endpoint.
+    """
+    if raw is None or isinstance(raw, bool):
+        return None
+    if isinstance(raw, float) and not raw.is_integer():
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
 def _iso(value: Any) -> str | None:
     """Render a DB datetime (or string) as an ISO string, or ``None``."""
     if value is None:
@@ -306,26 +324,28 @@ def build_outcome_benchmark(
 
     if isinstance(current_outcome, dict):
         actual = _safe_rate(current_outcome.get("actual_conversion_rate"))
-        outcome_id = current_outcome.get("outcome_id") or current_outcome.get("id")
+        outcome_id = _safe_int(
+            current_outcome.get("outcome_id")
+            or current_outcome.get("id")
+        )
         if actual is not None and outcome_id is not None:
             has_data = True
             predicted = _safe_rate(
                 current_outcome.get("predicted_conversion_rate")
             )
             current = {
-                "outcome_id": int(outcome_id),
-                "simulation_id": (
-                    int(current_outcome["simulation_id"])
-                    if current_outcome.get("simulation_id") is not None
-                    else None
+                "outcome_id": outcome_id,
+                "simulation_id": _safe_int(
+                    current_outcome.get("simulation_id")
                 ),
-                "project_id": int(current_outcome.get("project_id") or 0),
+                "project_id": _safe_int(current_outcome.get("project_id")),
                 "actual_conversion_rate": round(actual, 6),
                 "predicted_conversion_rate": (
                     round(predicted, 6) if predicted is not None else None
                 ),
-                "days_since_launch": int(
-                    current_outcome.get("days_since_launch") or 0
+                "days_since_launch": max(
+                    _safe_int(current_outcome.get("days_since_launch")) or 0,
+                    0,
                 ),
                 "data_confidence": (
                     str(current_outcome["data_confidence"])
