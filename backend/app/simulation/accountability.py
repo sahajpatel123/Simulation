@@ -78,6 +78,11 @@ class AccountabilityEngine:
         "refund_liability_concern": 0.30,
         "regulatory_suppressor": 1.0,
         "compliance_credibility": 1.0,
+        "payment_method_coverage": 0.80,
+        "checkout_friction": 0.20,
+        "payment_credibility": 1.0,
+        "cash_gap_active": 0.0,
+        "financing_gap_active": 0.0,
         "disability_barrier": 0.30,
         "language_barrier": 0.25,
         "age_friction": 0.35,
@@ -95,6 +100,9 @@ class AccountabilityEngine:
         "privacy_concern_intensity",
         "certification_barrier",
         "refund_liability_concern",
+        "checkout_friction",
+        "cash_gap_active",
+        "financing_gap_active",
         "disability_barrier",
         "language_barrier",
         "age_friction",
@@ -163,6 +171,34 @@ class AccountabilityEngine:
             "{cluster} sees weak compliance credibility "
             "({val:.2f} vs benchmark {bench:.2f})"
         ),
+        "payment_method_coverage": (
+            "Only {pct:.0f}% of {cluster} have compatible payment methods "
+            "(benchmark {bench:.0f}%)"
+        ),
+        "checkout_friction": (
+            "Checkout friction for {cluster} is {val:.2f} "
+            "(benchmark {bench:.2f})"
+        ),
+        "cash_dependency": (
+            "{pct:.0f}% of {cluster} depend on cash/COD payments "
+            "(benchmark {bench:.0f}%)"
+        ),
+        "financing_dependency": (
+            "{pct:.0f}% of {cluster} need EMI/BNPL/invoice financing "
+            "(benchmark {bench:.0f}%)"
+        ),
+        "payment_credibility": (
+            "{cluster} sees weak payment credibility "
+            "({val:.2f} vs benchmark {bench:.2f})"
+        ),
+        "cash_gap_active": (
+            "{cluster} has an open cash/COD payment gap "
+            "(benchmark {bench:.2f})"
+        ),
+        "financing_gap_active": (
+            "{cluster} has an open financing gap (EMI/BNPL/invoice) "
+            "(benchmark {bench:.2f})"
+        ),
         "disability_barrier": (
             "{cluster} faces disability/accessibility barrier {val:.2f} "
             "(benchmark {bench:.2f})"
@@ -216,6 +252,33 @@ class AccountabilityEngine:
         ),
         "compliance_credibility": (
             "Publish compliance evidence: certifications, audits, policy pages"
+        ),
+        "payment_method_coverage": (
+            "Accept the payment methods each segment uses: UPI, COD, cards, "
+            "wallets, EMI/BNPL, invoices and international payments"
+        ),
+        "checkout_friction": (
+            "Simplify checkout and remove restricted/required payment methods"
+        ),
+        "cash_dependency": (
+            "Add cash-on-delivery or offline/cash payment options for "
+            "cash-dependent segments"
+        ),
+        "financing_dependency": (
+            "Add EMI, BNPL, installment plans or invoice/net terms for "
+            "high-AOV buyers"
+        ),
+        "payment_credibility": (
+            "Publish payment-method evidence: supported methods, gateways "
+            "and international coverage"
+        ),
+        "cash_gap_active": (
+            "Add cash-on-delivery or offline/cash payment options for "
+            "cash-dependent segments"
+        ),
+        "financing_gap_active": (
+            "Add EMI, BNPL, installment plans or invoice/net terms for "
+            "high-AOV buyers"
         ),
         "disability_barrier": (
             "Ship WCAG-aligned design, screen-reader/keyboard support and captions"

@@ -12,6 +12,7 @@ ALL_ARCHITECT_NAMES = [
     "CompetitiveDynamicsArchitect",
     "TrustArchitect",
     "PricingArchitect",
+    "PaymentFrictionArchitect",
     "OnboardingArchitect",
     "FeatureAdoptionArchitect",
     "RetentionArchitect",
