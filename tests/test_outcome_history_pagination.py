@@ -7,7 +7,7 @@ fields on ``GET /projects/{id}/outcomes`` plus the optional
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -67,19 +67,47 @@ class _OutcomeQuery:
     def count(self) -> int:
         return len(self.rows)
 
+    def with_entities(self, *args, **kwargs):  # noqa: ARG002
+        return _AggregateQuery(self.rows)
+
     def offset(self, value: int) -> "_OutcomeQuery":
-        self._offset = value
-        return self
+        clone = self._clone()
+        clone._offset = value
+        return clone
 
     def limit(self, value: int) -> "_OutcomeQuery":
-        self._limit = value
-        return self
+        clone = self._clone()
+        clone._limit = value
+        return clone
 
     def all(self) -> list[SimpleNamespace]:
         start = self._offset or 0
         if self._limit is None:
             return self.rows[start:]
         return self.rows[start : start + self._limit]
+
+    def _clone(self) -> "_OutcomeQuery":
+        clone = _OutcomeQuery(self.rows)
+        clone._offset = self._offset
+        clone._limit = self._limit
+        clone.filter_count = self.filter_count
+        return clone
+
+
+class _AggregateQuery:
+    """Fake for the aggregate ``with_entities(...).one()`` call."""
+
+    def __init__(self, rows: list[SimpleNamespace]) -> None:
+        self.rows = rows
+
+    def one(self) -> tuple:
+        scores = [
+            float(o.calibration_score or 0.0)
+            for o in self.rows
+        ]
+        if not scores:
+            return None, None, None
+        return sum(scores) / len(scores), max(scores), min(scores)
 
 
 class _FakeSession:
@@ -137,10 +165,21 @@ def _rows(count: int) -> list[SimpleNamespace]:
     ]
 
 
+def _rows_with_scores(scores: list[float]) -> list[SimpleNamespace]:
+    base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    rows = [
+        _outcome(i + 1, base.replace(hour=23 - i))
+        for i in range(len(scores))
+    ]
+    for row, score in zip(rows, scores):
+        row.calibration_score = score
+    return rows
+
+
 def test_pagination_returns_page_and_has_more() -> None:
     result, _ = _call_route(_rows(5), limit=2)
 
-    assert result.total == 2
+    assert result.total == 5
     assert result.filtered_total == 5
     assert result.limit == 2
     assert result.offset == 0
@@ -151,7 +190,7 @@ def test_pagination_returns_page_and_has_more() -> None:
 def test_pagination_respects_offset() -> None:
     result, _ = _call_route(_rows(5), limit=2, offset=2)
 
-    assert result.total == 2
+    assert result.total == 5
     assert result.filtered_total == 5
     assert result.has_more is True
     assert [r.id for r in result.outcomes] == [3, 4]
@@ -176,6 +215,18 @@ def test_empty_history_returns_empty_payload() -> None:
     assert result.calibration_trend == "INSUFFICIENT_DATA"
 
 
+def test_aggregates_cover_full_filtered_set_not_just_page() -> None:
+    result, _ = _call_route(_rows_with_scores([60.0, 70.0, 80.0, 90.0]), limit=2)
+
+    # Only the first two rows are returned on the page…
+    assert [r.id for r in result.outcomes] == [1, 2]
+    # …but the headline calibration numbers come from all four rows.
+    assert result.average_calibration_score == 75.0
+    assert result.best_calibration_score == 90.0
+    assert result.worst_calibration_score == 60.0
+    assert result.calibration_trend == "DEGRADING"
+
+
 def test_date_filters_are_wired() -> None:
     _, query = _call_route(
         _rows(3),
@@ -185,6 +236,20 @@ def test_date_filters_are_wired() -> None:
 
     # project_id filter + start_date + end_date = 3 filter calls.
     assert query.filter_count == 3
+
+
+def test_naive_datetimes_are_normalized_to_utc() -> None:
+    from app.api.v1.outcomes import _as_utc
+
+    assert _as_utc(datetime(2026, 1, 1)) == datetime(
+        2026, 1, 1, tzinfo=timezone.utc
+    )
+    assert _as_utc(None) is None
+    aware = datetime(2026, 1, 1, 5, 30, tzinfo=timezone.utc)
+    assert _as_utc(aware) == aware
+    offset = datetime(2026, 1, 1, 6, 0, tzinfo=timezone.utc)
+    ist = datetime(2026, 1, 1, 11, 30, tzinfo=timezone(timedelta(hours=5, minutes=30)))
+    assert _as_utc(ist) == offset
 
 
 def test_pagination_fields_default_in_schema() -> None:

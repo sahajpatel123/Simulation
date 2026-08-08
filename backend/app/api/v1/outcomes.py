@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
@@ -183,6 +183,21 @@ def _calibration_trend(outcomes: list[Outcome]) -> str:
     if delta_recent < -5 and delta_older < 0:
         return "DEGRADING"
     return "STABLE"
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    """Normalize a query datetime to UTC so DB comparisons are stable.
+
+    Naive datetimes are treated as UTC (the API documents both
+    ``start_date`` and ``end_date`` as UTC). Aware datetimes are
+    converted to UTC instead of being passed through in whatever
+    offset the caller happened to use.
+    """
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 def _hydrate_record(outcome: Outcome) -> OutcomeRecord:
@@ -1081,22 +1096,38 @@ def get_outcome_history(
 ):
     project = get_owned_project(db, current_user.id, project_id)
 
-    query = db.query(Outcome).filter(Outcome.project_id == project_id)
+    start_date = _as_utc(start_date)
+    end_date = _as_utc(end_date)
+
+    base = db.query(Outcome).filter(Outcome.project_id == project_id)
     if start_date is not None:
-        query = query.filter(Outcome.created_at >= start_date)
+        base = base.filter(Outcome.created_at >= start_date)
     if end_date is not None:
-        query = query.filter(Outcome.created_at <= end_date)
-    query = query.order_by(Outcome.created_at.desc())
+        base = base.filter(Outcome.created_at <= end_date)
 
-    filtered_total = query.count()
+    filtered_total = base.count()
 
+    ordered = base.order_by(Outcome.created_at.desc())
     if limit is not None:
-        rows = query.offset(offset).limit(limit + 1).all()
+        rows = ordered.offset(offset).limit(limit + 1).all()
         has_more = len(rows) > limit
         outcomes = rows[:limit]
     else:
-        outcomes = query.offset(offset).all()
+        outcomes = ordered.offset(offset).all()
         has_more = False
+
+    # Calibration aggregates and trend are computed over the *full*
+    # filtered set so paging never changes the headline numbers.
+    avg_score, best_score, worst_score = (
+        base.with_entities(
+            func.avg(func.coalesce(Outcome.calibration_score, 0.0)),
+            func.max(func.coalesce(Outcome.calibration_score, 0.0)),
+            func.min(func.coalesce(Outcome.calibration_score, 0.0)),
+        ).one()
+    )
+    trend = _calibration_trend(
+        base.order_by(Outcome.created_at.desc()).limit(3).all()
+    )
 
     records = [_hydrate_record(outcome) for outcome in outcomes]
 
@@ -1104,30 +1135,29 @@ def get_outcome_history(
         return OutcomeHistoryOut(
             project_id=project_id,
             outcomes=[],
-            total=0,
+            total=filtered_total,
             filtered_total=filtered_total,
             limit=limit,
             offset=offset,
             has_more=has_more,
-            average_calibration_score=0.0,
-            best_calibration_score=0.0,
-            worst_calibration_score=0.0,
-            calibration_trend="INSUFFICIENT_DATA",
+            average_calibration_score=round(float(avg_score or 0.0), 2),
+            best_calibration_score=round(float(best_score or 0.0), 2),
+            worst_calibration_score=round(float(worst_score or 0.0), 2),
+            calibration_trend=trend,
         )
 
-    scores = [record.calibration_score for record in records]
     return OutcomeHistoryOut(
         project_id=project_id,
         outcomes=records,
-        total=len(records),
+        total=filtered_total,
         filtered_total=filtered_total,
         limit=limit,
         offset=offset,
         has_more=has_more,
-        average_calibration_score=round(sum(scores) / len(scores), 2),
-        best_calibration_score=round(max(scores), 2),
-        worst_calibration_score=round(min(scores), 2),
-        calibration_trend=_calibration_trend(outcomes),
+        average_calibration_score=round(float(avg_score or 0.0), 2),
+        best_calibration_score=round(float(best_score or 0.0), 2),
+        worst_calibration_score=round(float(worst_score or 0.0), 2),
+        calibration_trend=trend,
     )
 
 

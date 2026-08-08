@@ -106,7 +106,11 @@ class OutcomeRecord(BaseModel):
 class OutcomeHistoryOut(BaseModel):
     project_id: int
     outcomes: list[OutcomeRecord]
-    total: int
+    total: int = Field(
+        default=0,
+        ge=0,
+        description="Total matching outcomes before pagination.",
+    )
     filtered_total: int = Field(default=0, ge=0)
     limit: int | None = Field(default=None, ge=1)
     offset: int = Field(default=0, ge=0)
@@ -166,6 +170,5 @@ class OutcomesDigestOut(BaseModel):
 
 
 OutcomeDigestOut = OutcomesDigestOut
-
 
 
