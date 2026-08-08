@@ -107,6 +107,10 @@ class OutcomeHistoryOut(BaseModel):
     project_id: int
     outcomes: list[OutcomeRecord]
     total: int
+    filtered_total: int = Field(default=0, ge=0)
+    limit: int | None = Field(default=None, ge=1)
+    offset: int = Field(default=0, ge=0)
+    has_more: bool = False
     average_calibration_score: float
     best_calibration_score: float
     worst_calibration_score: float
@@ -162,7 +166,6 @@ class OutcomesDigestOut(BaseModel):
 
 
 OutcomeDigestOut = OutcomesDigestOut
-
 
 
 

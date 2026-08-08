@@ -1047,17 +1047,57 @@ def record_outcome(
 )
 def get_outcome_history(
     project_id: int,
+    limit: int | None = Query(
+        default=None,
+        ge=1,
+        le=500,
+        description=(
+            "Max outcomes to return. Omit to return all matching "
+            "outcomes (no pagination)."
+        ),
+    ),
+    offset: int = Query(
+        default=0,
+        ge=0,
+        description=(
+            "Number of matching outcomes to skip before returning "
+            "the page."
+        ),
+    ),
+    start_date: datetime | None = Query(
+        default=None,
+        description=(
+            "Return outcomes recorded at or after this UTC datetime."
+        ),
+    ),
+    end_date: datetime | None = Query(
+        default=None,
+        description=(
+            "Return outcomes recorded at or before this UTC datetime."
+        ),
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     project = get_owned_project(db, current_user.id, project_id)
 
-    outcomes = (
-        db.query(Outcome)
-        .filter(Outcome.project_id == project_id)
-        .order_by(Outcome.created_at.desc())
-        .all()
-    )
+    query = db.query(Outcome).filter(Outcome.project_id == project_id)
+    if start_date is not None:
+        query = query.filter(Outcome.created_at >= start_date)
+    if end_date is not None:
+        query = query.filter(Outcome.created_at <= end_date)
+    query = query.order_by(Outcome.created_at.desc())
+
+    filtered_total = query.count()
+
+    if limit is not None:
+        rows = query.offset(offset).limit(limit + 1).all()
+        has_more = len(rows) > limit
+        outcomes = rows[:limit]
+    else:
+        outcomes = query.offset(offset).all()
+        has_more = False
+
     records = [_hydrate_record(outcome) for outcome in outcomes]
 
     if not records:
@@ -1065,6 +1105,10 @@ def get_outcome_history(
             project_id=project_id,
             outcomes=[],
             total=0,
+            filtered_total=filtered_total,
+            limit=limit,
+            offset=offset,
+            has_more=has_more,
             average_calibration_score=0.0,
             best_calibration_score=0.0,
             worst_calibration_score=0.0,
@@ -1076,6 +1120,10 @@ def get_outcome_history(
         project_id=project_id,
         outcomes=records,
         total=len(records),
+        filtered_total=filtered_total,
+        limit=limit,
+        offset=offset,
+        has_more=has_more,
         average_calibration_score=round(sum(scores) / len(scores), 2),
         best_calibration_score=round(max(scores), 2),
         worst_calibration_score=round(min(scores), 2),
