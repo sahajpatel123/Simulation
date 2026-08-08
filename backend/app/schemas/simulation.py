@@ -1020,6 +1020,15 @@ class SimulationResultOut(BaseModel):
     cluster_narrative: str = ""
     signal_quality: float | None = None
     user_blindspots: list[dict[str, Any]] = Field(default_factory=list)
+    conductor_diagnostics: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Per-architect execution health for the run: attempted/completed/"
+            "failed cluster counts, first failed cluster, severity distribution, "
+            "and cross-architect report-failure accounting. Empty for legacy "
+            "results persisted before the diagnostics feature shipped."
+        ),
+    )
 
     model_config = {"from_attributes": True}
 

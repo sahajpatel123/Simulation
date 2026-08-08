@@ -4164,6 +4164,7 @@ def get_simulation_results(
         architect_accountability=results_json.get("architect_accountability", {}),
         product_type_detected=results_json.get("product_type_detected", ""),
         cluster_narrative=results_json.get("cluster_narrative", ""),
+        conductor_diagnostics=results_json.get("conductor_diagnostics", {}),
         signal_quality=float(sim.signal_quality or 0.0),
         user_blindspots=user_blindspots,
     )

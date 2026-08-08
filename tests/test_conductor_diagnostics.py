@@ -13,6 +13,7 @@ This module pins the new deterministic diagnostics block:
 """
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from app.simulation.architects.base import ArchitectOutput
@@ -193,3 +194,75 @@ def test_run_counts_report_failures(monkeypatch: Any) -> None:
     # Compute itself still succeeded for every cluster.
     by_name = {s["architect_name"]: s for s in payload["architect_stats"]}
     assert by_name["PricingArchitect"]["completed_clusters"] == 52
+
+
+# ---------------------------------------------------------------------------
+# Persistence contract: the payload is JSON-safe, deterministic, and wired
+# into both the result schema and the worker's persisted results blob.
+# ---------------------------------------------------------------------------
+
+
+def test_diagnostics_payload_is_json_safe_and_stable() -> None:
+    stats = ArchitectDiagnostics(architect_name="PricingArchitect")
+    stats.record_success(_output("CRITICAL"))
+    stats.record_failure("cluster_a")
+    diagnostics = ConductorDiagnostics(architect_stats=[stats])
+    diagnostics.report_failures = 1
+    diagnostics.failed_report_architects = ["PricingArchitect"]
+
+    first = diagnostics.to_dict()
+    # The persisted results_json is a PostgreSQL JSONB blob, so the payload
+    # must round-trip through JSON without loss or reordering.
+    round_tripped = json.loads(json.dumps(first))
+    assert round_tripped == first
+    assert diagnostics.to_dict() == first
+
+
+def test_result_schema_surfaces_diagnostics_and_defaults_for_legacy_runs() -> None:
+    from app.schemas.simulation import SimulationResultOut
+
+    created_at = "2026-01-01T00:00:00Z"
+    legacy = SimulationResultOut(
+        id=1,
+        project_id=1,
+        status="COMPLETED",
+        consumer_volume=10_000,
+        results={"mean_conversion_rate": 0.12},
+        error_message=None,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    assert legacy.conductor_diagnostics == {}
+
+    payload = {
+        "architect_stats": [],
+        "total_compute_failures": 0,
+        "architects_with_failures": 0,
+        "report_failures": 0,
+        "failed_report_architects": [],
+    }
+    with_diagnostics = SimulationResultOut(
+        id=2,
+        project_id=1,
+        status="COMPLETED",
+        consumer_volume=10_000,
+        results={},
+        error_message=None,
+        created_at=created_at,
+        updated_at=created_at,
+        conductor_diagnostics=payload,
+    )
+    assert with_diagnostics.conductor_diagnostics == payload
+
+
+def test_worker_wires_diagnostics_into_persisted_results() -> None:
+    from pathlib import Path
+
+    source = Path("backend/app/tasks/simulation_tasks.py").read_text()
+    assert (
+        'results_dict["conductor_diagnostics"] = '
+        "conductor_result.diagnostics.to_dict()"
+    ) in source
+    # The diagnostics must be part of the fingerprint so a run whose
+    # execution health changed is never reported as an exact replay.
+    assert "results_fingerprint = stable_result_fingerprint(results_dict)" in source
