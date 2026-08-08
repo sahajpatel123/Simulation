@@ -61,6 +61,7 @@ from app.schemas.outcome import (
     OutcomeRecord,
     VarianceReport,
 )
+from app.schemas.outcome_benchmark import OutcomeBenchmarkOut
 from app.schemas.outcome_tracker import (
     OutcomeTrackerCreate,
     OutcomeTrackerPoint,
@@ -75,8 +76,15 @@ from app.simulation.architect_leaderboard import (
 from app.simulation.calibration_health import (
     build_calibration_health,
 )
+from app.simulation.founder_outcomes_export import (
+    predicted_conversion_from_results,
+)
 from app.simulation.funnel_calibration import (
     build_funnel_calibration_digest,
+)
+from app.simulation.outcome_benchmark import (
+    MAX_PEERS,
+    build_outcome_benchmark,
 )
 from app.simulation.outcome_tracker_export import (
     outcome_tracker_to_csv,
@@ -1648,3 +1656,125 @@ def get_funnel_calibration_digest(
         ttl_seconds=120,
     )
     return FunnelCalibrationDigestOut(**payload)
+
+
+@router.get(
+    "/{project_id}/outcome-benchmark",
+    response_model=OutcomeBenchmarkOut,
+    summary=(
+        "Benchmark a project's real-world conversion against other "
+        "launched outcomes in the same product category"
+    ),
+    # Read-only aggregate over the calibration learning layer; bounded.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_outcome_benchmark(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> OutcomeBenchmarkOut:
+    """Rank one project's reported outcome against peer launches.
+
+    Uses the most recent ``founder_outcomes`` row for the project, derives
+    the product category from the linked simulation (falling back to the
+    project's latest completed simulation), and compares the actual
+    conversion rate against other launched outcomes in that category.
+    Only aggregates are returned — individual peer rows are never exposed.
+    """
+    get_owned_project(db, current_user.id, project_id)
+
+    current_row = db.execute(
+        text("""
+            SELECT
+                fo.id,
+                fo.simulation_id,
+                fo.project_id,
+                fo.days_since_launch,
+                fo.actual_conversion_rate,
+                fo.launched,
+                fo.data_confidence,
+                fo.created_at,
+                s.results_json,
+                s.results_json->>'product_type_detected' AS product_type_detected
+            FROM founder_outcomes fo
+            LEFT JOIN simulations s ON s.id = fo.simulation_id
+            WHERE fo.project_id = :pid
+            ORDER BY fo.created_at DESC, fo.id DESC
+            LIMIT 1
+        """),
+        {"pid": project_id},
+    ).mappings().first()
+
+    category = None
+    current_outcome = None
+    if current_row is not None:
+        category = current_row.get("product_type_detected")
+        current_outcome = {
+            "outcome_id": current_row.get("id"),
+            "simulation_id": current_row.get("simulation_id"),
+            "project_id": current_row.get("project_id"),
+            "days_since_launch": current_row.get("days_since_launch"),
+            "actual_conversion_rate": current_row.get(
+                "actual_conversion_rate"
+            ),
+            "predicted_conversion_rate": predicted_conversion_from_results(
+                current_row.get("results_json")
+            ),
+            "launched": current_row.get("launched"),
+            "data_confidence": current_row.get("data_confidence"),
+            "created_at": current_row.get("created_at"),
+        }
+
+    if category is None or not str(category).strip():
+        fallback = db.execute(
+            text("""
+                SELECT
+                    results_json->>'product_type_detected'
+                        AS product_type_detected
+                FROM simulations
+                WHERE project_id = :pid
+                  AND UPPER(status) = 'COMPLETED'
+                  AND results_json->>'product_type_detected' IS NOT NULL
+                ORDER BY created_at DESC
+                LIMIT 1
+            """),
+            {"pid": project_id},
+        ).mappings().first()
+        if fallback is not None:
+            category = fallback.get("product_type_detected")
+
+    peer_rows: list[dict] = []
+    if category and str(category).strip():
+        peer_rows = [
+            dict(row)
+            for row in db.execute(
+                text("""
+                    SELECT
+                        fo.actual_conversion_rate,
+                        COALESCE(
+                            fo.product_changed_since_sim,
+                            FALSE
+                        ) AS product_changed_since_sim
+                    FROM founder_outcomes fo
+                    JOIN simulations s ON s.id = fo.simulation_id
+                    JOIN projects p ON p.id = fo.project_id
+                    WHERE p.id <> :pid
+                      AND COALESCE(fo.launched, FALSE) = TRUE
+                      AND s.results_json->>'product_type_detected' = :pt
+                    ORDER BY fo.created_at DESC, fo.id DESC
+                    LIMIT :limit
+                """),
+                {
+                    "pid": project_id,
+                    "pt": str(category),
+                    "limit": MAX_PEERS,
+                },
+            ).mappings().all()
+        ]
+
+    payload = build_outcome_benchmark(
+        current_outcome,
+        peer_rows,
+        category=category,
+    )
+    return OutcomeBenchmarkOut(**payload)
