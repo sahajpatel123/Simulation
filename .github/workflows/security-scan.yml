@@ -208,7 +208,7 @@ jobs:
           cache-dependency-path: requirements.txt
 
       - name: Install safety
-        run: pip install --quiet safety==2.3.5
+        run: pip install --quiet safety==3.6.1
 
       - name: Safety check
         id: safety

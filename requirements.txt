@@ -14,7 +14,7 @@ openai==1.54.4
 celery[redis]==5.4.0
 redis==5.2.1
 flower==2.0.1
-numpy==2.5.1
+numpy==2.2.6
 scipy==1.14.1
 reportlab==5.0.0
 websockets==13.1

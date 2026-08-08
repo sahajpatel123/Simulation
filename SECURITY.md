@@ -131,4 +131,8 @@ For security concerns, please contact the project maintainers.
 - 2026-08-08 - Extended `tools/validate_ci.py` to require a positive
   `timeout-minutes` on every CI job, preventing hung runs from burning runner
   time without a bound.
+- 2026-08-08 - Fixed CI dependency/config failures: pinned `numpy` to a
+  Python 3.11/scipy-compatible release, upgraded `safety` to a version
+  compatible with `pip-audit`, and removed an invalid ruff `pyupgrade`
+  config field.
 - [VERSION] - Initial security policy

@@ -72,7 +72,7 @@ jobs:
 
       - name: Install security tools
         run: |
-          pip install --quiet pip-audit==2.7.2 safety==2.3.5 bandit==1.7.10
+          pip install --quiet pip-audit==2.7.2 safety==3.6.1 bandit==1.7.10
 
       - name: Audit requirements.txt for CVEs
         id: pip-audit
