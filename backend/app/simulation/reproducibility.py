@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from typing import Any
 
 FINGERPRINT_ALGORITHM = "sha256-canonical-json-v1"
@@ -38,10 +39,17 @@ def _canonicalise(value: Any) -> Any:
         }
     if isinstance(value, (list, tuple)):
         return [_canonicalise(item) for item in value]
-    if isinstance(value, float) and value == 0.0:
-        # JSONB round-trips -0.0 as 0.0 on some drivers; treat them as the
-        # same number so a sign-only difference never flags a mismatch.
-        return 0.0
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            # NaN/±Infinity are not valid JSON tokens and PostgreSQL
+            # jsonb cannot persist them. Map them to null so fingerprinting
+            # never emits an unparseable representation and the worker-side
+            # fingerprint stays consistent with any read-back fallback.
+            return None
+        if value == 0.0:
+            # JSONB round-trips -0.0 as 0.0 on some drivers; treat them as
+            # the same number so a sign-only difference never flags a mismatch.
+            return 0.0
     return value
 
 
@@ -53,7 +61,12 @@ def _strip_volatile(value: Any) -> Any:
             for key, item in value.items()
             if key not in VOLATILE_RESULT_KEYS
         }
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
+        # Tuples serialise to JSON arrays and round-trip through JSONB as
+        # lists, so recurse into both. Without this, a tuple-wrapped
+        # volatile key would survive stripping in memory but be stripped
+        # after JSONB read-back, making the worker-computed fingerprint
+        # disagree with the legacy fallback for the same payload.
         return [_strip_volatile(item) for item in value]
     return value
 
@@ -64,6 +77,10 @@ def _canonical_json(value: Any) -> str:
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
+        # Backstop: _canonicalise maps non-finite floats to null, so this
+        # must never fire; if an exotic non-finite value slips through,
+        # fail loudly rather than emit an invalid JSON token.
+        allow_nan=False,
     )
 
 
