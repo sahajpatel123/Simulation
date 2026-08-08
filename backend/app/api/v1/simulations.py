@@ -158,6 +158,11 @@ from app.simulation.cultural_fit import build_cultural_fit
 from app.simulation.ecosystem_compatibility import build_ecosystem_compatibility
 from app.simulation.setup_friction import build_setup_friction
 from app.simulation.after_sales_read import build_after_sales_read
+from app.simulation.what_if_batch_export import (
+    what_if_batch_to_csv,
+    what_if_batch_to_json,
+    what_if_batch_to_markdown,
+)
 from app.simulation.assumption_cascade_read import build_assumption_cascade
 from app.simulation.assumption_postmortem import build_assumption_postmortem
 from app.simulation.simulation_export import (
@@ -3834,6 +3839,106 @@ def post_what_if_batch(
         env_params=env_params,
         existing_assumptions=assumptions,
         scenarios=payload.scenarios,
+    )
+
+
+@router.post(
+    "/{simulation_id}/what-if/batch/export",
+    response_class=StreamingResponse,
+    summary="Export a batch what-if comparison as CSV, JSON, or Markdown",
+    # Mirrors the batch what-if compute cost; cap path-spam at 10/min/IP.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
+)
+def export_what_if_batch(
+    payload: WhatIfBatchRequest,
+    simulation_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw batch "
+            "payload; ``md`` returns a founder-facing Markdown brief."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Export a batch what-if scenario comparison.
+
+    Default ``format=csv`` renders the batch payload as a multi-section
+    spreadsheet (summary, ranked scenarios, best/worst blocks). ``json``
+    returns the raw ``WhatIfBatchOut`` document for machine consumers, and
+    ``md`` returns a concise Markdown brief for sharing with a team.
+
+    Reuses the same batch projection as ``POST /what-if/batch`` — the
+    response body is just a different serialization of that result.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json", "md"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; "
+                "expected 'csv', 'json', or 'md'"
+            ),
+        )
+
+    result = post_what_if_batch(
+        payload=payload,
+        simulation_id=simulation_id,
+        db=db,
+        current_user=current_user,
+    )
+
+    metadata = {
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "user_id": current_user.id,
+        "format_version": "1",
+        "simulation_id": simulation_id,
+        "project_id": result.project_id,
+    }
+
+    if fmt == "json":
+        body = what_if_batch_to_json(result, metadata=metadata).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="what-if-batch-{simulation_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    if fmt == "md":
+        body = what_if_batch_to_markdown(result, metadata=metadata).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="what-if-batch-{simulation_id}.md"'
+                ),
+                "Content-Length": str(len(body)),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    csv_text = what_if_batch_to_csv(result, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="what-if-batch-{simulation_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
+        },
     )
 
 
