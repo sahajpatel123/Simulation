@@ -198,6 +198,38 @@ def test_missing_conversion_in_one_run_returns_no_data() -> None:
     assert out["conversion"]["direction"] == "NO_DATA"
 
 
+def test_zero_conversion_rate_is_not_treated_as_missing() -> None:
+    from app.simulation.simulation_evolution import build_simulation_evolution
+
+    out = build_simulation_evolution(
+        [
+            _row(1, "COMPLETED", 0.0),
+            _row(2, "COMPLETED", 0.05),
+        ],
+        project_id=1,
+    )
+    assert out["conversion"]["previous"] == pytest.approx(0.0)
+    assert out["conversion"]["latest"] == pytest.approx(0.05)
+    assert out["conversion"]["delta"] == pytest.approx(0.05)
+    assert out["conversion"]["direction"] == "IMPROVED"
+
+
+def test_zero_conversion_rate_both_runs_is_stable() -> None:
+    from app.simulation.simulation_evolution import build_simulation_evolution
+
+    out = build_simulation_evolution(
+        [
+            _row(1, "COMPLETED", 0.0),
+            _row(2, "COMPLETED", 0.0),
+        ],
+        project_id=1,
+    )
+    assert out["conversion"]["previous"] == pytest.approx(0.0)
+    assert out["conversion"]["latest"] == pytest.approx(0.0)
+    assert out["conversion"]["delta"] == pytest.approx(0.0)
+    assert out["conversion"]["direction"] == "STABLE"
+
+
 # ---------------------------------------------------------------------------
 # Critical findings movement
 # ---------------------------------------------------------------------------
@@ -251,6 +283,26 @@ def test_bottleneck_changes() -> None:
     assert out["bottleneck"]["changed"] is True
 
 
+def test_bottleneck_uses_mean_drop_off_when_primary_key_is_none() -> None:
+    from app.simulation.simulation_evolution import build_simulation_evolution
+
+    prev = _row(1, "COMPLETED", 0.04, stage_metrics=_stages(0.40, 0.80))
+    latest = _row(
+        2,
+        "COMPLETED",
+        0.04,
+        stage_metrics=[
+            {"state": "ARRIVE", "drop_off_rate": 0.13},
+            {"state": "BROWSE", "drop_off_rate": None, "mean_drop_off_rate": 0.80},
+            {"state": "CONSIDER", "drop_off_rate": 0.38},
+            {"state": "DECIDE", "drop_off_rate": 0.60},
+        ],
+    )
+    out = build_simulation_evolution([prev, latest], project_id=1)
+    assert out["bottleneck"]["latest"] == "BROWSE"
+    assert out["bottleneck"]["changed"] is True
+
+
 # ---------------------------------------------------------------------------
 # Recommendations
 # ---------------------------------------------------------------------------
@@ -292,6 +344,42 @@ def test_recommendations_prioritise_critical_then_impact() -> None:
     assert recs
     assert recs[0]["domain"] == "TrustArchitect"
     assert recs[0]["priority"] == 1
+
+
+def test_zero_conversion_impact_does_not_fall_through_to_secondary_key() -> None:
+    from app.simulation.simulation_evolution import build_simulation_evolution
+
+    latest = _row(
+        2,
+        "COMPLETED",
+        0.06,
+        findings=[
+            {
+                "architect_name": "PricingArchitect",
+                "metric_affected": "pricing",
+                "severity": "INFO",
+                "finding": "explicit zero impact",
+                "conversion_impact": 0.0,
+                "impact_on_overall_conversion": 0.09,
+            },
+            {
+                "architect_name": "OnboardingArchitect",
+                "metric_affected": "onboarding",
+                "severity": "INFO",
+                "finding": "small real impact",
+                "conversion_impact": 0.02,
+            },
+        ],
+    )
+    out = build_simulation_evolution(
+        [_row(1, "COMPLETED", 0.04), latest],
+        project_id=1,
+    )
+    recs = out["recommendations"]
+    assert recs
+    assert recs[0]["domain"] == "OnboardingArchitect"
+    assert recs[0]["priority"] == 1
+    assert recs[1]["domain"] == "PricingArchitect"
 
 
 # ---------------------------------------------------------------------------
@@ -344,3 +432,17 @@ def test_helper_produces_serialisable_payload() -> None:
     assert parsed.previous_run is not None
     assert parsed.latest_run is not None
     assert parsed.summary.verdict == "IMPROVED"
+
+
+def test_stable_narrative_uses_stayed_stable_wording() -> None:
+    from app.simulation.simulation_evolution import build_simulation_evolution
+
+    out = build_simulation_evolution(
+        [
+            _row(1, "COMPLETED", 0.05),
+            _row(2, "COMPLETED", 0.0504),
+        ],
+        project_id=1,
+    )
+    assert out["summary"]["headline"].startswith("Latest sim conversion stayed stable at ")
+    assert out["summary"]["headline"].find("stable to") == -1

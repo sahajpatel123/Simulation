@@ -66,6 +66,15 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def _coalesce_number(*values: Any) -> float | None:
+    """Return the first parseable number, treating ``0`` as a valid value."""
+    for value in values:
+        parsed = _safe_float(value)
+        if parsed is not None:
+            return parsed
+    return None
+
+
 def _coerce_results(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
@@ -106,12 +115,11 @@ def _sort_key(row: dict[str, Any]) -> tuple[str, int]:
 
 
 def _conversion_rate(results: dict[str, Any]) -> float | None:
-    value = (
-        results.get("population_weighted_conversion")
-        or results.get("conversion_rate")
-        or results.get("mean_conversion_rate")
+    return _coalesce_number(
+        results.get("population_weighted_conversion"),
+        results.get("conversion_rate"),
+        results.get("mean_conversion_rate"),
     )
-    return _safe_float(value)
 
 
 def _critical_findings(results: dict[str, Any]) -> list[dict[str, Any]]:
@@ -158,7 +166,10 @@ def _bottleneck_stage(results: dict[str, Any]) -> str | None:
         stage = str(item.get("state") or item.get("stage") or "").upper().strip()
         if not stage or stage not in FORWARD_STAGES:
             continue
-        drop = _safe_float(item.get("drop_off_rate", item.get("mean_drop_off_rate")))
+        drop = _coalesce_number(
+            item.get("drop_off_rate"),
+            item.get("mean_drop_off_rate"),
+        )
         if drop is None:
             continue
         healthy = HEALTHY_DROP_OFF.get(stage, 0.35)
@@ -176,13 +187,13 @@ def _top_recommendations(results: dict[str, Any]) -> list[EvolutionRecommendatio
     for item in raw:
         if not isinstance(item, dict):
             continue
-        impact = _safe_float(
-            item.get("conversion_impact") or item.get("impact_on_overall_conversion"),
-            default=0.0,
-        )
+        impact = _coalesce_number(
+            item.get("conversion_impact"),
+            item.get("impact_on_overall_conversion"),
+        ) or 0.0
         parsed.append(
             {
-                "impact": impact or 0.0,
+                "impact": impact,
                 "domain": str(item.get("architect_name") or item.get("domain") or ""),
                 "metric": str(item.get("metric_affected") or item.get("metric") or ""),
                 "severity": str(item.get("severity") or "INFO").upper(),
@@ -239,10 +250,16 @@ def _build_narrative(
     prev_txt = f"{conversion.previous:.1%}" if conversion.previous is not None else "n/a"
     latest_txt = f"{conversion.latest:.1%}" if conversion.latest is not None else "n/a"
 
-    headline = (
-        f"Latest sim conversion {direction.lower()} to "
-        f"{latest_txt} ({delta_txt} vs {prev_txt})."
-    )
+    if direction == "STABLE":
+        headline = (
+            f"Latest sim conversion stayed stable at {latest_txt} "
+            f"({delta_txt} vs {prev_txt})."
+        )
+    else:
+        headline = (
+            f"Latest sim conversion {direction.lower()} to "
+            f"{latest_txt} ({delta_txt} vs {prev_txt})."
+        )
 
     sentences: list[str] = [headline]
     if findings:
