@@ -75,6 +75,22 @@ def _current_payload() -> dict:
     )
 
 
+def _strong_payload() -> dict:
+    results = _strong_results()
+    return build_journey_analytics(
+        results["per_cluster_matrices"],
+        results["cluster_weights"],
+    )
+
+
+def _weak_payload() -> dict:
+    results = _weak_results()
+    return build_journey_analytics(
+        results["per_cluster_matrices"],
+        results["cluster_weights"],
+    )
+
+
 def _cohort() -> list[dict]:
     return [
         summarise_journey_matrices(
@@ -191,7 +207,7 @@ def test_benchmark_percentile_rank_and_distribution() -> None:
     assert set(distribution["stage_leak_medians"]) == set(LEAK_STAGE_ORDER)
     assert all(v >= 0.0 for v in distribution["stage_leak_medians"].values())
 
-    assert any("50.0th percentile" in i for i in payload["insights"])
+    assert any("Ranks above 50.0%" in i for i in payload["insights"])
     assert any("above" in i and "median idea" in i for i in payload["insights"])
 
 
@@ -229,6 +245,61 @@ def test_benchmark_skips_invalid_cohort_entries() -> None:
     assert payload["percentile_rank"] == pytest.approx(50.0)
 
 
+def test_benchmark_skips_cohort_entries_with_out_of_range_metrics() -> None:
+    cohort = _cohort() + [
+        {
+            "purchase_probability": 0.5,
+            "abandon_probability": 1.2,
+            "expected_steps_to_absorb": 2.0,
+            "expected_revisits": 0.0,
+            "exit_stage_distribution": {"BROWSE": 0.4},
+        },
+        {
+            "purchase_probability": 0.5,
+            "abandon_probability": 0.5,
+            "expected_steps_to_absorb": -1.0,
+            "expected_revisits": 0.0,
+            "exit_stage_distribution": {"BROWSE": 0.4},
+        },
+        {
+            "purchase_probability": 0.5,
+            "abandon_probability": 0.5,
+            "expected_steps_to_absorb": 2.0,
+            "expected_revisits": float("-inf"),
+            "exit_stage_distribution": {"BROWSE": 0.4},
+        },
+        {"purchase_probability": 0.5},  # missing every other metric
+    ]
+    payload = build_journey_benchmark(_current_payload(), cohort)
+
+    assert payload["cohort_size"] == 2
+    assert payload["meta"]["skipped_invalid_summaries"] == 4
+    assert payload["percentile_rank"] == pytest.approx(50.0)
+
+
+def test_benchmark_ignores_unknown_exit_stages() -> None:
+    cohort = [
+        {
+            "purchase_probability": 0.3,
+            "abandon_probability": 0.7,
+            "expected_steps_to_absorb": 2.0,
+            "expected_revisits": 0.0,
+            "exit_stage_distribution": {"NOT_A_STAGE": 1.0, "BROWSE": 0.4},
+        }
+    ]
+    payload = build_journey_benchmark(_current_payload(), cohort)
+
+    assert payload["distribution"]["most_common_primary_exit_stage"] == "BROWSE"
+    assert payload["distribution"]["stage_leak_medians"] == {
+        "ARRIVE": 0.0,
+        "BROWSE": 0.4,
+        "CONSIDER": 0.0,
+        "DECIDE": 0.0,
+    }
+    assert "NOT_A_STAGE" not in payload["distribution"]["stage_leak_medians"]
+    assert "NOT_A_STAGE" not in " ".join(payload["insights"])
+
+
 def test_current_payload_with_missing_keys_defaults_safely() -> None:
     payload = build_journey_benchmark({}, [])
 
@@ -236,6 +307,54 @@ def test_current_payload_with_missing_keys_defaults_safely() -> None:
     assert payload["current"]["purchase_probability"] == 0.0
     assert payload["current"]["primary_exit_stage"] is None
     assert payload["current"]["exit_stage_distribution"] == {}
+
+
+def test_current_payload_out_of_range_values_are_clamped() -> None:
+    payload = build_journey_benchmark(
+        {
+            "purchase_probability": 1.5,
+            "abandon_probability": -0.4,
+            "expected_steps_to_absorb": -3.0,
+            "expected_revisits": float("nan"),
+            "exit_stage_distribution": {"BROWSE": float("inf")},
+        },
+        [],
+    )
+
+    current = payload["current"]
+    assert current["purchase_probability"] == 1.0
+    assert current["abandon_probability"] == 0.0
+    assert current["expected_steps_to_absorb"] == 0.0
+    assert current["expected_revisits"] == 0.0
+    assert current["exit_stage_distribution"] == {}
+    assert current["primary_exit_stage"] is None
+    # The clamped payload must satisfy the Pydantic response contract.
+    JourneyBenchmarkOut(simulation_id=1, project_id=1, **payload)
+
+
+def test_percentile_insights_handle_extremes() -> None:
+    strong = summarise_journey_matrices(
+        _strong_results()["per_cluster_matrices"],
+        _strong_results()["cluster_weights"],
+    )
+    weak = summarise_journey_matrices(
+        _weak_results()["per_cluster_matrices"],
+        _weak_results()["cluster_weights"],
+    )
+
+    top = build_journey_benchmark(_strong_payload(), [weak, weak])
+    assert top["percentile_rank"] == 100.0
+    assert any(
+        "Outperforms every benchmarked simulation" in i
+        for i in top["insights"]
+    )
+
+    bottom = build_journey_benchmark(_weak_payload(), [strong, strong])
+    assert bottom["percentile_rank"] == 0.0
+    assert any(
+        "converts at least as well as this one" in i
+        for i in bottom["insights"]
+    )
 
 
 def test_benchmark_payload_validates_response_schema() -> None:

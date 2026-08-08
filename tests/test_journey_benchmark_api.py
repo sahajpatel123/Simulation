@@ -220,3 +220,56 @@ def test_benchmark_missing_owned_simulation_raises_404() -> None:
         _call_route(simulation_id=999, session=session)
     assert exc.value.status_code == 404
     assert "Simulation not found" in exc.value.detail
+
+
+def test_benchmark_uses_lightweight_summary_not_full_analytics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api.v1 import simulations as sim_mod
+
+    def _must_not_be_called(*args, **kwargs):
+        raise AssertionError(
+            "benchmark must not run the full journey-analytics pipeline"
+        )
+
+    monkeypatch.setattr(sim_mod, "build_journey_analytics", _must_not_be_called)
+    monkeypatch.setattr(
+        sim_mod,
+        "_journey_payload_for_simulation",
+        _must_not_be_called,
+    )
+
+    out = _call_route(session=_FakeSession(cohort_rows=_cohort_rows()))
+
+    assert out.cohort_size == 2
+    assert out.current.purchase_probability == pytest.approx(0.060933, abs=1e-5)
+
+
+def test_benchmark_clamps_malformed_current_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api.v1 import simulations as sim_mod
+
+    def _malformed_summary(*args, **kwargs):
+        return {
+            "purchase_probability": 3.0,
+            "abandon_probability": -1.0,
+            "expected_steps_to_absorb": -5.0,
+            "expected_revisits": float("nan"),
+            "exit_stage_distribution": {"BROWSE": float("inf")},
+        }
+
+    monkeypatch.setattr(
+        sim_mod,
+        "summarise_journey_matrices",
+        _malformed_summary,
+    )
+
+    out = _call_route(session=_FakeSession(cohort_rows=[]))
+
+    assert out.current.purchase_probability == 1.0
+    assert out.current.abandon_probability == 0.0
+    assert out.current.expected_steps_to_absorb == 0.0
+    assert out.current.expected_revisits == 0.0
+    assert out.current.exit_stage_distribution == {}
+    assert out.current.primary_exit_stage is None

@@ -70,6 +70,8 @@ def _primary_exit_stage(distribution: Any) -> str | None:
         return None
     cleaned: dict[str, float] = {}
     for stage, raw in distribution.items():
+        if str(stage) not in LEAK_STAGE_ORDER:
+            continue
         parsed = _finite(raw)
         if parsed is not None:
             cleaned[str(stage)] = parsed
@@ -80,11 +82,18 @@ def _primary_exit_stage(distribution: Any) -> str | None:
 
 
 def _cleaned_leak_distribution(raw: Any) -> dict[str, float]:
-    """Normalise a leak dict to finite floats, dropping unknown entries."""
+    """Normalise a leak dict to finite floats, keeping only known stages.
+
+    Unknown stage names (e.g. from a hand-edited or legacy persisted
+    payload) are dropped so they can never surface as a primary exit stage
+    or in insight strings.
+    """
     if not isinstance(raw, dict):
         return {}
     cleaned: dict[str, float] = {}
     for stage, value in raw.items():
+        if str(stage) not in LEAK_STAGE_ORDER:
+            continue
         parsed = _finite(value)
         if parsed is not None and parsed >= 0.0:
             cleaned[str(stage)] = parsed
@@ -92,43 +101,64 @@ def _cleaned_leak_distribution(raw: Any) -> dict[str, float]:
 
 
 def _normalise_summary(summary: dict[str, Any]) -> dict[str, Any] | None:
-    """Project a raw cohort summary onto the fields the benchmark needs."""
+    """Project a raw cohort summary onto the fields the benchmark needs.
+
+    Entries are usable only when every core metric is finite and in a valid
+    range (purchase/abandon probabilities in ``[0, 1]``, non-negative
+    expected steps and revisits). Anything else is malformed and is skipped
+    by the caller, since a single bad value would otherwise contaminate the
+    cohort medians.
+    """
     if not isinstance(summary, dict):
         return None
     purchase = _finite(summary.get("purchase_probability"))
     if purchase is None or purchase < 0.0 or purchase > 1.0:
         return None
+    abandon = _finite(summary.get("abandon_probability"))
+    if abandon is None or abandon < 0.0 or abandon > 1.0:
+        return None
+    steps = _finite(summary.get("expected_steps_to_absorb"))
+    if steps is None or steps < 0.0:
+        return None
+    revisits = _finite(summary.get("expected_revisits"))
+    if revisits is None or revisits < 0.0:
+        return None
+    leak_distribution = _cleaned_leak_distribution(
+        summary.get("exit_stage_distribution")
+    )
     return {
         "purchase_probability": purchase,
-        "abandon_probability": _finite(summary.get("abandon_probability")) or 0.0,
-        "expected_steps_to_absorb": (
-            _finite(summary.get("expected_steps_to_absorb")) or 0.0
-        ),
-        "expected_revisits": _finite(summary.get("expected_revisits")) or 0.0,
-        "exit_stage_distribution": _cleaned_leak_distribution(
-            summary.get("exit_stage_distribution")
-        ),
-        "primary_exit_stage": _primary_exit_stage(
-            summary.get("exit_stage_distribution")
-        ),
+        "abandon_probability": abandon,
+        "expected_steps_to_absorb": steps,
+        "expected_revisits": revisits,
+        "exit_stage_distribution": leak_distribution,
+        "primary_exit_stage": _primary_exit_stage(leak_distribution),
     }
 
 
 def _current_summary(payload: dict[str, Any]) -> dict[str, Any]:
-    """Normalise the current simulation's journey payload."""
+    """Normalise the current simulation's journey payload.
+
+    Non-finite values default to zero, and finite-but-out-of-range values
+    are clamped into the response schema's valid ranges so a corrupt or
+    legacy persisted payload can never turn this endpoint into a 500.
+    """
     leak_raw = payload.get("exit_stage_distribution") if isinstance(
         payload.get("exit_stage_distribution"),
         dict,
     ) else {}
+    purchase = _finite(payload.get("purchase_probability")) or 0.0
+    abandon = _finite(payload.get("abandon_probability")) or 0.0
+    steps = _finite(payload.get("expected_steps_to_absorb")) or 0.0
+    revisits = _finite(payload.get("expected_revisits")) or 0.0
+    leak_distribution = _cleaned_leak_distribution(leak_raw)
     return {
-        "purchase_probability": _finite(payload.get("purchase_probability")) or 0.0,
-        "abandon_probability": _finite(payload.get("abandon_probability")) or 0.0,
-        "expected_steps_to_absorb": (
-            _finite(payload.get("expected_steps_to_absorb")) or 0.0
-        ),
-        "expected_revisits": _finite(payload.get("expected_revisits")) or 0.0,
-        "exit_stage_distribution": _cleaned_leak_distribution(leak_raw),
-        "primary_exit_stage": _primary_exit_stage(leak_raw),
+        "purchase_probability": max(0.0, min(1.0, purchase)),
+        "abandon_probability": max(0.0, min(1.0, abandon)),
+        "expected_steps_to_absorb": max(0.0, steps),
+        "expected_revisits": max(0.0, revisits),
+        "exit_stage_distribution": leak_distribution,
+        "primary_exit_stage": _primary_exit_stage(leak_distribution),
     }
 
 
@@ -218,11 +248,20 @@ def _insights(
     rates = [item["purchase_probability"] for item in cohort]
     median_rate = statistics.median(rates)
     if percentile_rank is not None:
-        insights.append(
-            f"Converts at the {percentile_rank:.1f}th percentile of your "
-            f"previous ideas — ranks above {percentile_rank:.1f}% of your "
-            f"{len(cohort)} benchmarked simulations."
-        )
+        if percentile_rank >= 100.0:
+            insights.append(
+                "Outperforms every benchmarked simulation in your portfolio."
+            )
+        elif percentile_rank <= 0.0:
+            insights.append(
+                "Every benchmarked simulation in your portfolio converts at "
+                "least as well as this one."
+            )
+        else:
+            insights.append(
+                f"Ranks above {percentile_rank:.1f}% of your "
+                f"{len(cohort)} benchmarked simulations."
+            )
 
     delta_pp = (current["purchase_probability"] - median_rate) * 100.0
     if abs(delta_pp) < 0.05:

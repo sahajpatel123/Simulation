@@ -8596,11 +8596,28 @@ def get_simulation_journey_analytics(
 
 
 def _journey_payload_for_simulation(sim: Simulation) -> dict[str, Any]:
-    """Validate a simulation and return its journey-analytics payload.
+    """Return the full journey-analytics payload for a simulation.
 
     Applies the same status / results gates as
-    :func:`get_simulation_journey_analytics` so the JSON endpoint and the
-    export endpoint can never disagree about which simulations are eligible.
+    :func:`get_simulation_journey_analytics` so journey endpoints never
+    disagree about which simulations are eligible.
+    """
+    results, _matrices = _journey_data_for_simulation(sim)
+    return build_journey_analytics(
+        results.get("per_cluster_matrices"),
+        results.get("cluster_weights"),
+    )
+
+
+def _journey_data_for_simulation(
+    sim: Simulation,
+) -> tuple[dict[str, Any], dict[str, dict[tuple[str, str], float]]]:
+    """Validate a simulation and return its journey results + matrices.
+
+    Shared status / results gates for every journey endpoint (analytics,
+    export, and benchmark) so they can never disagree about which
+    simulations are eligible. Returns the raw ``results_json`` dict and the
+    deserialised per-cluster transition matrices.
     """
     if sim.status == "FAILED":
         raise HTTPException(
@@ -8622,8 +8639,8 @@ def _journey_payload_for_simulation(sim: Simulation) -> dict[str, Any]:
         )
 
     results = sim.results_json if isinstance(sim.results_json, dict) else {}
-    raw_matrices = results.get("per_cluster_matrices")
-    if not deserialise_per_cluster_matrices(raw_matrices):
+    matrices = deserialise_per_cluster_matrices(results.get("per_cluster_matrices"))
+    if not matrices:
         raise HTTPException(
             status_code=404,
             detail=(
@@ -8632,10 +8649,7 @@ def _journey_payload_for_simulation(sim: Simulation) -> dict[str, Any]:
                 "after this version. Re-run the simulation to generate it."
             ),
         )
-    return build_journey_analytics(
-        raw_matrices,
-        results.get("cluster_weights"),
-    )
+    return results, matrices
 
 
 @router.get(
@@ -8750,7 +8764,22 @@ def get_simulation_journey_benchmark(
     insights. Pure post-hoc analytics — no Celery, no LLM, no DB writes.
     """
     sim = _get_owned_simulation(simulation_id, current_user.id, db)
-    current_payload = _journey_payload_for_simulation(sim)
+    results, _matrices = _journey_data_for_simulation(sim)
+    current_payload = summarise_journey_matrices(
+        results.get("per_cluster_matrices"),
+        results.get("cluster_weights"),
+    )
+    if current_payload is None:
+        # _journey_data_for_simulation guarantees non-empty matrices; this
+        # guards against a hypothetical empty aggregate edge case.
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Journey analytics are unavailable for this simulation — "
+                "per-cluster journey data is persisted for runs started "
+                "after this version. Re-run the simulation to generate it."
+            ),
+        )
 
     rows = (
         db.query(
