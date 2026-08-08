@@ -202,6 +202,32 @@ def test_csv_guards_spreadsheet_formula_injection() -> None:
     assert "'@SUM(A1:A2)" in csv_text
 
 
+def test_csv_guards_control_character_formula_injection() -> None:
+    """OWASP-style leading tab/CR/LF cells are neutralised too."""
+    payload = _payload()
+    payload["insights"] = [
+        '\t=HYPERLINK("https://evil.example")',
+        "\r=2+2",
+        "\n@EVAL",
+    ]
+    payload["points"][0]["primary_exit_stage"] = "\tCMD"
+
+    csv_text = journey_trend_to_csv(payload)
+
+    assert "'\t=HYPERLINK" in csv_text
+    assert "'\r=2+2" in csv_text
+    assert "'\n@EVAL" in csv_text
+    assert "'\tCMD" in csv_text
+
+
+def test_csv_falls_back_to_payload_generated_at_without_metadata() -> None:
+    """Provenance is preserved when the caller omits metadata."""
+    csv_text = journey_trend_to_csv(_payload())
+
+    assert csv_text.startswith("generated_at,2026-08-08T12:00:00+00:00\n")
+    assert "\nsection,Headline" in csv_text
+
+
 def test_csv_handles_malformed_payload_without_raising() -> None:
     csv_text = journey_trend_to_csv(
         {
@@ -271,6 +297,16 @@ def test_json_renders_envelope_with_payload() -> None:
     ]
     assert data["journey_trend"]["anchor_percentile_rank"] == pytest.approx(100.0)
     assert text.endswith("\n")
+
+
+def test_json_falls_back_to_payload_generated_at_without_metadata() -> None:
+    text = journey_trend_to_json(_payload())
+    data = json.loads(text)
+
+    assert data["metadata"]["generated_at"] == "2026-08-08T12:00:00+00:00"
+    assert data["metadata"] == {
+        "generated_at": "2026-08-08T12:00:00+00:00",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -370,6 +406,26 @@ def test_export_route_rejects_unsupported_format(
         _call_export(format="xml")
     assert exc.value.status_code == 400
     assert "expected 'csv' or 'json'" in exc.value.detail
+
+
+def test_export_route_accepts_whitespace_and_case_variants(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api.v1 import simulations as sim_mod
+
+    monkeypatch.setattr(
+        sim_mod,
+        "get_simulation_journey_trend",
+        lambda **kwargs: _trend_model(),
+    )
+
+    response = _call_export(format=" JSON ")
+    body = asyncio.run(_body_bytes(response)).decode()
+    data = json.loads(body)
+
+    assert response.media_type == "application/json; charset=utf-8"
+    assert data["metadata"]["simulation_id"] == 3
+    assert data["metadata"]["format_version"] == "1"
 
 
 def test_export_route_propagates_endpoint_gate(

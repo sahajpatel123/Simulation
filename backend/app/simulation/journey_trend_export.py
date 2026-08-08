@@ -13,7 +13,10 @@ statistics, purchase statistics, recent momentum, best/worst runs, the full
 per-simulation point series, stage-leak medians, the latest stage leaks, and
 the founder-facing insights. Missing or malformed rows degrade to blanks
 instead of crashing the export, and every cell is guarded against
-spreadsheet formula injection.
+spreadsheet formula injection — including cells that begin with a tab,
+carriage return, or newline. When the caller supplies no ``generated_at`` in
+the metadata, the export falls back to the payload's own generation
+timestamp so provenance is never silently lost.
 """
 
 from __future__ import annotations
@@ -70,8 +73,16 @@ def _safe_int(value: Any) -> int:
 
 
 def _safe_csv_cell(value: Any) -> object:
-    """Neutralise spreadsheet formula injection while leaving data intact."""
-    if isinstance(value, str) and value.lstrip()[:1] in ("=", "+", "-", "@"):
+    """Neutralise spreadsheet formula injection while leaving data intact.
+
+    Guards the classic formula starters (``=``, ``+``, ``-``, ``@``) even
+    when hidden behind leading whitespace, plus cells that *begin* with a
+    tab, carriage return, or newline — control characters some spreadsheet
+    parsers treat as formula/DDE triggers even without a formula starter.
+    """
+    if not isinstance(value, str):
+        return value
+    if value.lstrip()[:1] in ("=", "+", "-", "@") or value[:1] in ("\t", "\r", "\n"):
         return f"'{value}"
     return value
 
@@ -79,6 +90,17 @@ def _safe_csv_cell(value: Any) -> object:
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with the formula-injection guard on every cell."""
     writer.writerow([_safe_csv_cell(value) for value in row])
+
+
+def _effective_metadata(
+    metadata: dict[str, Any] | None,
+    data: dict[str, Any],
+) -> dict[str, Any]:
+    """Coerce metadata to a dict, falling back to the payload's timestamp."""
+    effective = dict(metadata) if isinstance(metadata, dict) else {}
+    if not effective.get("generated_at") and data.get("generated_at"):
+        effective["generated_at"] = data.get("generated_at")
+    return effective
 
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
@@ -182,6 +204,7 @@ def journey_trend_to_csv(
 ) -> str:
     """Render a journey-trend payload as a multi-section CSV string."""
     data = _as_dict(payload)
+    metadata_dict = _effective_metadata(metadata, data)
     summary = data.get("summary") or {}
     if not isinstance(summary, dict):
         summary = {}
@@ -189,9 +212,9 @@ def journey_trend_to_csv(
     buffer = io.StringIO()
     writer = csv.writer(buffer, lineterminator="\n")
 
-    for key, value in _metadata_rows(metadata):
+    for key, value in _metadata_rows(metadata_dict):
         _write_row(writer, [key, value])
-    if isinstance(metadata, dict) and metadata:
+    if metadata_dict:
         _write_row(writer, [])
 
     # Headline trend summary.
@@ -339,11 +362,12 @@ def journey_trend_to_json(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     """Render a journey-trend payload as an indented JSON document."""
+    data = _as_dict(payload)
     return (
         json.dumps(
             {
-                "metadata": metadata or {},
-                "journey_trend": _as_dict(payload),
+                "metadata": _effective_metadata(metadata, data),
+                "journey_trend": data,
             },
             default=str,
             indent=2,
