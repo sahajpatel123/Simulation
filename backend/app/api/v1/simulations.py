@@ -2349,6 +2349,7 @@ def export_cluster_overlap_matrix(
                     'attachment; filename="cluster-overlap-matrix.json"'
                 ),
                 "Content-Length": str(len(body)),
+                "Cache-Control": "no-store",
             },
         )
 
@@ -2362,6 +2363,7 @@ def export_cluster_overlap_matrix(
                 'attachment; filename="cluster-overlap-matrix.csv"'
             ),
             "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
         },
     )
 

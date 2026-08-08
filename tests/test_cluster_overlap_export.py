@@ -74,6 +74,11 @@ def test_csv_renders_summary_matrix_pairs_and_candidates() -> None:
     assert "strong_pair_count,1" in csv_text
     assert "weak_pair_count,2" in csv_text
     assert "moderate_pair_count,0" in csv_text
+    assert "section,Cluster Details" in csv_text
+    assert "cluster_id,cluster_name,income_level,digital_literacy" in csv_text
+    assert "a,Alpha,0.5,0.0" in csv_text
+    assert "b,Bravo,0.5,0.0" in csv_text
+    assert "c,Charlie,0.1,0.0" in csv_text
     assert "section,Similarity Matrix" in csv_text
     assert ",a,b,c" in csv_text
     assert "a,1.0,0.85,0.2" in csv_text
@@ -93,9 +98,40 @@ def test_csv_empty_payload_still_renders_sections() -> None:
     assert "cluster_count,0" in csv_text
     assert "pair_count,0" in csv_text
     assert "strong_pair_count,0" in csv_text
+    assert "section,Cluster Details" in csv_text
+    assert "cluster_id,cluster_name,income_level,digital_literacy" in csv_text
     assert "section,Similarity Matrix" in csv_text
     assert "section,Pair Summaries" in csv_text
     assert "section,Consolidation Candidates" in csv_text
+
+
+def test_csv_summary_counts_derive_from_pair_summaries() -> None:
+    """The summary counts come from the pair rows, so a stale or
+    missing ``strong_pair_count`` payload field can't desync the
+    export from the actual pair data."""
+    payload = _matrix_payload()
+    payload["strong_pair_count"] = 999  # deliberately stale
+    csv_text = cluster_overlap_to_csv(payload)
+
+    assert "strong_pair_count,1" in csv_text
+    assert "weak_pair_count,2" in csv_text
+    assert "moderate_pair_count,0" in csv_text
+
+
+def test_csv_cluster_details_falls_back_to_cluster_names() -> None:
+    """Without cluster_metadata, the export still labels rows using
+    the payload's cluster_names list."""
+    csv_text = cluster_overlap_to_csv({
+        "cluster_ids": ["a", "b"],
+        "cluster_names": ["Alpha", "Bravo"],
+        "matrix": [],
+        "pair_summaries": [],
+        "consolidation_candidates": [],
+        "strong_pair_count": 0,
+    })
+
+    assert "a,Alpha" in csv_text
+    assert "b,Bravo" in csv_text
 
 
 def test_csv_guards_formula_injection() -> None:
@@ -182,8 +218,11 @@ def test_export_route_returns_csv() -> None:
         'filename="cluster-overlap-matrix.csv"'
         in resp.headers["Content-Disposition"]
     )
+    assert resp.headers["Cache-Control"] == "no-store"
     body = _body(resp).decode("utf-8")
     assert "section,Cluster Overlap Summary" in body
+    assert "section,Cluster Details" in body
+    assert "cluster_id,cluster_name,income_level,digital_literacy" in body
     assert "section,Similarity Matrix" in body
     assert "section,Consolidation Candidates" in body
     assert "cluster_count,2" in body
@@ -197,6 +236,7 @@ def test_export_route_returns_json() -> None:
         'filename="cluster-overlap-matrix.json"'
         in resp.headers["Content-Disposition"]
     )
+    assert resp.headers["Cache-Control"] == "no-store"
     body = _body(resp).decode("utf-8")
     assert '"cluster_overlap"' in body
     assert '"cluster_ids"' in body

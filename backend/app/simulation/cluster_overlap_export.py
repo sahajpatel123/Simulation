@@ -21,6 +21,8 @@ import io
 import json
 from typing import Any
 
+from app.simulation.cluster_diff import REQUIRED_TRAITS
+
 
 def _as_dict(payload: Any) -> dict[str, Any]:
     """Coerce a Pydantic model or plain dict into a plain dict."""
@@ -93,23 +95,45 @@ def cluster_overlap_to_csv(
     )
     cluster_ids = data.get("cluster_ids") or []
     pair_summaries = data.get("pair_summaries") or []
+    label_counts: dict[str, int] = {}
+    for pair in pair_summaries:
+        if isinstance(pair, dict) and pair.get("label") is not None:
+            label_counts[str(pair["label"])] = (
+                label_counts.get(str(pair["label"]), 0) + 1
+            )
     summary: dict[str, object] = {
         "cluster_count": len(cluster_ids),
         "pair_count": len(pair_summaries),
-        "strong_pair_count": data.get("strong_pair_count", 0),
-        "weak_pair_count": sum(
-            1
-            for pair in pair_summaries
-            if isinstance(pair, dict) and pair.get("label") == "WEAK"
-        ),
-        "moderate_pair_count": sum(
-            1
-            for pair in pair_summaries
-            if isinstance(pair, dict) and pair.get("label") == "MODERATE"
-        ),
+        "strong_pair_count": label_counts.get("STRONG", 0),
+        "weak_pair_count": label_counts.get("WEAK", 0),
+        "moderate_pair_count": label_counts.get("MODERATE", 0),
     }
     for key in summary_keys:
         _write_row(writer, [key, _value(summary.get(key, ""))])
+    _write_row(writer, [])
+
+    # Cluster details: names + trait values so the export is
+    # self-contained for spreadsheet consumers.
+    _write_row(writer, ["section", "Cluster Details"])
+    _write_row(writer, ["cluster_id", "cluster_name"] + list(REQUIRED_TRAITS))
+    cluster_metadata = data.get("cluster_metadata") or {}
+    for index, cid in enumerate(cluster_ids):
+        meta = cluster_metadata.get(cid)
+        if not isinstance(meta, dict):
+            meta = {}
+        meta_name = meta.get("cluster_name")
+        if meta_name is None:
+            cluster_names = data.get("cluster_names") or []
+            if index < len(cluster_names):
+                meta_name = cluster_names[index]
+            else:
+                meta_name = cid
+        traits = meta.get("traits") or {}
+        _write_row(
+            writer,
+            [_value(cid), _value(meta_name)]
+            + [_value(traits.get(trait)) for trait in REQUIRED_TRAITS],
+        )
     _write_row(writer, [])
 
     # Similarity matrix section.
