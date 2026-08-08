@@ -1,9 +1,10 @@
 """
-Journey benchmark — how one simulation's funnel compares to a founder's own history.
+Journey benchmark — how one simulation's funnel compares to a reference cohort.
 
 The journey-analytics endpoint answers *"how does this idea convert and where
 does its funnel leak?"*. This module answers the question founders ask next:
-*"is this idea actually better than my previous ideas?"*
+*"is this idea actually better than my previous ideas?"* — and, with a category
+scope, *"is it better than the typical idea in its product category?"*.
 
 The route layer supplies the current simulation's journey payload and the
 user's other completed simulations (as per-cluster matrix + weight raw
@@ -17,12 +18,18 @@ and computes a deterministic benchmark:
 * the current simulation's percentile rank against that cohort;
 * a short list of founder-facing insights.
 
+``build_journey_benchmark`` accepts a ``scope`` of ``"portfolio"`` (the
+founder's own completed simulations; default and unchanged) or ``"category"``
+(completed simulations across all TheCee users in one product category) so the
+same deterministic math and hardening powers both benchmarks.
+
 The module is pure (no DB, no I/O, no LLM), so it can be unit-tested with
 plain dicts and reused for exports or digests later.
 """
 from __future__ import annotations
 
 import math
+import re
 import statistics
 from collections import Counter
 from typing import Any
@@ -231,14 +238,30 @@ def _percentile_rank(value: float, rates: list[float]) -> float | None:
     return round(below / len(rates) * 100.0, 2)
 
 
+def _category_label(category: str | None) -> str:
+    """Normalise a product category into a safe display label."""
+    label = re.sub(r"[^a-z0-9 _-]", "", (category or "idea").strip().lower())
+    label = label.replace("_", " ").strip()
+    return label[:40] or "idea"
+
+
 def _insights(
     current: dict[str, Any],
     cohort: list[dict[str, Any]],
     percentile_rank: float | None,
     distribution: dict[str, Any],
+    *,
+    scope: str = "portfolio",
+    category: str | None = None,
 ) -> list[str]:
     """Founder-facing, deterministic insight strings."""
     if not cohort:
+        if scope == "category":
+            return [
+                f"No journey-capable {category} simulations on TheCee yet — "
+                "check back as more simulations complete, or compare against "
+                "your own portfolio with the journey benchmark."
+            ]
         return [
             "No previous journey-capable simulations yet — run and complete "
             "another simulation to unlock funnel benchmarks."
@@ -248,47 +271,91 @@ def _insights(
     rates = [item["purchase_probability"] for item in cohort]
     median_rate = statistics.median(rates)
     if percentile_rank is not None:
-        if percentile_rank >= 100.0:
-            insights.append(
-                "Outperforms every benchmarked simulation in your portfolio."
-            )
-        elif percentile_rank <= 0.0:
-            insights.append(
-                "Every benchmarked simulation in your portfolio converts at "
-                "least as well as this one."
-            )
+        if scope == "category":
+            if percentile_rank >= 100.0:
+                insights.append(
+                    f"Outperforms every benchmarked {category} simulation "
+                    "on TheCee."
+                )
+            elif percentile_rank <= 0.0:
+                insights.append(
+                    f"Every benchmarked {category} simulation on TheCee "
+                    "converts at least as well as this one."
+                )
+            else:
+                insights.append(
+                    f"Ranks above {percentile_rank:.1f}% of "
+                    f"{len(cohort)} benchmarked {category} simulations "
+                    "on TheCee."
+                )
         else:
-            insights.append(
-                f"Ranks above {percentile_rank:.1f}% of your "
-                f"{len(cohort)} benchmarked simulations."
-            )
+            if percentile_rank >= 100.0:
+                insights.append(
+                    "Outperforms every benchmarked simulation in your portfolio."
+                )
+            elif percentile_rank <= 0.0:
+                insights.append(
+                    "Every benchmarked simulation in your portfolio converts at "
+                    "least as well as this one."
+                )
+            else:
+                insights.append(
+                    f"Ranks above {percentile_rank:.1f}% of your "
+                    f"{len(cohort)} benchmarked simulations."
+                )
 
     delta_pp = (current["purchase_probability"] - median_rate) * 100.0
     if abs(delta_pp) < 0.05:
-        insights.append(
-            f"Purchase probability ({current['purchase_probability']:.1%}) is "
-            f"right in line with your median idea ({median_rate:.1%})."
-        )
+        if scope == "category":
+            insights.append(
+                f"Purchase probability ({current['purchase_probability']:.1%}) "
+                f"is right in line with the median {category} idea "
+                f"({median_rate:.1%})."
+            )
+        else:
+            insights.append(
+                f"Purchase probability ({current['purchase_probability']:.1%}) "
+                f"is right in line with your median idea ({median_rate:.1%})."
+            )
     else:
         direction = "above" if delta_pp > 0 else "below"
-        insights.append(
-            f"Purchase probability is {abs(delta_pp):.1f}pp {direction} your "
-            f"median idea ({median_rate:.1%})."
-        )
+        if scope == "category":
+            insights.append(
+                f"Purchase probability is {abs(delta_pp):.1f}pp {direction} "
+                f"the median {category} idea ({median_rate:.1%})."
+            )
+        else:
+            insights.append(
+                f"Purchase probability is {abs(delta_pp):.1f}pp {direction} "
+                f"your median idea ({median_rate:.1%})."
+            )
 
     current_primary = current["primary_exit_stage"]
     modal_primary = distribution["most_common_primary_exit_stage"]
     if current_primary and modal_primary:
-        if current_primary == modal_primary:
-            insights.append(
-                f"Your biggest leak ({current_primary} → ABANDON) matches "
-                "your typical idea."
-            )
+        if scope == "category":
+            if current_primary == modal_primary:
+                insights.append(
+                    f"Your biggest leak ({current_primary} → ABANDON) matches "
+                    f"the typical {category} idea."
+                )
+            else:
+                insights.append(
+                    f"Your biggest leak is {current_primary} → ABANDON; the "
+                    f"typical {category} idea leaks most at "
+                    f"{modal_primary} → ABANDON."
+                )
         else:
-            insights.append(
-                f"Your biggest leak is {current_primary} → ABANDON; your "
-                f"typical idea leaks most at {modal_primary} → ABANDON."
-            )
+            if current_primary == modal_primary:
+                insights.append(
+                    f"Your biggest leak ({current_primary} → ABANDON) matches "
+                    "your typical idea."
+                )
+            else:
+                insights.append(
+                    f"Your biggest leak is {current_primary} → ABANDON; your "
+                    f"typical idea leaks most at {modal_primary} → ABANDON."
+                )
 
     median_steps = statistics.median(
         item["expected_steps_to_absorb"] for item in cohort
@@ -296,16 +363,26 @@ def _insights(
     current_steps = current["expected_steps_to_absorb"]
     if abs(current_steps - median_steps) >= 0.1:
         direction = "longer" if current_steps > median_steps else "shorter"
-        insights.append(
-            f"Consumers spend {current_steps:.1f} steps in the funnel — "
-            f"{direction} than your {median_steps:.1f}-step median journey."
-        )
+        if scope == "category":
+            insights.append(
+                f"Consumers spend {current_steps:.1f} steps in the funnel — "
+                f"{direction} than the {median_steps:.1f}-step median "
+                f"{category} journey."
+            )
+        else:
+            insights.append(
+                f"Consumers spend {current_steps:.1f} steps in the funnel — "
+                f"{direction} than your {median_steps:.1f}-step median journey."
+            )
     return insights
 
 
 def build_journey_benchmark(
     current_payload: dict[str, Any],
     cohort_summaries: list[dict[str, Any]],
+    *,
+    scope: str = "portfolio",
+    category: str | None = None,
 ) -> dict[str, Any]:
     """Compose the full journey-benchmark payload.
 
@@ -314,7 +391,17 @@ def build_journey_benchmark(
     summaries (from :func:`summarise_journey_matrices`) of every other
     completed simulation in the cohort. Malformed or non-finite cohort
     entries are skipped and counted in ``meta``.
+
+    ``scope`` selects the insight wording and ``meta.cohort_scope``:
+    ``"portfolio"`` (default) benchmarks against the founder's own
+    simulations, while ``"category"`` benchmarks against all completed
+    simulations in one product category (``category`` labels the cohort).
     """
+    if scope not in {"portfolio", "category"}:
+        raise ValueError(
+            f"unsupported benchmark scope {scope!r}; "
+            "expected 'portfolio' or 'category'"
+        )
     current = _current_summary(current_payload)
 
     cohort: list[dict[str, Any]] = []
@@ -331,7 +418,26 @@ def build_journey_benchmark(
         current["purchase_probability"],
         [item["purchase_probability"] for item in cohort],
     )
-    insights = _insights(current, cohort, percentile_rank, distribution)
+    label = _category_label(category) if scope == "category" else None
+    insights = _insights(
+        current,
+        cohort,
+        percentile_rank,
+        distribution,
+        scope=scope,
+        category=label,
+    )
+    cohort_scope = (
+        (
+            f"completed {label} simulations across all TheCee users with "
+            "per-cluster journey data"
+        )
+        if scope == "category"
+        else (
+            "other completed simulations owned by the user with "
+            "per-cluster journey data"
+        )
+    )
 
     return {
         "cohort_size": len(cohort),
@@ -341,10 +447,7 @@ def build_journey_benchmark(
         "insights": insights,
         "meta": {
             "skipped_invalid_summaries": skipped_invalid,
-            "cohort_scope": (
-                "other completed simulations owned by the user with "
-                "per-cluster journey data"
-            ),
+            "cohort_scope": cohort_scope,
         },
     }
 

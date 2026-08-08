@@ -370,3 +370,90 @@ def test_benchmark_payload_validates_response_schema() -> None:
     assert out.current.purchase_probability == pytest.approx(0.060933)
     assert out.distribution.most_common_primary_exit_stage == "BROWSE"
     assert out.insights
+
+
+# ---------------------------------------------------------------------------
+# Category-scoped benchmark (platform-wide cohort)
+# ---------------------------------------------------------------------------
+
+
+def test_category_scope_uses_category_wording() -> None:
+    payload = build_journey_benchmark(
+        _current_payload(),
+        _cohort(),
+        scope="category",
+        category="saas",
+    )
+
+    assert payload["cohort_size"] == 2
+    assert payload["percentile_rank"] == pytest.approx(50.0)
+    assert payload["meta"]["cohort_scope"] == (
+        "completed saas simulations across all TheCee users with "
+        "per-cluster journey data"
+    )
+    assert any("median saas idea" in i for i in payload["insights"])
+    assert any("benchmarked saas simulations" in i for i in payload["insights"])
+
+
+def test_category_scope_empty_cohort_message() -> None:
+    payload = build_journey_benchmark(
+        _current_payload(),
+        [],
+        scope="category",
+        category="consumer_hardware",
+    )
+
+    assert payload["cohort_size"] == 0
+    assert (
+        "No journey-capable consumer hardware simulations on TheCee yet"
+        in payload["insights"][0]
+    )
+    assert payload["meta"]["cohort_scope"] == (
+        "completed consumer hardware simulations across all TheCee users "
+        "with per-cluster journey data"
+    )
+
+
+def test_category_scope_sanitises_display_label() -> None:
+    payload = build_journey_benchmark(
+        _current_payload(),
+        _cohort(),
+        scope="category",
+        category="SaaS <script>alert(1)</script>",
+    )
+
+    joined = " ".join(payload["insights"])
+    assert "<" not in joined
+    assert ">" not in joined
+    assert "saas" in joined
+    assert "saas scriptalert1script" in joined
+
+
+def test_category_scope_payload_validates_response_schema() -> None:
+    from app.schemas.journey_benchmark import JourneyCategoryBenchmarkOut
+
+    payload = build_journey_benchmark(
+        _current_payload(),
+        _cohort(),
+        scope="category",
+        category="saas",
+    )
+    out = JourneyCategoryBenchmarkOut(
+        simulation_id=1,
+        project_id=10,
+        category="saas",
+        **payload,
+    )
+
+    assert out.category == "saas"
+    assert out.cohort_size == 2
+    assert out.percentile_rank == pytest.approx(50.0)
+
+
+def test_unsupported_benchmark_scope_raises() -> None:
+    with pytest.raises(ValueError):
+        build_journey_benchmark(
+            _current_payload(),
+            [],
+            scope="industry",
+        )

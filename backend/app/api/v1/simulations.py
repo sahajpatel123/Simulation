@@ -89,7 +89,10 @@ from app.schemas.founder_action_plan import FounderActionPlanOut
 from app.schemas.founder_brief import FounderBriefOut
 from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
 from app.schemas.journey_analytics import JourneyAnalyticsOut
-from app.schemas.journey_benchmark import JourneyBenchmarkOut
+from app.schemas.journey_benchmark import (
+    JourneyBenchmarkOut,
+    JourneyCategoryBenchmarkOut,
+)
 from app.schemas.launch_checklist import LaunchChecklistOut
 from app.schemas.market_concentration import MarketConcentrationOut
 from app.schemas.market_sizing import MarketSizingOut
@@ -8819,6 +8822,142 @@ def get_simulation_journey_benchmark(
     return JourneyBenchmarkOut(
         simulation_id=sim.id,
         project_id=sim.project_id,
+        **payload,
+    )
+
+
+# Category benchmark scans completed simulations across all users, so the
+# payload is cached for a few minutes and the path is rate-limited to keep
+# accidental dashboard loops from triggering repeated platform-wide scans.
+_JOURNEY_CATEGORY_BENCHMARK_CACHE_TTL_S: int = 300
+_JOURNEY_CATEGORY_BENCHMARK_CACHE_NAMESPACE: str = "journey-category-benchmark"
+
+
+@router.get(
+    "/{simulation_id}/journey/category-benchmark",
+    response_model=JourneyCategoryBenchmarkOut,
+    summary=(
+        "Journey category benchmark: how this simulation's funnel ranks "
+        "against completed simulations in the same product category"
+    ),
+    responses=_JSON_200,
+    # Platform-wide cohort scan — cap path-spam at 20/min/IP so a runaway
+    # dashboard script can't drive repeated full-table JSONB scans.
+    dependencies=[Depends(rate_limit(limit=20, window_s=60))],
+)
+def get_simulation_journey_category_benchmark(
+    simulation_id: int,
+    limit: int = Query(
+        default=200,
+        ge=10,
+        le=1000,
+        description=(
+            "Maximum number of same-category completed simulations to "
+            "include in the cohort, newest first."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> JourneyCategoryBenchmarkOut:
+    """
+    Benchmark a completed simulation's customer journey against every other
+    completed simulation in the same product category across all TheCee users.
+
+    The category is taken from the simulation's own
+    ``product_type_detected`` result (falling back to ``saas`` for legacy
+    runs). The response uses the same funnel cohort statistics and percentile
+    ranking as the personal journey benchmark, but the cohort is the latest
+    same-category simulations platform-wide. Only aggregate statistics are
+    returned — no individual simulation from another user is ever exposed.
+    Pure post-hoc analytics — no Celery, no LLM, no DB writes.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+    results, _matrices = _journey_data_for_simulation(sim)
+    current_payload = summarise_journey_matrices(
+        results.get("per_cluster_matrices"),
+        results.get("cluster_weights"),
+    )
+    if current_payload is None:
+        # _journey_data_for_simulation guarantees non-empty matrices; this
+        # guards against a hypothetical empty aggregate edge case.
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Journey analytics are unavailable for this simulation — "
+                "per-cluster journey data is persisted for runs started "
+                "after this version. Re-run the simulation to generate it."
+            ),
+        )
+
+    category = str(results.get("product_type_detected") or "saas").strip().lower()
+    if not category:
+        category = "saas"
+
+    cached = cache_get_json(
+        namespace=_JOURNEY_CATEGORY_BENCHMARK_CACHE_NAMESPACE,
+        params={
+            "simulation_id": simulation_id,
+            "category": category,
+            "limit": limit,
+        },
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return JourneyCategoryBenchmarkOut(**cached)
+
+    rows = (
+        db.query(Simulation.id, Simulation.results_json)
+        .filter(
+            Simulation.id != simulation_id,
+            Simulation.status == "COMPLETED",
+            Simulation.results_json["product_type_detected"].astext == category,
+            text("results_json ? 'per_cluster_matrices'"),
+        )
+        .order_by(Simulation.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    cohort_summaries: list[dict[str, Any]] = []
+    skipped_without_journey_data = 0
+    for row in rows:
+        row_results = row.results_json if isinstance(row.results_json, dict) else {}
+        summary = summarise_journey_matrices(
+            row_results.get("per_cluster_matrices"),
+            row_results.get("cluster_weights"),
+        )
+        if summary is None:
+            skipped_without_journey_data += 1
+            continue
+        cohort_summaries.append(summary)
+
+    payload = build_journey_benchmark(
+        current_payload,
+        cohort_summaries,
+        scope="category",
+        category=category,
+    )
+    payload["meta"] = {
+        **payload["meta"],
+        "raw_completed_count": len(rows),
+        "skipped_without_journey_data": skipped_without_journey_data,
+        "sample_limit": limit,
+    }
+    cache_set_json(
+        namespace=_JOURNEY_CATEGORY_BENCHMARK_CACHE_NAMESPACE,
+        params={
+            "simulation_id": simulation_id,
+            "category": category,
+            "limit": limit,
+        },
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=_JOURNEY_CATEGORY_BENCHMARK_CACHE_TTL_S,
+    )
+    return JourneyCategoryBenchmarkOut(
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        category=category,
         **payload,
     )
 

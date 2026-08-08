@@ -1,10 +1,13 @@
 """
-Pydantic schemas for the journey-benchmark endpoint
-``GET /api/v1/simulations/{id}/journey/benchmark``.
+Pydantic schemas for the journey-benchmark endpoints
+``GET /api/v1/simulations/{id}/journey/benchmark`` and
+``GET /api/v1/simulations/{id}/journey/category-benchmark``.
 
 The payload compares one simulation's customer-journey funnel against the
-founder's other completed simulations: where the current idea ranks, how its
-leaks compare with the cohort's norms, and what that means in plain language.
+reference cohort (the founder's other simulations, or all completed
+simulations in the same product category): where the current idea ranks, how
+its leaks compare with the cohort's norms, and what that means in plain
+language.
 """
 from __future__ import annotations
 
@@ -54,8 +57,15 @@ class JourneyBenchmarkOut(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class JourneyCategoryBenchmarkOut(JourneyBenchmarkOut):
+    """Category-scoped journey-benchmark payload for a completed simulation."""
+
+    category: str
+
+
 __all__ = [
     "JourneyBenchmarkCurrentOut",
     "JourneyBenchmarkDistributionOut",
     "JourneyBenchmarkOut",
+    "JourneyCategoryBenchmarkOut",
 ]
