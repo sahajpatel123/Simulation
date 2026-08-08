@@ -262,6 +262,98 @@ def test_build_fix_leverage_handles_malformed_results() -> None:
     assert out.summary.verdict == "INSUFFICIENT_DATA"
 
 
+def test_build_fix_leverage_falls_back_to_base_rate_baseline() -> None:
+    results = _results()
+    # Remove every persisted conversion key/raw-funnel headline so the base
+    # Markov chain product becomes the deterministic baseline.
+    results.pop("population_weighted_conversion", None)
+    results.pop("conversion_rate", None)
+    results["raw_funnel"].pop("conversion_rate", None)
+
+    out = build_fix_leverage(results, simulation_id=1, project_id=10)
+
+    assert out.baseline_conversion == pytest.approx(
+        round(0.87 * 0.62 * 0.46 * 0.31, 6)
+    )
+    assert out.projected_conversion is not None
+
+
+def test_build_fix_leverage_ignores_malformed_stage_counts() -> None:
+    results = _results()
+    results["raw_funnel"]["stage_counts"] = {
+        "ARRIVE": 10000,
+        "BROWSE": "6500.0",
+        "CONSIDER": "not-a-number",
+        "DECIDE": 2200,
+        "PURCHASE": None,
+    }
+
+    out = build_fix_leverage(results, simulation_id=1, project_id=10)
+
+    # Malformed counts degrade to zero instead of crashing the endpoint.
+    assert out.baseline_conversion is not None
+    assert out.projected_conversion is not None
+    assert out.summary.total_findings == 2
+
+
+def test_build_fix_leverage_falls_back_to_stage_metrics_when_counts_missing() -> None:
+    results = _results()
+    # Strip the preferred stage_counts dict entirely so the fallback path has
+    # to derive transition rates from stage_metrics rows.
+    results.pop("raw_funnel", None)
+    results["stage_metrics"] = [
+        {"state": "ARRIVE", "agent_count": 10000},
+        # A row where agent_count is None but the aliased key exists should
+        # still be readable instead of silently dropping the stage.
+        {"state": "BROWSE", "agent_count": None, "agents": 6500},
+        {"stage": "CONSIDER", "agents": "4000.0"},
+        {"state": "DECIDE", "agent_count": 2200},
+        {"state": "PURCHASE", "agent_count": 310},
+    ]
+
+    out = build_fix_leverage(results, simulation_id=1, project_id=10)
+
+    assert out.baseline_conversion is not None
+    assert out.projected_conversion is not None
+    assert out.projected_conversion > out.baseline_conversion
+    assert out.summary.actionable_findings == 2
+
+
+def test_build_fix_leverage_preserves_explicit_zero_impact() -> None:
+    results = _results(include_findings=False)
+    results["domain_findings"] = [
+        {
+            "architect_name": "PricingArchitect",
+            "cluster_id": "b",
+            "cluster_name": "Budget Shoppers",
+            "metric_affected": "will_pay_probability",
+            "finding": "Explicitly flagged as no conversion impact.",
+            "recommended_action": "Monitor only.",
+            "severity": "INFO",
+            "conversion_impact": 0.0,
+            "impact_on_overall_conversion": 0.05,
+        }
+    ]
+
+    out = build_fix_leverage(results, simulation_id=1, project_id=10)
+
+    assert len(out.findings) == 1
+    assert out.findings[0].conversion_impact == 0.0
+    assert out.findings[0].projected_uplift == 0.0
+    assert out.summary.verdict == "NO_UPLIFT_PROJECTED"
+
+
+def test_build_fix_leverage_omits_nonfinite_signal_quality() -> None:
+    out = build_fix_leverage(
+        _results(),
+        simulation_id=1,
+        project_id=10,
+        signal_quality=float("nan"),
+    )
+
+    assert "signal_quality" not in out.meta
+
+
 # ---------------------------------------------------------------------------
 # Route contract
 # ---------------------------------------------------------------------------

@@ -39,6 +39,7 @@ from app.schemas.fix_leverage import (
     FixLeverageOut,
     FixLeverageSummary,
 )
+from app.simulation.markov import BASE_TRANSITIONS, State
 
 
 # Forward funnel transitions used by the Markov chain. Keys are the
@@ -100,14 +101,20 @@ def _coerce_results(value: Any) -> dict[str, Any]:
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
+    parsed = _optional_float(value)
+    return default if parsed is None else parsed
+
+
+def _optional_float(value: Any) -> float | None:
+    """Parse a numeric value, returning ``None`` for missing/invalid input."""
     if value is None or isinstance(value, bool):
-        return default
+        return None
     try:
         parsed = float(value)
     except (TypeError, ValueError, OverflowError):
-        return default
+        return None
     if not math.isfinite(parsed):
-        return default
+        return None
     return parsed
 
 
@@ -122,7 +129,7 @@ def _extract_stage_counts(results: dict[str, Any]) -> dict[str, int]:
         counts = raw_funnel.get("stage_counts")
         if isinstance(counts, dict):
             return {
-                str(k).upper(): max(0, int(v or 0))
+                str(k).upper(): max(0, int(_safe_float(v, 0.0)))
                 for k, v in counts.items()
             }
     # Fallback: stage_metrics rows carry agent_count.
@@ -136,7 +143,10 @@ def _extract_stage_counts(results: dict[str, Any]) -> dict[str, int]:
         stage = str(row.get("state") or row.get("stage") or "").upper().strip()
         if not stage:
             continue
-        count = int(_safe_float(row.get("agent_count", row.get("agents")), 0.0))
+        count_value = row.get("agent_count")
+        if count_value is None:
+            count_value = row.get("agents")
+        count = int(_safe_float(count_value, 0.0))
         if count >= 0:
             out[stage] = count
     return out
@@ -158,8 +168,6 @@ def _transition_rate(
 
 def _base_rates() -> dict[str, float]:
     """Return the forward transition rates from the Markov base matrix."""
-    from app.simulation.markov import BASE_TRANSITIONS, State
-
     rates: dict[str, float] = {}
     for from_stage, to_stage, label in FORWARD_TRANSITIONS:
         from_state = State[from_stage]
@@ -173,25 +181,25 @@ def _base_rates() -> dict[str, float]:
 def _baseline_conversion(
     results: dict[str, Any],
 ) -> float | None:
-    """Return the persisted headline conversion, or the base-rate product."""
+    """Return the persisted headline conversion if present, else ``None``.
+
+    Callers use the base Markov product as the last-resort baseline when this
+    returns ``None``.
+    """
     for key in (
         "population_weighted_conversion",
         "conversion_rate",
         "mean_conversion_rate",
     ):
-        value = _safe_float(results.get(key))
-        if value is not None:
-            return _clamp01(value)
+        parsed = _optional_float(results.get(key))
+        if parsed is not None:
+            return _clamp01(parsed)
     raw_funnel = results.get("raw_funnel")
     if isinstance(raw_funnel, dict):
-        value = _safe_float(raw_funnel.get("conversion_rate"))
-        if value is not None:
-            return _clamp01(value)
-    rates = _base_rates()
-    product = 1.0
-    for label in dict.fromkeys(t[2] for t in FORWARD_TRANSITIONS):
-        product *= rates[label]
-    return _clamp01(product)
+        parsed = _optional_float(raw_funnel.get("conversion_rate"))
+        if parsed is not None:
+            return _clamp01(parsed)
+    return None
 
 
 def _parse_findings(results: dict[str, Any]) -> list[dict[str, Any]]:
@@ -217,8 +225,11 @@ def _parse_findings(results: dict[str, Any]) -> list[dict[str, Any]]:
                 "conversion_impact": max(
                     0.0,
                     _safe_float(
-                        item.get("conversion_impact")
-                        or item.get("impact_on_overall_conversion")
+                        (
+                            item.get("conversion_impact")
+                            if item.get("conversion_impact") is not None
+                            else item.get("impact_on_overall_conversion")
+                        )
                     ),
                 ),
             }
@@ -387,8 +398,9 @@ def build_fix_leverage(
     )
 
     meta: dict[str, Any] = {}
-    if signal_quality is not None:
-        meta["signal_quality"] = round(_clamp01(signal_quality), 4)
+    parsed_signal = _optional_float(signal_quality)
+    if parsed_signal is not None:
+        meta["signal_quality"] = round(_clamp01(parsed_signal), 4)
 
     return FixLeverageOut(
         simulation_id=simulation_id,
