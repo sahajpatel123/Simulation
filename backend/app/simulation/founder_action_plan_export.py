@@ -85,7 +85,7 @@ def founder_action_plan_to_csv(
     # Summary section.
     _write_row(writer, ["section", "Founder Action Plan Summary"])
     _write_row(writer, ["key", "value"])
-    summary = data.get("summary") or {}
+    summary = _as_dict(data.get("summary"))
     summary_keys = (
         "simulation_id",
         "project_id",
@@ -126,10 +126,17 @@ def founder_action_plan_to_csv(
         "related_cluster_ids",
     )
     _write_row(writer, list(action_keys))
-    for action in data.get("actions") or []:
-        if not isinstance(action, dict):
+    for raw_action in data.get("actions") or []:
+        action = _as_dict(raw_action) if raw_action is not None else {}
+        if not action:
             continue
-        related = action.get("related_cluster_ids") or []
+        related = action.get("related_cluster_ids")
+        if related is None:
+            related = []
+        elif not isinstance(related, (list, tuple, set)):
+            # A single cluster identifier (e.g. a string) is one CSV cell
+            # rather than being split character-by-character.
+            related = [related]
         related_text = "|".join(str(item) for item in related)
         _write_row(
             writer,
@@ -143,8 +150,8 @@ def founder_action_plan_to_csv(
     _write_row(writer, [])
 
     # Meta key/value section (optional but useful for provenance).
-    meta = data.get("meta") or {}
-    if meta and isinstance(meta, dict):
+    meta = _as_dict(data.get("meta") or {})
+    if meta:
         _write_row(writer, ["section", "Meta"])
         _write_row(writer, ["key", "value"])
         for key in sorted(meta):

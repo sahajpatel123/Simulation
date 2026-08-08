@@ -7395,6 +7395,7 @@ def export_founder_action_plan(
                     'attachment; filename="founder-action-plan.json"'
                 ),
                 "Content-Length": str(len(body)),
+                "Cache-Control": "no-store",
             },
         )
 
@@ -7406,6 +7407,7 @@ def export_founder_action_plan(
         headers={
             "Content-Disposition": 'attachment; filename="founder-action-plan.csv"',
             "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
         },
     )
 

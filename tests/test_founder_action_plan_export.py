@@ -158,6 +158,39 @@ def test_csv_guards_formula_injection() -> None:
     assert "'-cmd" in csv_text
 
 
+def test_csv_tolerates_malformed_summary_actions_and_related_ids() -> None:
+    """A non-dict summary or a single-string related_cluster_ids must not crash."""
+    csv_text = founder_action_plan_to_csv(
+        {
+            "simulation_id": 9,
+            "project_id": 10,
+            "summary": "not-a-dict",
+            "actions": [
+                ActionPlanItem(
+                    priority=1,
+                    title="First action",
+                    related_cluster_ids=["cluster_a", "cluster_b"],
+                ),
+                {
+                    "priority": 2,
+                    "title": "Second action",
+                    "related_cluster_ids": "cluster_c",
+                },
+            ],
+            "meta": "also-not-a-dict",
+        }
+    )
+
+    assert "simulation_id,9" in csv_text
+    assert "project_id,10" in csv_text
+    assert "verdict," in csv_text
+    assert "First action" in csv_text
+    assert "Second action" in csv_text
+    assert "cluster_a|cluster_b" in csv_text
+    assert "cluster_c" in csv_text
+    assert "section,Meta" not in csv_text
+
+
 def test_json_renders_payload_with_metadata() -> None:
     json_text = founder_action_plan_to_json(
         _payload(),
@@ -224,6 +257,7 @@ def test_export_route_returns_csv(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert resp.media_type == "text/csv; charset=utf-8"
     assert 'filename="founder-action-plan.csv"' in resp.headers["Content-Disposition"]
+    assert resp.headers["Cache-Control"] == "no-store"
     body = _body(resp).decode("utf-8")
     assert "section,Founder Action Plan Summary" in body
     assert "verdict,CRITICAL_ISSUES" in body
@@ -236,6 +270,7 @@ def test_export_route_returns_json(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert resp.media_type == "application/json; charset=utf-8"
     assert 'filename="founder-action-plan.json"' in resp.headers["Content-Disposition"]
+    assert resp.headers["Cache-Control"] == "no-store"
     body = _body(resp).decode("utf-8")
     assert '"metadata"' in body
     assert '"founder_action_plan"' in body
