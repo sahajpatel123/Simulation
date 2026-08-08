@@ -58,14 +58,39 @@ def _maybe_float(value: Any) -> float | str:
 
 
 def _safe_int(value: Any) -> int:
-    """Parse a finite integer, defaulting to ``0`` for unusable values."""
+    """Parse a finite integer, defaulting to ``0`` for unusable values.
+
+    Rejects booleans and non-integral floats (``1.5`` would otherwise
+    silently truncate to ``1``), matching the strict integer semantics of
+    the benchmark builder so a malformed count can never claim a wrong
+    number.
+    """
     if value is None or isinstance(value, bool):
+        return 0
+    if isinstance(value, float) and not value.is_integer():
         return 0
     try:
         parsed = int(value)
     except (TypeError, ValueError, OverflowError):
         return 0
     return parsed if math.isfinite(parsed) else 0
+
+
+def _maybe_int(value: Any) -> int | str:
+    """Parse a finite integer, or return ``""`` for missing/unusable values.
+
+    Used for optional identifiers where a blank cell is the honest answer —
+    a missing ``simulation_id`` must never masquerade as the fake id ``0``.
+    """
+    if value is None or isinstance(value, bool):
+        return ""
+    if isinstance(value, float) and not value.is_integer():
+        return ""
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return ""
+    return parsed if math.isfinite(parsed) else ""
 
 
 def _safe_csv_cell(value: Any) -> object:
@@ -142,7 +167,7 @@ def outcome_benchmark_to_csv(
         "project_id",
         "days_since_launch",
     ):
-        value = _safe_int(current.get(key)) if current else ""
+        value = _maybe_int(current.get(key)) if current else ""
         _write_row(writer, [key, value])
     actual = _current_value(current, "actual_conversion_rate", numeric=True)
     predicted = _current_value(current, "predicted_conversion_rate", numeric=True)

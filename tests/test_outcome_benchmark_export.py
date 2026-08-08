@@ -7,6 +7,8 @@ blank-cell behaviour when no current outcome or peers exist.
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 
 import pytest
@@ -16,6 +18,25 @@ from app.simulation.outcome_benchmark_export import (
     outcome_benchmark_to_csv,
     outcome_benchmark_to_json,
 )
+
+
+def _section_rows(csv_text: str, section: str) -> dict[str, str]:
+    """Parse one ``section`` block of the CSV into a ``{key: value}`` map."""
+    parsed = list(csv.reader(io.StringIO(csv_text)))
+    start = next(
+        index
+        for index, row in enumerate(parsed)
+        if len(row) >= 2 and row[0] == "section" and row[1] == section
+    )
+    rows: dict[str, str] = {}
+    for row in parsed[start + 1:]:
+        if not row or row[0] == "section":
+            break
+        if row in (["key", "value"], ["metric", "value"]):
+            continue
+        if len(row) >= 2:
+            rows[row[0]] = row[1]
+    return rows
 
 
 def _payload(*, with_current: bool = True) -> dict:
@@ -175,6 +196,44 @@ def test_csv_renders_blanks_when_no_current_outcome() -> None:
     assert "percentile_rank," in csv_text
     assert "verdict,INSUFFICIENT_DATA" in csv_text
     assert "Record a founder outcome" in csv_text
+
+
+def test_csv_renders_blank_optional_ids_instead_of_fake_zero() -> None:
+    payload = _payload()
+    payload["current"]["simulation_id"] = None
+    payload["current"]["project_id"] = None
+    payload["current"]["days_since_launch"] = None
+
+    current_rows = _section_rows(
+        outcome_benchmark_to_csv(payload),
+        "Current Outcome",
+    )
+
+    assert current_rows["outcome_id"] == "1"
+    assert current_rows["simulation_id"] == ""
+    assert current_rows["project_id"] == ""
+    assert current_rows["days_since_launch"] == ""
+    assert current_rows["actual_conversion_rate"] == "0.06"
+
+
+def test_csv_never_truncates_non_integral_values() -> None:
+    payload = _payload()
+    payload["current"]["outcome_id"] = 1.9
+    payload["current"]["simulation_id"] = "7.5"
+    payload["distribution"]["peer_count"] = 3.7
+    payload["meta"]["peers_scanned"] = 2.5
+    payload["meta"]["peers_usable"] = "n/a"
+
+    csv_text = outcome_benchmark_to_csv(payload)
+
+    current_rows = _section_rows(csv_text, "Current Outcome")
+    distribution_rows = _section_rows(csv_text, "Peer Distribution")
+    meta_rows = _section_rows(csv_text, "Meta")
+    assert current_rows["outcome_id"] == ""
+    assert current_rows["simulation_id"] == ""
+    assert distribution_rows["peer_count"] == "0"
+    assert meta_rows["peers_scanned"] == "0"
+    assert meta_rows["peers_usable"] == "0"
 
 
 def test_csv_guards_spreadsheet_formula_injection() -> None:
