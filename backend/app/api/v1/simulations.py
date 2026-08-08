@@ -94,6 +94,7 @@ from app.schemas.journey_benchmark import (
     JourneyBenchmarkOut,
     JourneyCategoryBenchmarkOut,
 )
+from app.schemas.journey_trend import JourneyTrendOut
 from app.schemas.launch_checklist import LaunchChecklistOut
 from app.schemas.market_concentration import MarketConcentrationOut
 from app.schemas.market_sizing import MarketSizingOut
@@ -238,9 +239,12 @@ from app.simulation.journey_analytics_export import (
 from app.simulation.journey_benchmark import build_journey_benchmark
 from app.simulation.journey_benchmark_export import (
     FORMAT_VERSION as JOURNEY_BENCHMARK_FORMAT_VERSION,
+)
+from app.simulation.journey_benchmark_export import (
     journey_benchmark_to_csv,
     journey_benchmark_to_json,
 )
+from app.simulation.journey_trend import build_journey_trend
 from app.simulation.launch_checklist import build_launch_checklist
 from app.simulation.launch_checklist_export import (
     launch_checklist_to_csv,
@@ -8830,6 +8834,80 @@ def get_simulation_journey_benchmark(
         project_id=sim.project_id,
         **payload,
     )
+
+
+@router.get(
+    "/{simulation_id}/journey/trend",
+    response_model=JourneyTrendOut,
+    summary=(
+        "Journey trend: how funnel health has evolved across the founder's "
+        "completed simulations"
+    ),
+    responses=_JSON_200,
+)
+def get_simulation_journey_trend(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> JourneyTrendOut:
+    """
+    Show whether a founder's funnel health is improving across simulations.
+
+    Every completed simulation owned by the user (oldest first, including
+    the requested one) is reduced to a lightweight funnel summary. The
+    response includes per-simulation purchase probability, journey length,
+    revisits and primary exit stage with deltas; best/worst runs; a trend
+    slope and stability score; recent momentum; per-stage leak medians; and
+    plain-language insights. The requested simulation is flagged
+    ``is_anchor`` and ranked against the founder's other simulations.
+    Pure post-hoc analytics — no Celery, no LLM, no DB writes.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+    # Validate the anchor simulation has persisted journey data first, so
+    # the trend can never silently omit the run the founder asked about.
+    _journey_data_for_simulation(sim)
+
+    rows = (
+        db.query(
+            Simulation.id,
+            Simulation.project_id,
+            Simulation.created_at,
+            Simulation.results_json,
+        )
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(
+            Project.user_id == current_user.id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.asc(), Simulation.id.asc())
+        .all()
+    )
+
+    trend_rows: list[dict[str, Any]] = []
+    for row in rows:
+        row_results = (
+            row.results_json if isinstance(row.results_json, dict) else {}
+        )
+        summary = summarise_journey_matrices(
+            row_results.get("per_cluster_matrices"),
+            row_results.get("cluster_weights"),
+        )
+        trend_rows.append(
+            {
+                "simulation_id": row.id,
+                "project_id": row.project_id,
+                "created_at": row.created_at,
+                "journey_summary": summary,
+            }
+        )
+
+    payload = build_journey_trend(
+        trend_rows,
+        anchor_simulation_id=sim.id,
+        project_id=sim.project_id,
+    )
+    payload["generated_at"] = datetime.now(tz=UTC).isoformat()
+    return JourneyTrendOut(**payload)
 
 
 # Category benchmark scans completed simulations across all users, so the
