@@ -86,6 +86,13 @@ from app.simulation.outcome_benchmark import (
     MAX_PEERS,
     build_outcome_benchmark,
 )
+from app.simulation.outcome_benchmark_export import (
+    FORMAT_VERSION as OUTCOME_BENCHMARK_FORMAT_VERSION,
+)
+from app.simulation.outcome_benchmark_export import (
+    outcome_benchmark_to_csv,
+    outcome_benchmark_to_json,
+)
 from app.simulation.outcome_tracker_export import (
     outcome_tracker_to_csv,
 )
@@ -1778,3 +1785,89 @@ def get_outcome_benchmark(
         category=category,
     )
     return OutcomeBenchmarkOut(**payload)
+
+
+@router.get(
+    "/{project_id}/outcome-benchmark/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export a project's real-world outcome peer benchmark as CSV "
+        "(or JSON with ?format=json)"
+    ),
+    responses=_JSON_200,
+    # Read-only aggregate over the calibration learning layer; bounded.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_outcome_benchmark(
+    project_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "benchmark payload. Unsupported values return a 400 response."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Download a real-world outcome benchmark in CSV (default) or JSON form.
+
+    Delegates to the same ``get_outcome_benchmark`` builder as the JSON
+    endpoint, so the exported comparison can never disagree with what the
+    API returns. The CSV mirrors the project's current outcome, the peer
+    distribution, the ranking verdict, and the founder-facing insights in
+    one spreadsheet. Pure post-hoc analytics — no Celery, no LLM, no DB
+    writes.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; expected 'csv' or "
+                "'json'"
+            ),
+        )
+
+    benchmark = get_outcome_benchmark(
+        project_id=project_id,
+        db=db,
+        current_user=current_user,
+    )
+    payload = benchmark.model_dump()
+    metadata = {
+        "generated_at": datetime.now(tz=UTC).isoformat(),
+        "user_id": current_user.id,
+        "project_id": project_id,
+        "category": payload.get("category"),
+        "format_version": OUTCOME_BENCHMARK_FORMAT_VERSION,
+    }
+
+    if fmt == "json":
+        text = outcome_benchmark_to_json(payload, metadata=metadata)
+        body = text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="outcome-benchmark.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = outcome_benchmark_to_csv(payload, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="outcome-benchmark.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
