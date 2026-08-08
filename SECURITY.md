@@ -45,12 +45,15 @@ This repository runs automated security scans:
 - **Dependency Review**: PR-time gate on high-severity dependency changes (`dependency-review.yml`)
 - **Gitleaks**: Git history and working-tree secret scanner (`backend-ci.yml`)
 - **Gitleaks (scheduled)**: Weekly full-history secret scan to catch pre-existing leaks (`secret-scan.yml`)
-- **Actionlint + YAML/TOML validation**: GitHub Actions workflow syntax and security-policy checks (`workflow-validation.yml`)
+- **Actionlint + YAML/TOML validation**: GitHub Actions workflow syntax and security-policy checks (`workflow-validation.yml` runs `tools/validate_ci.py`, which can also be run locally)
 
 The `workflow-validation.yml` job also enforces that every GitHub Action ref is pinned
 to a full version tag, that every workflow declares least-privilege permissions,
 and that no workflow grants `actions: write`. YAML files are parsed and invalid
 workflow files fail the validator.
+
+Run `python3 tools/validate_ci.py` locally to check the same supply-chain,
+permissions, YAML/TOML, security-policy, and env-file tracking rules before pushing.
 
 ### Running Security Checks Locally
 
@@ -119,4 +122,7 @@ For security concerns, please contact the project maintainers.
   fail when reports are missing.
 - 2026-08-07 - Added a Safety scan job to `security-scan.yml`, consolidating
   Python advisory checks in the security workflow alongside lint.
+- 2026-08-08 - Added a local `tools/validate_ci.py` parity checker for the
+  workflow-validation CI job so pinning/permissions/YAML/TOML/security-policy
+  checks can run before pushing, and wired the CI job to the same script.
 - [VERSION] - Initial security policy

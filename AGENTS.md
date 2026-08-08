@@ -46,9 +46,10 @@ The repo ships several GitHub Actions workflows in `.github/workflows/`:
 - `security-scan.yml` — Bandit, `pip-audit`, `safety`, `npm audit`, and Trivy (fs + Dockerfile config).
 - `secret-scan.yml` — weekly full-history gitleaks scan (scheduled + manual).
 - `scorecard.yml` — OpenSSF Scorecard supply-chain analysis (SARIF → Code Scanning).
-- `workflow-validation.yml` — actionlint, YAML/TOML validation, security-policy,
-  supply-chain pinning, least-privilege permissions, `persist-credentials: false`
-  enforcement, and env-file tracking guard.
+- `workflow-validation.yml` — actionlint plus `tools/validate_ci.py`, which
+  runs YAML/TOML validation, security-policy, supply-chain pinning,
+  least-privilege permissions, `persist-credentials: false` enforcement, and
+  env-file tracking guard. The same script can be run locally before pushing.
 
 Rules that keep CI green and secure:
 
@@ -70,6 +71,9 @@ pip-audit -r requirements.txt
 safety check -r requirements.txt
 npm audit --json
 gitleaks detect --config .github/gitleaks.toml
+
+# CI hygiene parity (action pinning, permissions, YAML/TOML, security policy)
+python3 tools/validate_ci.py
 ```
 
 ---

@@ -6,6 +6,11 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/**'
+      - '.github/dependabot.yml'
+      - '.github/gitleaks.toml'
+      - '.github/ISSUE_TEMPLATE/security_report.md'
+      - 'SECURITY.md'
+      - 'tools/validate_ci.py'
   push:
     branches: [main]
   workflow_dispatch:
@@ -44,8 +49,8 @@ jobs:
           "${{ steps.get_actionlint.outputs.executable }}" -verbose
           echo "✅ All workflows are valid"
 
-  validate-yaml:
-    name: Validate YAML syntax
+  validate-ci-hygiene:
+    name: Validate CI hygiene (local parity script)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -54,178 +59,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Validate YAML files
-        run: |
-          python - <<'PY'
-          import glob, sys, yaml
-          errors = []
-          files = glob.glob('.github/**/*.yml', recursive=True) + glob.glob('.github/**/*.yaml', recursive=True)
-          for f in files:
-              try:
-                  with open(f) as fh:
-                      yaml.safe_load(fh)
-              except Exception as e:
-                  errors.append(f'{f}: {e}')
-          if errors:
-              print('::error::Invalid YAML files found')
-              for e in errors:
-                  print(f'  {e}')
-              sys.exit(1)
-          print('✅ All YAML files are valid')
-          PY
-
-  validate-toml:
-    name: Validate TOML syntax
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7.0.1
+      - name: Setup Python
+        uses: actions/setup-python@v7.0.0
         with:
-          persist-credentials: false
+          python-version: "3.11"
 
-      - name: Validate TOML files
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+
+      - name: Run CI hygiene checks
         run: |
-          python - <<'PY'
-          import sys, tomllib
-          errors = []
-          for f in ('pyproject.toml', '.github/gitleaks.toml'):
-              try:
-                  with open(f, 'rb') as fh:
-                      tomllib.load(fh)
-              except Exception as e:
-                  errors.append(f'{f}: {e}')
-          if errors:
-              print('::error::Invalid TOML files found')
-              for e in errors:
-                  print(f'  {e}')
-              sys.exit(1)
-          print('✅ TOML files are valid')
-          PY
-
-  security-policy-check:
-    name: Security policy validation
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Validate security policy exists
-        run: |
-          if [ -f "SECURITY.md" ]; then
-            echo "✅ SECURITY.md exists"
-          else
-            echo "::error::SECURITY.md not found"
-            exit 1
-          fi
-
-      - name: Check for security issue template
-        run: |
-          if [ -f ".github/ISSUE_TEMPLATE/security_report.md" ]; then
-            echo "✅ Security issue template exists"
-          else
-            echo "::error::Security issue template not found"
-            exit 1
-          fi
-
-      - name: Validate dependabot configuration
-        run: |
-          if [ -f ".github/dependabot.yml" ]; then
-            python -c "import yaml; yaml.safe_load(open('.github/dependabot.yml'))"
-            echo "✅ dependabot.yml is valid"
-          else
-            echo "::error::dependabot.yml not found"
-            exit 1
-          fi
-
-      - name: Ensure no environment files are tracked
-        run: |
-          tracked_env=$(git ls-files | grep -E '(^|/)\.env(\.local|\.production)?$' || true)
-          if [ -n "$tracked_env" ]; then
-            echo "::error::Environment files must never be committed:"
-            echo "$tracked_env"
-            exit 1
-          fi
-          echo "✅ No environment files tracked"
-
-  validate-supply-chain:
-    name: Validate action pinning & permissions
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Check action refs are pinned
-        run: |
-          python - <<'PY'
-          import glob, re, sys, yaml
-          errors = []
-          for f in glob.glob('.github/workflows/*.yml'):
-              with open(f) as fh:
-                  data = yaml.safe_load(fh) or {}
-              for job in (data.get('jobs') or {}).values():
-                  for i, step in enumerate((job.get('steps') or []), 1):
-                      ref = step.get('uses') or ''
-                      if not ref:
-                          continue
-                      if ref == 'actions/checkout@v7.0.1' and 'persist-credentials' not in step.get('with', {}):
-                          errors.append(
-                              f'{f} step {i}: checkout must set persist-credentials: false'
-                          )
-                      if ref.startswith('docker://'):
-                          if ref.count(':') < 2:
-                              errors.append(f'{f} step {i}: {ref} not pinned to a specific tag')
-                          continue
-                      _, _, version = ref.partition('@')
-                      if re.fullmatch(r'[0-9a-f]{40}', version or ''):
-                          continue  # SHA-pinned is fine
-                      if version is None or version.count('.') < 2:
-                          errors.append(
-                              f'{f} step {i}: {ref} is not pinned to a full version tag'
-                          )
-          if errors:
-              print('::error::Supply-chain pinning violations')
-              for e in errors:
-                  print(f'  {e}')
-              sys.exit(1)
-          print('✅ All action refs are pinned to specific tags')
-          PY
-
-      - name: Check workflows set least-privilege permissions
-        run: |
-          python - <<'PY'
-          import glob, sys, yaml
-          errors = []
-          for f in glob.glob('.github/workflows/*.yml'):
-              with open(f) as fh:
-                  data = yaml.safe_load(fh) or {}
-              blocks = []
-              if data.get('permissions'):
-                  blocks.append(('workflow', data['permissions']))
-              for job_name, job in (data.get('jobs') or {}).items():
-                  if job.get('permissions'):
-                      blocks.append((f'job {job_name}', job['permissions']))
-              if not blocks:
-                  errors.append(f'{f}: no permissions block')
-              for name, block in blocks:
-                  if block.get('actions') == 'write':
-                      errors.append(
-                          f'{f} {name}: actions: write is too broad; use actions: read or omit'
-                      )
-                  if 'scorecard.yml' not in f and block.get('id-token') == 'write':
-                      errors.append(
-                          f'{f} {name}: id-token: write is only allowed in scorecard.yml'
-                      )
-          if errors:
-              print('::error::Least-privilege permission violations')
-              for e in errors:
-                  print(f'  {e}')
-              sys.exit(1)
-          print('✅ All workflows use least-privilege permissions')
-          PY
+          python tools/validate_ci.py
