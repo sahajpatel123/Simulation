@@ -286,6 +286,17 @@ def test_export_route_rejects_unsupported_format() -> None:
     assert "expected 'csv' or 'json'" in exc.value.detail
 
 
+def test_export_route_rejects_unsupported_format_before_ownership_lookup() -> None:
+    # A malformed format is a client error regardless of the simulation's
+    # existence/state, so the route must not touch the DB first.
+    session = _FakeSession(_FakeSimulation(sim_id=999))
+    session.sim = None
+    with pytest.raises(HTTPException) as exc:
+        _call_export(simulation_id=999, format="xml", session=session)
+    assert exc.value.status_code == 400
+    assert "expected 'csv' or 'json'" in exc.value.detail
+
+
 def test_export_route_gates_failed_simulation() -> None:
     session = _FakeSession(_FakeSimulation(status="FAILED", error_message="boom"))
     with pytest.raises(HTTPException) as exc:

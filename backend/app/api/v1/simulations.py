@@ -8666,6 +8666,16 @@ def export_simulation_journey_analytics(
     for machine consumers. Pure post-hoc analytics — no Celery, no LLM, no
     DB writes.
     """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; expected 'csv' or "
+                "'json'"
+            ),
+        )
+
     sim = _get_owned_simulation(simulation_id, current_user.id, db)
     payload = _journey_payload_for_simulation(sim)
     payload = {
@@ -8682,16 +8692,6 @@ def export_simulation_journey_analytics(
         "project_id": sim.project_id,
         "format_version": FORMAT_VERSION,
     }
-
-    fmt = (format or "csv").strip().lower()
-    if fmt not in {"csv", "json"}:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; expected 'csv' or "
-                "'json'"
-            ),
-        )
 
     if fmt == "json":
         text = journey_analytics_to_json(payload, metadata=metadata)
