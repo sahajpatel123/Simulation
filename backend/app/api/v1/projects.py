@@ -150,6 +150,8 @@ from app.simulation.reweighting_preview import (
 from app.simulation.simulation_trend import (
     build_simulation_trend as _build_simulation_trend,
 )
+from app.schemas.simulation_evolution import SimulationEvolutionOut
+from app.simulation.simulation_evolution import build_simulation_evolution
 from app.api.v1.common import get_owned_project
 from app.api.v1.users import (
     _USER_INSIGHTS_CACHE_NAMESPACE,
@@ -5264,6 +5266,70 @@ def get_simulation_trend(
     trend = _build_simulation_trend(rows, project_id=project_id)
     trend["generated_at"] = datetime.now(timezone.utc).isoformat()
     return SimulationTrendOut(**trend)
+
+
+@router.get(
+    "/{project_id}/latest-sim-evolution",
+    response_model=SimulationEvolutionOut,
+    summary=(
+        "Run-to-run evolution digest: how the latest simulation compares "
+        "with the previous completed run (conversion, critical findings, "
+        "bottleneck movement, top recommendations)"
+    ),
+    # Pure analytics over two sim rows — same cap as the other
+    # project analytics endpoints.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_latest_simulation_evolution(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SimulationEvolutionOut:
+    """Compare the two most recent completed simulations for a project.
+
+    A founder-friendly alternative to the raw ``/simulations/compare`` and
+    ``/simulations/sim-diff`` endpoints: instead of picking two sim ids and
+    reading a diff table, this endpoint automatically surfaces the movement
+    in predicted conversion, critical findings added/resolved, bottleneck
+    stage shift, and the latest run's top recommendations. Pure post-hoc
+    analytics — no Celery, no LLM, no DB writes.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+
+    sims = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == project.id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc(), Simulation.id.desc())
+        .limit(2)
+        .all()
+    )
+    if len(sims) < 2:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "At least two completed simulations are required to compute "
+                "run-to-run evolution."
+            ),
+        )
+
+    rows = [
+        {
+            "id": s.id,
+            "status": s.status,
+            "signal_quality": s.signal_quality,
+            "results_json": s.results_json,
+            "created_at": s.created_at,
+        }
+        for s in sims
+    ]
+    payload = build_simulation_evolution(
+        rows,
+        project_id=project.id,
+    )
+    return SimulationEvolutionOut(**payload)
 
 
 @router.post(
