@@ -3,6 +3,11 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.simulation.reproducibility import (
+    FINGERPRINT_ALGORITHM,
+    VOLATILE_RESULT_KEYS,
+)
+
 
 class SimulationCreate(BaseModel):
     project_id: int
@@ -82,6 +87,47 @@ class SimulationCancelOut(BaseModel):
     task_id: str | None = None
     cancelled_at: datetime
     message: str = "Simulation cancelled"
+
+
+class IdenticalInputRunOut(BaseModel):
+    """One completed simulation that shares identical recorded inputs."""
+
+    simulation_id: int
+    status: str
+    created_at: datetime
+    fingerprint: str | None = None
+    match: bool | None = None
+
+
+class SimulationReproducibilityOut(BaseModel):
+    """Response from ``GET /simulations/{id}/reproducibility``.
+
+    A run manifest plus an automatic verification summary: which other
+    completed simulations in the same project used identical inputs
+    (consumer volume, resolved seed, environment snapshot) and whether
+    their result fingerprints match the source run's fingerprint.
+    """
+
+    simulation_id: int
+    project_id: int
+    status: str
+    consumer_volume: int
+    seed: int | None = None
+    seed_used: int
+    seed_pinned: bool = False
+    env_snapshot: dict | None = None
+    exact_replay_supported: bool = False
+    fingerprint: str | None = None
+    fingerprint_algorithm: str = FINGERPRINT_ALGORITHM
+    volatile_excluded_keys: list[str] = Field(
+        default_factory=lambda: sorted(VOLATILE_RESULT_KEYS)
+    )
+    identical_input_runs: list[IdenticalInputRunOut] = Field(default_factory=list)
+    matched_runs: int = 0
+    mismatched_runs: int = 0
+    pending_runs: int = 0
+    exact_replay_confirmed: bool = False
+    notes: list[str] = Field(default_factory=list)
 
 
 class DatabaseHealthOut(BaseModel):

@@ -36,6 +36,7 @@ class Simulation(Base, TimestampMixin):
     seed: Mapped[int | None] = mapped_column(Integer, nullable=True)
     env_snapshot_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     results_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    results_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     signal_quality: Mapped[float | None] = mapped_column(Float, nullable=True)

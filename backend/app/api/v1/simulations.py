@@ -121,6 +121,7 @@ from app.schemas.simulation import (
     DatabaseHealthOut,
     FindingsAggregateOut,
     FindingsTrendOut,
+    IdenticalInputRunOut,
     OutcomesDigestOut,
     OutlierDetectionOut,
     PortfolioNarrativeOut,
@@ -133,6 +134,7 @@ from app.schemas.simulation import (
     SimulationBatchStatusOut,
     SimulationCancelOut,
     SimulationCreate,
+    SimulationReproducibilityOut,
     SimulationResultOut,
     SimulationSensitivityMatrixOut,
     SimulationStatusOut,
@@ -365,6 +367,10 @@ from app.simulation.portfolio_summary import (
     portfolio_to_csv,
 )
 from app.simulation.portfolio_trend import compute_portfolio_trend
+from app.simulation.reproducibility import (
+    inputs_are_identical,
+    stable_result_fingerprint,
+)
 from app.simulation.scenario_stress import ScenarioStressAnalyzer
 from app.simulation.scored_assumption import (
     ClaimConfidence,
@@ -444,6 +450,20 @@ def _invalidate_simulation_caches(user_id: int) -> None:
     """Bust every user-scoped cache that derives from simulation state."""
     for namespace in _SIMULATION_CACHE_NAMESPACES:
         cache_invalidate(namespace=namespace, user_id=user_id)
+
+
+def _stored_or_computed_fingerprint(sim: Simulation) -> str | None:
+    """Return a run's reproducibility fingerprint.
+
+    Prefers the fingerprint persisted by the worker at completion; legacy
+    completed runs fall back to computing it from the stored results
+    payload with the same canonical algorithm.
+    """
+    if sim.results_fingerprint:
+        return sim.results_fingerprint
+    if sim.status == "COMPLETED":
+        return stable_result_fingerprint(sim.results_json)
+    return None
 
 
 def _signal_suggestions(sq: float, dist: dict) -> list[str]:
@@ -769,6 +789,145 @@ def rerun_simulation(
     _invalidate_simulation_caches(current_user.id)
 
     return SimulationStatusOut.model_validate(sim)
+
+
+@router.get(
+    "/{simulation_id}/reproducibility",
+    response_model=SimulationReproducibilityOut,
+    summary="Show a simulation's reproducibility manifest and verify identical-input runs",
+    responses={
+        200: {"description": "Reproducibility manifest returned"},
+        404: {"description": "Simulation not found"},
+    },
+)
+def get_simulation_reproducibility(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SimulationReproducibilityOut:
+    """Return a run's frozen inputs and how it compares to identical-input runs.
+
+    The manifest shows the resolved seed, the environment snapshot frozen
+    at enqueue time, and the run's stable result fingerprint. Completed
+    sibling simulations in the same project with identical inputs (seed,
+    consumer volume, environment snapshot) are listed with a ``match``
+    verdict, so a founder can see at a glance whether a rerun was exact or
+    whether something non-seed (input edits, code drift) changed the
+    outcome.
+    """
+    source = (
+        db.query(Simulation)
+        .join(Project, Simulation.project_id == Project.id)
+        .filter(Simulation.id == simulation_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not source:
+        raise HTTPException(status_code=404, detail="Simulation not found")
+
+    seed_used = resolve_simulation_seed(source.seed, source.id)
+    env_snapshot = (
+        copy.deepcopy(source.env_snapshot_json)
+        if isinstance(source.env_snapshot_json, dict)
+        else None
+    )
+    fingerprint = _stored_or_computed_fingerprint(source)
+
+    notes: list[str] = []
+    if source.status != "COMPLETED":
+        notes.append("Fingerprint verification requires completed results.")
+    if env_snapshot is None:
+        notes.append(
+            "This run predates environment snapshots; a rerun may use "
+            "different environment inputs than the original."
+        )
+    if source.seed is None:
+        notes.append(
+            "No explicit seed was pinned; the legacy deterministic scheme "
+            "provides the seed, so reruns remain reproducible."
+        )
+
+    siblings = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == source.project_id,
+            Simulation.id != source.id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.id.asc())
+        .limit(200)
+        .all()
+    )
+
+    identical_runs: list[IdenticalInputRunOut] = []
+    matched_runs = 0
+    mismatched_runs = 0
+    pending_runs = 0
+    for other in siblings:
+        if not inputs_are_identical(
+            consumer_volume_a=source.consumer_volume,
+            seed_used_a=seed_used,
+            env_snapshot_a=env_snapshot,
+            consumer_volume_b=other.consumer_volume,
+            seed_used_b=resolve_simulation_seed(other.seed, other.id),
+            env_snapshot_b=(
+                copy.deepcopy(other.env_snapshot_json)
+                if isinstance(other.env_snapshot_json, dict)
+                else None
+            ),
+        ):
+            continue
+        other_fingerprint = _stored_or_computed_fingerprint(other)
+        match: bool | None = None
+        if fingerprint is not None and other_fingerprint is not None:
+            match = fingerprint == other_fingerprint
+        if match is True:
+            matched_runs += 1
+        elif match is False:
+            mismatched_runs += 1
+        else:
+            pending_runs += 1
+        identical_runs.append(
+            IdenticalInputRunOut(
+                simulation_id=other.id,
+                status=other.status,
+                created_at=other.created_at,
+                fingerprint=other_fingerprint,
+                match=match,
+            )
+        )
+
+    if not identical_runs:
+        notes.append(
+            "No other completed simulation shares identical inputs "
+            "(seed, consumer volume, environment snapshot)."
+        )
+    if mismatched_runs:
+        mismatched_ids = [r.simulation_id for r in identical_runs if r.match is False]
+        notes.append(
+            "Identical-input runs produced different result fingerprints "
+            f"(simulations {mismatched_ids}) — inputs or code changed between runs."
+        )
+
+    return SimulationReproducibilityOut(
+        simulation_id=source.id,
+        project_id=source.project_id,
+        status=source.status,
+        consumer_volume=source.consumer_volume,
+        seed=source.seed,
+        seed_used=seed_used,
+        seed_pinned=source.seed is not None,
+        env_snapshot=env_snapshot,
+        exact_replay_supported=env_snapshot is not None,
+        fingerprint=fingerprint,
+        identical_input_runs=identical_runs,
+        matched_runs=matched_runs,
+        mismatched_runs=mismatched_runs,
+        pending_runs=pending_runs,
+        exact_replay_confirmed=bool(
+            fingerprint is not None and matched_runs > 0 and mismatched_runs == 0
+        ),
+        notes=notes,
+    )
 
 
 @router.get(

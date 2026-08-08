@@ -155,12 +155,13 @@ def run_migrations():
             raise RuntimeError(f"failed to convert simulations.results_json to JSONB: {e}") from e
         # Step 36a: add signal_quality, claim_confidence_distribution, and
         # reproducibility columns (explicit RNG seed + frozen environment
-        # snapshot) to simulations
+        # snapshot + stable result fingerprint) to simulations
         for column, col_type in [
             ("signal_quality", "FLOAT"),
             ("claim_confidence_distribution", "JSONB"),
             ("seed", "INTEGER"),
             ("env_snapshot_json", "JSONB"),
+            ("results_fingerprint", "VARCHAR(64)"),
         ]:
             try:
                 conn.execute(

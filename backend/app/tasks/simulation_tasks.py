@@ -30,6 +30,7 @@ from app.simulation.funnel import (
 from app.simulation.journey_analytics import serialise_per_cluster_matrices
 from app.simulation.markov import STATES
 from app.simulation.profiles import AgentProfileGenerator
+from app.simulation.reproducibility import stable_result_fingerprint
 from app.simulation.simulation_webhook_delivery import (
     build_webhook_payload,
     deliver_webhook_event,
@@ -691,6 +692,7 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         results_dict["cluster_narrative"] = accountability.generate_cluster_breakdown_narrative(
             conductor_result
         )
+        results_fingerprint = stable_result_fingerprint(results_dict)
 
         if _simulation_is_cancelled(self.db, simulation_id):
             logger.info(
@@ -713,6 +715,7 @@ def run_full_simulation(self, simulation_id: int) -> dict:
             .values(
                 status="COMPLETED",
                 results_json=results_dict,
+                results_fingerprint=results_fingerprint,
                 confidence_score=float(agg_result.confidence_score) / 100.0,
                 updated_at=_utcnow(),
             )
@@ -727,6 +730,7 @@ def run_full_simulation(self, simulation_id: int) -> dict:
 
         sim.status = "COMPLETED"
         sim.results_json = results_dict
+        sim.results_fingerprint = results_fingerprint
         sim.confidence_score = float(agg_result.confidence_score) / 100.0
         sim.updated_at = _utcnow()
 
