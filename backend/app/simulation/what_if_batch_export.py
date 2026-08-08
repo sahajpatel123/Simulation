@@ -43,6 +43,23 @@ def _safe_csv_cell(value: object) -> object:
     return value
 
 
+def _markdown_cell(value: object) -> str:
+    """Escape a value for use inside a Markdown table cell.
+
+    Pipe characters become ``\\|`` so table structure is preserved (this also
+    covers the pipe separators used in direction/category summaries), and
+    line breaks collapse to a single space so the row stays on one line.
+    """
+    text = str(value)
+    return (
+        text.replace("\\", "\\\\")
+        .replace("|", "\\|")
+        .replace("\r\n", " ")
+        .replace("\n", " ")
+        .replace("\r", " ")
+    )
+
+
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with the formula-injection guard applied to every cell."""
     writer.writerow([_safe_csv_cell(value) for value in row])
@@ -117,6 +134,13 @@ def _scenario_header() -> list[str]:
     return ["rank", "label", *WhatIfOut.to_csv_header()]
 
 
+def _matched_categories_text(categories: object, separator: str = "|") -> str:
+    """Render the matched-keyword list as a delimited string."""
+    if not isinstance(categories, list):
+        return "" if not categories else str(categories)
+    return separator.join(str(item) for item in categories)
+
+
 def _scenario_row(ranked: Any) -> list[object]:
     """Render one ``WhatIfBatchScenarioOut`` as a CSV row."""
     data = _as_dict(ranked)
@@ -125,6 +149,20 @@ def _scenario_row(ranked: Any) -> list[object]:
     label = data.get("label", "")
     if hasattr(ranked, "scenario") and hasattr(ranked.scenario, "to_csv_row"):
         scenario_row = ranked.scenario.to_csv_row()
+    elif isinstance(scenario, dict):
+        scenario_row = [
+            str(scenario.get("simulation_id", "")),
+            str(scenario.get("project_id", "")),
+            scenario.get("base_conversion_rate", ""),
+            scenario.get("projected_conversion_rate", ""),
+            scenario.get("conversion_delta", ""),
+            scenario.get("conversion_delta_pct", ""),
+            (scenario.get("meta") or {}).get("dominant_direction", ""),
+            (scenario.get("meta") or {}).get("sensitivity_label", ""),
+            _matched_categories_text(
+                (scenario.get("meta") or {}).get("matched_keyword_categories")
+            ),
+        ]
     else:
         scenario_row = []
     return [rank, label, *scenario_row]
@@ -230,11 +268,9 @@ def _scenario_markdown_row(ranked: Any) -> list[object]:
     data = _as_dict(ranked)
     scenario = data.get("scenario") or {}
     meta = scenario.get("meta") or {}
-    categories = meta.get("matched_keyword_categories") or []
-    if isinstance(categories, list):
-        categories_text = ", ".join(str(item) for item in categories)
-    else:
-        categories_text = str(categories)
+    categories_text = _matched_categories_text(
+        meta.get("matched_keyword_categories"), separator=", "
+    )
     return [
         data.get("rank", ""),
         data.get("label", ""),
@@ -269,7 +305,7 @@ def what_if_batch_to_markdown(
     lines.append("| Metric | Value |")
     lines.append("| --- | --- |")
     for key, value in _summary_markdown_rows(summary):
-        lines.append(f"| {key} | {value} |")
+        lines.append(f"| {_markdown_cell(key)} | {_markdown_cell(value)} |")
     lines.append("")
 
     scenarios = data.get("scenarios") or []
@@ -281,7 +317,7 @@ def what_if_batch_to_markdown(
         lines.append("| Rank | Label | Base CR | Projected CR | Δ% | Direction | Sensitivity | Matched categories |")
         lines.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
         for ranked in scenarios:
-            cells = _scenario_markdown_row(ranked)
+            cells = [_markdown_cell(cell) for cell in _scenario_markdown_row(ranked)]
             lines.append("| " + " | ".join(str(cell) for cell in cells) + " |")
     lines.append("")
 
@@ -294,11 +330,18 @@ def what_if_batch_to_markdown(
         meta = _as_dict(scenario.get("meta") or {})
         lines.append(f"## {name}")
         lines.append("")
-        lines.append(f"- Rank: {block_data.get('rank', '')}")
-        lines.append(f"- Label: {block_data.get('label', '')}")
-        lines.append(f"- Projected conversion: {scenario.get('projected_conversion_rate', '')}")
-        lines.append(f"- Delta %: {scenario.get('conversion_delta_pct', '')}")
-        lines.append(f"- Direction: {meta.get('dominant_direction', '')}")
+        lines.append(f"- Rank: {_markdown_cell(block_data.get('rank', ''))}")
+        lines.append(f"- Label: {_markdown_cell(block_data.get('label', ''))}")
+        lines.append(
+            f"- Projected conversion: "
+            f"{_markdown_cell(scenario.get('projected_conversion_rate', ''))}"
+        )
+        lines.append(
+            f"- Delta %: {_markdown_cell(scenario.get('conversion_delta_pct', ''))}"
+        )
+        lines.append(
+            f"- Direction: {_markdown_cell(meta.get('dominant_direction', ''))}"
+        )
         lines.append("")
 
     return "\n".join(lines)
