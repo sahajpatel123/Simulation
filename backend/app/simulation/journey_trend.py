@@ -213,6 +213,7 @@ def _insights(
     momentum: dict[str, float | int | None],
     modal_exit: str | None,
     anchor_rank: float | None,
+    anchor_tied_count: int = 0,
 ) -> list[str]:
     """Deterministic founder-facing insight strings."""
     if not points:
@@ -287,7 +288,12 @@ def _insights(
             f"The most common exit across your simulations is at {modal_exit}."
         )
 
-    if anchor_rank is not None:
+    if anchor_tied_count and anchor_tied_count == len(points) - 1:
+        insights.append(
+            "This simulation converts in line with all of your other "
+            "simulations."
+        )
+    elif anchor_rank is not None:
         if anchor_rank >= 50.0:
             insights.append(
                 "This simulation converts better than "
@@ -414,6 +420,7 @@ def build_journey_trend(
         )
 
     anchor_rank: float | None = None
+    anchor_tied_count = 0
     anchor_point = next(
         (p for p in points if p["simulation_id"] == anchor_simulation_id),
         None,
@@ -425,8 +432,17 @@ def build_journey_trend(
             if p["simulation_id"] != anchor_simulation_id
         ]
         if others:
-            below = sum(1 for v in others if v < anchor_point["purchase_probability"])
-            anchor_rank = round(below / len(others) * 100.0, 2)
+            anchor_purchase = anchor_point["purchase_probability"]
+            below = sum(1 for v in others if v < anchor_purchase)
+            tied = sum(1 for v in others if v == anchor_purchase)
+            anchor_tied_count = tied
+            # Ties count half a rank (midrank method), so an anchor that
+            # matches every other simulation is never reported as "worse
+            # than 100% of your other simulations".
+            anchor_rank = round(
+                (below + 0.5 * tied) / len(others) * 100.0,
+                2,
+            )
 
     return {
         "simulation_id": anchor_simulation_id,
@@ -455,6 +471,7 @@ def build_journey_trend(
             momentum=momentum,
             modal_exit=most_common_exit,
             anchor_rank=anchor_rank,
+            anchor_tied_count=anchor_tied_count,
         ),
         "anchor_percentile_rank": anchor_rank,
         "generated_at": "",

@@ -209,6 +209,32 @@ def test_trend_anchor_percentile_rank() -> None:
     assert any("better than 100%" in i for i in best["insights"])
 
 
+def test_trend_anchor_rank_counts_ties_fairly() -> None:
+    rows = [
+        _row(1, _weak_results()),
+        _row(2, _results()),
+        _row(3, _results()),
+        _row(4, _strong_results()),
+    ]
+    payload = _payload(rows, anchor_id=2)
+
+    assert payload["anchor_percentile_rank"] == pytest.approx(50.0)
+
+
+def test_trend_all_tied_anchor_is_not_reported_worse() -> None:
+    rows = [
+        _row(1, _results()),
+        _row(2, _results()),
+        _row(3, _results()),
+    ]
+    payload = _payload(rows, anchor_id=2)
+
+    assert payload["anchor_percentile_rank"] == pytest.approx(50.0)
+    assert any("in line" in i for i in payload["insights"])
+    assert not any("worse than" in i for i in payload["insights"])
+    assert not any("better than" in i for i in payload["insights"])
+
+
 def test_trend_modal_exit_and_stage_leak_medians() -> None:
     payload = _payload(_improving_rows(), anchor_id=3)
 
