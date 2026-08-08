@@ -5,9 +5,12 @@ Covers the three layers of the feature:
 1. ``Conductor.run(cancel_check=...)`` stops between clusters and raises
    :class:`SimulationCancelled` instead of returning partial results.
 2. The Celery task helpers detect a CANCELLED row and persist/notify the
-   terminal state without touching failure metrics or webhook doubles.
-3. ``POST /simulations/{id}/cancel`` revokes the Celery task, flips the
-   row, broadcasts progress, and (for queued runs) emits the webhook.
+   terminal state without touching failure metrics.
+3. ``POST /simulations/{id}/cancel`` revokes the Celery task, atomically
+   flips the row, broadcasts progress, and emits the webhook exactly once
+   (the API owns cancellation webhooks; the worker never double-sends).
+4. Terminal-state races are guarded: whichever side commits first wins,
+   and the loser cannot overwrite the winner's status.
 """
 
 from __future__ import annotations
@@ -67,8 +70,9 @@ class _FakeQuery:
 
 
 class _FakeResult:
-    def __init__(self, value: object) -> None:
+    def __init__(self, value: object, *, rowcount: int = 1) -> None:
         self._value = value
+        self.rowcount = rowcount
 
     def scalar(self) -> object:
         return self._value
@@ -83,6 +87,7 @@ class _FakeSession:
         sims: list[_FakeSimulation] | None = None,
         *,
         status_value: str = "CANCELLED",
+        rowcount: int = 1,
         execute_error: Exception | None = None,
     ) -> None:
         self.sims = sims if sims is not None else []
@@ -90,6 +95,7 @@ class _FakeSession:
         self.rollbacks = 0
         self.refreshed: list[object] = []
         self._status_value = status_value
+        self._rowcount = rowcount
         self._execute_error = execute_error
 
     def query(self, *args, **kwargs):
@@ -98,7 +104,7 @@ class _FakeSession:
     def execute(self, stmt, params=None):
         if self._execute_error is not None:
             raise self._execute_error
-        return _FakeResult(self._status_value)
+        return _FakeResult(self._status_value, rowcount=self._rowcount)
 
     def commit(self) -> None:
         self.commits += 1
@@ -202,8 +208,70 @@ def test_mark_cancelled_persists_and_notifies_without_failure_metrics(
     assert cancelled_counter[0] == 1
     assert len(broadcasts) == 1
     assert broadcasts[0][0][1] == "CANCELLED"
-    assert len(webhooks) == 1
-    assert webhooks[0][1]["status"] == "CANCELLED"
+    # Webhook delivery is owned by the API cancel handler; a worker that
+    # performs the transition must not enqueue a second delivery.
+    assert webhooks == []
+
+
+def test_mark_cancelled_noop_when_row_already_terminal(monkeypatch) -> None:
+    """A worker observing an API-cancelled row must not double-notify."""
+    from app.tasks import simulation_tasks as tasks_mod
+
+    sim = _FakeSimulation(status="CANCELLED")
+    session = _FakeSession([sim], rowcount=0)
+    broadcasts: list[tuple] = []
+    webhooks: list[tuple] = []
+    cancelled_counter: list[int] = [0]
+
+    monkeypatch.setattr(tasks_mod, "sync_broadcast", lambda *a, **k: broadcasts.append((a, k)))
+    monkeypatch.setattr(
+        tasks_mod,
+        "_enqueue_simulation_webhooks",
+        lambda *a, **k: webhooks.append((a, k)),
+    )
+    monkeypatch.setattr(
+        tasks_mod.metrics,
+        "sim_cancelled",
+        lambda: cancelled_counter.__setitem__(0, cancelled_counter[0] + 1),
+    )
+
+    tasks_mod._mark_cancelled(session, sim, simulation_id=1)
+
+    assert sim.status == "CANCELLED"
+    assert cancelled_counter[0] == 0
+    assert broadcasts == []
+    assert webhooks == []
+
+
+def test_mark_failed_does_not_overwrite_cancelled(monkeypatch) -> None:
+    """A late worker failure must never flip a cancelled row to FAILED."""
+    from app.tasks import simulation_tasks as tasks_mod
+
+    sim = _FakeSimulation(status="CANCELLED")
+    session = _FakeSession([sim], rowcount=0)
+    broadcasts: list[tuple] = []
+    webhooks: list[tuple] = []
+    failed_counter: list[int] = [0]
+
+    monkeypatch.setattr(tasks_mod, "sync_broadcast", lambda *a, **k: broadcasts.append((a, k)))
+    monkeypatch.setattr(
+        tasks_mod,
+        "_enqueue_simulation_webhooks",
+        lambda *a, **k: webhooks.append((a, k)),
+    )
+    monkeypatch.setattr(
+        tasks_mod.metrics,
+        "sim_failed",
+        lambda: failed_counter.__setitem__(0, failed_counter[0] + 1),
+    )
+
+    tasks_mod._mark_failed(session, sim, ValueError("boom"))
+
+    assert sim.status == "CANCELLED"
+    assert sim.error_message is None
+    assert failed_counter[0] == 0
+    assert broadcasts == []
+    assert webhooks == []
 
 
 # ── API endpoint ───────────────────────────────────────────────────────────
@@ -222,6 +290,7 @@ def _call_cancel_route(
     broadcasts: list[tuple] = []
     webhooks: list[tuple] = []
     invalidations: list[tuple] = []
+    cancelled_metrics: list[int] = [0]
 
     class _FakeControl:
         def revoke(self, task_id: str, terminate: bool) -> None:
@@ -240,18 +309,23 @@ def _call_cancel_route(
         "cache_invalidate",
         lambda namespace, user_id: invalidations.append((namespace, user_id)),
     )
+    monkeypatch.setattr(
+        sim_mod.metrics,
+        "sim_cancelled",
+        lambda: cancelled_metrics.__setitem__(0, cancelled_metrics[0] + 1),
+    )
 
     out = sim_mod.cancel_simulation(
         simulation_id=simulation_id,
         db=session,
         current_user=type("U", (), {"id": user_id})(),
     )
-    return out, revoked, broadcasts, webhooks, invalidations
+    return out, revoked, broadcasts, webhooks, invalidations, cancelled_metrics
 
 
 def test_cancel_queued_simulation(monkeypatch) -> None:
     sim = _FakeSimulation(status="QUEUED", task_id="task-queued")
-    out, revoked, broadcasts, webhooks, invalidations = _call_cancel_route(
+    out, revoked, broadcasts, webhooks, invalidations, cancelled_metrics = _call_cancel_route(
         _FakeSession([sim]), monkeypatch=monkeypatch
     )
 
@@ -262,20 +336,36 @@ def test_cancel_queued_simulation(monkeypatch) -> None:
     assert out.message == "Simulation cancelled"
     assert revoked == ["task-queued"]
     assert broadcasts and broadcasts[0][0][1] == "CANCELLED"
-    assert len(webhooks) == 1  # queued runs have no worker to emit the event
+    assert len(webhooks) == 1  # API owns the simulation.cancelled webhook
+    assert cancelled_metrics[0] == 1
     assert invalidations
 
 
-def test_cancel_running_simulation_defers_webhook_to_worker(monkeypatch) -> None:
+def test_cancel_running_simulation_emits_webhook(monkeypatch) -> None:
     sim = _FakeSimulation(status="RUNNING", task_id="task-running")
-    out, revoked, _broadcasts, webhooks, invalidations = _call_cancel_route(
+    out, revoked, _broadcasts, webhooks, invalidations, cancelled_metrics = _call_cancel_route(
         _FakeSession([sim]), monkeypatch=monkeypatch
     )
 
     assert out.status == "CANCELLED"
     assert revoked == ["task-running"]
-    assert webhooks == []  # the running worker emits simulation.cancelled itself
+    assert len(webhooks) == 1
+    assert cancelled_metrics[0] == 1
     assert invalidations
+
+
+def test_cancel_loses_race_to_completed_returns_409(monkeypatch) -> None:
+    """If the worker commits COMPLETED first, cancel must not overwrite it."""
+    sim = _FakeSimulation(status="RUNNING")
+    with pytest.raises(HTTPException) as exc:
+        _call_cancel_route(
+            _FakeSession([sim], status_value="COMPLETED", rowcount=0),
+            monkeypatch=monkeypatch,
+        )
+    assert exc.value.status_code == 409
+    assert "COMPLETED" in str(exc.value.detail)
+    # The route never touched the row or emitted cancellation signals.
+    assert sim.status == "RUNNING"
 
 
 def test_cancel_completed_simulation_conflicts(monkeypatch) -> None:

@@ -5,7 +5,7 @@ import time
 from datetime import UTC, datetime
 
 from celery import Task
-from sqlalchemy import text
+from sqlalchemy import text, update
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
@@ -67,21 +67,37 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+def _transition_count(result: object) -> int:
+    """Rowcount of a terminal-state UPDATE, defaulting to 1 for fakes.
+
+    The worker's unit-test sessions often stub ``execute()`` with a
+    ``None`` result; treat that as "the transition happened" so legacy
+    fakes keep exercising the notify path. Real SQLAlchemy results
+    always expose ``rowcount``.
+    """
+    return int(getattr(result, "rowcount", 1) or 0)
+
+
 def _mark_failed(db: Session, sim: Simulation, exc: Exception) -> None:
     msg = str(exc)[:500]
-    metrics.sim_failed()
-    sync_broadcast(sim.id, "FAILED", "Error", 0, extra={"error": msg})
     try:
-        db.execute(
+        result = db.execute(
             text(
                 """
                 UPDATE simulations
                 SET status = 'FAILED', error_message = :msg, updated_at = :u
                 WHERE id = :sid
+                  AND status IN ('QUEUED', 'RUNNING')
                 """
             ),
             {"msg": msg, "u": _utcnow(), "sid": sim.id},
         )
+        if _transition_count(result) == 0:
+            # The row already left the cancellable states (e.g. a user
+            # cancelled it). Do not overwrite that terminal state with
+            # FAILED, and do not emit failure signals for it.
+            db.rollback()
+            return
         sim.status = "FAILED"
         sim.error_message = msg
         sim.updated_at = _utcnow()
@@ -96,6 +112,8 @@ def _mark_failed(db: Session, sim: Simulation, exc: Exception) -> None:
                 __name__,
                 _exc,
             )
+    metrics.sim_failed()
+    sync_broadcast(sim.id, "FAILED", "Error", 0, extra={"error": msg})
     try:
         _enqueue_simulation_webhooks(
             db,
@@ -168,11 +186,15 @@ def _mark_cancelled(db: Session, sim: Simulation | None, simulation_id: int) -> 
 
     Cancellation is a terminal outcome, not a failure: no retry is
     scheduled, no FAILED row is written, and the failure counter is not
-    bumped. Webhooks and the progress channel still hear about it.
+    bumped. The progress channel still hears about it. Webhook delivery
+    is owned by the API cancel handler, which wins the row transition
+    first — this helper only acts when it actually performed the
+    transition, so a worker that observes an already-cancelled row
+    cannot double-deliver notifications.
     """
     message = "Cancelled by user"
     try:
-        db.execute(
+        result = db.execute(
             text(
                 """
                 UPDATE simulations
@@ -180,10 +202,16 @@ def _mark_cancelled(db: Session, sim: Simulation | None, simulation_id: int) -> 
                     error_message = COALESCE(error_message, :msg),
                     updated_at = :u
                 WHERE id = :sid
+                  AND status IN ('QUEUED', 'RUNNING')
                 """
             ),
             {"msg": message, "u": _utcnow(), "sid": simulation_id},
         )
+        if _transition_count(result) == 0:
+            # The API cancel handler already moved the row to a terminal
+            # state and owns the broadcast/metrics/webhook notifications.
+            db.rollback()
+            return
         if sim is not None:
             sim.status = "CANCELLED"
             sim.error_message = sim.error_message or message
@@ -204,20 +232,6 @@ def _mark_cancelled(db: Session, sim: Simulation | None, simulation_id: int) -> 
         0,
         extra={"error": message},
     )
-    try:
-        _enqueue_simulation_webhooks(
-            db,
-            project_id=sim.project_id if sim is not None else None,
-            simulation_id=simulation_id,
-            status="CANCELLED",
-            conversion_rate=None,
-            error=message,
-        )
-    except Exception as _exc:
-        logger.debug(
-            "[Simulation] webhook enqueue on cancel skipped: %s",
-            _exc,
-        )
 
 
 def _derive_chain_scalars(conductor_result: ConductorResult) -> tuple[float, float, float, float]:
@@ -610,6 +624,32 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         if _simulation_is_cancelled(self.db, simulation_id):
             logger.info(
                 f"[Simulation] Cancelled before persist - simulation_id={simulation_id}"
+            )
+            _mark_cancelled(self.db, sim, simulation_id)
+            return {"simulation_id": simulation_id, "status": "CANCELLED"}
+
+        # Atomic terminal transition: only QUEUED/RUNNING rows may become
+        # COMPLETED. If a user cancel lands between the check above and
+        # this UPDATE, the guarded WHERE makes the cancel win; the loser
+        # (this task) observes rowcount == 0 and unwinds as CANCELLED
+        # instead of overwriting the terminal state with COMPLETED.
+        transition = self.db.execute(
+            update(Simulation)
+            .where(
+                Simulation.id == simulation_id,
+                Simulation.status.in_(["QUEUED", "RUNNING"]),
+            )
+            .values(
+                status="COMPLETED",
+                results_json=results_dict,
+                confidence_score=float(agg_result.confidence_score) / 100.0,
+                updated_at=_utcnow(),
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if _transition_count(transition) == 0:
+            logger.info(
+                f"[Simulation] Cancelled during persist - simulation_id={simulation_id}"
             )
             _mark_cancelled(self.db, sim, simulation_id)
             return {"simulation_id": simulation_id, "status": "CANCELLED"}

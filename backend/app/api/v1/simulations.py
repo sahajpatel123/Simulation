@@ -50,6 +50,7 @@ from app.api.v1.users import (
     _USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
 )
 from app.core.deps import get_current_user, get_db
+from app.core.metrics import metrics
 from app.core.progress_bridge import progress_bridge
 from app.core.rate_limiter import rate_limit
 from app.core.redis_client import get_redis_client
@@ -3957,6 +3958,12 @@ def cancel_simulation(
     ``Conductor.run(cancel_check=...)``) and unwind cleanly — no partial
     results are persisted and no retries are burned. Completed or failed
     simulations cannot be cancelled.
+
+    The QUEUED/RUNNING → CANCELLED write is atomic with the worker's
+    QUEUED/RUNNING → COMPLETED write: if the run finishes first, this
+    call returns 409 with the fresh status instead of overwriting it.
+    The API is the sole emitter of ``simulation.cancelled`` webhooks, so
+    a queued task that races past its revoke cannot double-deliver.
     """
     sim = _get_owned_simulation(simulation_id, current_user.id, db)
 
@@ -3968,8 +3975,6 @@ def cancel_simulation(
                 "cannot be cancelled."
             ),
         )
-
-    was_queued = sim.status == "QUEUED"
 
     if sim.task_id:
         try:
@@ -3983,12 +3988,45 @@ def cancel_simulation(
             )
 
     cancelled_at = datetime.now(UTC)
+    # Guarded terminal transition: only QUEUED/RUNNING rows may become
+    # CANCELLED. If the worker completed (or failed) the simulation
+    # between the ownership read above and this UPDATE, the row is no
+    # longer cancellable and we must not overwrite its terminal state —
+    # the request turns into a 409 with the fresh status.
+    result = db.execute(
+        text(
+            """
+            UPDATE simulations
+            SET status = 'CANCELLED',
+                error_message = :msg,
+                updated_at = :u
+            WHERE id = :sid
+              AND status IN ('QUEUED', 'RUNNING')
+            """
+        ),
+        {"msg": "Cancelled by user", "u": cancelled_at, "sid": simulation_id},
+    )
+    if int(getattr(result, "rowcount", 1) or 0) == 0:
+        db.rollback()
+        fresh_status = db.execute(
+            text("SELECT status FROM simulations WHERE id = :sid"),
+            {"sid": simulation_id},
+        ).scalar()
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation {simulation_id} is {fresh_status} and "
+                "cannot be cancelled."
+            ),
+        )
+
     sim.status = "CANCELLED"
     sim.error_message = "Cancelled by user"
     sim.updated_at = cancelled_at
     db.commit()
     db.refresh(sim)
 
+    metrics.sim_cancelled()
     sync_broadcast(
         simulation_id,
         "CANCELLED",
@@ -3996,26 +4034,26 @@ def cancel_simulation(
         0,
     )
 
-    # A queued task will never run, so the API emits its lifecycle
-    # event. A running task observes CANCELLED and emits the webhook
-    # itself — this split avoids duplicate deliveries.
-    if was_queued:
-        try:
-            _enqueue_simulation_webhooks(
-                db,
-                project_id=sim.project_id,
-                simulation_id=simulation_id,
-                status="CANCELLED",
-                conversion_rate=None,
-                error="Cancelled by user",
-            )
-        except Exception as exc:
-            logger.warning(
-                "[Simulation] webhook enqueue on cancel skipped - "
-                "simulation_id=%s error=%s",
-                simulation_id,
-                exc,
-            )
+    # The API is the single webhook emitter for cancellation: the worker
+    # observes the CANCELLED row (which this request just committed) and
+    # unwinds without re-enqueueing, so a queued task that races past its
+    # revoke cannot cause a duplicate simulation.cancelled delivery.
+    try:
+        _enqueue_simulation_webhooks(
+            db,
+            project_id=sim.project_id,
+            simulation_id=simulation_id,
+            status="CANCELLED",
+            conversion_rate=None,
+            error="Cancelled by user",
+        )
+    except Exception as exc:
+        logger.warning(
+            "[Simulation] webhook enqueue on cancel skipped - "
+            "simulation_id=%s error=%s",
+            simulation_id,
+            exc,
+        )
 
     _invalidate_simulation_caches(current_user.id)
 
