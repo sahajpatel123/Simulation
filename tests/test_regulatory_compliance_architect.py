@@ -207,6 +207,119 @@ def test_refund_policy_mention_lowers_concern() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Negation-aware evidence / policy detection
+# ---------------------------------------------------------------------------
+
+
+def test_negative_certification_language_is_not_evidence() -> None:
+    out = _compute(
+        product_type="health_hardware",
+        assumptions=[{"text": "We are not yet certified for medical devices"}],
+    )
+    assert out.metrics["regulatory_exposure"] > 0.40
+    assert out.flags["certification_gate"] is True
+    assert out.metrics["compliance_credibility"] < 1.0
+    assert out.flags["regulatory_advantage"] is False
+    assert out.metrics["regulatory_advantage_lift"] == 0.0
+
+
+def test_negative_approval_language_is_not_evidence() -> None:
+    out = _compute(
+        product_type="health_hardware",
+        assumptions=[{"text": "The product is not FDA approved yet"}],
+    )
+    assert out.flags["certification_gate"] is True
+    assert out.flags["regulatory_advantage"] is False
+
+
+def test_unclear_compliance_status_is_not_evidence() -> None:
+    out = _compute(
+        product_type="health_hardware",
+        assumptions=[{"text": "Unclear whether the device is compliant"}],
+    )
+    assert out.flags["certification_gate"] is True
+    assert out.metrics["compliance_credibility"] < 1.0
+    assert out.metrics["regulatory_advantage_lift"] == 0.0
+
+
+def test_legal_risk_is_not_compliance_evidence() -> None:
+    out = _compute(
+        assumptions=[{"text": "Legal risk and liability could delay launch"}],
+    )
+    assert out.metrics["compliance_credibility"] < 1.0
+    assert out.flags["regulatory_advantage"] is False
+    assert out.metrics["regulatory_advantage_lift"] == 0.0
+
+
+def test_legal_team_marker_is_compliance_evidence() -> None:
+    out = _compute(
+        product_type="health_hardware",
+        assumptions=[
+            {"text": "Requires FDA approval before launch"},
+            {"text": "Legal team reviews all contracts"},
+        ],
+    )
+    assert out.metrics["compliance_credibility"] == 1.0
+    assert out.flags["certification_gate"] is False
+    assert out.flags["regulatory_advantage"] is True
+
+
+def test_returns_on_investment_is_not_refund_policy() -> None:
+    out = _compute(
+        income=0.2,
+        price_sens=0.9,
+        product_type="d2c",
+        assumptions=[
+            {"text": "Liability risk if the device fails"},
+            {"text": "Investors expect returns within 12 months"},
+        ],
+    )
+    assert out.flags["refund_policy_risk"] is True
+    assert out.metrics["refund_liability_concern"] >= 0.35
+
+
+def test_repair_mention_is_not_refund_policy() -> None:
+    out = _compute(
+        income=0.2,
+        price_sens=0.9,
+        product_type="d2c",
+        assumptions=[
+            {"text": "Liability risk if the device fails"},
+            {"text": "Repair support will be offered after purchase"},
+        ],
+    )
+    assert out.flags["refund_policy_risk"] is True
+    assert out.metrics["refund_liability_concern"] >= 0.35
+
+
+def test_negative_policy_language_does_not_clear_risk() -> None:
+    out = _compute(
+        income=0.2,
+        price_sens=0.9,
+        product_type="d2c",
+        assumptions=[
+            {"text": "Liability risk if the device fails"},
+            {"text": "No refund policy is planned"},
+        ],
+    )
+    assert out.flags["refund_policy_risk"] is True
+    assert out.metrics["refund_liability_concern"] >= 0.35
+
+
+def test_non_refundable_is_not_refund_policy() -> None:
+    out = _compute(
+        income=0.2,
+        price_sens=0.9,
+        product_type="d2c",
+        assumptions=[
+            {"text": "Liability risk if the device fails"},
+            {"text": "Orders are non-refundable"},
+        ],
+    )
+    assert out.flags["refund_policy_risk"] is True
+
+
+# ---------------------------------------------------------------------------
 # Markov overrides
 # ---------------------------------------------------------------------------
 

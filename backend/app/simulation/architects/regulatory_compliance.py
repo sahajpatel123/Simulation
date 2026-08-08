@@ -25,6 +25,11 @@ What this architect does:
   licensed, audited, ISO, privacy policy, ...) raise ``compliance_credibility``
   to 1.0, remove the ``certification_gate`` flag and soften the funnel
   suppressor, and earn a small purchase-stage ``regulatory_advantage_lift``.
+  Evidence and consumer-policy detection is negation-aware: statements such
+  as "not yet certified", "no approval obtained" or "no refund policy" are
+  treated as gaps, never as evidence, and broad words such as "legal" or
+  "returns" only count inside concrete phrases ("legal team", "return
+  policy") so legal risk and ROI talk cannot clear the compliance gate.
 * **Markov overrides** — only when explicit regulatory exposure exists:
   BROWSE→CONSIDER / CONSIDER→DECIDE are multiplied by the suppressor,
   DECIDE→PURCHASE by ``1 + regulatory_advantage_lift`` when compliance
@@ -77,19 +82,35 @@ _CONSUMER_PROTECTION_KEYWORDS: tuple[str, ...] = (
 )
 
 _CONSUMER_POLICY_KEYWORDS: tuple[str, ...] = (
-    "refund", "returns", "warranty", "replacement", "guarantee",
-    "cancellation policy", "repair",
+    "refund", "refundable", "return policy", "returns policy",
+    "free returns", "easy returns", "30-day returns", "60-day returns",
+    "money-back guarantee", "satisfaction guarantee", "quality guarantee",
+    "guaranteed refund", "warranty", "replacement policy", "repair policy",
+    "cancellation policy",
 )
 
 _EVIDENCE_KEYWORDS: tuple[str, ...] = (
     "certified", "certification", "approved", "compliant", "licensed",
     "audited", "iso", "ce mark", "fssai", "fda approved", "cdsco",
     "rbi approved", "dpdp compliant", "gdpr compliant", "privacy policy",
-    "terms of service", "transparent", "secure", "encryption",
-    "consent", "opt-in", "refund policy", "return policy", "warranty",
-    "compliance team", "legal", "privacy by design", "data minimisation",
-    "data minimization",
+    "terms of service", "encryption", "consent", "opt-in",
+    "refund policy", "return policy", "warranty", "compliance team",
+    "privacy by design", "data minimisation", "data minimization",
+    "legal team", "legal review", "legal counsel", "legal clearance",
+    "legal approval", "legal compliance", "legally compliant",
+    "legal department", "legal advisor", "legal advisory",
 )
+
+# Negation / absence / pending markers that void an evidence or policy
+# keyword when they appear within a few words of the match.
+_NEGATION_MARKERS: frozenset[str] = frozenset({
+    "no", "not", "never", "non", "without", "lack", "lacks",
+    "lacking", "missing", "absent", "absence", "unclear", "uncertain",
+    "unknown", "unverified", "unapproved", "unlicensed", "pending",
+    "awaiting", "awaited", "outstanding", "void", "expired", "lapsed",
+    "revoked", "rejected", "denied", "withdrawn", "incomplete",
+    "suspended",
+})
 
 # Signal → exposure contribution once detected.
 _SIGNAL_EXPOSURE: dict[str, float] = {
@@ -140,8 +161,16 @@ _CONSUMER_PRODUCT_TYPES: frozenset[str] = frozenset({
 def _has_any_keyword(
     assumptions: list[dict[str, Any]],
     keywords: tuple[str, ...],
+    *,
+    guard_negation: bool = False,
 ) -> bool:
-    """True when any assumption text contains any keyword (word-boundary)."""
+    """
+    True when any assumption text contains any keyword (word-boundary).
+
+    With ``guard_negation``, a match is ignored when negation/absence/pending
+    markers appear within a few words around it, so "not yet certified" does
+    not count as compliance evidence.
+    """
     if not assumptions:
         return False
     pattern = re.compile(
@@ -155,9 +184,21 @@ def _has_any_keyword(
             ).lower()
         else:
             text = str(assumption).lower()
-        if pattern.search(text):
-            return True
+        if not guard_negation:
+            if pattern.search(text):
+                return True
+            continue
+        for match in pattern.finditer(text):
+            if not _is_negated(text, match.start(), match.end()):
+                return True
     return False
+
+
+def _is_negated(text: str, start: int, end: int) -> bool:
+    """True when a negation/absence marker sits within ~5 words of a match."""
+    before = re.findall(r"[a-z]+", text[max(0, start - 120):start])[-5:]
+    after = re.findall(r"[a-z]+", text[end:end + 120])[:5]
+    return bool(set(before + after) & _NEGATION_MARKERS)
 
 
 def _trait(traits: dict[str, Any], key: str, default: float = 0.5) -> float:
@@ -216,9 +257,11 @@ class RegulatoryComplianceArchitect(BaseArchitect):
                 assumptions, _CONSUMER_PROTECTION_KEYWORDS
             ),
         }
-        evidence = _has_any_keyword(assumptions, _EVIDENCE_KEYWORDS)
+        evidence = _has_any_keyword(
+            assumptions, _EVIDENCE_KEYWORDS, guard_negation=True
+        )
         policy_present = _has_any_keyword(
-            assumptions, _CONSUMER_POLICY_KEYWORDS
+            assumptions, _CONSUMER_POLICY_KEYWORDS, guard_negation=True
         )
 
         exposure = _EXPOSURE_BASELINE + sum(
