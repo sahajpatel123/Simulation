@@ -13,6 +13,9 @@ Logic:
 * The range width is ``max(MAE, RMSE x 0.8)`` widened by 1.5x on small
   samples (<10 outcomes) and capped at 30pp so a poor historical record can't
   produce a meaningless near-0..100% band.
+* Pairs with a missing, non-numeric, boolean, or non-finite conversion rate
+  on either side are dropped before aggregation; out-of-range values are
+  clamped to ``[0, 1]`` so one bad data row can't poison the calibration.
 * With no recorded outcomes the helper still returns a conservative default
   band (predicted ± 5pp) so the dashboard always has a range to render, but
   labels it ``INSUFFICIENT_DATA``.
@@ -85,6 +88,25 @@ def _rate(value: Any) -> float | None:
     return max(0.0, min(1.0, parsed))
 
 
+def _usable_pair(
+    predicted: Any,
+    actual: Any,
+) -> tuple[float, float] | None:
+    """Normalize one historical pair, or return ``None`` when unusable.
+
+    Only pairs with a finite, numeric conversion rate on *both* sides can
+    teach the calibration layer. Anything else (``None``, a non-numeric
+    string, a boolean, ``NaN``, or an out-of-range value) is dropped before
+    aggregation so the sample count and error metrics always describe the
+    same usable set.
+    """
+    pred = _rate(predicted)
+    act = _rate(actual)
+    if pred is None or act is None:
+        return None
+    return pred, act
+
+
 def extract_predicted_conversion(results: Any) -> float | None:
     """Pull the persisted predicted conversion rate, clamped to ``[0, 1]``.
 
@@ -142,6 +164,7 @@ def _clamp_range(predicted: float, spread: float) -> tuple[float, float]:
 
 def _narrative(
     predicted: float | None,
+    raw_count: int,
     sample_count: int,
     mae: float,
     spread: float,
@@ -152,6 +175,14 @@ def _narrative(
         return (
             "No predicted conversion rate was found in this run, so no "
             "accuracy-adjusted range can be produced."
+        )
+    if raw_count > sample_count and sample_count < MIN_OUTCOMES_FOR_RANGE:
+        return (
+            f"Found {raw_count} outcome row(s), but only {sample_count} had a "
+            "usable predicted/actual conversion pair; the "
+            f"{predicted:.1%} prediction is shown with a conservative "
+            f"±{spread:.1%} band until at least {MIN_OUTCOMES_FOR_RANGE} "
+            "usable outcomes are recorded."
         )
     if sample_count < MIN_OUTCOMES_FOR_RANGE:
         return (
@@ -202,7 +233,14 @@ def build_prediction_range(
         A dict matching :class:`PredictionRangeOut` with the calibrated
         low/high band, MAE/RMSE, confidence label, narrative, and key signals.
     """
-    aggregate = aggregate_outcomes(pairs)
+    raw_count = len(pairs)
+    usable_pairs: list[tuple[float, float]] = []
+    for predicted, actual in pairs:
+        pair = _usable_pair(predicted, actual)
+        if pair is not None:
+            usable_pairs.append(pair)
+
+    aggregate = aggregate_outcomes(usable_pairs)
     sample_count = int(aggregate.get("mae_count", 0))
     mae = float(aggregate.get("mae", 0.0))
     rmse = float(aggregate.get("rmse", 0.0))
@@ -221,6 +259,7 @@ def build_prediction_range(
 
     narrative = _narrative(
         predicted_conversion_rate,
+        raw_count,
         sample_count,
         mae,
         spread if spread is not None else DEFAULT_SPREAD,
@@ -229,7 +268,9 @@ def build_prediction_range(
     )
 
     range_severity = _signal_severity(spread if spread is not None else DEFAULT_SPREAD)
-    if sample_count < MIN_OUTCOMES_FOR_RANGE:
+    if raw_count and sample_count == 0:
+        mae_severity = "critical"
+    elif sample_count < MIN_OUTCOMES_FOR_RANGE:
         mae_severity = "watch"
     elif mae >= 0.05:
         mae_severity = "critical"
@@ -320,6 +361,8 @@ def build_prediction_range(
             "min_outcomes_for_range": MIN_OUTCOMES_FOR_RANGE,
             "small_sample_count": SMALL_SAMPLE_COUNT,
             "max_spread": MAX_SPREAD,
+            "raw_pairs_supplied": raw_count,
+            "usable_pairs_used": sample_count,
         },
     }
 

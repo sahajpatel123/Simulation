@@ -255,6 +255,68 @@ def test_build_prediction_range_no_pairs_uses_default_spread() -> None:
     assert payload["high"] == pytest.approx(min(1.0, 0.08 + DEFAULT_SPREAD))
 
 
+def test_build_prediction_range_filters_unusable_pairs() -> None:
+    pairs: list[tuple[object, object]] = [
+        (0.08, 0.06),        # usable
+        (None, 0.05),        # missing prediction
+        (0.08, None),        # missing actual
+        ("not-a-rate", 0.05),  # non-numeric prediction
+        (0.08, True),        # boolean actual
+        (0.08, float("nan")),  # non-finite actual
+    ]
+    payload = build_prediction_range(
+        0.08,
+        pairs,  # type: ignore[arg-type]
+        simulation_id=1,
+        project_id=2,
+    )
+
+    assert payload["calibration_sample_count"] == 1
+    assert payload["meta"]["raw_pairs_supplied"] == len(pairs)
+    assert payload["meta"]["usable_pairs_used"] == 1
+    assert payload["mae"] == pytest.approx(0.02, abs=0.001)
+    assert payload["rmse"] == pytest.approx(0.02, abs=0.001)
+    assert "Found 6 outcome row(s), but only 1 had a usable" in payload["narrative"]
+
+
+def test_build_prediction_range_clamps_out_of_range_pairs() -> None:
+    # A conversion rate outside [0, 1] is a data-entry error; clamp it so a
+    # single bad row can't poison the whole calibration aggregate.
+    payload = build_prediction_range(
+        0.08,
+        [(0.08, 2.0), (0.08, -1.0), (0.08, 0.06)],
+        simulation_id=1,
+        project_id=2,
+    )
+
+    assert payload["calibration_sample_count"] == 3
+    assert payload["mae"] == pytest.approx(0.34, abs=0.001)
+    assert payload["meta"]["raw_pairs_supplied"] == 3
+    assert payload["meta"]["usable_pairs_used"] == 3
+
+
+def test_build_prediction_range_enough_usable_pairs_still_calibrates() -> None:
+    payload = build_prediction_range(
+        0.08,
+        [
+            (None, 0.05),
+            (0.08, 0.07),
+            (0.08, 0.09),
+            (0.08, 0.07),
+            (0.08, 0.09),
+        ],
+        simulation_id=1,
+        project_id=2,
+    )
+
+    assert payload["calibration_sample_count"] == 4
+    assert payload["confidence_label"] == LABEL_WELL_CALIBRATED
+    assert payload["meta"]["raw_pairs_supplied"] == 5
+    assert payload["meta"]["usable_pairs_used"] == 4
+    assert "Across 4 recorded outcome(s)" in payload["narrative"]
+    assert "conservative" not in payload["narrative"]
+
+
 def test_build_prediction_range_predicted_none() -> None:
     payload = build_prediction_range(
         None,
