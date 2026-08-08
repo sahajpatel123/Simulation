@@ -160,6 +160,35 @@ def test_export_activity_feed_missing_project_raises_404() -> None:
     assert exc.value.status_code == 404
 
 
+def test_export_activity_feed_csv_neutralizes_formula_injection() -> None:
+    class EvilDecisionSession(_FakeSession):
+        def query(self, model, *args, **kwargs):
+            name = getattr(model, "__name__", "")
+            if not name and hasattr(model, "class_"):
+                name = model.class_.__name__
+            if name == "Decision":
+                return _FakeQuery(
+                    [
+                        _Row(
+                            id=2,
+                            status="COMPLETED",
+                            title="=HYPERLINK(\"http://evil\")",
+                            created_at="=NOW()",
+                            updated_at="2026-01-03T00:00:00Z",
+                            results_json={
+                                "recommended_scenario": "=NOW()",
+                                "winner_margin": 0.07,
+                            },
+                        )
+                    ]
+                )
+            return super().query(model, *args, **kwargs)
+
+    resp = _call_route(session=EvilDecisionSession())
+    body = _body(resp).decode("utf-8")
+    assert "'=NOW()" in body
+
+
 def test_export_activity_feed_route_registered() -> None:
     from app.api.v1 import projects as proj_mod
 

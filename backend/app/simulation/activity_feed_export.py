@@ -12,6 +12,30 @@ def _text(value: Any) -> str:
     return str(value)
 
 
+def _safe_csv_cell(value: object) -> object:
+    """Neutralise spreadsheet formula injection while leaving normal data intact.
+
+    Cells that begin with ``=``, ``+``, ``-``, ``@``, tab, or carriage return
+    are prefixed with a single quote so Excel, LibreOffice, and Google Sheets
+    treat them as literal text rather than executable formulas. The guard also
+    catches formula characters hidden after leading whitespace, which Excel
+    still interprets as formulas.
+    """
+    if isinstance(value, str):
+        stripped = value.lstrip()
+        if value[:1] in ("=", "+", "-", "@", "\t", "\r") or (
+            stripped[:1] in ("=", "+", "-", "@", "\t", "\r")
+            and stripped != value
+        ):
+            return f"'{value}"
+    return value
+
+
+def _write_row(writer: Any, row: list[object]) -> None:
+    """Write a CSV row with formula-injection guard applied to every cell."""
+    writer.writerow([_safe_csv_cell(value) for value in row])
+
+
 def activity_feed_to_csv(
     events: list[dict[str, Any]],
     metadata: dict[str, Any] | None = None,
@@ -21,15 +45,22 @@ def activity_feed_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
-        writer.writerow(["project_id", _text(metadata.get("project_id"))])
-        writer.writerow(["user_id", _text(metadata.get("user_id"))])
-        writer.writerow(["format_version", _text(metadata.get("format_version", "1"))])
-        writer.writerow([])
+        _write_row(writer, ["generated_at", _text(metadata.get("generated_at"))])
+        _write_row(writer, ["project_id", _text(metadata.get("project_id"))])
+        _write_row(writer, ["user_id", _text(metadata.get("user_id"))])
+        _write_row(
+            writer,
+            ["format_version", _text(metadata.get("format_version", "1"))],
+        )
+        _write_row(writer, [])
 
-    writer.writerow(["type", "occurred_at", "ref_id", "title", "summary", "severity"])
+    _write_row(
+        writer,
+        ["type", "occurred_at", "ref_id", "title", "summary", "severity"],
+    )
     for event in events or []:
-        writer.writerow(
+        _write_row(
+            writer,
             [
                 _text(event.get("type")),
                 _text(event.get("occurred_at")),
