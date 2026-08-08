@@ -7460,7 +7460,8 @@ def export_launch_checklist(
         description=(
             "Output format. ``csv`` (default) returns a multi-section "
             "spreadsheet; ``json`` returns the raw checklist payload; "
-            "``md`` returns a founder-facing Markdown brief."
+            "``md`` returns a founder-facing Markdown brief. "
+            "Unsupported values return 422."
         ),
     ),
     db: Session = Depends(get_db),
@@ -7506,6 +7507,14 @@ def export_launch_checklist(
     }
 
     fmt = format.strip().lower() if format else "csv"
+    if fmt not in {"csv", "json", "md"}:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Unsupported export format: {format}. "
+                "Choose csv, json, or md."
+            ),
+        )
     if fmt == "json":
         body = launch_checklist_to_json(checklist, metadata=metadata).encode("utf-8")
         return StreamingResponse(

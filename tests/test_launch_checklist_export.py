@@ -94,13 +94,17 @@ def test_csv_has_summary_items_and_recommendations() -> None:
     assert "Signals look launch-actionable" in csv_text
 
 
-def test_csv_neutralises_formula_injection() -> None:
+@pytest.mark.parametrize(
+    "malicious",
+    ["=HYPERLINK('http://evil')", "+cmd", "-cmd", "@cmd", "\tcmd", "\rcmd"],
+)
+def test_csv_neutralises_formula_injection(malicious: str) -> None:
     checklist = _checklist()
-    checklist.recommendations = ["=HYPERLINK('http://evil')"]
+    checklist.recommendations = [malicious]
 
     csv_text = launch_checklist_to_csv(checklist)
 
-    assert "'=HYPERLINK" in csv_text
+    assert f"'{malicious}" in csv_text
 
 
 def test_json_round_trips_payload() -> None:
@@ -141,6 +145,20 @@ def test_markdown_escapes_pipe_characters() -> None:
     md = launch_checklist_to_markdown(checklist)
 
     assert "Results \\| payload" in md
+
+
+def test_markdown_handles_empty_items() -> None:
+    md = launch_checklist_to_markdown(
+        {
+            "summary": {},
+            "items": [],
+            "recommendations": [],
+        }
+    )
+
+    assert "## Checklist" in md
+    assert "No checklist items available." in md
+    assert "No recommendations are currently available." in md
 
 
 class _FakeSimulation:
@@ -278,3 +296,27 @@ def test_route_rejects_failed_simulation() -> None:
     with pytest.raises(HTTPException) as exc:
         _call_route(session, format="csv")
     assert exc.value.status_code == 422
+
+
+def test_route_rejects_empty_results() -> None:
+    session = _FakeSession(_FakeSimulation(results={}))
+    with pytest.raises(HTTPException) as exc:
+        _call_route(session, format="csv")
+    assert exc.value.status_code == 422
+
+
+def test_route_rejects_unsupported_format() -> None:
+    with pytest.raises(HTTPException) as exc:
+        _call_route(_FakeSession(_FakeSimulation()), format="xml")
+    assert exc.value.status_code == 422
+    assert "xml" in exc.value.detail
+
+
+def test_route_accepts_uppercase_format() -> None:
+    response = _call_route(
+        _FakeSession(_FakeSimulation(), assumptions=[_FakeAssumption("viral loop")]),
+        format="JSON",
+    )
+
+    body = json.loads(asyncio.run(_stream_bytes(response)).decode("utf-8"))
+    assert body["launch_checklist"]["simulation_id"] == 1
