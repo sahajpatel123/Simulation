@@ -63,6 +63,7 @@ class _Delivery:
         simulation_id: int | None = 11,
         event_type: str = "simulation.completed",
         status: str = "FAILED",
+        attempt_status: str | None = None,
         http_status: int | None = 500,
         error: str | None = "webhook endpoint returned HTTP 500",
         conversion_rate: float | None = 0.012,
@@ -76,6 +77,7 @@ class _Delivery:
         self.simulation_id = simulation_id
         self.event_type = event_type
         self.status = status
+        self.attempt_status = attempt_status
         self.http_status = http_status
         self.error = error
         self.conversion_rate = conversion_rate
@@ -646,7 +648,7 @@ def test_record_webhook_delivery_creates_history_and_updates_subscription() -> N
         subscription=sub,
         simulation_id=11,
         event_type="simulation.completed",
-        status="COMPLETED",
+        attempt_status="COMPLETED",
         conversion_rate=0.013,
         error=None,
         result={"ok": False, "error": "nope"},
@@ -655,6 +657,7 @@ def test_record_webhook_delivery_creates_history_and_updates_subscription() -> N
     assert session.commits == 1
     assert delivery.id == 1
     assert delivery.status == "FAILED"
+    assert delivery.attempt_status == "COMPLETED"
     assert delivery.error == "nope"
     assert delivery.request_body == {"event": "simulation.completed"}
     assert sub.last_delivery_status == "FAILED"
@@ -804,6 +807,98 @@ def test_retry_failed_delivery_uses_stored_event_and_increments_retry() -> None:
     assert session.commits == 1
     assert sub.last_delivery_status == "SUCCESS"
     assert session.commits >= 1
+    assert new_delivery.attempt_status == "COMPLETED"
+
+
+def test_retry_failed_delivery_preserves_failed_event_status() -> None:
+    """A failed simulation.failed delivery must retry as FAILED, not COMPLETED."""
+    from app.simulation import webhook_delivery_history as history
+
+    sub = _Subscription(id=1, url="https://example.com/hooks/cee")
+    original = _Delivery(
+        id=12,
+        webhook_subscription_id=1,
+        simulation_id=44,
+        event_type="simulation.failed",
+        status="FAILED",
+        attempt_status="FAILED",
+        error="simulation exploded",
+        conversion_rate=None,
+        subscription=sub,
+    )
+    session = _FakeSession(subscriptions=[sub], deliveries=[original])
+
+    captured: dict = {}
+
+    def _fake_deliver(**kwargs):
+        captured.update(kwargs)
+        return {"ok": True, "status_code": 200}
+
+    with patch.object(history, "deliver_webhook_event", _fake_deliver):
+        new_delivery = history.retry_failed_delivery(session, delivery=original)
+
+    assert captured["payload"]["event"] == "simulation.failed"
+    assert captured["payload"]["status"] == "FAILED"
+    assert captured["payload"]["error"] == "simulation exploded"
+    assert new_delivery.status == "SUCCESS"
+    assert new_delivery.attempt_status == "FAILED"
+    assert new_delivery.error == "simulation exploded"
+
+
+def test_retry_failed_delivery_preserves_ping_event() -> None:
+    """A failed ping retry must remain simulation.ping, not become failed."""
+    from app.simulation import webhook_delivery_history as history
+
+    sub = _Subscription(id=1, url="https://example.com/hooks/cee")
+    original = _Delivery(
+        id=13,
+        webhook_subscription_id=1,
+        simulation_id=None,
+        event_type="simulation.ping",
+        status="FAILED",
+        attempt_status="PING",
+        error="nope",
+        conversion_rate=None,
+        subscription=sub,
+    )
+    session = _FakeSession(subscriptions=[sub], deliveries=[original])
+
+    captured: dict = {}
+
+    def _fake_deliver(**kwargs):
+        captured.update(kwargs)
+        return {"ok": True, "status_code": 200}
+
+    with patch.object(history, "deliver_webhook_event", _fake_deliver):
+        new_delivery = history.retry_failed_delivery(session, delivery=original)
+
+    assert captured["payload"]["event"] == "simulation.ping"
+    assert captured["payload"]["status"] == "PING"
+    assert captured["payload"]["simulation_id"] == 0
+    assert new_delivery.status == "SUCCESS"
+    assert new_delivery.attempt_status == "PING"
+
+
+def test_retry_failed_delivery_rejects_success_and_disabled() -> None:
+    from app.simulation import webhook_delivery_history as history
+
+    success = _Delivery(
+        id=14,
+        webhook_subscription_id=1,
+        status="SUCCESS",
+        subscription=_Subscription(id=1),
+    )
+    with pytest.raises(ValueError, match="only failed deliveries"):
+        history.retry_failed_delivery(_FakeSession(), delivery=success)
+
+    disabled = _Delivery(
+        id=15,
+        webhook_subscription_id=1,
+        status="FAILED",
+        subscription=_Subscription(id=1, status="DISABLED"),
+    )
+    with pytest.raises(ValueError, match="disabled webhook subscription"):
+        history.retry_failed_delivery(_FakeSession(), delivery=disabled)
 
 
 def test_enqueue_simulation_webhooks_filters_active() -> None:

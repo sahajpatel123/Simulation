@@ -38,6 +38,15 @@ class SimulationWebhookDelivery(Base, TimestampMixin):
     simulation_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     event_type: Mapped[str] = mapped_column(String(40), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
+    attempt_status: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+        doc=(
+            "Simulation/ping status carried by the event (COMPLETED, FAILED, "
+            "or PING). Stored so a manual retry can rebuild the original "
+            "payload without inferring status from the event type."
+        ),
+    )
     http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     conversion_rate: Mapped[float | None] = mapped_column(Float, nullable=True)

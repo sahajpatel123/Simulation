@@ -19,13 +19,18 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _default_attempt_status(event_type: str) -> str:
+    """Best-effort status fallback for rows written before attempt_status existed."""
+    return "COMPLETED" if event_type.endswith("completed") else "FAILED"
+
+
 def record_webhook_delivery(
     db: Session,
     *,
     subscription: SimulationWebhookSubscription,
     simulation_id: int | None,
     event_type: str,
-    status: str,
+    attempt_status: str | None,
     conversion_rate: float | None,
     error: str | None,
     result: dict[str, Any],
@@ -41,13 +46,24 @@ def record_webhook_delivery(
     """
     now = _utcnow()
     ok = bool(result.get("ok"))
+    is_failed_event = attempt_status not in (None, "COMPLETED", "PING")
+    # ``error`` means the delivery/transport error for successful events, but
+    # for failed events it is the simulation error the event carries
+    # (delivery status is tracked separately). This keeps manual retries
+    # faithful even when the retry itself succeeds.
+    delivery_error = (
+        error
+        if is_failed_event
+        else (None if ok else (result.get("error") or "unknown delivery error"))
+    )
     delivery = SimulationWebhookDelivery(
         webhook_subscription_id=subscription.id,
         simulation_id=simulation_id,
         event_type=event_type,
+        attempt_status=attempt_status,
         status="SUCCESS" if ok else "FAILED",
         http_status=result.get("status_code"),
-        error=None if ok else (result.get("error") or "unknown delivery error"),
+        error=delivery_error,
         conversion_rate=conversion_rate,
         request_body=payload,
         retry_count=int(retry_count),
@@ -74,10 +90,18 @@ def retry_failed_delivery(
     replaying stored JSON, then records the retry attempt with an incremented
     retry count. The caller is responsible for ownership/active checks.
     """
-    event_status = (
-        "COMPLETED"
-        if delivery.event_type.endswith("completed")
-        else "FAILED"
+    if delivery.status != "FAILED":
+        raise ValueError(
+            f"cannot retry delivery with status {delivery.status!r}; "
+            "only failed deliveries are retryable"
+        )
+    if delivery.subscription.status != "ACTIVE":
+        raise ValueError(
+            "cannot retry delivery on a disabled webhook subscription"
+        )
+
+    event_status = delivery.attempt_status or _default_attempt_status(
+        delivery.event_type
     )
     payload = build_webhook_payload(
         event_type=delivery.event_type,
@@ -97,7 +121,7 @@ def retry_failed_delivery(
         subscription=delivery.subscription,
         simulation_id=delivery.simulation_id,
         event_type=delivery.event_type,
-        status=event_status,
+        attempt_status=event_status,
         conversion_rate=delivery.conversion_rate,
         error=delivery.error,
         result=result,

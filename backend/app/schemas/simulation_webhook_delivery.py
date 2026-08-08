@@ -14,6 +14,7 @@ class SimulationWebhookDeliveryOut(BaseModel):
     simulation_id: int | None = None
     event_type: str
     status: str
+    attempt_status: str | None = None
     http_status: int | None = None
     error: str | None = None
     conversion_rate: float | None = None

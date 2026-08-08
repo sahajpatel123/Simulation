@@ -948,6 +948,19 @@ def run_migrations():
                     """
                 )
             )
+            # Additive columns for the delivery audit trail. attempt_status
+            # preserves the event's original simulation/ping status so manual
+            # retries rebuild the exact payload instead of guessing from the
+            # event type (a failed simulation.ping must not become a
+            # simulation.failed event).
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE simulation_webhook_deliveries
+                    ADD COLUMN IF NOT EXISTS attempt_status VARCHAR(20);
+                    """
+                )
+            )
             conn.commit()
             print("✅ simulation_webhook_deliveries table created")
         except Exception as e:

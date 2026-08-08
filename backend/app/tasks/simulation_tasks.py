@@ -653,7 +653,7 @@ def deliver_simulation_webhook(
         subscription=subscription,
         simulation_id=simulation_id,
         event_type=payload["event"],
-        status=status,
+        attempt_status=status,
         conversion_rate=conversion_rate,
         error=error,
         result=result,

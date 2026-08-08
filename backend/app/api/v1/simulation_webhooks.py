@@ -209,7 +209,7 @@ def ping_simulation_webhook(
         subscription=webhook,
         simulation_id=None,
         event_type=payload["event"],
-        status="PING",
+        attempt_status="PING",
         conversion_rate=None,
         error=None,
         result=result,
