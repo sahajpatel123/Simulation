@@ -116,6 +116,7 @@ from app.schemas.setup_friction import SetupFrictionOut
 from app.schemas.after_sales import AfterSalesOut
 from app.schemas.assumption_cascade import AssumptionCascadeOut
 from app.schemas.assumption_postmortem import AssumptionPostmortemOut
+from app.schemas.prediction_range import PredictionRangeOut
 from app.schemas.launch_checklist import LaunchChecklistOut
 from app.schemas.founder_brief import FounderBriefOut
 from app.schemas.retention_churn import RetentionChurnOut
@@ -170,6 +171,11 @@ from app.simulation.what_if_batch_export import (
 )
 from app.simulation.assumption_cascade_read import build_assumption_cascade
 from app.simulation.assumption_postmortem import build_assumption_postmortem
+from app.simulation.prediction_range import (
+    MIN_OUTCOMES_FOR_RANGE,
+    build_prediction_range,
+    extract_predicted_conversion,
+)
 from app.simulation.simulation_export import (
     build_simulation_export,
     simulation_to_csv,
@@ -7231,6 +7237,55 @@ def _get_owned_simulation(
     return sim
 
 
+def _query_outcome_pairs(
+    db: Session,
+    project_id: int | None = None,
+    owned_project_ids: list[int] | None = None,
+) -> list[tuple[float | None, float | None]]:
+    """Pull (predicted, actual) conversion pairs from recorded outcomes.
+
+    Only pairs with both sides present are included — a missing prediction
+    means the outcome can't teach the calibration layer anything.
+    """
+    q = db.query(
+        Outcome.predicted_conversion_rate,
+        Outcome.actual_conversion_rate,
+    )
+    if project_id is not None:
+        q = q.filter(Outcome.project_id == project_id)
+    else:
+        q = q.filter(Outcome.project_id.in_(owned_project_ids or []))
+    q = q.filter(
+        Outcome.predicted_conversion_rate.isnot(None),
+        Outcome.actual_conversion_rate.isnot(None),
+    )
+    q = q.order_by(Outcome.created_at.desc())
+    rows = q.limit(200).all()
+    return [(r[0], r[1]) for r in rows]
+
+
+def _load_prediction_calibration_pairs(
+    db: Session,
+    project_id: int,
+    owned_project_ids: list[int],
+) -> tuple[list[tuple[float | None, float | None]], str]:
+    """Choose the richest calibration set for a prediction-range read.
+
+    Project-level outcomes are preferred because they share the same product
+    context; when the project doesn't yet have enough pairs, the user's
+    cross-project pool is used instead so early founders still get signal.
+    """
+    project_pairs = _query_outcome_pairs(db, project_id=project_id)
+    if len(project_pairs) >= MIN_OUTCOMES_FOR_RANGE:
+        return project_pairs, "project"
+    user_pairs = _query_outcome_pairs(db, owned_project_ids=owned_project_ids)
+    if len(user_pairs) >= MIN_OUTCOMES_FOR_RANGE:
+        return user_pairs, "user"
+    if project_pairs:
+        return project_pairs, "project"
+    return user_pairs, "user" if user_pairs else "none"
+
+
 def _load_what_if_context(
     sim: Simulation,
     db: Session,
@@ -8308,6 +8363,72 @@ def get_assumption_postmortem(
         status=sim.status,
         assumptions=assumption_dicts,
         outcome=outcome_dict,
+    )
+
+
+@router.get(
+    "/{simulation_id}/prediction-range",
+    response_model=PredictionRangeOut,
+    summary=(
+        "Accuracy-adjusted prediction range: the realistic band around "
+        "a run's predicted conversion rate"
+    ),
+    responses=_JSON_200,
+)
+def get_prediction_range(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PredictionRangeOut:
+    """
+    Prediction-range digest for a completed simulation.
+
+    Blends the run's predicted conversion rate with the historical
+    (predicted, actual) outcome pairs from this project (or the founder's
+    cross-project pool when the project is still young) and emits a realistic
+    low/high band plus a calibration label. Pure post-hoc analytics — no
+    Celery, no LLM, no DB writes.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — prediction range requires "
+                "completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    predicted = extract_predicted_conversion(sim.results_json)
+
+    owned_project_ids = [
+        p.id for p in db.query(Project).filter(Project.user_id == current_user.id).all()
+    ]
+    pairs, source = _load_prediction_calibration_pairs(
+        db,
+        sim.project_id,
+        owned_project_ids,
+    )
+
+    return PredictionRangeOut(
+        **build_prediction_range(
+            predicted_conversion_rate=predicted,
+            pairs=pairs,
+            simulation_id=sim.id,
+            project_id=sim.project_id,
+            calibration_source=source,
+        )
     )
 
 
