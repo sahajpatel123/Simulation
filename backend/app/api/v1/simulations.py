@@ -5,6 +5,7 @@ import logging
 import math
 import time
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -222,6 +223,11 @@ from app.simulation.founder_brief import build_founder_brief
 from app.simulation.journey_analytics import (
     build_journey_analytics,
     deserialise_per_cluster_matrices,
+)
+from app.simulation.journey_analytics_export import (
+    FORMAT_VERSION,
+    journey_analytics_to_csv,
+    journey_analytics_to_json,
 )
 from app.simulation.launch_checklist import build_launch_checklist
 from app.simulation.launch_checklist_export import (
@@ -8583,6 +8589,135 @@ def get_simulation_journey_analytics(
         project_id=sim.project_id,
         status=sim.status,
         **payload,
+    )
+
+
+def _journey_payload_for_simulation(sim: Simulation) -> dict[str, Any]:
+    """Validate a simulation and return its journey-analytics payload.
+
+    Applies the same status / results gates as
+    :func:`get_simulation_journey_analytics` so the JSON endpoint and the
+    export endpoint can never disagree about which simulations are eligible.
+    """
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — journey analytics requires "
+                "completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    results = sim.results_json if isinstance(sim.results_json, dict) else {}
+    raw_matrices = results.get("per_cluster_matrices")
+    if not deserialise_per_cluster_matrices(raw_matrices):
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Journey analytics are unavailable for this simulation — "
+                "per-cluster journey data is persisted for runs started "
+                "after this version. Re-run the simulation to generate it."
+            ),
+        )
+    return build_journey_analytics(
+        raw_matrices,
+        results.get("cluster_weights"),
+    )
+
+
+@router.get(
+    "/{simulation_id}/journey/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export the journey-analytics payload as CSV (or JSON with "
+        "?format=json)"
+    ),
+)
+def export_simulation_journey_analytics(
+    simulation_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly multi-section table; ``json`` returns the "
+            "raw journey-analytics payload. Unsupported values return a 400 "
+            "response."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Download the journey analytics for a completed simulation.
+
+    The CSV export mirrors the JSON endpoint's summary, exit-stage leaks,
+    most probable paths, leverage rankings, per-cluster detail, and key
+    insights in one spreadsheet. ``format=json`` returns the exact payload
+    for machine consumers. Pure post-hoc analytics — no Celery, no LLM, no
+    DB writes.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+    payload = _journey_payload_for_simulation(sim)
+    payload = {
+        **payload,
+        "simulation_id": sim.id,
+        "project_id": sim.project_id,
+        "status": sim.status,
+    }
+
+    metadata = {
+        "generated_at": datetime.now(tz=UTC).isoformat(),
+        "user_id": current_user.id,
+        "simulation_id": sim.id,
+        "project_id": sim.project_id,
+        "format_version": FORMAT_VERSION,
+    }
+
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; expected 'csv' or "
+                "'json'"
+            ),
+        )
+
+    if fmt == "json":
+        text = journey_analytics_to_json(payload, metadata=metadata)
+        body = text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="journey-analytics.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = journey_analytics_to_csv(payload, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="journey-analytics.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
     )
 
 
