@@ -266,6 +266,11 @@ _PORTFOLIO_NARRATIVE_CACHE_TTL_S: int = 30
 _PORTFOLIO_NARRATIVE_CACHE_NAMESPACE: str = "portfolio-narrative"
 from app.simulation.conductor import _ARCHITECTS as _architect_registry
 from app.simulation.comparison import build_simulation_comparison
+from app.simulation.simulation_comparison_export import (
+    simulation_comparison_to_csv,
+    simulation_comparison_to_json,
+    simulation_comparison_to_markdown,
+)
 from app.simulation.cohort_retention import build_cohort_retention
 from app.simulation.funnel_diagnosis import build_funnel_diagnosis
 from app.simulation.funnel_diagnosis_export import (
@@ -678,6 +683,137 @@ def get_cluster_registry():
 
 
 @router.get(
+    "/compare/export",
+    response_class=StreamingResponse,
+    summary="Export a 2–5 simulation comparison as CSV, JSON, or Markdown",
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_simulation_comparison(
+    simulation_ids: str = Query(
+        ...,
+        min_length=3,
+        max_length=512,
+        description=(
+            "Comma-separated list of 2–5 simulation IDs from the same "
+            "project, in the desired comparison order."
+        ),
+    ),
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "comparison payload; ``md`` returns a founder-facing "
+            "Markdown brief."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Export a simulation comparison as CSV, JSON, or Markdown.
+
+    Default ``format=csv`` renders the summary, simulation refs,
+    per-cluster conversion + delta table, and domain-finding consensus as
+    a multi-section spreadsheet. ``json`` returns the raw comparison
+    document for machine consumers, and ``md`` returns a concise
+    founder-facing Markdown brief.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json", "md"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; "
+                "expected 'csv', 'json', or 'md'"
+            ),
+        )
+
+    try:
+        ids = [int(token) for token in simulation_ids.split(",") if token.strip()]
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="simulation_ids must be comma-separated integers",
+        ) from exc
+    if len(ids) < 2 or len(ids) > 5:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="simulation_ids must contain between 2 and 5 simulation IDs",
+        )
+    if len(set(ids)) != len(ids):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="simulation_ids must be unique",
+        )
+    if any(sid <= 0 for sid in ids):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="simulation_ids must be positive integers",
+        )
+
+    result = compare_simulations(
+        payload=SimulationCompareRequest(simulation_ids=ids),
+        db=db,
+        current_user=current_user,
+    )
+
+    metadata = {
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "user_id": current_user.id,
+        "format_version": "1",
+        "project_id": result.project_id,
+        "comparison_id": result.comparison_id,
+    }
+
+    if fmt == "json":
+        body = simulation_comparison_to_json(
+            result,
+            metadata=metadata,
+        ).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="simulation-comparison.json"'
+                ),
+                "Content-Length": str(len(body)),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    if fmt == "md":
+        body = simulation_comparison_to_markdown(
+            result,
+            metadata=metadata,
+        ).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="simulation-comparison.md"'
+                ),
+                "Content-Length": str(len(body)),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    csv_text = simulation_comparison_to_csv(result, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="simulation-comparison.csv"',
+            "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.get(
     "/{simulation_id}/signal-quality",
     summary="Signal quality tier and improvement suggestions for a run",
     responses=_JSON_200,
@@ -747,18 +883,55 @@ def compare_simulations(
     and cross-simulation domain-finding consensus. Pure analytics — no Celery
     dispatch and no LLM calls.
     """
+    ordered = _load_simulations_for_comparison(
+        payload.simulation_ids,
+        db=db,
+        current_user_id=current_user.id,
+    )
+    rows = [
+        {
+            "id": s.id,
+            "project_id": s.project_id,
+            "status": s.status,
+            "results_json": s.results_json,
+            "signal_quality": s.signal_quality,
+            "created_at": s.created_at,
+        }
+        for s in ordered
+    ]
+    registry = {
+        cid: {
+            "name": cluster.name,
+            "population_weight": cluster.population_weight,
+        }
+        for cid, cluster in _clusters_map.items()
+    }
+    return build_simulation_comparison(rows, cluster_registry=registry)
+
+
+def _load_simulations_for_comparison(
+    simulation_ids: list[int],
+    *,
+    db: Session,
+    current_user_id: int,
+) -> list[Simulation]:
+    """Fetch and validate owned completed simulations for comparison.
+
+    Shared by the JSON comparison endpoint and the export endpoint so both
+    paths enforce identical ownership, same-project, and completion rules.
+    """
     sims = (
         db.query(Simulation)
         .join(Project, Simulation.project_id == Project.id)
         .filter(
-            Simulation.id.in_(payload.simulation_ids),
-            Project.user_id == current_user.id,
+            Simulation.id.in_(simulation_ids),
+            Project.user_id == current_user_id,
         )
         .all()
     )
     by_id = {s.id: s for s in sims}
 
-    missing = [sid for sid in payload.simulation_ids if sid not in by_id]
+    missing = [sid for sid in simulation_ids if sid not in by_id]
     if missing:
         raise HTTPException(
             status_code=404,
@@ -785,26 +958,7 @@ def compare_simulations(
         )
 
     # Preserve caller order so winner labels A/B/C map to request order.
-    ordered = [by_id[sid] for sid in payload.simulation_ids]
-    rows = [
-        {
-            "id": s.id,
-            "project_id": s.project_id,
-            "status": s.status,
-            "results_json": s.results_json,
-            "signal_quality": s.signal_quality,
-            "created_at": s.created_at,
-        }
-        for s in ordered
-    ]
-    registry = {
-        cid: {
-            "name": cluster.name,
-            "population_weight": cluster.population_weight,
-        }
-        for cid, cluster in _clusters_map.items()
-    }
-    return build_simulation_comparison(rows, cluster_registry=registry)
+    return [by_id[sid] for sid in simulation_ids]
 
 
 @router.get(
