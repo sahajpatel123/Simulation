@@ -73,6 +73,7 @@ from app.schemas.environment import (
     EnvironmentOut,
     ManualParams,
 )
+from app.schemas.go_no_go import GoNoGoOut
 from app.schemas.intervention import Intervention, InterventionOut, InterventionRequest
 from app.schemas.premortem import FailureMode, PremortemOut, PremortemRequest
 from app.schemas.project import (
@@ -170,6 +171,7 @@ from app.simulation.environment_export import environment_to_csv
 from app.simulation.evidence_export import evidence_to_csv
 from app.simulation.evidence_export import evidence_count_to_csv
 from app.simulation.existing_product_export import existing_product_to_csv
+from app.simulation.go_no_go import build_go_no_go
 from app.simulation.intake_mode_export import intake_mode_to_csv
 from app.simulation.intervention_digest import (
     build_intervention_digest,
@@ -180,6 +182,7 @@ from app.simulation.is_archived_export import is_archived_to_csv
 from app.simulation.landing_export import landing_to_csv
 from app.simulation.landing_url_export import landing_url_to_csv
 from app.simulation.latest_snapshot import build_latest_snapshot
+from app.simulation.launch_checklist import build_launch_checklist
 from app.simulation.mvp_features_export import features_to_csv
 from app.simulation.mvp_features_export import mvp_feature_count_to_csv
 from app.simulation.next_best_action import build_next_best_action
@@ -230,6 +233,7 @@ from app.simulation.reweighting_preview import (
 from app.simulation.scored_assumption import score_assumptions, signal_quality_tier
 from app.simulation.similar_projects import find_similar_projects
 from app.simulation.simulation_evolution import build_simulation_evolution
+from app.simulation.simulation_quality import build_simulation_quality
 from app.simulation.simulation_trend import (
     build_simulation_trend as _build_simulation_trend,
 )
@@ -5808,6 +5812,137 @@ def get_next_action(
         category=payload["category"],
         source=NextBestActionSource(**payload["source"]),
         fallback=payload["fallback"],
+    )
+
+
+@router.get(
+    "/{project_id}/go-no-go",
+    response_model=GoNoGoOut,
+    summary=(
+        "Project-level go/no-go launch verdict — consolidates launch "
+        "readiness, premortem risk, competitive position, simulation "
+        "trust, data freshness and assumption coverage"
+    ),
+    # Read-only composes a bounded set of cheap reads; same cap as the
+    # other lightweight project endpoints.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_go_no_go(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> GoNoGoOut:
+    """Compose the project-level go/no-go digest.
+
+    Answers "should I ship this?" from deterministic reads already
+    persisted for the project — the latest completed simulation's
+    launch checklist + quality gate, the premortem severity breakdown,
+    the stored competitive position, freshness of the latest
+    simulation / assumptions / outcomes, and assumption category
+    coverage. No LLM call, no Celery dispatch.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+
+    latest_sim = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc(), Simulation.id.desc())
+        .first()
+    )
+
+    assumption_rows = (
+        db.query(Assumption)
+        .filter(Assumption.project_id == project_id)
+        .limit(1000)
+        .all()
+    )
+
+    readiness_payload = None
+    trust_payload = None
+    if latest_sim is not None:
+        readiness_payload = build_launch_checklist(
+            results=latest_sim.results_json,
+            simulation_id=latest_sim.id,
+            project_id=project_id,
+            status=latest_sim.status,
+            signal_quality=latest_sim.signal_quality,
+            visible_assumption_count=len(assumption_rows),
+        )
+        trust_payload = build_simulation_quality(
+            simulation_id=latest_sim.id,
+            project_id=project_id,
+            base_results=latest_sim.results_json,
+            status=latest_sim.status,
+            signal_quality=latest_sim.signal_quality,
+        )
+
+    premortem_payload = build_premortem_digest(project.premortem_json)
+
+    competitive_payload = None
+    competitive_data = project.competitive_json
+    if isinstance(competitive_data, dict):
+        competitors = competitive_data.get("competitors") or []
+        high_threat_count = sum(
+            1
+            for c in competitors
+            if isinstance(c, dict)
+            and str(c.get("threat_level", "")).upper() == "HIGH"
+        )
+        competitive_payload = {
+            "overall_competitive_position": competitive_data.get(
+                "overall_competitive_position"
+            ),
+            "high_threat_count": high_threat_count,
+        }
+
+    latest_outcome_row = (
+        db.query(Outcome.created_at)
+        .filter(Outcome.project_id == project_id)
+        .order_by(Outcome.created_at.desc())
+        .first()
+    )
+    latest_outcome_at = (
+        latest_outcome_row[0] if latest_outcome_row else None
+    )
+
+    assumption_times = [
+        a.created_at for a in assumption_rows if a.created_at is not None
+    ]
+    freshness_payload = {
+        "latest_sim_completed_at": (
+            latest_sim.created_at if latest_sim is not None else None
+        ),
+        "latest_assumption_at": (
+            max(assumption_times) if assumption_times else None
+        ),
+        "latest_outcome_at": latest_outcome_at,
+    }
+
+    coverage_payload = build_coverage_gaps(
+        assumptions=[
+            {
+                "category": a.category,
+                "sensitivity": a.sensitivity,
+                "is_hidden": a.is_hidden,
+            }
+            for a in assumption_rows
+        ],
+    )
+
+    return build_go_no_go(
+        readiness=readiness_payload,
+        premortem=premortem_payload,
+        competitive=competitive_payload,
+        trust=trust_payload,
+        freshness=freshness_payload,
+        coverage=coverage_payload,
+        project_id=project_id,
+        latest_simulation_id=(
+            latest_sim.id if latest_sim is not None else None
+        ),
     )
 
 
