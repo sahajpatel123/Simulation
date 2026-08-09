@@ -91,6 +91,19 @@ def _safe_float(value: Any, default: float | None = None) -> float | None:
     return parsed if math.isfinite(parsed) else default
 
 
+def _safe_signal_quality(raw: Any) -> float | None:
+    """Coerce a persisted signal quality to a finite 0..1 float.
+
+    Non-finite, out-of-range, boolean and unparseable values are
+    treated as missing so a malformed legacy row can neither crash
+    the quality gate nor inflate its trust score.
+    """
+    parsed = _safe_float(raw)
+    if parsed is not None and not (0.0 <= parsed <= 1.0):
+        return None
+    return parsed
+
+
 def _safe_int(value: Any, default: int | None = None) -> int | None:
     if value is None or isinstance(value, bool):
         return default
@@ -528,6 +541,7 @@ def build_simulation_quality(
     Pure post-hoc analysis — no Celery dispatch, no LLM calls, no DB writes.
     """
     results = _coerce_results(base_results)
+    signal_quality = _safe_signal_quality(signal_quality)
     expected_ids = _expected_cluster_ids()
 
     checks: list[QualityCheck] = []
@@ -596,9 +610,7 @@ def build_simulation_quality(
         verdict=_verdict(trust_score, has_critical_failure),
         headline_conversion=headline,
         signal_quality=(
-            round(signal_quality, 4)
-            if signal_quality is not None and math.isfinite(signal_quality)
-            else None
+            round(signal_quality, 4) if signal_quality is not None else None
         ),
         summary=summary,
         checks=checks,

@@ -77,11 +77,12 @@ class _FakeSimulation:
         *,
         status: str = "COMPLETED",
         results: dict | None = None,
+        signal_quality: float = 0.62,
     ) -> None:
         self.id = sim_id
         self.project_id = 10
         self.status = status
-        self.signal_quality = 0.62
+        self.signal_quality = signal_quality
         self.results_json = results if results is not None else _results()
         self.created_at = datetime.now(UTC) - timedelta(days=1)
 
@@ -265,3 +266,50 @@ def test_go_no_go_uses_latest_completed_simulation(
         "NO_GO",
         "INSUFFICIENT_DATA",
     }
+
+
+def test_go_no_go_malformed_signal_quality_does_not_crash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for bad in (float("nan"), float("inf"), 1.5):
+        session = _FakeSession(
+            sim=_FakeSimulation(signal_quality=bad),
+            assumptions=[],
+        )
+        out = _call_route(session=session, monkeypatch=monkeypatch)
+
+        assert out.verdict in {
+            "GO",
+            "CONDITIONAL_GO",
+            "NO_GO",
+            "INSUFFICIENT_DATA",
+        }
+        trust = next(p for p in out.pillars if p.key == "trust")
+        assert trust.score is not None
+
+
+def test_go_no_go_counts_only_visible_assumptions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api.v1 import projects as projects_mod
+
+    captured: dict[str, int | None] = {}
+    real_builder = projects_mod.build_launch_checklist
+
+    def spy_builder(*args, **kwargs):
+        captured["visible_assumption_count"] = kwargs.get(
+            "visible_assumption_count"
+        )
+        return real_builder(*args, **kwargs)
+
+    monkeypatch.setattr(projects_mod, "build_launch_checklist", spy_builder)
+    session = _FakeSession(
+        assumptions=[
+            _FakeAssumption("Pricing", is_hidden=True),
+            _FakeAssumption("Trust", is_hidden=True),
+            _FakeAssumption("Onboarding", is_hidden=False),
+        ],
+    )
+    _call_route(session=session, monkeypatch=monkeypatch)
+
+    assert captured["visible_assumption_count"] == 1

@@ -5869,7 +5869,11 @@ def get_go_no_go(
             project_id=project_id,
             status=latest_sim.status,
             signal_quality=latest_sim.signal_quality,
-            visible_assumption_count=len(assumption_rows),
+            visible_assumption_count=sum(
+                1
+                for assumption in assumption_rows
+                if not assumption.is_hidden
+            ),
         )
         trust_payload = build_simulation_quality(
             simulation_id=latest_sim.id,

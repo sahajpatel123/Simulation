@@ -3482,7 +3482,11 @@ def get_portfolio_launch_priority(
                 project_id=project_id,
                 status=sim.status,
                 signal_quality=sim.signal_quality,
-                visible_assumption_count=len(assumptions),
+                visible_assumption_count=sum(
+                    1
+                    for assumption in assumptions
+                    if not assumption["is_hidden"]
+                ),
             )
             trust_payload = build_simulation_quality(
                 simulation_id=sim.id,

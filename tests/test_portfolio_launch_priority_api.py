@@ -323,6 +323,87 @@ def test_malformed_project_json_does_not_crash() -> None:
     }
 
 
+def test_malformed_signal_quality_does_not_crash() -> None:
+    for bad in (float("nan"), float("inf"), 1.5):
+        session = _FakeSession(
+            projects=[
+                _FakeProjectRow(
+                    50,
+                    title="Legacy",
+                    premortem_json={
+                        "failure_modes": [
+                            {"title": "Copycats", "severity": "LOW"},
+                        ]
+                    },
+                    competitive_json={
+                        "overall_competitive_position": "STRONG",
+                        "competitors": [],
+                    },
+                ),
+            ],
+            sims=[_FakeSimRow(500, 50, signal_quality=bad)],
+            assumptions=[],
+            outcomes=[],
+        )
+
+        out = _call_route(session=session)
+
+        assert out.evaluated_count == 1
+        assert out.launch_sequence == [50]
+        assert out.top_pick is not None
+        assert out.top_pick.verdict in {
+            "GO",
+            "CONDITIONAL_GO",
+            "NO_GO",
+            "INSUFFICIENT_DATA",
+        }
+
+
+def test_hidden_assumptions_are_not_counted_as_visible(
+    monkeypatch,
+) -> None:
+    from app.api.v1 import simulations as simulations_mod
+
+    captured: dict[str, int | None] = {}
+    real_builder = simulations_mod.build_launch_checklist
+
+    def spy_builder(*args, **kwargs):
+        captured["visible_assumption_count"] = kwargs.get(
+            "visible_assumption_count"
+        )
+        return real_builder(*args, **kwargs)
+
+    monkeypatch.setattr(simulations_mod, "build_launch_checklist", spy_builder)
+    session = _FakeSession(
+        projects=[
+            _FakeProjectRow(
+                60,
+                title="Hidden only",
+                premortem_json={
+                    "failure_modes": [
+                        {"title": "Copycats", "severity": "LOW"},
+                    ]
+                },
+                competitive_json={
+                    "overall_competitive_position": "STRONG",
+                    "competitors": [],
+                },
+            ),
+        ],
+        sims=[_FakeSimRow(600, 60)],
+        assumptions=[
+            _FakeAssumptionRow(60, "Pricing", is_hidden=True),
+            _FakeAssumptionRow(60, "Trust", is_hidden=True),
+            _FakeAssumptionRow(60, "Onboarding", is_hidden=False),
+        ],
+        outcomes=[],
+    )
+
+    _call_route(session=session)
+
+    assert captured["visible_assumption_count"] == 1
+
+
 def test_large_portfolio_payload_is_capped() -> None:
     session = _FakeSession(
         projects=[

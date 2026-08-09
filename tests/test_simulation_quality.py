@@ -107,6 +107,16 @@ def _run(results: dict | None = None) -> object:
     )
 
 
+def _run_with_signal_quality(raw: object) -> object:
+    return build_simulation_quality(
+        simulation_id=1,
+        project_id=10,
+        base_results=_healthy_results(),
+        status="COMPLETED",
+        signal_quality=raw,  # type: ignore[arg-type]
+    )
+
+
 def _check(out: object, check_id: str) -> object:
     return next(c for c in out.checks if c.id == check_id)
 
@@ -149,6 +159,17 @@ def test_string_json_results_are_coerced() -> None:
     out = _run(json.dumps(_healthy_results()))
     assert out.trust_score == 1.0
     assert out.verdict == VERDICT_PASS
+
+
+def test_malformed_signal_quality_is_treated_as_missing() -> None:
+    for bad in (float("nan"), float("inf"), -float("inf"), 1.5, -0.1):
+        out = _run_with_signal_quality(bad)
+        assert out.signal_quality is None
+
+
+def test_numeric_string_signal_quality_is_coerced() -> None:
+    out = _run_with_signal_quality("0.62")
+    assert out.signal_quality == 0.62
 
 
 def test_non_finite_values_flagged() -> None:

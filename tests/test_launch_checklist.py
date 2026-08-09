@@ -96,6 +96,25 @@ def test_missing_assumptions_and_low_signal_need_work() -> None:
     assert any("Add assumptions" in rec for rec in out.recommendations)
 
 
+def test_malformed_signal_quality_is_treated_as_missing() -> None:
+    for bad in (float("nan"), float("inf"), -float("inf"), 1.5, -0.1):
+        out = _build(signal_quality=bad)
+
+        assert out.signal_quality is None
+        item = next(i for i in out.items if i.id == "signal_quality")
+        assert item.status == "WARN"
+        assert "No persisted signal quality is available" in item.detail
+
+
+def test_numeric_string_signal_quality_is_coerced() -> None:
+    out = _build(signal_quality="0.62")
+
+    assert out.signal_quality == 0.62
+    item = next(i for i in out.items if i.id == "signal_quality")
+    assert item.status == "WARN"
+    assert "0.62" in item.detail
+
+
 def test_empty_results_fails() -> None:
     out = _build(results={})
 

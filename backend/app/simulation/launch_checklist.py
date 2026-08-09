@@ -80,6 +80,19 @@ def _safe_float(value: Any, default: float | None = None) -> float | None:
     return parsed if math.isfinite(parsed) else default
 
 
+def _safe_signal_quality(raw: Any) -> float | None:
+    """Coerce a persisted signal quality to a finite 0..1 float.
+
+    Non-finite, out-of-range, boolean and unparseable values are
+    treated as missing so a malformed legacy row can neither crash
+    the checklist nor inflate its score.
+    """
+    parsed = _safe_float(raw)
+    if parsed is not None and not (0.0 <= parsed <= 1.0):
+        return None
+    return parsed
+
+
 def _safe_int(value: Any, default: int | None = None) -> int | None:
     if value is None or isinstance(value, bool):
         return default
@@ -176,6 +189,8 @@ def build_launch_checklist(
         project_id: Owning project primary key (echoed back).
         status: Simulation status string.
         signal_quality: Persisted signal quality (0..1), if any.
+            Malformed values (NaN/Inf, out-of-range, non-numeric) are
+            treated as missing rather than crashing the read.
         visible_assumption_count: Number of visible project assumptions
             available to the analysis.
         product_type: Detected product type for the run.
@@ -185,6 +200,7 @@ def build_launch_checklist(
             is used.
     """
     payload = _coerce_results(results)
+    signal_quality = _safe_signal_quality(signal_quality)
     product_type_name = str(
         product_type or payload.get("product_type_detected", "saas") or "saas"
     ).lower()
