@@ -3,7 +3,11 @@ from __future__ import annotations
 
 import json
 
-from app.simulation.readings_export import readings_payload, readings_to_csv
+from app.simulation.readings_export import (
+    readings_count_to_csv,
+    readings_payload,
+    readings_to_csv,
+)
 
 
 def test_readings_to_csv_contains_header_and_row() -> None:
@@ -105,3 +109,14 @@ def test_readings_payload_handles_none() -> None:
 
     assert payload["readings"] == []
     assert payload["ledger"] == {}
+
+
+def test_readings_count_to_csv_contains_header_and_row() -> None:
+    csv_text = readings_count_to_csv(
+        {"project_id": 10, "readings_count": 1},
+        metadata={"generated_at": "now", "user_id": 42},
+    )
+
+    assert "project_id,readings_count" in csv_text
+    assert "10,1" in csv_text
+    assert "generated_at,now" in csv_text

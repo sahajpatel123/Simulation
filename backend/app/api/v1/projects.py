@@ -212,7 +212,11 @@ from app.simulation.project_tags import (
 )
 from app.simulation.prototypes_export import prototype_count_to_csv, prototypes_to_csv
 from app.simulation.readiness_score import compute_readiness
-from app.simulation.readings_export import readings_payload, readings_to_csv
+from app.simulation.readings_export import (
+    readings_count_to_csv,
+    readings_payload,
+    readings_to_csv,
+)
 from app.simulation.recommendations_digest import (
     build_recommendations_digest,
 )
@@ -8547,6 +8551,72 @@ def export_mvp_feature_count(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="mvp-feature-count-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/readings-count/export",
+    summary="Export a project's readings count as CSV or JSON",
+    response_class=StreamingResponse,
+)
+def export_readings_count(
+    project_id: int,
+    format: Literal["csv", "json"] = Query(
+        default="csv",
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "readings-count row."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Export a project's readings count as CSV (default) or JSON."""
+    project = get_owned_project(db, current_user.id, project_id)
+    count = 1 if getattr(project, "readings_json", None) else 0
+    row = {"project_id": project_id, "readings_count": count}
+
+    if format == "json":
+        json_text = json.dumps(
+            {
+                "generated_at": datetime.now(UTC).isoformat(),
+                "project_id": project_id,
+                "readings_count": count,
+            },
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="readings-count-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = readings_count_to_csv(
+        row,
+        metadata={
+            "generated_at": datetime.now(UTC).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="readings-count-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },
