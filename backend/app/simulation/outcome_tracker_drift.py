@@ -152,8 +152,8 @@ def _narrative(
 ) -> str:
     if sample_count < 1 or mean_error_pp is None:
         return (
-            "Log at least 2 conversion checkpoints on different dates to "
-            "unlock tracking-drift alerts."
+            f"Log at least {MIN_POINTS + 1} conversion checkpoints on "
+            "different dates to unlock tracking-drift alerts."
         )
     if status == TRACKING_ON_TRACK:
         return (
@@ -171,9 +171,11 @@ def _narrative(
             f"running {abs(mean_error_pp):.2f}pp below the model's expected path"
         )
     if direction == DRIFT_INSUFFICIENT_DATA:
+        needed = MIN_DRIFT_CHECKS - sample_count
+        unit = "checkpoint" if needed == 1 else "checkpoints"
         return (
             f"Across {sample_count} tracked checkpoint step(s), actual "
-            f"conversion is {gap_phrase}. Log 2 more checkpoints to see "
+            f"conversion is {gap_phrase}. Log {needed} more {unit} to see "
             "whether the gap is widening or closing."
         )
     if direction == DRIFT_WIDENING:

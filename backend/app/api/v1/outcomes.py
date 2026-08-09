@@ -289,6 +289,27 @@ def _predicted_revenue_from_results(results: dict) -> float | None:
     return None
 
 
+def _latest_tracker_conversion_target(
+    rows: list[OutcomeTracker],
+    sim: Simulation | None,
+) -> float | None:
+    """Resolve the conversion target shared by the tracker forecast routes.
+
+    Prefers the newest completed simulation's predicted conversion rate;
+    when no usable simulation exists, falls back to the newest legacy
+    checkpoint's captured prediction (rows arrive in ascending
+    ``recorded_at`` order).
+    """
+    if sim is not None and sim.results_json:
+        raw_pred = _predicted_from_results(sim.results_json)
+        if raw_pred and raw_pred > 0.0:
+            return float(raw_pred)
+    for row in reversed(rows):
+        if row.predicted_conversion_rate and row.predicted_conversion_rate > 0.0:
+            return float(row.predicted_conversion_rate)
+    return None
+
+
 def _hydrate_tracker_point(row: OutcomeTracker) -> OutcomeTrackerPoint:
     return OutcomeTrackerPoint(
         id=row.id,
@@ -792,17 +813,7 @@ def get_outcome_tracker_forecast(
         .first()
     )
 
-    predicted: float | None = None
-    if sim is not None and sim.results_json:
-        raw_pred = _predicted_from_results(sim.results_json)
-        if raw_pred and raw_pred > 0.0:
-            predicted = float(raw_pred)
-    if predicted is None:
-        # Legacy rows carry the prediction captured at checkpoint time —
-        # fall back to the newest one so older projects still get a target.
-        for row in rows:
-            if row.predicted_conversion_rate and row.predicted_conversion_rate > 0.0:
-                predicted = float(row.predicted_conversion_rate)
+    predicted = _latest_tracker_conversion_target(rows, sim)
 
     payload = build_outcome_tracker_forecast(
         [r.__dict__ for r in rows],
@@ -903,17 +914,7 @@ def get_outcome_tracker_forecast_accuracy(
         .first()
     )
 
-    predicted: float | None = None
-    if sim is not None and sim.results_json:
-        raw_pred = _predicted_from_results(sim.results_json)
-        if raw_pred and raw_pred > 0.0:
-            predicted = float(raw_pred)
-    if predicted is None:
-        # Legacy rows carry the prediction captured at checkpoint time —
-        # fall back to the newest one so older projects still get a target.
-        for row in rows:
-            if row.predicted_conversion_rate and row.predicted_conversion_rate > 0.0:
-                predicted = float(row.predicted_conversion_rate)
+    predicted = _latest_tracker_conversion_target(rows, sim)
 
     payload = build_outcome_tracker_forecast_accuracy(
         [r.__dict__ for r in rows],
@@ -959,17 +960,7 @@ def get_outcome_tracker_drift(
         .first()
     )
 
-    predicted: float | None = None
-    if sim is not None and sim.results_json:
-        raw_pred = _predicted_from_results(sim.results_json)
-        if raw_pred and raw_pred > 0.0:
-            predicted = float(raw_pred)
-    if predicted is None:
-        # Legacy rows carry the prediction captured at checkpoint time —
-        # fall back to the newest one so older projects still get a target.
-        for row in rows:
-            if row.predicted_conversion_rate and row.predicted_conversion_rate > 0.0:
-                predicted = float(row.predicted_conversion_rate)
+    predicted = _latest_tracker_conversion_target(rows, sim)
 
     payload = build_outcome_tracker_drift(
         [r.__dict__ for r in rows],

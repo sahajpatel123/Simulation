@@ -76,7 +76,7 @@ def test_empty_rows_are_insufficient() -> None:
     assert out["drift_direction"] == DRIFT_INSUFFICIENT_DATA
     assert out["severity"] == "watch"
     assert out["checks"] == []
-    assert "at least 2 conversion checkpoints" in out["narrative"]
+    assert "at least 3 conversion checkpoints" in out["narrative"]
 
 
 def test_single_point_is_insufficient() -> None:
@@ -99,6 +99,7 @@ def test_two_points_cannot_form_a_step() -> None:
     assert out["span_days"] == 30.0
     assert out["latest_actual"] == 0.08
     assert out["tracking_status"] == TRACKING_INSUFFICIENT_DATA
+    assert "at least 3 conversion checkpoints" in out["narrative"]
 
 
 def test_same_day_points_collapse_to_one() -> None:
@@ -230,6 +231,22 @@ def test_fewer_than_three_steps_has_no_drift_direction() -> None:
     assert out["sample_count"] == 2
     assert out["drift_direction"] == DRIFT_INSUFFICIENT_DATA
     assert out["gap_slope_pp_per_check"] is None
+    assert "Log 1 more checkpoint" in out["narrative"]
+
+
+def test_one_tracked_step_guidance_asks_for_two_more() -> None:
+    """One tracked step needs two more checkpoints before drift direction."""
+    out = _call(
+        [
+            _row(1, day=0.0, rate=0.05),
+            _row(2, day=30.0, rate=0.10),
+            _row(3, day=60.0, rate=0.08),
+        ],
+        predicted=0.05,
+    )
+    assert out["sample_count"] == 1
+    assert out["tracking_status"] == TRACKING_BEHIND
+    assert out["drift_direction"] == DRIFT_INSUFFICIENT_DATA
     assert "Log 2 more checkpoints" in out["narrative"]
 
 
@@ -472,6 +489,19 @@ def test_route_falls_back_to_row_prediction_when_no_simulation() -> None:
     out = _call_route(session=session)
     assert out.sample_count == 5
     assert out.tracking_status in (TRACKING_ON_TRACK, TRACKING_BEHIND, TRACKING_AHEAD)
+
+
+def test_route_uses_newest_row_prediction_when_no_simulation() -> None:
+    """Legacy fallback must prefer the newest checkpoint's prediction."""
+    rows = [
+        _make_tracker_row(i, rate=0.20 - 0.001 * day, day=day)
+        for i, day in enumerate(range(0, 181, 30))
+    ]
+    for idx, row in enumerate(rows):
+        row.predicted_conversion_rate = 0.05 if idx < len(rows) - 1 else 0.35
+    session = _FakeSession(rows=rows, sim=None)
+    out = _call_route(session=session)
+    assert out.predicted_conversion_rate == 0.35
 
 
 def test_route_empty_tracker_is_insufficient() -> None:
