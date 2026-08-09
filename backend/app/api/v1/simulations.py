@@ -104,6 +104,7 @@ from app.schemas.launch_checklist import LaunchChecklistOut
 from app.schemas.market_concentration import MarketConcentrationOut
 from app.schemas.market_sizing import MarketSizingOut
 from app.schemas.market_timing import MarketTimingOut
+from app.schemas.portfolio_launch_priority import PortfolioLaunchPriorityOut
 from app.schemas.prediction_range import PredictionRangeOut
 from app.schemas.pricing_optimization import PricingOptimizationOut
 from app.schemas.retention_churn import RetentionChurnOut
@@ -206,6 +207,7 @@ from app.simulation.cluster_trend import (
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.competitive_moat import build_competitive_moat
 from app.simulation.conductor import ARCHITECT_STACKS, Conductor
+from app.simulation.coverage_gaps import build_coverage_gaps
 from app.simulation.cultural_fit import build_cultural_fit
 from app.simulation.distribution_channels import build_distribution_channels
 from app.simulation.ecosystem_compatibility import build_ecosystem_compatibility
@@ -235,6 +237,7 @@ from app.simulation.founder_action_plan_export import (
     founder_action_plan_to_json,
 )
 from app.simulation.founder_brief import build_founder_brief
+from app.simulation.go_no_go import build_go_no_go
 from app.simulation.investor_readiness import build_investor_readiness
 from app.simulation.journey_analytics import (
     build_journey_analytics,
@@ -285,6 +288,9 @@ from app.simulation.outlier_detection import (
     build_outlier_detection,
     normalise_z_threshold,
 )
+from app.simulation.portfolio_launch_priority import (
+    build_portfolio_launch_priority,
+)
 from app.simulation.portfolio_narrative import (
     build_portfolio_narrative,
 )
@@ -293,6 +299,7 @@ from app.simulation.prediction_range import (
     build_prediction_range,
     extract_predicted_conversion,
 )
+from app.simulation.premortem_digest import build_premortem_digest
 from app.simulation.pricing_optimization import build_pricing_optimization
 from app.simulation.product_type import ProductType
 from app.simulation.project_rollup import (
@@ -3308,6 +3315,261 @@ def get_project_portfolio_rollup(
     )
     payload["confidence_threshold"] = threshold
     return ProjectPortfolioRollupOut(**payload)
+
+
+# Bounds for the portfolio launch-priority read. The digest composes
+# the same six-pillar go/no-go reads as the per-project endpoint for
+# up to MAX_PROJECTS projects, so the row caps keep the route
+# bounded on tenants with large histories.
+_PORTFOLIO_LAUNCH_PRIORITY_MAX_PROJECTS: int = 25
+_PORTFOLIO_LAUNCH_PRIORITY_MAX_SIM_ROWS: int = 5000
+_PORTFOLIO_LAUNCH_PRIORITY_MAX_ASSUMPTION_ROWS: int = 20000
+_PORTFOLIO_LAUNCH_PRIORITY_ASSUMPTIONS_PER_PROJECT: int = 500
+_PORTFOLIO_LAUNCH_PRIORITY_MAX_OUTCOME_ROWS: int = 5000
+
+
+@router.get(
+    "/portfolio-launch-priority",
+    response_model=PortfolioLaunchPriorityOut,
+    summary=(
+        "Portfolio launch-priority digest — ranks the founder's "
+        "projects by their go/no-go scorecards and answers "
+        "'which project should I launch first?'"
+    ),
+    # Bounded per-project composition — same cap as the other
+    # portfolio aggregates.
+    dependencies=[Depends(rate_limit(limit=15, window_s=60))],
+)
+def get_portfolio_launch_priority(
+    limit: int = Query(
+        default=_PORTFOLIO_LAUNCH_PRIORITY_MAX_PROJECTS,
+        ge=1,
+        le=50,
+        description=(
+            "Maximum number of active projects to evaluate. Default "
+            f"{_PORTFOLIO_LAUNCH_PRIORITY_MAX_PROJECTS}, capped at "
+            "50 so the digest stays fast on large portfolios."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioLaunchPriorityOut:
+    """Compose the portfolio launch-priority digest.
+
+    Loads the user's active projects (newest first), the latest
+    completed simulation, assumptions, and outcome freshness for
+    each, then reuses the canonical per-project go/no-go builder so
+    the portfolio ranking is exactly consistent with
+    ``GET /projects/{id}/go-no-go``. The pure helper then buckets
+    projects into LAUNCH_NOW / CONDITIONAL_LAUNCH / FIX_FIRST /
+    PARK and emits the ranked launch sequence, top pick, and
+    portfolio-wide focus pillar. No LLM call, no Celery dispatch.
+    """
+    projects = (
+        db.query(
+            Project.id,
+            Project.title,
+            Project.premortem_json,
+            Project.competitive_json,
+        )
+        .filter(
+            Project.user_id == current_user.id,
+            Project.is_archived.is_(False),
+        )
+        .order_by(Project.created_at.desc(), Project.id.desc())
+        .limit(limit)
+        .all()
+    )
+    if not projects:
+        return PortfolioLaunchPriorityOut(
+            **build_portfolio_launch_priority([])
+        )
+
+    project_ids = [row.id for row in projects]
+    projects_by_id = {row.id: row for row in projects}
+
+    # Latest completed simulation per project — one bounded scan,
+    # deduped to the newest row per project in Python.
+    sim_rows = (
+        db.query(
+            Simulation.id,
+            Simulation.project_id,
+            Simulation.created_at,
+            Simulation.results_json,
+            Simulation.signal_quality,
+            Simulation.status,
+        )
+        .filter(
+            Simulation.project_id.in_(project_ids),
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(
+            Simulation.project_id.asc(),
+            Simulation.created_at.desc(),
+            Simulation.id.desc(),
+        )
+        .limit(_PORTFOLIO_LAUNCH_PRIORITY_MAX_SIM_ROWS)
+        .all()
+    )
+    latest_sims: dict[int, Any] = {}
+    for row in sim_rows:
+        if row.project_id not in latest_sims:
+            latest_sims[row.project_id] = row
+
+    # Assumptions per project (category + sensitivity coverage),
+    # capped per project so one giant project cannot starve the rest.
+    assumption_rows = (
+        db.query(
+            Assumption.project_id,
+            Assumption.category,
+            Assumption.sensitivity,
+            Assumption.is_hidden,
+            Assumption.created_at,
+        )
+        .filter(Assumption.project_id.in_(project_ids))
+        .order_by(
+            Assumption.project_id.asc(),
+            Assumption.created_at.desc(),
+            Assumption.id.desc(),
+        )
+        .limit(_PORTFOLIO_LAUNCH_PRIORITY_MAX_ASSUMPTION_ROWS)
+        .all()
+    )
+    assumptions_by_project: dict[int, list[dict[str, Any]]] = {}
+    for row in assumption_rows:
+        bucket = assumptions_by_project.setdefault(row.project_id, [])
+        if len(bucket) >= _PORTFOLIO_LAUNCH_PRIORITY_ASSUMPTIONS_PER_PROJECT:
+            continue
+        bucket.append({
+            "category": row.category,
+            "sensitivity": row.sensitivity,
+            "is_hidden": row.is_hidden,
+            "created_at": row.created_at,
+        })
+
+    # Latest outcome timestamp per project (freshness + has-outcome).
+    outcome_rows = (
+        db.query(
+            Outcome.project_id,
+            Outcome.created_at,
+        )
+        .filter(Outcome.project_id.in_(project_ids))
+        .order_by(
+            Outcome.project_id.asc(),
+            Outcome.created_at.desc(),
+            Outcome.id.desc(),
+        )
+        .limit(_PORTFOLIO_LAUNCH_PRIORITY_MAX_OUTCOME_ROWS)
+        .all()
+    )
+    latest_outcomes: dict[int, Any] = {}
+    for row in outcome_rows:
+        if row.project_id not in latest_outcomes:
+            latest_outcomes[row.project_id] = row.created_at
+
+    project_payloads: list[dict[str, Any]] = []
+    for project_id in project_ids:
+        project = projects_by_id[project_id]
+        sim = latest_sims.get(project_id)
+        assumptions = assumptions_by_project.get(project_id, [])
+
+        readiness_payload = None
+        trust_payload = None
+        if sim is not None:
+            readiness_payload = build_launch_checklist(
+                results=sim.results_json,
+                simulation_id=sim.id,
+                project_id=project_id,
+                status=sim.status,
+                signal_quality=sim.signal_quality,
+                visible_assumption_count=len(assumptions),
+            )
+            trust_payload = build_simulation_quality(
+                simulation_id=sim.id,
+                project_id=project_id,
+                base_results=sim.results_json,
+                status=sim.status,
+                signal_quality=sim.signal_quality,
+            )
+
+        # A malformed legacy premortem blob (e.g. a JSON string)
+        # must not 500 the whole portfolio digest — treat it as
+        # "premortem not run yet", matching the per-project
+        # endpoint's conservative fallback.
+        premortem_data = project.premortem_json
+        if not isinstance(premortem_data, dict):
+            premortem_data = None
+        premortem_payload = build_premortem_digest(premortem_data)
+
+        competitive_payload = None
+        competitive_data = project.competitive_json
+        if isinstance(competitive_data, dict):
+            competitors = competitive_data.get("competitors") or []
+            high_threat_count = sum(
+                1
+                for competitor in competitors
+                if isinstance(competitor, dict)
+                and str(competitor.get("threat_level", "")).upper()
+                == "HIGH"
+            )
+            competitive_payload = {
+                "overall_competitive_position": (
+                    competitive_data.get("overall_competitive_position")
+                ),
+                "high_threat_count": high_threat_count,
+            }
+
+        assumption_times = [
+            assumption["created_at"]
+            for assumption in assumptions
+            if assumption["created_at"] is not None
+        ]
+        freshness_payload = {
+            "latest_sim_completed_at": (
+                sim.created_at if sim is not None else None
+            ),
+            "latest_assumption_at": (
+                max(assumption_times) if assumption_times else None
+            ),
+            "latest_outcome_at": latest_outcomes.get(project_id),
+        }
+
+        coverage_payload = build_coverage_gaps(
+            assumptions=[
+                {
+                    "category": assumption["category"],
+                    "sensitivity": assumption["sensitivity"],
+                    "is_hidden": assumption["is_hidden"],
+                }
+                for assumption in assumptions
+            ],
+        )
+
+        go_no_go = build_go_no_go(
+            readiness=readiness_payload,
+            premortem=premortem_payload,
+            competitive=competitive_payload,
+            trust=trust_payload,
+            freshness=freshness_payload,
+            coverage=coverage_payload,
+            project_id=project_id,
+            latest_simulation_id=(
+                sim.id if sim is not None else None
+            ),
+        )
+
+        project_payloads.append({
+            "project_id": project_id,
+            "project_title": project.title,
+            "latest_simulation_at": (
+                sim.created_at if sim is not None else None
+            ),
+            "has_outcomes": project_id in latest_outcomes,
+            "go_no_go": go_no_go.model_dump(),
+        })
+
+    payload = build_portfolio_launch_priority(project_payloads)
+    return PortfolioLaunchPriorityOut(**payload)
 
 
 @router.get(
