@@ -68,4 +68,28 @@ def interventions_to_csv(
     return buffer.getvalue()
 
 
-__all__ = ["interventions_to_csv"]
+def intervention_count_to_csv(
+    row: dict[str, Any],
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    """Render an intervention-count row as a single-row CSV table."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+
+    if metadata:
+        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
+        writer.writerow(["user_id", _text(metadata.get("user_id"))])
+        writer.writerow(["format_version", _text(metadata.get("format_version", "1"))])
+        writer.writerow([])
+
+    writer.writerow(["project_id", "intervention_count"])
+    writer.writerow(
+        [
+            _text(row.get("project_id")),
+            _text(row.get("intervention_count")),
+        ]
+    )
+    return buffer.getvalue()
+
+
+__all__ = ["intervention_count_to_csv", "interventions_to_csv"]
