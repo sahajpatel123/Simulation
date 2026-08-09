@@ -1,7 +1,7 @@
 """Tests for the pure assumptions-export helper."""
 from __future__ import annotations
 
-from app.simulation.assumptions_export import assumptions_to_csv
+from app.simulation.assumptions_export import assumption_count_to_csv, assumptions_to_csv
 
 
 def test_assumptions_to_csv_contains_header_and_rows() -> None:
@@ -30,3 +30,14 @@ def test_assumptions_to_csv_handles_missing_fields() -> None:
     csv_text = assumptions_to_csv([{"id": 2}])
 
     assert "2,,," in csv_text
+
+
+def test_assumption_count_to_csv_contains_header_and_row() -> None:
+    csv_text = assumption_count_to_csv(
+        {"project_id": 10, "assumption_count": 3},
+        metadata={"generated_at": "now", "user_id": 42},
+    )
+
+    assert "project_id,assumption_count" in csv_text
+    assert "10,3" in csv_text
+    assert "generated_at,now" in csv_text
