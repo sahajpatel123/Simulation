@@ -209,6 +209,28 @@ def test_revenue_forecast_latest_already_at_target_is_above() -> None:
     out = _call_forecast(rows, predicted=1000.0)
     assert out["verdict"] == "ABOVE_TARGET"
     assert out["days_to_target"] is None
+    assert "already meets or exceeds" in out["narrative"]
+
+
+def test_revenue_forecast_projected_above_target_narrative_is_accurate() -> None:
+    # An earlier checkpoint peaked above the prediction and the recent
+    # trend is rising again, so the verdict is ABOVE_TARGET based on the
+    # 30-day projection even though the latest actual is still below the
+    # target. The narrative must not claim the latest actual already
+    # meets or exceeds the prediction.
+    rows = [
+        _row(1, recorded_at="2026-08-01T00:00:00+00:00", actual=600.0),
+        _row(2, recorded_at="2026-08-02T00:00:00+00:00", actual=1200.0),
+        _row(3, recorded_at="2026-08-03T00:00:00+00:00", actual=700.0),
+        _row(4, recorded_at="2026-08-04T00:00:00+00:00", actual=800.0),
+    ]
+    out = _call_forecast(rows, predicted=1000.0)
+    assert out["verdict"] == "ABOVE_TARGET"
+    assert out["latest_revenue"] < out["predicted_revenue"]
+    assert out["forecasts"][0]["projected_revenue"] >= 1100.0
+    assert "already meets or exceeds" not in out["narrative"]
+    assert "still below the predicted" in out["narrative"]
+    assert "above target" in out["narrative"]
 
 
 def test_revenue_forecast_steep_rise_is_capped_at_ceiling() -> None:

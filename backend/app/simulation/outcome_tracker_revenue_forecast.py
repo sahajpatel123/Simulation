@@ -357,6 +357,21 @@ def _narrative(
             "revenue (or run a simulation) to get an on-track verdict."
         )
     if verdict == VERDICT_ABOVE_TARGET:
+        if latest < target:
+            if projected_30 is not None:
+                return (
+                    f"Latest actual revenue ({_format_revenue(latest)}) is "
+                    f"still below the predicted {_format_revenue(target)}, "
+                    f"but the current trend projects "
+                    f"{_format_revenue(projected_30)} in 30 days — "
+                    "trajectory is above target."
+                )
+            return (
+                f"Latest actual revenue ({_format_revenue(latest)}) is "
+                f"still below the predicted {_format_revenue(target)}, "
+                "but the trend is projected to overtake it — trajectory "
+                "is above target."
+            )
         return (
             f"Latest actual revenue ({_format_revenue(latest)}) already "
             f"meets or exceeds the predicted {_format_revenue(target)} — "
