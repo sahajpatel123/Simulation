@@ -608,3 +608,23 @@ def test_export_mvp_feature_count_returns_csv() -> None:
     body = _body(resp).decode("utf-8")
     assert "project_id,mvp_feature_count" in body
     assert "10,1" in body
+
+
+def test_export_mvp_feature_count_invalid_format_rejected_with_422() -> None:
+    from app.api.v1 import projects as proj_mod
+    from app.core.deps import get_current_user, get_db
+
+    mini_app = FastAPI()
+    mini_app.include_router(proj_mod.router)
+    mini_app.dependency_overrides[get_db] = lambda: _FakeSession(simulations=[])
+    mini_app.dependency_overrides[get_current_user] = lambda: type(
+        "U", (), {"id": 42}
+    )()
+
+    with TestClient(mini_app) as client:
+        resp = client.get(
+            "/projects/10/mvp-feature-count/export",
+            params={"format": "xlsx"},
+        )
+
+    assert resp.status_code == 422
