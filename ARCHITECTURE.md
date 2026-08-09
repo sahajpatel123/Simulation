@@ -69,7 +69,9 @@ Simulation completes
            the highest-confidence scalar (cluster-specific or ALL) to
            each architect's probability/score metrics before the Markov
            funnel — so real outcome data changes future predictions,
-           not just the calibration dashboard.
+           not just the calibration dashboard. Scalar direction:
+           > 1.0 raises probabilities when founders beat the model,
+           < 1.0 lowers them when the model over-predicted.
 ```
 
 ## CognitiveState Mutation Flow

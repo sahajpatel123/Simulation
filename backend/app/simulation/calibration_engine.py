@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import json
+import math
 from collections import defaultdict
 from statistics import mean
 
 from sqlalchemy import text
+
+from app.simulation.correction_application import (
+    MAX_CORRECTION_SCALAR,
+    MIN_CORRECTION_SCALAR,
+)
 
 ALL_ARCHITECT_NAMES = [
     "AccessibilityInclusionArchitect",
@@ -50,6 +56,28 @@ def _predicted_conversion(results: dict) -> float:
         or results.get("conversion_rate")
         or results.get("population_weighted_conversion")
         or 0
+    )
+
+
+def _calibration_scalar(wmean: float) -> float:
+    """Turn a signed mean error into a multiplicative correction scalar.
+
+    ``wmean`` is ``actual - predicted``: a positive error means founders
+    beat the model, so future probabilities must be raised (scalar > 1.0);
+    a negative error means the model over-predicted, so future
+    probabilities must be lowered (scalar < 1.0). The scalar is the
+    reciprocal of ``1 - wmean`` and is clamped to the same safe bounds the
+    Conductor enforces when it reads correction rows, so an extreme or
+    malformed bias can never distort the funnel.
+    """
+    if not math.isfinite(wmean):
+        return 1.0
+    denominator = 1.0 - wmean
+    if denominator <= 0.0:
+        return MAX_CORRECTION_SCALAR
+    return max(
+        MIN_CORRECTION_SCALAR,
+        min(MAX_CORRECTION_SCALAR, 1.0 / denominator),
     )
 
 
@@ -146,7 +174,7 @@ class CalibrationEngine:
         wmean = sum(e * w for e, w in zip(errors, weights)) / w_sum
 
         if abs(wmean) > 0.03:
-            scalar = 1.0 / (1.0 + wmean)
+            scalar = _calibration_scalar(wmean)
             conf = min(1.0, eff_count / (eff_count + 30))
             for arch_name in ALL_ARCHITECT_NAMES:
                 self._upsert_correction(
@@ -186,7 +214,7 @@ class CalibrationEngine:
             wmean = sum(errors) / w_sum
             if abs(wmean) < 0.05:
                 continue
-            scalar = 1.0 / (1.0 + wmean)
+            scalar = _calibration_scalar(wmean)
             conf_w = eff_count / (eff_count + 30)
             self._upsert_correction(
                 db,
