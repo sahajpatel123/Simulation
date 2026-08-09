@@ -8,7 +8,9 @@ accurate have past forecasts actually been?**
 The verification is out-of-sample and uses the exact same deterministic
 arithmetic as the production forecast: for every checkpoint that has at
 least :data:`MIN_POINTS` earlier checkpoints AND a later checkpoint at or
-beyond a forecast horizon, we rebuild the forecast that the production
+beyond a forecast horizon — but no more than half a horizon late, so a
+sparse checkpoint months after the deadline cannot masquerade as the
+horizon's realized value — we rebuild the forecast that the production
 builder *would have* produced from that history and compare it to what
 actually happened at the horizon. This includes the production saturation
 ceiling, so a strongly rising series that the conservative ceiling capped
@@ -66,6 +68,15 @@ MIN_VERIFICATIONS_LOW: int = 3
 MIN_VERIFICATIONS_MEDIUM: int = 5
 MIN_VERIFICATIONS_HIGH: int = 10
 
+# The realized value for a horizon is the first checkpoint at/after the
+# deadline, but only when it lands within this grace window. Without the
+# bound, a 30-day forecast on a sparsely logged project would be judged
+# against a checkpoint months later, silently conflating horizons and
+# inflating errors. The window scales with the horizon (half a horizon
+# late, with a small floor so short horizons stay meaningful).
+VERIFY_GRACE_FRACTION: float = 0.5
+VERIFY_GRACE_MIN_DAYS: float = 7.0
+
 # Accuracy-score bands. 90+ = the model's projections have been near misses;
 # 70–90 = usable but noisy; below 70 = materially off.
 ACCURATE_MIN_SCORE: float = 90.0
@@ -91,6 +102,11 @@ def _bias_direction(bias: float) -> str:
     return BIAS_BALANCED
 
 
+def _verification_grace(horizon_days: int) -> float:
+    """Max lateness (days) a checkpoint may have for a horizon's deadline."""
+    return max(VERIFY_GRACE_MIN_DAYS, horizon_days * VERIFY_GRACE_FRACTION)
+
+
 def _verify_horizon(
     points: list[tuple[float, float]],
     target: float | None,
@@ -101,11 +117,14 @@ def _verify_horizon(
     For each anchor checkpoint with at least ``MIN_POINTS`` history (itself
     included), the production trend fit is rebuilt from the anchor's history
     and projected ``horizon_days`` ahead. The actual value is the first
-    checkpoint at or beyond that deadline. Both values are raw floats; the
-    caller aggregates them.
+    checkpoint at or beyond that deadline, provided it is no more than
+    :func:`_verification_grace` days late — otherwise the checkpoint
+    describes a materially different time window and the anchor is skipped.
+    Both values are raw floats; the caller aggregates them.
     """
     checks: list[tuple[float, float]] = []
     next_actual_index = MIN_POINTS
+    grace = _verification_grace(horizon_days)
     for anchor_index in range(MIN_POINTS - 1, len(points) - 1):
         if next_actual_index <= anchor_index:
             next_actual_index = anchor_index + 1
@@ -117,6 +136,10 @@ def _verify_horizon(
             next_actual_index += 1
         if next_actual_index >= len(points):
             break
+        if points[next_actual_index][0] > deadline + grace:
+            # The nearest later checkpoint is too far past the deadline to
+            # measure this horizon; the next anchor may still use it.
+            continue
 
         history = points[: anchor_index + 1]
         latest = history[-1][1]

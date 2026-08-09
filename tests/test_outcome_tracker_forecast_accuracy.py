@@ -256,6 +256,58 @@ def test_extreme_values_stay_finite_and_bounded() -> None:
     assert math.isfinite(out["overall_accuracy_score"] or 0.0)
 
 
+# ---------------------------------------------------------------------------
+# Pure builder — bounded lookahead
+# ---------------------------------------------------------------------------
+
+
+def test_sparse_series_does_not_verify_against_far_late_actuals() -> None:
+    """A 30-day forecast must not be scored against an actual 150 days late."""
+    rows = [
+        _row(1, day=0.0, rate=0.05),
+        _row(2, day=30.0, rate=0.08),
+        _row(3, day=60.0, rate=0.11),
+        _row(4, day=210.0, rate=0.20),
+    ]
+    out = _call(rows, predicted=0.05)
+    by_horizon = {h["horizon_days"]: h for h in out["horizons"]}
+    assert by_horizon[30]["sample_count"] == 1
+    assert by_horizon[60]["sample_count"] == 0
+    assert by_horizon[90]["sample_count"] == 0
+    assert out["total_verifications"] == 1
+    assert out["overall_verdict"] == VERDICT_INSUFFICIENT_DATA
+
+
+def test_checkpoint_within_grace_still_verifies_horizon() -> None:
+    """A checkpoint 15 days past the 30-day deadline is still a valid actual."""
+    rows = [
+        _row(1, day=0.0, rate=0.05),
+        _row(2, day=30.0, rate=0.08),
+        _row(3, day=75.0, rate=0.09),
+    ]
+    out = _call(rows, predicted=0.05)
+    by_horizon = {h["horizon_days"]: h for h in out["horizons"]}
+    assert by_horizon[30]["sample_count"] == 1
+    assert by_horizon[30]["mean_abs_error"] == pytest.approx(0.0084)
+    assert by_horizon[30]["within_2pp_rate"] == 1.0
+    assert by_horizon[60]["sample_count"] == 0
+    assert by_horizon[90]["sample_count"] == 0
+
+
+def test_sparse_gap_excludes_only_misaligned_horizon_checks() -> None:
+    """A 120-day logging gap drops 30-day checks across it but keeps 90-day ones."""
+    rows = [
+        _row(i + 1, day=day, rate=0.20 - 0.001 * day)
+        for i, day in enumerate((0, 30, 60, 90, 210, 240, 270, 300))
+    ]
+    out = _call(rows, predicted=0.05)
+    by_horizon = {h["horizon_days"]: h for h in out["horizons"]}
+    assert by_horizon[30]["sample_count"] == 5
+    assert by_horizon[60]["sample_count"] == 3
+    assert by_horizon[90]["sample_count"] == 2
+    assert out["total_verifications"] == 10
+
+
 def test_schema_accepts_builder_payload() -> None:
     out = OutcomeTrackerForecastAccuracyOut(
         **_call(_linear_rows(), predicted=0.05)
