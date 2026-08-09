@@ -217,6 +217,32 @@ _CLAUSE_BOUNDARY_PATTERN = re.compile(
     r"[.,;:!?—–\n]|\b(?:but|yet|though|although|whereas|however|while)\b",
     re.IGNORECASE,
 )
+_TOKEN_PATTERN = re.compile(r"[a-z]+")
+
+# All strong/gap keyword groups, used to decide whether a trailing
+# negation belongs to a later evidence phrase rather than the current
+# match ("we have a working prototype without a support plan" still has
+# a working prototype).
+_ALL_EVIDENCE_KEYWORD_GROUPS: tuple[tuple[str, ...], ...] = (
+    _TEAM_STRONG_KEYWORDS,
+    _TEAM_GAP_KEYWORDS,
+    _PRODUCT_STRONG_KEYWORDS,
+    _PRODUCT_GAP_KEYWORDS,
+    _SUPPORT_STRONG_KEYWORDS,
+    _SUPPORT_GAP_KEYWORDS,
+)
+
+# Copulas, auxiliaries and degree words that can sit between two gap
+# signals without turning them into separate findings ("working prototype
+# is not available yet" is one gap, not two). Connectors ("and", "but")
+# and clause punctuation are deliberately excluded so distinct gaps stay
+# distinct.
+_FUNCTION_BRIDGE_WORDS: frozenset[str] = frozenset({
+    "is", "are", "was", "were", "been", "being", "am", "be",
+    "has", "have", "had", "will", "would", "can", "could", "should",
+    "not", "no", "yet", "still", "just", "very", "quite", "really",
+    "extremely", "simply", "almost", "nearly",
+})
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────
@@ -312,20 +338,50 @@ def _match_context(
     text: str,
     start: int,
     end: int,
-) -> tuple[list[str], list[str], str]:
-    """Return (before, after, before_text) for the clause around a match."""
+) -> tuple[list[str], list[str], str, list[tuple[str, int]], int]:
+    """Return (before, after, before_text, trailing, clause_end).
+
+    ``trailing`` is the tokenized tail of the clause with character
+    positions, used to decide whether a trailing negation scopes to a
+    later evidence phrase. ``clause_end`` is the position of the next
+    clause boundary (or ``len(text)``).
+    """
     clause_matches_before = list(_CLAUSE_BOUNDARY_PATTERN.finditer(text, 0, start))
     clause_start = clause_matches_before[-1].end() if clause_matches_before else 0
     before = re.findall(r"[a-z]+", text[clause_start:start])[-8:]
 
     clause_matches_after = list(_CLAUSE_BOUNDARY_PATTERN.finditer(text, end, len(text)))
     clause_end = clause_matches_after[0].start() if clause_matches_after else len(text)
-    after = re.findall(r"[a-z]+", text[end:clause_end])[:8]
+    trailing = [
+        (token.group(), token.start())
+        for token in _TOKEN_PATTERN.finditer(text, end, clause_end)
+    ][:8]
 
-    if after and after[0] in {"and", "or", "then", "also", "plus", "too"}:
-        after = []
+    if trailing and trailing[0][0] in {"and", "or", "then", "also", "plus", "too"}:
+        trailing = []
+    after = [word for word, _ in trailing]
     before_text = " ".join(before)
-    return before, after, before_text
+    return before, after, before_text, trailing, clause_end
+
+
+def _next_evidence_keyword(
+    text: str,
+    position: int,
+    limit: int,
+) -> int | None:
+    """Earliest evidence-keyword start at/after ``position`` before ``limit``."""
+    best: int | None = None
+    for keywords in _ALL_EVIDENCE_KEYWORD_GROUPS:
+        match = _keyword_pattern(keywords).search(text, position, limit)
+        if match is not None and (best is None or match.start() < best):
+            best = match.start()
+    return best
+
+
+def _is_function_bridge(text: str, left_end: int, right_start: int) -> bool:
+    """True when only copulas/degree words sit between two spans."""
+    words = re.findall(r"[a-z]+", text[left_end:right_start])
+    return bool(words) and all(word in _FUNCTION_BRIDGE_WORDS for word in words)
 
 
 def _match_is_voided(
@@ -341,7 +397,9 @@ def _match_is_voided(
     if clause_end < len(text) and text[clause_end] == "?":
         return True
 
-    before, after, before_text = _match_context(text, start, end)
+    before, after, before_text, trailing, clause_end = _match_context(
+        text, start, end
+    )
     combined = before + after
 
     if any(
@@ -353,6 +411,31 @@ def _match_is_voided(
         negation_voided = False
     else:
         negation_voided = bool(set(combined) & _NEGATION_MARKERS)
+        # A trailing negation often scopes to a later noun phrase rather
+        # than the matched evidence ("we have a working prototype without
+        # a support plan" still has a working prototype). Only let
+        # trailing negations void the match when none of them is followed
+        # by another evidence keyword in the same clause; leading
+        # negations always still apply ("we do not have a working
+        # prototype ...").
+        if (
+            negation_voided
+            and not (set(before) & _NEGATION_MARKERS)
+            and trailing
+        ):
+            trailing_negations = [
+                (word, pos)
+                for word, pos in trailing
+                if word in _NEGATION_MARKERS
+            ]
+            if trailing_negations and all(
+                _next_evidence_keyword(
+                    text, pos + len(word), clause_end
+                )
+                is not None
+                for word, pos in trailing_negations
+            ):
+                negation_voided = False
     # Intent markers only void strong evidence when they precede the
     # keyword ("we plan to launch", "we will build the MVP"). Markers in
     # the trailing clause ("we launched to build momentum") explain the
@@ -366,7 +449,7 @@ def _is_negated(
     end: int,
 ) -> bool:
     """True when negation markers (not intent alone) qualify a match."""
-    before, after, _ = _match_context(text, start, end)
+    before, after, _, _, _ = _match_context(text, start, end)
     combined = before + after
     if _is_discourse_negation(combined):
         return False
@@ -385,40 +468,54 @@ def _count_strong(
     return count
 
 
-def _count_gaps(
+def _count_gap_signals(
     joined: str,
-    keywords: tuple[str, ...],
+    gap_keywords: tuple[str, ...],
+    strong_keywords: tuple[str, ...],
 ) -> int:
-    """Count gap matches; negation/intent inside the phrase is the signal."""
-    pattern = _keyword_pattern(keywords)
-    count = 0
+    """Count distinct gap findings, merging signals for the same gap.
+
+    Explicit gap phrases ("no support team") and negated strong-evidence
+    phrases ("support team" with "no" before it) frequently describe the
+    same fact; counting both would double the penalty. Overlapping spans,
+    and spans bridged only by copulas/degree words ("working prototype is
+    not available yet"), are merged into one finding.
+    """
+    spans: list[tuple[int, int]] = []
+    pattern = _keyword_pattern(gap_keywords)
     for match in pattern.finditer(joined):
         matched = joined[match.start():match.end()].lower()
         if matched in _GAP_NEGATION_IS_THE_SIGNAL:
-            count += 1
+            spans.append(match.span())
             continue
         tokens = set(re.findall(r"[a-z]+", matched))
         if tokens & _INTENT_MARKERS:
-            count += 1
+            spans.append(match.span())
             continue
         if not _match_is_voided(joined, match.start(), match.end()):
-            count += 1
-    return count
+            spans.append(match.span())
 
-
-def _count_negated_evidence(
-    joined: str,
-    keywords: tuple[str, ...],
-) -> int:
-    """Count strong-evidence phrases negated in the text ("no prototype")."""
-    pattern = _keyword_pattern(keywords)
-    count = 0
-    for match in pattern.finditer(joined):
+    for match in _keyword_pattern(strong_keywords).finditer(joined):
         if _match_is_voided(joined, match.start(), match.end()) and _is_negated(
             joined, match.start(), match.end()
         ):
-            count += 1
-    return count
+            spans.append(match.span())
+
+    if not spans:
+        return 0
+
+    spans.sort()
+    merged_count = 1
+    _, current_end = spans[0]
+    for start, end in spans[1:]:
+        if start <= current_end or _is_function_bridge(
+            joined, current_end, start
+        ):
+            current_end = max(current_end, end)
+        else:
+            merged_count += 1
+            _, current_end = start, end
+    return merged_count
 
 
 def _signal_scores(texts: list[str]) -> dict[str, float]:
@@ -436,16 +533,19 @@ def _signal_scores(texts: list[str]) -> dict[str, float]:
 
     joined = "\n".join(texts)
     team_gap = float(
-        _count_gaps(joined, _TEAM_GAP_KEYWORDS)
-        + _count_negated_evidence(joined, _TEAM_STRONG_KEYWORDS)
+        _count_gap_signals(
+            joined, _TEAM_GAP_KEYWORDS, _TEAM_STRONG_KEYWORDS
+        )
     )
     product_gap = float(
-        _count_gaps(joined, _PRODUCT_GAP_KEYWORDS)
-        + _count_negated_evidence(joined, _PRODUCT_STRONG_KEYWORDS)
+        _count_gap_signals(
+            joined, _PRODUCT_GAP_KEYWORDS, _PRODUCT_STRONG_KEYWORDS
+        )
     )
     support_gap = float(
-        _count_gaps(joined, _SUPPORT_GAP_KEYWORDS)
-        + _count_negated_evidence(joined, _SUPPORT_STRONG_KEYWORDS)
+        _count_gap_signals(
+            joined, _SUPPORT_GAP_KEYWORDS, _SUPPORT_STRONG_KEYWORDS
+        )
     )
     return {
         "evidence": 1.0,

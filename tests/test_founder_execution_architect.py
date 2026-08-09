@@ -299,6 +299,120 @@ def test_negation_voids_strong_evidence() -> None:
     assert out.metrics["execution_funnel_suppressor"] < 1.0
 
 
+def test_explicit_gap_phrases_are_not_double_counted() -> None:
+    from app.simulation.architects.founder_execution import (
+        _collect_texts,
+        _signal_scores,
+    )
+
+    cases = [
+        ("We have no support team.", "support_gap"),
+        ("We have no refund policy.", "support_gap"),
+        ("We have no beta users yet.", "product_gap"),
+        ("We have no paying customers.", "product_gap"),
+        ("We have no co-founder.", "team_gap"),
+        ("We have no engineering team.", "team_gap"),
+    ]
+    for text, key in cases:
+        signals = _signal_scores(_collect_texts([], {"description": text}))
+        assert signals[key] == 1.0, (text, key, signals[key])
+
+    out = _compute(description="We have no support team.")
+    assert out.flags["support_gap"] is True
+    assert out.flags["prototype_evidence_present"] is False
+
+
+def test_trailing_negation_scoped_to_later_evidence_keeps_product() -> None:
+    from app.simulation.architects.founder_execution import (
+        _collect_texts,
+        _signal_scores,
+    )
+
+    out = _compute(
+        description="We have a working prototype without a support plan."
+    )
+    assert out.flags["prototype_evidence_present"] is True
+    assert out.flags["support_gap"] is True
+    assert out.metrics["prototype_evidence_strength"] > 0.0
+
+    signals = _signal_scores(
+        _collect_texts(
+            [],
+            {"description": "We have a working prototype without a support plan."},
+        )
+    )
+    assert signals["product"] == 1.0
+    assert signals["product_gap"] == 0.0
+    assert signals["support_gap"] == 1.0
+
+
+def test_trailing_negation_directly_on_evidence_voids_once() -> None:
+    from app.simulation.architects.founder_execution import (
+        _collect_texts,
+        _signal_scores,
+    )
+
+    out = _compute(description="Our working prototype is not available yet.")
+    assert out.flags["prototype_evidence_present"] is False
+    assert out.flags["unbuilt_product_gap"] is True
+
+    signals = _signal_scores(
+        _collect_texts(
+            [],
+            {"description": "Our working prototype is not available yet."},
+        )
+    )
+    assert signals["product"] == 0.0
+    assert signals["product_gap"] == 1.0
+
+
+def test_leading_negation_still_voids_with_scoped_trailing_negation() -> None:
+    from app.simulation.architects.founder_execution import (
+        _collect_texts,
+        _signal_scores,
+    )
+
+    out = _compute(
+        description=(
+            "We do not have a working prototype without a support plan."
+        )
+    )
+    assert out.flags["prototype_evidence_present"] is False
+
+    signals = _signal_scores(
+        _collect_texts(
+            [],
+            {
+                "description": (
+                    "We do not have a working prototype without a support plan."
+                )
+            },
+        )
+    )
+    assert signals["product_gap"] == 1.0
+    assert signals["support_gap"] == 1.0
+
+
+def test_connector_separated_gap_does_not_void_product_evidence() -> None:
+    from app.simulation.architects.founder_execution import (
+        _collect_texts,
+        _signal_scores,
+    )
+
+    out = _compute(description="We have a working prototype and no support team.")
+    assert out.flags["prototype_evidence_present"] is True
+    assert out.flags["support_gap"] is True
+
+    signals = _signal_scores(
+        _collect_texts(
+            [], {"description": "We have a working prototype and no support team."}
+        )
+    )
+    assert signals["product"] == 1.0
+    assert signals["product_gap"] == 0.0
+    assert signals["support_gap"] == 1.0
+
+
 def test_suppressor_has_floor() -> None:
     out = _compute(
         risk_aversion=1.0,
