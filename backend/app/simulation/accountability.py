@@ -118,6 +118,13 @@ class AccountabilityEngine:
         "perceived_ai_risk": 0.20,
         "ai_trust_gap": 0.20,
         "ai_funnel_suppressor": 1.0,
+        "loss_aversion_sensitivity": 0.55,
+        "perceived_purchase_risk": 0.45,
+        "social_proof_coverage": 0.10,
+        "choice_simplicity_evidence": 0.65,
+        "choice_overload_risk": 0.30,
+        "default_bias_exposure": 0.30,
+        "behavioral_funnel_suppressor": 1.0,
     }
 
     LOWER_IS_BETTER: frozenset[str] = frozenset({
@@ -155,6 +162,10 @@ class AccountabilityEngine:
         "ai_skepticism",
         "perceived_ai_risk",
         "ai_trust_gap",
+        "loss_aversion_sensitivity",
+        "perceived_purchase_risk",
+        "choice_overload_risk",
+        "default_bias_exposure",
     })
 
     FINDING_TEMPLATES: dict[str, str] = {
@@ -387,6 +398,34 @@ class AccountabilityEngine:
             "AI skepticism leaves {cluster} at {pct:.0f}% purchase "
             "funnel strength (benchmark {bench:.0f}%)"
         ),
+        "loss_aversion_sensitivity": (
+            "{cluster} has {val:.2f} loss-aversion sensitivity "
+            "(benchmark {bench:.2f})"
+        ),
+        "perceived_purchase_risk": (
+            "{pct:.0f}% of {cluster} perceive purchase risk "
+            "(benchmark {bench:.0f}%)"
+        ),
+        "social_proof_coverage": (
+            "{cluster} social-proof coverage {val:.2f} "
+            "(benchmark {bench:.2f})"
+        ),
+        "choice_simplicity_evidence": (
+            "{cluster} choice-simplicity evidence {val:.2f} "
+            "(benchmark {bench:.2f})"
+        ),
+        "choice_overload_risk": (
+            "{pct:.0f}% of {cluster} face choice overload "
+            "(benchmark {bench:.0f}%)"
+        ),
+        "default_bias_exposure": (
+            "{cluster} default-bias exposure {val:.2f} "
+            "(benchmark {bench:.2f})"
+        ),
+        "behavioral_funnel_suppressor": (
+            "Behavioural heuristics leave {cluster} at {pct:.0f}% "
+            "purchase funnel strength (benchmark {bench:.0f}%)"
+        ),
     }
 
     RECOMMENDED_ACTIONS: dict[str, str] = {
@@ -574,6 +613,33 @@ class AccountabilityEngine:
         "ai_funnel_suppressor": (
             "Add human fallback, fact-checking, and data opt-outs to "
             "restore purchase confidence"
+        ),
+        "loss_aversion_sensitivity": (
+            "De-risk the purchase for loss-averse segments: guarantee, "
+            "free trial, refund, or cancel-anytime commitment"
+        ),
+        "perceived_purchase_risk": (
+            "De-risk the final commitment: guarantee, free trial, refund, "
+            "or cancel anytime"
+        ),
+        "social_proof_coverage": (
+            "Show proof this segment trusts: peer reviews, case studies, "
+            "community usage"
+        ),
+        "choice_simplicity_evidence": (
+            "Simplify to one clear plan and reduce bundles, add-ons "
+            "and options"
+        ),
+        "choice_overload_risk": (
+            "Cut the plan/option count and add a default recommended option"
+        ),
+        "default_bias_exposure": (
+            "Make renewal and trial conversion explicit opt-in; avoid "
+            "surprise auto-charges"
+        ),
+        "behavioral_funnel_suppressor": (
+            "Fix the dominant behavioural blocker: risk reversal, choice "
+            "overload, manipulative scarcity, or default-bias surprise"
         ),
     }
 

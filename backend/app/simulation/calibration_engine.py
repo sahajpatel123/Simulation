@@ -39,6 +39,7 @@ ALL_ARCHITECT_NAMES = [
     "MessagingClarityArchitect",
     "FounderExecutionArchitect",
     "AISkepticismArchitect",
+    "BehavioralEconomicsArchitect",
 ]
 
 

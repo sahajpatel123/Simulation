@@ -3,7 +3,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.simulation.outcome_tracker_export import outcome_tracker_to_csv
+from app.simulation.outcome_tracker_export import (
+    outcome_tracker_count_to_csv,
+    outcome_tracker_to_csv,
+)
 
 
 def _row(
@@ -141,3 +144,14 @@ def test_csv_missing_fields_renders_empty() -> None:
     )
 
     assert "4,7,,,0.03,,,,,\n" in csv_text
+
+
+def test_outcome_tracker_count_to_csv_contains_header_and_row() -> None:
+    csv_text = outcome_tracker_count_to_csv(
+        {"project_id": 10, "outcome_tracker_count": 2},
+        metadata={"generated_at": "now", "user_id": 42},
+    )
+
+    assert "project_id,outcome_tracker_count" in csv_text
+    assert "10,2" in csv_text
+    assert "generated_at,now" in csv_text

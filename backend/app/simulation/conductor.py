@@ -326,6 +326,15 @@ for _stack in ARCHITECT_STACKS.values():
     if "AISkepticismArchitect" not in _stack:
         _stack.insert(len(_stack) - 2, "AISkepticismArchitect")
 
+# BehavioralEconomicsArchitect is universal too: loss aversion, social proof,
+# choice overload, scarcity, default bias and anchoring shape every funnel.
+# Evaluate it right after MessagingClarityArchitect so its BROWSE->CONSIDER
+# and CONSIDER->DECIDE overrides build on comprehension, and its
+# DECIDE->PURCHASE override reflects the full risk-reversal picture.
+for _stack in ARCHITECT_STACKS.values():
+    if "BehavioralEconomicsArchitect" not in _stack:
+        _stack.insert(3, "BehavioralEconomicsArchitect")
+
 # Inter-architect dependency map
 # key = architect that needs input, value = {param_name: (source_architect, metric_key)}
 DEPENDENCY_MAP: dict[str, dict[str, tuple[str, str]]] = {
@@ -492,6 +501,9 @@ def _build_architect_registry() -> dict[str, Any]:
     from app.simulation.architects.aftersales_lifecycle import AftersalesLifecycleArchitect
     from app.simulation.architects.ai_skepticism import AISkepticismArchitect
     from app.simulation.architects.assumption_cascade import AssumptionCascadeArchitect
+    from app.simulation.architects.behavioral_economics import (
+        BehavioralEconomicsArchitect,
+    )
     from app.simulation.architects.competitive_dynamics import CompetitiveDynamicsArchitect
     from app.simulation.architects.cultural_context import CulturalContextArchitect
     from app.simulation.architects.demographic_interaction import DemographicInteractionArchitect
@@ -566,6 +578,7 @@ def _build_architect_registry() -> dict[str, Any]:
         "RunwayArchitect":                 RunwayArchitect(),
         "AISkepticismArchitect":           AISkepticismArchitect(),
         "FounderExecutionArchitect":       FounderExecutionArchitect(),
+        "BehavioralEconomicsArchitect":    BehavioralEconomicsArchitect(),
     }
 
 

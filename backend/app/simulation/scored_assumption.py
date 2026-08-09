@@ -164,6 +164,12 @@ SPECIFICITY_RULES: dict[str, dict[float, str]] = {
         0.2: "AI vocabulary only (AI, ML, chatbot, automation)",
         0.0: "no AI claim",
     },
+    "BehavioralEconomicsArchitect": {
+        1.0: "specific behavioural mechanism with a number (30-day money-back, 1M users, one plan, 50% off)",
+        0.6: "named behavioural mechanism (guarantee, free trial, reviews, limited stock, one plan)",
+        0.2: "quality adjectives only (easy, simple, risk-free, trusted)",
+        0.0: "no behavioural or decision-lever claim",
+    },
     "NetworkEffectArchitect": {
         1.0: "specific network effect mechanism with measured or observed data",
         0.6: "network effect described with mechanism but unmeasured",
@@ -341,6 +347,47 @@ _AI_DENIAL_RE = re.compile(
     re.I,
 )
 
+_BEHAVIORAL_MEASURE_RE = re.compile(
+    r"\d+(?:\.\d+)?(?:[- ]?\s*(?:day|days|month|months|year|years))?\s*"
+    r"(?:money-?back|guarantee|refund|free trial|trial|return|warranty)\b"
+    r"|\d+\s*(?:million|m|k|thousand)?\s*"
+    r"(?:users?|customers?|downloads?|reviews?|ratings?|subscribers?)\b"
+    r"|\d+\s*%?\s*off\b|\d+\s*plans?\b|\d+\s*steps?\b",
+    re.I,
+)
+_BEHAVIORAL_MECHANISM_RE = re.compile(
+    r"\b(?:money-?back|guarantee|guaranteed|free trial|trial period|"
+    r"refund|returns?|cancel anytime|no lock-?in|warranty|"
+    r"reviews?|ratings?|testimonials?|case stud(?:y|ies)|"
+    r"users?|customers?|waitlist|featured in|press|award-?winning|"
+    r"trusted by|one plan|single plan|simple pricing|no hidden fees|"
+    r"limited (?:time|stock)|last chance|early bird|launch offer|"
+    r"expires|today only|flash sale|pre-?selected|auto-?renew|opt-?out|"
+    r"default plan|auto-?enroll|set and forget|was\s+[₹$]|"
+    r"now\s+[₹$]|worth\s+[₹$]|% off|save \d+|compare-?d to|"
+    r"retail price|discount)\b",
+    re.I,
+)
+_BEHAVIORAL_DENIAL_RE = re.compile(
+    r"\b(?:no|not|without|never|no longer|isn'?t|aren'?t|don'?t|"
+    r"doesn'?t|won'?t)\s+(?:a\s+|an\s+|any\s+)?"
+    r"(?:money-?back|guarantee|guaranteed|free trial|refund|reviews?|"
+    r"ratings?|testimonials?|case stud(?:y|ies)|users?|customers?|"
+    r"warranty|auto-?renew|pre-?selected|one plan|limited (?:time|stock)|"
+    r"early bird|launch offer)\b"
+    r"|\b(?:do|does|did|will|would|can|could|should|must)\s+"
+    r"(?:not|never)\s+(?:have|offer|provide|include|feature|give|"
+    r"support|run)\s+(?:any\s+|the\s+|our\s+)?"
+    r"(?:reviews?|ratings?|testimonials?|case stud(?:y|ies)|users?|"
+    r"customers?|guarantee|free trial|refund|warranty)\b",
+    re.I,
+)
+_BEHAVIORAL_QUAL_RE = re.compile(
+    r"\b(?:easy|simple|simplest|risk-?free|trusted|no risk|"
+    r"no-?brainer|convenient)\b",
+    re.I,
+)
+
 
 def _score_specificity(architect: str, claim: str) -> float:
     """
@@ -420,6 +467,17 @@ def _score_specificity(architect: str, claim: str) -> float:
             return 1.0
         if has_mechanism or has_guardrail:
             return 0.6
+        return 0.0
+
+    if architect == "BehavioralEconomicsArchitect":
+        if _BEHAVIORAL_DENIAL_RE.search(lower):
+            return 0.0
+        if _BEHAVIORAL_MEASURE_RE.search(claim):
+            return 1.0
+        if _BEHAVIORAL_MECHANISM_RE.search(lower):
+            return 0.6
+        if _BEHAVIORAL_QUAL_RE.search(lower):
+            return 0.2
         return 0.0
 
     # Generic fallback for architects in the rule table but without
