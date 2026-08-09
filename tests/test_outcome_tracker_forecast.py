@@ -244,9 +244,46 @@ def test_forecast_flat_below_target_is_stalled() -> None:
     assert out["verdict"] == "STALLED"
     assert out["trend_label"] == "FLAT"
     assert out["slope_per_day"] == 0.0
-    assert out["r_squared"] is None
+    assert out["r_squared"] == 1.0
     assert out["days_to_target"] is None
     assert out["confidence"] == "LOW"
+
+
+def test_forecast_flat_series_over_weeks_is_high_confidence() -> None:
+    rows = [
+        _row(1, recorded_at="2026-08-01T00:00:00+00:00", actual=0.02),
+        _row(2, recorded_at="2026-08-08T00:00:00+00:00", actual=0.02),
+        _row(3, recorded_at="2026-08-15T00:00:00+00:00", actual=0.02),
+        _row(4, recorded_at="2026-08-22T00:00:00+00:00", actual=0.02),
+    ]
+    out = _call_forecast(rows, predicted=0.05)
+    assert out["r_squared"] == 1.0
+    assert out["confidence"] == "HIGH"
+    assert out["trend_label"] == "FLAT"
+    assert out["verdict"] == "STALLED"
+
+
+def test_forecast_declining_trend_narrative_says_falling() -> None:
+    rows = [
+        _row(1, recorded_at="2026-08-01T00:00:00+00:00", actual=0.05),
+        _row(2, recorded_at="2026-08-15T00:00:00+00:00", actual=0.03),
+    ]
+    out = _call_forecast(rows, predicted=0.2)
+    assert out["verdict"] == "STALLED"
+    assert out["trend_label"] == "DECLINING"
+    assert "falling" in out["narrative"]
+    assert "has not improved" not in out["narrative"]
+
+
+def test_forecast_narrative_pluralizes_single_day() -> None:
+    rows = [
+        _row(1, recorded_at="2026-08-01T00:00:00+00:00", actual=0.01),
+        _row(2, recorded_at="2026-08-02T00:00:00+00:00", actual=0.03),
+    ]
+    out = _call_forecast(rows, predicted=0.05)
+    assert out["days_to_target"] == 1.0
+    assert "~1 day." in out["narrative"]
+    assert "~1 days" not in out["narrative"]
 
 
 def test_forecast_without_target_reports_trend_but_no_verdict() -> None:
@@ -516,6 +553,45 @@ def test_route_falls_back_to_row_prediction_when_no_simulation() -> None:
     out = _call_get(session=session)
     assert out.predicted_conversion_rate == 0.05
     assert out.verdict in ("ON_TRACK", "ABOVE_TARGET")
+
+
+def test_route_falls_back_when_sim_results_have_no_prediction() -> None:
+    session = _FakeSession(
+        rows=[
+            _make_tracker_row(1, actual=0.03, predicted=0.05),
+            _make_tracker_row(2, actual=0.04, predicted=0.05),
+        ],
+        sim=_FakeSimulation(results={}),
+    )
+    out = _call_get(session=session)
+    assert out.predicted_conversion_rate == 0.05
+    assert out.verdict in ("ON_TRACK", "ABOVE_TARGET")
+
+
+def test_route_falls_back_when_sim_prediction_is_zero() -> None:
+    session = _FakeSession(
+        rows=[
+            _make_tracker_row(1, actual=0.03, predicted=0.05),
+            _make_tracker_row(2, actual=0.04, predicted=0.05),
+        ],
+        sim=_FakeSimulation(results={"mean_conversion_rate": 0.0}),
+    )
+    out = _call_get(session=session)
+    assert out.predicted_conversion_rate == 0.05
+
+
+def test_route_falls_back_when_sim_results_are_missing() -> None:
+    sim = _FakeSimulation()
+    sim.results_json = None
+    session = _FakeSession(
+        rows=[
+            _make_tracker_row(1, actual=0.03, predicted=0.05),
+            _make_tracker_row(2, actual=0.04, predicted=0.05),
+        ],
+        sim=sim,
+    )
+    out = _call_get(session=session)
+    assert out.predicted_conversion_rate == 0.05
 
 
 def test_route_empty_tracker_is_insufficient() -> None:

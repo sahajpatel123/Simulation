@@ -173,8 +173,10 @@ def _linear_fit(
 ) -> tuple[float, float | None]:
     """Fit ``y = slope * t + intercept``; return ``(slope, R²)``.
 
-    Degenerate inputs (fewer than two distinct timestamps, or constant
-    conversion) yield a flat slope and ``None`` R² instead of NaN.
+    Degenerate inputs (fewer than two distinct timestamps) yield a flat
+    slope and ``None`` R² instead of NaN. A perfectly flat series (zero
+    variance in conversion, real time spread) is a perfect fit, so it
+    reports R² = 1.0 rather than an undefined value.
     """
     if len(points) < 2:
         return 0.0, None
@@ -182,6 +184,10 @@ def _linear_fit(
     y = np.array([p[1] for p in points], dtype=float)
     if float(np.var(t)) == 0.0:
         return 0.0, None
+    if float(np.var(y)) == 0.0:
+        # The fitted line is exactly the constant conversion with zero
+        # residual error, so R² is 1.0 (perfect-fit convention).
+        return 0.0, 1.0
     try:
         slope, intercept = np.polyfit(t, y, 1)
     except (np.linalg.LinAlgError, ValueError):
@@ -328,9 +334,14 @@ def _narrative(
             f"exceeds the predicted {target:.1%} — trajectory is above target."
         )
     if verdict == VERDICT_STALLED:
+        movement = (
+            "has been falling"
+            if trend == TREND_DECLINING
+            else "has not improved"
+        )
         return (
-            f"Latest actual conversion ({latest:.1%}) has not improved "
-            f"over {span_text} — stalled below the predicted {target:.1%}."
+            f"Latest actual conversion ({latest:.1%}) {movement} over "
+            f"{span_text} — stalled below the predicted {target:.1%}."
         )
     if projected_30 is None:
         return (
@@ -339,11 +350,13 @@ def _narrative(
             f"{target:.1%}."
         )
     if verdict == VERDICT_ON_TRACK:
-        tail = (
-            f" Expected to reach the prediction in ~{days_to_target:.0f} days."
-            if days_to_target is not None
-            else ""
-        )
+        tail = ""
+        if days_to_target is not None:
+            unit = "day" if days_to_target == 1 else "days"
+            tail = (
+                f" Expected to reach the prediction in "
+                f"~{days_to_target:.0f} {unit}."
+            )
         return (
             f"Across {sample_count} checkpoint(s) spanning {span_text}, "
             f"conversion is trending toward the predicted {target:.1%}; the "

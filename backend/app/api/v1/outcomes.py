@@ -754,7 +754,7 @@ def get_outcome_tracker_forecast(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> OutcomeTrackerForecastOut:
-    """Project where the project's post-launch conversion is heading.
+    """Predict where the project's post-launch conversion is heading.
 
     Fits a deterministic trend over the logged conversion checkpoints and
     compares the 30-day projection (or the latest actual, when it already
