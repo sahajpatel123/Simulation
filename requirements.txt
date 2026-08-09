@@ -10,7 +10,7 @@ passlib==1.7.4
 bcrypt==5.0.0
 python-multipart==0.0.32
 anthropic==0.120.2
-openai==1.54.4
+openai==2.53.0
 celery[redis]==5.6.3
 redis==5.2.1
 flower==2.0.1
