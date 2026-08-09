@@ -124,6 +124,91 @@ def test_ranked_rows_follow_launch_sequence_and_flatten_weakest_pillar() -> None
     assert rows[1][-3:] == ["premortem", "Premortem", "33"]
 
 
+def test_export_sequence_orders_appended_bucket_rows_by_rank() -> None:
+    launch_now = [
+        _item(
+            project_id,
+            f"Launch {project_id}",
+            rank=rank,
+            bucket="LAUNCH_NOW",
+            score=60,
+        )
+        for rank, project_id in (
+            (21, 201),
+            (27, 202),
+            (28, 203),
+            (29, 204),
+            (30, 205),
+        )
+    ]
+    conditional = [
+        _item(
+            project_id,
+            f"Conditional {project_id}",
+            rank=rank,
+            bucket="CONDITIONAL_LAUNCH",
+            score=70,
+        )
+        for rank, project_id in (
+            (1, 101),
+            (2, 102),
+            (22, 122),
+            (23, 123),
+            (24, 124),
+            (25, 125),
+            (26, 126),
+        )
+    ]
+    fix_first = [
+        _item(
+            300 + index,
+            f"Fix {300 + index}",
+            rank=3 + index,
+            bucket="FIX_FIRST",
+            score=50,
+        )
+        for index in range(10)
+    ]
+    park = [
+        _item(
+            400 + index,
+            f"Park {400 + index}",
+            rank=13 + index,
+            bucket="PARK",
+            score=None,
+            verdict="INSUFFICIENT_DATA",
+        )
+        for index in range(8)
+    ]
+
+    items = launch_now + conditional + fix_first + park
+    by_rank = sorted(items, key=lambda item: item["rank"])
+    payload = {
+        "project_count": len(items),
+        "evaluated_count": len(items),
+        "portfolio_verdict": "ALMOST_READY",
+        "top_pick": by_rank[0],
+        "buckets": {
+            "LAUNCH_NOW": launch_now,
+            "CONDITIONAL_LAUNCH": conditional,
+            "FIX_FIRST": fix_first,
+            "PARK": park,
+        },
+        "launch_sequence": [
+            item["project_id"] for item in by_rank[:25]
+        ],
+        "next_focus": "",
+        "narrative": "",
+    }
+
+    csv_text = portfolio_launch_priority_to_csv(payload)
+    rows = _rows_after_section(csv_text, "Launch Sequence")
+    ranks = [int(row[0]) for row in rows]
+
+    assert ranks == sorted(ranks)
+    assert ranks[-5:] == [26, 27, 28, 29, 30]
+
+
 def test_csv_escapes_cells_and_guards_formula_injection() -> None:
     payload = {
         "project_count": 1,

@@ -160,8 +160,11 @@ def _ranked_items(data: dict[str, Any]) -> list[dict[str, Any]]:
     Bucket lists are capped per bucket, so the export also honours the
     ``launch_sequence`` ids (which can include projects beyond a single
     bucket's cap) and then appends any remaining bucket rows that the
-    sequence did not mention. A missing ``top_pick`` is used as a final
-    fallback so a minimal hand-built payload still exports its one row.
+    sequence did not mention — sorted by their digest ``rank`` so the
+    spreadsheet never shows rank 27 before rank 26 just because a later
+    bucket happened to list it first. A missing ``top_pick`` is used as
+    a final fallback so a minimal hand-built payload still exports its
+    one row.
     """
     buckets = data.get("buckets")
     by_id: dict[int, dict[str, Any]] = {}
@@ -182,6 +185,7 @@ def _ranked_items(data: dict[str, Any]) -> list[dict[str, Any]]:
             ordered.append(by_id[project_id])
             seen.add(project_id)
 
+    remaining: list[dict[str, Any]] = []
     if isinstance(buckets, dict):
         for bucket in BUCKET_ORDER:
             for item in _as_list(buckets.get(bucket)):
@@ -189,8 +193,9 @@ def _ranked_items(data: dict[str, Any]) -> list[dict[str, Any]]:
                     continue
                 project_id = _project_key(item.get("project_id"))
                 if project_id is not None and project_id not in seen:
-                    ordered.append(item)
+                    remaining.append(item)
                     seen.add(project_id)
+    ordered.extend(sorted(remaining, key=_rank_order_key))
 
     top_pick = data.get("top_pick")
     top_pick_key = _project_key(
@@ -203,6 +208,14 @@ def _ranked_items(data: dict[str, Any]) -> list[dict[str, Any]]:
     ):
         ordered.append(top_pick)
     return ordered
+
+
+def _rank_order_key(item: dict[str, Any]) -> tuple[float, int]:
+    """Sort key for bucket rows the launch sequence did not mention."""
+    rank = _safe_float(item.get("rank"))
+    if rank is None:
+        rank = float("inf")
+    return (rank, _project_key(item.get("project_id")) or 0)
 
 
 def portfolio_launch_priority_to_csv(
