@@ -34,6 +34,7 @@ ALL_ARCHITECT_NAMES = [
     "RegulatoryComplianceArchitect",
     "EnterpriseProcurementArchitect",
     "PlatformDependencyArchitect",
+    "SupplyChainArchitect",
 ]
 
 

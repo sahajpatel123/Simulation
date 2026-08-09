@@ -161,6 +161,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "TrustArchitect", "PaymentFrictionArchitect", "PurchaseDecisionArchitect", "PhysicalSensoryArchitect",
         "PerformanceThresholdArchitect", "SetupFirstUseArchitect",
         "EcosystemCompatibilityArchitect", "DistributionChannelArchitect",
+        "SupplyChainArchitect",
         "AftersalesLifecycleArchitect", "SupportFrictionArchitect",
         "ViralityArchitect",
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
@@ -175,6 +176,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "PurchaseDecisionArchitect", "PhysicalSensoryArchitect",
         "PerformanceThresholdArchitect", "SetupFirstUseArchitect",
         "EcosystemCompatibilityArchitect", "DistributionChannelArchitect",
+        "SupplyChainArchitect",
         "AftersalesLifecycleArchitect", "SupportFrictionArchitect",
         "ViralityArchitect",
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
@@ -188,6 +190,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "TrustArchitect", "PaymentFrictionArchitect", "PurchaseDecisionArchitect",
         "PerformanceThresholdArchitect", "SetupFirstUseArchitect",
         "EcosystemCompatibilityArchitect", "DistributionChannelArchitect",
+        "SupplyChainArchitect",
         "AftersalesLifecycleArchitect", "SupportFrictionArchitect",
         "MacroeconomicArchitect",
         "DemographicInteractionArchitect", "RegulatoryComplianceArchitect",
@@ -200,6 +203,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "TrustArchitect", "PaymentFrictionArchitect", "PurchaseDecisionArchitect", "PhysicalSensoryArchitect",
         "PerformanceThresholdArchitect", "SetupFirstUseArchitect",
         "EcosystemCompatibilityArchitect", "DistributionChannelArchitect",
+        "SupplyChainArchitect",
         "AftersalesLifecycleArchitect", "SupportFrictionArchitect",
         "MacroeconomicArchitect",
         "DemographicInteractionArchitect", "RegulatoryComplianceArchitect",
@@ -212,6 +216,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "TrustArchitect", "PaymentFrictionArchitect", "PurchaseDecisionArchitect",
         "PerformanceThresholdArchitect", "SetupFirstUseArchitect",
         "DistributionChannelArchitect", "AftersalesLifecycleArchitect",
+        "SupplyChainArchitect",
         "SupportFrictionArchitect", "MacroeconomicArchitect",
         "DemographicInteractionArchitect",
         "RegulatoryComplianceArchitect",
@@ -274,6 +279,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "TrustArchitect", "PaymentFrictionArchitect", "PurchaseDecisionArchitect",
         "PerformanceThresholdArchitect", "SetupFirstUseArchitect",
         "EcosystemCompatibilityArchitect", "DistributionChannelArchitect",
+        "SupplyChainArchitect",
         "AftersalesLifecycleArchitect", "SupportFrictionArchitect",
         "MacroeconomicArchitect",
         "DemographicInteractionArchitect", "RegulatoryComplianceArchitect",
@@ -470,6 +476,7 @@ def _build_architect_registry() -> dict[str, Any]:
     )
     from app.simulation.architects.retention import RetentionArchitect
     from app.simulation.architects.setup_first_use import SetupFirstUseArchitect
+    from app.simulation.architects.supply_chain import SupplyChainArchitect
     from app.simulation.architects.support_friction import SupportFrictionArchitect
     from app.simulation.architects.sustainability import SustainabilityArchitect
     from app.simulation.architects.trust import TrustArchitect
@@ -501,6 +508,7 @@ def _build_architect_registry() -> dict[str, Any]:
         "EcosystemCompatibilityArchitect": EcosystemCompatibilityArchitect(),
         "EnterpriseProcurementArchitect":  EnterpriseProcurementArchitect(),
         "DistributionChannelArchitect":    DistributionChannelArchitect(),
+        "SupplyChainArchitect":            SupplyChainArchitect(),
         "AftersalesLifecycleArchitect":    AftersalesLifecycleArchitect(),
         "HealthSafetyHardwareArchitect":   HealthSafetyHardwareArchitect(),
         "RegulatoryComplianceArchitect":   RegulatoryComplianceArchitect(),
