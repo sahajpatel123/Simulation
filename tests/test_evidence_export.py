@@ -1,7 +1,7 @@
 """Tests for the pure evidence-export helper."""
 from __future__ import annotations
 
-from app.simulation.evidence_export import evidence_to_csv
+from app.simulation.evidence_export import evidence_count_to_csv, evidence_to_csv
 
 
 def test_evidence_to_csv_contains_header_and_rows() -> None:
@@ -30,3 +30,14 @@ def test_evidence_to_csv_handles_missing_fields() -> None:
     csv_text = evidence_to_csv([{"id": 2}])
 
     assert "2,,," in csv_text
+
+
+def test_evidence_count_to_csv_contains_header_and_row() -> None:
+    csv_text = evidence_count_to_csv(
+        {"project_id": 10, "evidence_count": 3},
+        metadata={"generated_at": "now", "user_id": 42},
+    )
+
+    assert "project_id,evidence_count" in csv_text
+    assert "10,3" in csv_text
+    assert "generated_at,now" in csv_text
