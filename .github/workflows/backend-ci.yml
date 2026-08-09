@@ -21,7 +21,9 @@ jobs:
   test:
     name: pytest
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The suite has grown past the old 15-minute cap; 30 keeps a real
+    # failure visible without letting a hung run burn unlimited runner time.
+    timeout-minutes: 30
 
     services:
       postgres:

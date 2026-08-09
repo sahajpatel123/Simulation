@@ -142,4 +142,7 @@ For security concerns, please contact the project maintainers.
   so token backfills work on PostgreSQL images without the vector extension.
 - 2026-08-08 - Made app startup tolerant of a missing `pgvector` extension so
   local/CI PostgreSQL instances without it can still start the backend.
+- 2026-08-09 - Re-pinned `numpy`/`scipy` to a Python 3.11-compatible set and
+  raised the backend-ci pytest timeout to 30 minutes after the suite outgrew
+  the old 15-minute cap.
 - [VERSION] - Initial security policy
