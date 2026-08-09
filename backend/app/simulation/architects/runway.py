@@ -72,11 +72,23 @@ _GAP_KEYWORDS: tuple[str, ...] = (
     "need investment", "needs investment", "need capital", "needs capital",
     "capital required", "raising funds", "raising capital",
     "raising money", "fundraising", "fund-raising",
+    "raising a seed round", "raising seed",
     "raise funding", "raise capital", "raise money", "raise investment",
     "raise a seed round", "raise seed", "raise a round",
+    "need to raise", "needs to raise", "want to raise", "wants to raise",
+    "hoping to raise", "planning to raise", "trying to raise",
+    "looking to raise", "plan to raise", "plans to raise",
+    "intend to raise", "intends to raise", "aim to raise", "aims to raise",
+    "hope to raise", "hopes to raise", "expect to raise", "expects to raise",
+    "seek funding", "seeks funding", "seek capital",
+    "seeks capital", "seeking a seed round", "seeking pre-seed",
+    "require funding", "requires funding", "required funding",
+    "require capital", "requires capital", "required capital",
+    "lack funding", "lacks funding", "lack capital", "lacks capital",
+    "lack of capital", "lack of cash", "lack runway", "lack of runway",
     "cash constrained", "cash-strapped", "cash strapped", "burn rate",
     "burning cash", "burning through cash", "out of money",
-    "running out of money", "running out of cash", "low runway",
+    "out of cash", "running out of money", "running out of cash", "low runway",
     "short runway", "thin runway", "no runway", "zero runway",
     "not raised", "have not raised", "has not raised",
 )
@@ -147,7 +159,8 @@ _RAISED_PATTERN = re.compile(
 
 _RUNWAY_MONTHS_PATTERN = re.compile(
     rf"\b{_AMOUNT_NUMBER}\s*(?:-|–)?\s*months?\s*(?:of\s+)?(?:cash\s+)?runway\b"
-    rf"|\brunway\s*(?:of\s+)?(?:cash\s+)?{_AMOUNT_NUMBER}\s*months?\b",
+    rf"|\brunway\s*(?:is\s+|stands?\s+at\s+|of\s+)?(?:cash\s+)?"
+    rf"{_AMOUNT_NUMBER}\s*months?\b",
     re.IGNORECASE,
 )
 
@@ -249,14 +262,18 @@ def _match_is_voided(
     clause_end = clause_matches_after[0].start() if clause_matches_after else len(text)
     after = re.findall(r"[a-z]+", text[end:clause_end])[:8]
 
+    # A keyword inside an interrogative clause ("Are you profitable?",
+    # "How much did we raise?") is a question, not evidence.
+    if clause_end < len(text) and text[clause_end] == "?":
+        return True
+
     if after and after[0] in {"and", "or", "then", "also", "plus", "too"}:
         after = []
     before_text = " ".join(before)
-    after_text = " ".join(after)
     combined = before + after
 
     if any(
-        phrase in f"{before_text} {after_text}"
+        phrase in before_text
         for phrase in ("working on", "in progress", "to be")
     ):
         return True
@@ -266,7 +283,12 @@ def _match_is_voided(
         negation_voided = bool(set(combined) & _NEGATION_MARKERS)
     if include_self_funding and bool(set(before[-2:]) & _SELF_FUNDING_MARKERS):
         return True
-    return negation_voided or (include_intent and bool(set(combined) & _INTENT_MARKERS))
+    # Intent markers only void evidence when they precede the keyword
+    # ("we will have 18 months", "we plan to raise $2M"). Markers in the
+    # trailing clause ("we raised $2M to build the product", "we are
+    # profitable because we plan to expand") explain the fact rather than
+    # making it aspirational.
+    return negation_voided or (include_intent and bool(set(before) & _INTENT_MARKERS))
 
 
 def _has_evidence(

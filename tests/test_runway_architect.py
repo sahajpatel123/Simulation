@@ -278,6 +278,9 @@ def test_runway_month_parsing_formats() -> None:
         ("We have 18 months of runway", 18.0, 0.85),
         ("runway of 12 months remains", 12.0, 0.75),
         ("6-9 months of cash runway left", 9.0, 0.58),
+        ("Our runway is 18 months", 18.0, 0.85),
+        ("Our runway stands at 12 months", 12.0, 0.75),
+        ("Our runway is 6 months", 6.0, 0.58),
     ]
     for text, months, health in cases:
         out = _compute(assumptions=[{"text": text}])
@@ -322,6 +325,50 @@ def test_bootstrapped_but_profitable_keeps_breakeven_evidence() -> None:
     assert out.flags["runway_gap"] is False
 
 
+def test_trailing_intent_clause_does_not_void_raised_evidence() -> None:
+    for text in (
+        "We raised $2M to build the product",
+        "We raised $2M because we need to hire",
+        "We raised $2M in order to build",
+    ):
+        out = _compute(assumptions=[{"text": text}])
+        assert out.metrics["raised_amount_millions"] == 2.0, text
+        assert out.metrics["business_health_score"] == 0.88, text
+        assert out.flags["funding_evidence"] is True, text
+        assert out.flags["runway_gap"] is False, text
+
+
+def test_trailing_intent_clause_does_not_void_runway_evidence() -> None:
+    out = _compute(
+        assumptions=[{"text": "We have 12 months of runway to build the product"}],
+    )
+    assert out.metrics["explicit_runway_months"] == 12.0
+    assert out.metrics["business_health_score"] == 0.75
+    assert out.flags["explicit_runway_reported"] is True
+
+
+def test_trailing_intent_clause_does_not_void_breakeven_evidence() -> None:
+    for text in (
+        "We are profitable because we plan to expand",
+        "We are profitable because we need cash flow",
+    ):
+        out = _compute(assumptions=[{"text": text}])
+        assert out.flags["break_even_reached"] is True, text
+        assert out.metrics["business_health_score"] == 0.95, text
+
+
+def test_question_clauses_are_not_evidence() -> None:
+    for text in (
+        "Are you profitable?",
+        "How much have we raised?",
+        "Profitable? We aim to be profitable",
+    ):
+        out = _compute(assumptions=[{"text": text}])
+        assert out.flags["break_even_reached"] is False, text
+        assert out.flags["funding_evidence"] is False, text
+        assert out.metrics["business_health_score"] == 1.0, text
+
+
 def test_fundraising_intent_is_a_gap() -> None:
     out = _compute(
         risk=0.1,
@@ -334,6 +381,21 @@ def test_fundraising_intent_is_a_gap() -> None:
     assert out.flags["runway_gap"] is True
     assert out.metrics["business_health_score"] <= 0.45
     assert out.severity == "WARNING"
+
+
+def test_common_gap_phrasings_are_detected() -> None:
+    for text in (
+        "We need to raise $2M",
+        "We plan to raise $2M next quarter",
+        "We are seeking pre-seed funding",
+        "We require funding to grow",
+        "We lack funding",
+        "We are out of cash",
+    ):
+        out = _compute(assumptions=[{"text": text}])
+        assert out.flags["funding_evidence"] is False, text
+        assert out.flags["runway_gap"] is True, text
+        assert out.metrics["business_health_score"] <= 0.45, text
 
 
 # ---------------------------------------------------------------------------
