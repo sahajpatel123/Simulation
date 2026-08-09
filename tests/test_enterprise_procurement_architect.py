@@ -303,6 +303,77 @@ def test_sibling_intent_does_not_void_existing_evidence() -> None:
     assert out.flags["security_review_blocker"] is False
 
 
+def test_contraction_expansion_does_not_double_negation() -> None:
+    from app.simulation.architects.enterprise_procurement import _normalise
+
+    assert _normalise("We don't have SOC 2") == "we do not have soc 2"
+    assert _normalise("We can't get SOC 2") == "we cannot get soc 2"
+    assert (
+        _normalise("Vendor approval isn't complete")
+        == "vendor approval is not complete"
+    )
+    assert _normalise("MSA won't be signed") == "msa will not be signed"
+    assert _normalise("They ain't approved") == "they is not approved"
+
+
+def test_contracted_negations_stay_gaps() -> None:
+    for text in (
+        "We don't have SOC 2",
+        "We can't get SOC 2 yet",
+        "The SOC 2 report isn't available",
+    ):
+        out = _compute(assumptions=[{"text": text}])
+        assert out.metrics["procurement_credibility"] < 1.0, text
+        assert out.flags["security_review_blocker"] is True, text
+
+
+def test_not_only_and_not_just_focus_keeps_evidence() -> None:
+    for text in (
+        "Not only do we have SOC 2, we also have ISO 27001",
+        "Not just SOC 2 - we also have ISO 27001",
+        "We aren't just SOC 2 certified",
+        "We don't only have SOC 2",
+        "We have SOC 2 not just as a formality",
+        "We have SOC 2 not only as a formality",
+        "We are not merely SOC 2 certified",
+    ):
+        out = _compute(assumptions=[{"text": text}])
+        assert out.metrics["procurement_credibility"] == 1.0, text
+        assert out.flags["security_review_blocker"] is False, text
+        assert out.flags["procurement_advantage"] is True, text
+
+
+def test_focus_construction_does_not_mask_intent_or_progress() -> None:
+    for text in (
+        "Not only do we want SOC 2",
+        "Not only are we working on SOC 2",
+        "We don't only plan to get SOC 2",
+        "We are not only working on SOC 2",
+    ):
+        out = _compute(assumptions=[{"text": text}])
+        assert out.metrics["procurement_credibility"] < 1.0, text
+        assert out.flags["security_review_blocker"] is True, text
+
+
+def test_none_assumptions_are_neutral() -> None:
+    from app.simulation.architects.enterprise_procurement import (
+        EnterpriseProcurementArchitect,
+    )
+
+    out = EnterpriseProcurementArchitect().compute(
+        cluster=_cluster(
+            cluster_id="enterprise_procurement_gatekeeper",
+            affinities=["enterprise_software", "saas"],
+        ),
+        agent_profile={},
+        assumptions=None,
+        env_params={"product_type": "enterprise_software"},
+    )
+    assert out.metrics["procurement_friction"] == 0.0
+    assert out.metrics["procurement_credibility"] == 1.0
+    assert out.severity == "INFO"
+
+
 # ---------------------------------------------------------------------------
 # generate_report
 # ---------------------------------------------------------------------------

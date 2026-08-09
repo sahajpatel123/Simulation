@@ -204,13 +204,15 @@ def _normalise(text: str) -> str:
     """Lowercase and expand common contracted negations."""
     lowered = text.lower()
     return _CONTRACTION_PATTERN.sub(
-        lambda m: f"{_CONTRACTION_SUFFIXES[m.group(1)]} not", lowered
+        lambda m: _CONTRACTION_SUFFIXES[m.group(1)], lowered
     )
 
 
-def _assumption_texts(assumptions: list[dict[str, Any]]) -> list[str]:
+def _assumption_texts(
+    assumptions: list[dict[str, Any]] | None,
+) -> list[str]:
     texts: list[str] = []
-    for assumption in assumptions:
+    for assumption in assumptions or []:
         if isinstance(assumption, dict):
             raw = str(assumption.get("text", assumption.get("assumption", "")))
         else:
@@ -220,16 +222,34 @@ def _assumption_texts(assumptions: list[dict[str, Any]]) -> list[str]:
 
 
 def _has_signal(
-    assumptions: list[dict[str, Any]],
+    assumptions: list[dict[str, Any]] | None,
     keywords: tuple[str, ...],
 ) -> bool:
     pattern = _keyword_pattern(keywords)
     return any(pattern.search(text) for text in _assumption_texts(assumptions))
 
 
-def _is_discourse_negation(before_tokens: list[str]) -> bool:
-    """True for "not only" openings that do not void the matched phrase."""
-    return before_tokens[:2] == ["not", "only"]
+# "not only"/"not just" (and variants) are discourse-focus constructions:
+# they presuppose the matched phrase ("not just SOC 2" means SOC 2 counts)
+# instead of voiding it. Plain "not" remains a voiding marker everywhere else.
+_DISCOURSE_FOCUS_MARKERS: frozenset[str] = frozenset({
+    "only", "just", "merely", "simply",
+})
+
+
+def _is_discourse_negation(tokens: list[str]) -> bool:
+    """True for "not only"/"not just" focus constructions.
+
+    Detected anywhere in the clause — "Not just SOC 2…", "we aren't just
+    SOC 2 certified" and "we have SOC 2 not only as a formality" all
+    presuppose the matched evidence phrase, so they stay evidence.
+    """
+    return any(
+        tokens[i] == "not"
+        and i + 1 < len(tokens)
+        and tokens[i + 1] in _DISCOURSE_FOCUS_MARKERS
+        for i in range(len(tokens) - 1)
+    )
 
 
 def _match_is_voided(
@@ -246,23 +266,28 @@ def _match_is_voided(
     clause_end = clause_matches_after[0].start() if clause_matches_after else len(text)
     after = re.findall(r"[a-z]+", text[end:clause_end])[:8]
 
-    if _is_discourse_negation(before):
-        return False
     if after and after[0] in {"and", "or", "then", "also", "plus", "too"}:
         after = []
     before_text = " ".join(before)
     after_text = " ".join(after)
+    combined = before + after
+    # Progress/intent phrases void even under a "not only/just" focus
+    # construction: "not only working on SOC 2" is still not evidence.
     if any(
         phrase in f"{before_text} {after_text}"
         for phrase in ("working on", "in progress", "to be")
     ):
         return True
-    return bool(
-        set(before + after) & (_NEGATION_MARKERS | _INTENT_MARKERS)
-    )
+    if _is_discourse_negation(combined):
+        # "not only"/"not just" presuppose the phrase, so the "not" is not
+        # a voiding negation — but intent markers ("want", "plan") still are.
+        negation_voided = False
+    else:
+        negation_voided = bool(set(combined) & _NEGATION_MARKERS)
+    return negation_voided or bool(set(combined) & _INTENT_MARKERS)
 
 
-def _has_evidence(assumptions: list[dict[str, Any]]) -> bool:
+def _has_evidence(assumptions: list[dict[str, Any]] | None) -> bool:
     pattern = _keyword_pattern(_EVIDENCE_KEYWORDS)
     for text in _assumption_texts(assumptions):
         for match in pattern.finditer(text):
