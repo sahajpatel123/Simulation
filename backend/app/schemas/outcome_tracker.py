@@ -22,14 +22,20 @@ class OutcomeTrackerCreate(BaseModel):
     At least one of ``actual_conversion_rate`` / ``actual_revenue`` must be
     provided so a point always carries a useful signal. ``simulation_id`` is
     optional — when omitted the route attaches the project's latest completed
-    simulation automatically.
+    simulation automatically. Numeric metrics must be finite — ``NaN`` and
+    ``Infinity`` are rejected so a checkpoint can never poison the drift /
+    forecast / accuracy math downstream.
     """
 
     model_config = {"extra": "forbid"}
 
     simulation_id: int | None = Field(default=None, ge=1)
-    actual_conversion_rate: float | None = Field(default=None, ge=0.0, le=1.0)
-    actual_revenue: float | None = Field(default=None, ge=0.0)
+    actual_conversion_rate: float | None = Field(
+        default=None, ge=0.0, le=1.0, allow_inf_nan=False
+    )
+    actual_revenue: float | None = Field(
+        default=None, ge=0.0, allow_inf_nan=False
+    )
     recorded_at: datetime | None = None
     notes: str | None = Field(default=None, max_length=2000)
 
@@ -52,13 +58,18 @@ class OutcomeTrackerUpdate(BaseModel):
     optional field. At least one field must be provided, and the merged
     checkpoint must keep at least one of ``actual_conversion_rate`` /
     ``actual_revenue`` (enforced by the route once the stored row is known).
+    Numeric metrics must be finite — ``NaN`` and ``Infinity`` are rejected.
     """
 
     model_config = {"extra": "forbid"}
 
     simulation_id: int | None = Field(default=None, ge=1)
-    actual_conversion_rate: float | None = Field(default=None, ge=0.0, le=1.0)
-    actual_revenue: float | None = Field(default=None, ge=0.0)
+    actual_conversion_rate: float | None = Field(
+        default=None, ge=0.0, le=1.0, allow_inf_nan=False
+    )
+    actual_revenue: float | None = Field(
+        default=None, ge=0.0, allow_inf_nan=False
+    )
     recorded_at: datetime | None = None
     notes: str | None = Field(default=None, max_length=2000)
 

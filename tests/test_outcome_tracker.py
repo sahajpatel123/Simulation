@@ -303,6 +303,34 @@ def test_update_schema_rejects_out_of_range_values() -> None:
         OutcomeTrackerUpdate(actual_revenue=-5.0)
 
 
+def test_create_schema_rejects_non_finite_metrics() -> None:
+    from pydantic import ValidationError
+    from app.schemas.outcome_tracker import OutcomeTrackerCreate
+
+    with pytest.raises(ValidationError):
+        OutcomeTrackerCreate(actual_conversion_rate=float("inf"))
+    with pytest.raises(ValidationError):
+        OutcomeTrackerCreate(actual_conversion_rate=float("nan"))
+    with pytest.raises(ValidationError):
+        OutcomeTrackerCreate(actual_revenue=float("inf"))
+    with pytest.raises(ValidationError):
+        OutcomeTrackerCreate(actual_revenue=float("nan"))
+
+
+def test_update_schema_rejects_non_finite_metrics() -> None:
+    from pydantic import ValidationError
+    from app.schemas.outcome_tracker import OutcomeTrackerUpdate
+
+    with pytest.raises(ValidationError):
+        OutcomeTrackerUpdate(actual_conversion_rate=float("inf"))
+    with pytest.raises(ValidationError):
+        OutcomeTrackerUpdate(actual_conversion_rate=float("nan"))
+    with pytest.raises(ValidationError):
+        OutcomeTrackerUpdate(actual_revenue=float("inf"))
+    with pytest.raises(ValidationError):
+        OutcomeTrackerUpdate(actual_revenue=float("nan"))
+
+
 # ---------------------------------------------------------------------------
 # Route smoke tests (fake session, no DB)
 # ---------------------------------------------------------------------------
@@ -650,6 +678,47 @@ def test_patch_updates_recorded_at() -> None:
     )
 
     assert out.recorded_at == datetime(2026, 8, 15, tzinfo=timezone.utc)
+
+
+def test_patch_clears_notes_and_recorded_at_with_explicit_null() -> None:
+    session = _FakeSession(rows=[_tracker_row()])
+    out = _call_patch(
+        session=session,
+        payload={"notes": None, "recorded_at": None},
+    )
+
+    assert session.committed == 1
+    assert out.notes is None
+    assert out.recorded_at is None
+    assert out.actual_conversion_rate == 0.06
+    assert out.actual_revenue == 100.0
+
+
+def test_patch_empty_results_simulation_clears_predictions() -> None:
+    sim = _FakeSimulation(sim_id=99, results={})
+    session = _FakeSession(rows=[_tracker_row()], sim=sim)
+
+    out = _call_patch(session=session, payload={"simulation_id": 99})
+
+    assert out.simulation_id == 99
+    assert out.predicted_conversion_rate is None
+    assert out.predicted_revenue is None
+    assert out.variance is None
+    assert out.actual_conversion_rate == 0.06
+
+
+def test_patch_rejects_non_finite_revenue_before_any_write() -> None:
+    from pydantic import ValidationError
+
+    session = _FakeSession(rows=[_tracker_row()])
+
+    with pytest.raises(ValidationError):
+        _call_patch(
+            session=session,
+            payload={"actual_revenue": float("inf")},
+        )
+    assert session.committed == 0
+    assert session.added == []
 
 
 def test_patch_404_unknown_point() -> None:
