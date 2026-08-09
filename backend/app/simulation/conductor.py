@@ -104,6 +104,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "RegulatoryComplianceArchitect",
         "EnterpriseProcurementArchitect",
         "PlatformDependencyArchitect",
+        "RunwayArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.MARKETPLACE: [
@@ -116,6 +117,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
         "RegulatoryComplianceArchitect",
         "PlatformDependencyArchitect",
+        "RunwayArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.MOBILE_APP: [
@@ -128,6 +130,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
         "RegulatoryComplianceArchitect",
         "PlatformDependencyArchitect",
+        "RunwayArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.DEVELOPER_TOOL: [
@@ -141,6 +144,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "RegulatoryComplianceArchitect",
         "EnterpriseProcurementArchitect",
         "PlatformDependencyArchitect",
+        "RunwayArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.ENTERPRISE_SOFTWARE: [
@@ -152,6 +156,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "SupportFrictionArchitect", "MacroeconomicArchitect",
         "DemographicInteractionArchitect", "RegulatoryComplianceArchitect",
         "EnterpriseProcurementArchitect",
+        "RunwayArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.CONSUMER_HARDWARE: [
@@ -166,6 +171,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "ViralityArchitect",
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
         "RegulatoryComplianceArchitect",
+        "RunwayArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.HEALTH_HARDWARE: [
@@ -181,6 +187,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "ViralityArchitect",
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
         "RegulatoryComplianceArchitect",
+        "RunwayArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.IOT_HARDWARE: [
@@ -194,6 +201,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "AftersalesLifecycleArchitect", "SupportFrictionArchitect",
         "MacroeconomicArchitect",
         "DemographicInteractionArchitect", "RegulatoryComplianceArchitect",
+        "RunwayArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.WEARABLE: [
@@ -207,6 +215,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "AftersalesLifecycleArchitect", "SupportFrictionArchitect",
         "MacroeconomicArchitect",
         "DemographicInteractionArchitect", "RegulatoryComplianceArchitect",
+        "RunwayArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.B2B_HARDWARE: [
@@ -221,6 +230,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "DemographicInteractionArchitect",
         "RegulatoryComplianceArchitect",
         "EnterpriseProcurementArchitect",
+        "RunwayArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.CONSUMER_APP: [
@@ -233,6 +243,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
         "RegulatoryComplianceArchitect",
         "PlatformDependencyArchitect",
+        "RunwayArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.DIRECT_TO_CONSUMER: [
@@ -244,6 +255,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "ViralityArchitect", "MacroeconomicArchitect",
         "DemographicInteractionArchitect", "RegulatoryComplianceArchitect",
         "PlatformDependencyArchitect",
+        "RunwayArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.B2B_MARKETPLACE: [
@@ -257,6 +269,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "RegulatoryComplianceArchitect",
         "EnterpriseProcurementArchitect",
         "PlatformDependencyArchitect",
+        "RunwayArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.PRODUCTIVITY_TOOL: [
@@ -270,6 +283,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "RegulatoryComplianceArchitect",
         "EnterpriseProcurementArchitect",
         "PlatformDependencyArchitect",
+        "RunwayArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.SMART_HOME: [
@@ -283,6 +297,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "AftersalesLifecycleArchitect", "SupportFrictionArchitect",
         "MacroeconomicArchitect",
         "DemographicInteractionArchitect", "RegulatoryComplianceArchitect",
+        "RunwayArchitect",
         "AssumptionCascadeArchitect",
     ],
 }
@@ -331,6 +346,9 @@ DEPENDENCY_MAP: dict[str, dict[str, tuple[str, str]]] = {
     "EnterpriseProcurementArchitect": {
         "brand_deficit_multiplier":    ("TrustArchitect", "brand_deficit_multiplier"),
         "problem_urgency_intensity": ("MarketTimingArchitect", "problem_urgency_intensity"),
+    },
+    "RunwayArchitect": {
+        "price_ceiling": ("PricingArchitect", "price_ceiling"),
     },
     "HealthSafetyHardwareArchitect": {
         "day30_survival": ("RetentionArchitect", "day30_survival"),
@@ -475,6 +493,7 @@ def _build_architect_registry() -> dict[str, Any]:
         RegulatoryComplianceArchitect,
     )
     from app.simulation.architects.retention import RetentionArchitect
+    from app.simulation.architects.runway import RunwayArchitect
     from app.simulation.architects.setup_first_use import SetupFirstUseArchitect
     from app.simulation.architects.supply_chain import SupplyChainArchitect
     from app.simulation.architects.support_friction import SupportFrictionArchitect
@@ -512,6 +531,7 @@ def _build_architect_registry() -> dict[str, Any]:
         "AftersalesLifecycleArchitect":    AftersalesLifecycleArchitect(),
         "HealthSafetyHardwareArchitect":   HealthSafetyHardwareArchitect(),
         "RegulatoryComplianceArchitect":   RegulatoryComplianceArchitect(),
+        "RunwayArchitect":                 RunwayArchitect(),
     }
 
 

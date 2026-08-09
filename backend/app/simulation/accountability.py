@@ -101,6 +101,10 @@ class AccountabilityEngine:
         "platform_risk_score": 0.25,
         "platform_risk_suppressor": 1.0,
         "mitigation_credibility": 1.0,
+        "viability_exposure": 0.15,
+        "business_health_score": 0.80,
+        "viability_risk": 0.20,
+        "runway_funnel_suppressor": 1.0,
     }
 
     LOWER_IS_BETTER: frozenset[str] = frozenset({
@@ -129,6 +133,8 @@ class AccountabilityEngine:
         "single_channel_risk",
         "platform_gate_risk",
         "platform_risk_score",
+        "viability_exposure",
+        "viability_risk",
     })
 
     FINDING_TEMPLATES: dict[str, str] = {
@@ -293,6 +299,22 @@ class AccountabilityEngine:
             "{cluster} sees weak platform mitigation credibility "
             "({val:.2f} vs benchmark {bench:.2f})"
         ),
+        "viability_exposure": (
+            "{pct:.0f}% of {cluster} exposed to cash-runway uncertainty "
+            "(benchmark {bench:.0f}%)"
+        ),
+        "business_health_score": (
+            "{cluster} sees {pct:.0f}% viability confidence "
+            "(benchmark {bench:.0f}%)"
+        ),
+        "viability_risk": (
+            "{cluster} faces viability risk {val:.2f} "
+            "(benchmark {bench:.2f})"
+        ),
+        "runway_funnel_suppressor": (
+            "Cash-runway uncertainty leaves {cluster} at {pct:.0f}% funnel "
+            "strength (benchmark {bench:.0f}%)"
+        ),
     }
 
     RECOMMENDED_ACTIONS: dict[str, str] = {
@@ -415,6 +437,22 @@ class AccountabilityEngine:
         "mitigation_credibility": (
             "Ship and document mitigations: web app/PWA, email list, "
             "multi-cloud, portability"
+        ),
+        "viability_exposure": (
+            "Publish funding, revenue and runway evidence so buyers stop "
+            "discounting for shutdown risk"
+        ),
+        "business_health_score": (
+            "Show 12-18 months of runway, revenue traction or breakeven "
+            "unit economics"
+        ),
+        "viability_risk": (
+            "Extend cash runway and share unit economics with high-risk, "
+            "high-ticket clusters"
+        ),
+        "runway_funnel_suppressor": (
+            "Publish concrete funding/revenue/runway evidence and a "
+            "12-18 month cash plan"
         ),
     }
 

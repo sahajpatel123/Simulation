@@ -140,6 +140,12 @@ SPECIFICITY_RULES: dict[str, dict[float, str]] = {
         0.2: "supply description without specifics (reliable, established supply)",
         0.0: "no supply chain information",
     },
+    "RunwayArchitect": {
+        1.0: "specific funding amount or runway months with revenue/breakeven status",
+        0.6: "funding or revenue status stated without amounts (raised seed, revenue positive)",
+        0.2: "finance vocabulary only (funding, runway, burn, unit economics)",
+        0.0: "no financial viability claim",
+    },
     "NetworkEffectArchitect": {
         1.0: "specific network effect mechanism with measured or observed data",
         0.6: "network effect described with mechanism but unmeasured",
