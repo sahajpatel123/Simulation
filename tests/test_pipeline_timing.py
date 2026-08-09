@@ -66,6 +66,11 @@ def test_build_pipeline_timing_drops_invalid_stages() -> None:
             "bool": True,
             "text": "not-a-number",
             "": 1.0,
+            "total_seconds": 99.0,
+            "stage_count": 7,
+            "per_agent_ms": 1.0,
+            "end_to_end_seconds": 2.0,
+            "failed_during": 3.0,
         }
     )
     assert payload == {
@@ -73,6 +78,28 @@ def test_build_pipeline_timing_drops_invalid_stages() -> None:
         "total_seconds": 0.5,
         "stage_count": 1,
         "per_agent_ms": None,
+    }
+
+
+def test_build_pipeline_timing_drops_reserved_summary_stage_names() -> None:
+    payload = build_pipeline_timing(
+        {
+            "conductor_run": 1.0,
+            "total_seconds": 999.0,
+            "stage_count": 99,
+            "per_agent_ms": 999.0,
+            "end_to_end_seconds": 999.0,
+            "failed_during": "spoof",
+        },
+        total_agents=10_000,
+        end_to_end_seconds=5.0,
+    )
+    assert payload == {
+        "conductor_run": 1.0,
+        "total_seconds": 1.0,
+        "stage_count": 1,
+        "per_agent_ms": 0.1,
+        "end_to_end_seconds": 5.0,
     }
 
 
@@ -112,6 +139,25 @@ def test_build_pipeline_timing_handles_agent_volume_edge_cases() -> None:
     assert bool_agents["per_agent_ms"] is None
 
 
+def test_build_pipeline_timing_marks_failed_during_stage() -> None:
+    payload = build_pipeline_timing(
+        {"load_project_data": 0.2, "agent_profile_generation": 3.0},
+        total_agents=10_000,
+        end_to_end_seconds=4.5,
+        failed_during="conductor_run",
+    )
+    assert payload["failed_during"] == "conductor_run"
+    assert payload["total_seconds"] == 3.2
+    assert payload["stage_count"] == 2
+    assert payload["end_to_end_seconds"] == 4.5
+
+
+def test_build_pipeline_timing_omits_invalid_failed_during() -> None:
+    for bad in (None, "", "   ", 12):
+        payload = build_pipeline_timing({}, failed_during=bad)  # type: ignore[arg-type]
+        assert "failed_during" not in payload
+
+
 # ── Reproducibility fingerprint ──────────────────────────────────────────────
 
 
@@ -141,6 +187,24 @@ def test_worker_persists_pipeline_timing_after_fingerprint() -> None:
     assert "stage_timings[\"conductor_run\"] = wall_s" in source
     assert "stage_timings[\"agent_profile_generation\"]" in source
     assert "stage_timings[\"accountability_and_funnel\"]" in source
+
+
+def test_worker_times_first_stage_after_running_flip() -> None:
+    source = _read(_TASKS_PATH)
+    flip_index = source.index("self._metrics_start = time.monotonic()")
+    stage_start_index = source.index("_stage_t0 = time.perf_counter()")
+    assert flip_index < stage_start_index
+    assert 'active_stage = "load_project_data"' in source
+    assert 'active_stage = "conductor_run"' in source
+
+
+def test_worker_persists_partial_timing_on_terminal_failure() -> None:
+    source = _read(_TASKS_PATH)
+    assert "failed_during=active_stage" in source
+    assert "pipeline_timing=build_pipeline_timing(" in source
+    failed_index = source.index("_mark_failed(")
+    timing_index = source.index("pipeline_timing=build_pipeline_timing(")
+    assert failed_index < timing_index
 
 
 # ── API contract ─────────────────────────────────────────────────────────────
@@ -199,3 +263,112 @@ def test_results_schema_rejects_non_dict_pipeline_timing() -> None:
 def test_results_route_surfaces_pipeline_timing() -> None:
     source = _read(_ROUTE_PATH)
     assert "pipeline_timing=results_json.get(\"pipeline_timing\", {})" in source
+
+
+# ── Failure persistence ──────────────────────────────────────────────────────
+
+
+class _FailedSim:
+    def __init__(self) -> None:
+        self.id = 9
+        self.project_id = 3
+        self.status = "RUNNING"
+        self.error_message: str | None = None
+        self.results_json: dict | None = None
+        self.updated_at: object | None = None
+
+
+class _FailureSession:
+    def __init__(self, *, rowcount: int = 1) -> None:
+        self.params: dict | None = None
+        self.sql = ""
+        self.commits = 0
+        self.rollbacks = 0
+        self._rowcount = rowcount
+
+    def execute(self, stmt, params=None):
+        self.sql = str(stmt)
+        self.params = params
+        result = type("_R", (), {"rowcount": self._rowcount})()
+        return result
+
+    def commit(self) -> None:
+        self.commits += 1
+
+    def rollback(self) -> None:
+        self.rollbacks += 1
+
+
+def _call_mark_failed(
+    monkeypatch: pytest.MonkeyPatch,
+    session: _FailureSession,
+    sim: _FailedSim,
+    *,
+    timing: dict[str, object] | None,
+) -> None:
+    from app.tasks import simulation_tasks as tasks
+
+    monkeypatch.setattr(tasks, "sync_broadcast", lambda *a, **k: None)
+    monkeypatch.setattr(tasks, "_enqueue_simulation_webhooks", lambda *a, **k: None)
+    monkeypatch.setattr(tasks.metrics, "sim_failed", lambda: None)
+    tasks._mark_failed(session, sim, ValueError("boom"), pipeline_timing=timing)
+
+
+def test_mark_failed_persists_partial_pipeline_timing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = _FailureSession()
+    sim = _FailedSim()
+    timing = {
+        "load_project_data": 0.25,
+        "total_seconds": 0.25,
+        "stage_count": 1,
+        "per_agent_ms": 0.025,
+        "failed_during": "agent_profile_generation",
+    }
+
+    _call_mark_failed(monkeypatch, session, sim, timing=timing)
+
+    assert sim.status == "FAILED"
+    assert sim.error_message == "boom"
+    assert sim.results_json == {"pipeline_timing": timing}
+    assert "CAST(:rj AS jsonb)" in session.sql
+    assert session.params is not None
+    assert "pipeline_timing" in session.params["rj"]
+    assert session.commits == 1
+
+
+def test_mark_failed_without_timing_keeps_results_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = _FailureSession()
+    sim = _FailedSim()
+    sim.results_json = {"pre_existing": True}
+
+    _call_mark_failed(monkeypatch, session, sim, timing=None)
+
+    assert sim.status == "FAILED"
+    assert sim.results_json == {"pre_existing": True}
+    assert "CAST(:rj AS jsonb)" not in session.sql
+    assert session.params is not None
+    assert "rj" not in session.params
+
+
+def test_mark_failed_with_timing_does_not_overwrite_cancelled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = _FailureSession(rowcount=0)
+    sim = _FailedSim()
+    sim.status = "CANCELLED"
+
+    _call_mark_failed(
+        monkeypatch,
+        session,
+        sim,
+        timing={"stage_count": 0, "total_seconds": 0.0, "per_agent_ms": None},
+    )
+
+    assert sim.status == "CANCELLED"
+    assert sim.error_message is None
+    assert sim.results_json is None
+    assert session.rollbacks == 1

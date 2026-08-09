@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import time
 from datetime import UTC, datetime
@@ -156,20 +157,56 @@ def _transition_count(result: object) -> int:
     return int(getattr(result, "rowcount", 1) or 0)
 
 
-def _mark_failed(db: Session, sim: Simulation, exc: Exception) -> None:
+def _mark_failed(
+    db: Session,
+    sim: Simulation,
+    exc: Exception,
+    *,
+    pipeline_timing: dict[str, object] | None = None,
+) -> None:
+    """Persist a terminal FAILED state, optionally with partial run timing.
+
+    ``pipeline_timing`` is the partial per-stage payload built from
+    ``build_pipeline_timing`` at the failure site. It is stored under
+    ``results_json["pipeline_timing"]`` so operators can see where a run
+    died without ever touching the reproducibility fingerprint of a
+    completed run.
+    """
     msg = str(exc)[:500]
+    failure_results_json: str | None = None
+    if pipeline_timing:
+        failure_results_json = json.dumps({"pipeline_timing": pipeline_timing})
     try:
-        result = db.execute(
-            text(
-                """
-                UPDATE simulations
-                SET status = 'FAILED', error_message = :msg, updated_at = :u
-                WHERE id = :sid
-                  AND status IN ('QUEUED', 'RUNNING')
-                """
-            ),
-            {"msg": msg, "u": _utcnow(), "sid": sim.id},
-        )
+        if failure_results_json is not None:
+            result = db.execute(
+                text(
+                    """
+                    UPDATE simulations
+                    SET status = 'FAILED', error_message = :msg,
+                        results_json = CAST(:rj AS jsonb), updated_at = :u
+                    WHERE id = :sid
+                      AND status IN ('QUEUED', 'RUNNING')
+                    """
+                ),
+                {
+                    "msg": msg,
+                    "u": _utcnow(),
+                    "sid": sim.id,
+                    "rj": failure_results_json,
+                },
+            )
+        else:
+            result = db.execute(
+                text(
+                    """
+                    UPDATE simulations
+                    SET status = 'FAILED', error_message = :msg, updated_at = :u
+                    WHERE id = :sid
+                      AND status IN ('QUEUED', 'RUNNING')
+                    """
+                ),
+                {"msg": msg, "u": _utcnow(), "sid": sim.id},
+            )
         if _transition_count(result) == 0:
             # The row already left the cancellable states (e.g. a user
             # cancelled it). Do not overwrite that terminal state with
@@ -178,6 +215,8 @@ def _mark_failed(db: Session, sim: Simulation, exc: Exception) -> None:
             return
         sim.status = "FAILED"
         sim.error_message = msg
+        if pipeline_timing:
+            sim.results_json = {"pipeline_timing": dict(pipeline_timing)}
         sim.updated_at = _utcnow()
         db.commit()
     except Exception as inner:
@@ -502,9 +541,11 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         # payload. Stages are recorded around the compute work only; the
         # terminal results_json write cannot time itself, so persistence is
         # intentionally excluded and the overall worker runtime is captured
-        # separately as end_to_end_seconds.
+        # separately as end_to_end_seconds. The first stage timer starts
+        # after the RUNNING flip so end_to_end_seconds always spans at least
+        # the accounted stages.
         stage_timings: dict[str, float] = {}
-        _stage_t0 = time.perf_counter()
+        active_stage = "startup"
 
         sim = self.db.query(Simulation).filter(Simulation.id == simulation_id).first()
         if not sim:
@@ -536,6 +577,8 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         metrics.sim_started()
         self.db.commit()
 
+        active_stage = "load_project_data"
+        _stage_t0 = time.perf_counter()
         self.update_state(state="PROGRESS", meta={"stage": "Loading project data", "pct": 5})
         sync_broadcast(simulation_id, "RUNNING", "Loading project data", 5)
 
@@ -609,6 +652,7 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         self.update_state(state="PROGRESS", meta={"stage": "Generating agent population", "pct": 15})
         sync_broadcast(simulation_id, "RUNNING", "Generating agent population", 15)
 
+        active_stage = "agent_profile_generation"
         _stage_t0 = time.perf_counter()
         generator = AgentProfileGenerator()
         agents = generator.generate_population(
@@ -630,6 +674,7 @@ def run_full_simulation(self, simulation_id: int) -> dict:
             project.description or "",
             assumption_dicts,
         )
+        active_stage = "conductor_run"
         t0 = time.perf_counter()
         conductor_result = conductor.run(
             agents=agents,
@@ -646,6 +691,7 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         wall_s = time.perf_counter() - t0
         stage_timings["conductor_run"] = wall_s
 
+        active_stage = "accountability_and_funnel"
         _stage_t0 = time.perf_counter()
         accountability = AccountabilityEngine()
         ranked = accountability.generate_domain_findings(
@@ -680,6 +726,7 @@ def run_full_simulation(self, simulation_id: int) -> dict:
             sim.consumer_volume,
         )
 
+        active_stage = "aggregation_and_serialization"
         _stage_t0 = time.perf_counter()
         aggregator = ResultsAggregator()
         agg_result = aggregator.aggregate(
@@ -726,6 +773,7 @@ def run_full_simulation(self, simulation_id: int) -> dict:
             ),
         )
 
+        active_stage = "persist_results"
         if _simulation_is_cancelled(self.db, simulation_id):
             logger.info(
                 f"[Simulation] Cancelled before persist - simulation_id={simulation_id}"
@@ -854,7 +902,25 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         retries = int(getattr(self.request, "retries", 0) or 0)
         max_retries = int(getattr(self, "max_retries", 0) or 0)
         if sim is not None and retries >= max_retries:
-            _mark_failed(self.db, sim, exc)
+            # Persist the partial stage timings with the failure so an
+            # operator can see how far the run got and which stage was in
+            # flight when it died. This never affects the reproducibility
+            # fingerprint: failed runs have no completed results_json.
+            _mark_failed(
+                self.db,
+                sim,
+                exc,
+                pipeline_timing=build_pipeline_timing(
+                    stage_timings,
+                    total_agents=sim.consumer_volume,
+                    end_to_end_seconds=(
+                        time.monotonic() - self._metrics_start
+                        if getattr(self, "_metrics_start", None) is not None
+                        else None
+                    ),
+                    failed_during=active_stage,
+                ),
+            )
         raise self.retry(exc=exc)
 
 

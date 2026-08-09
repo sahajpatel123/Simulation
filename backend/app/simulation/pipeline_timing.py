@@ -11,6 +11,9 @@ the persisted ``results_json["pipeline_timing"]`` payload:
 
 * only finite, non-negative stage durations are kept (a single bad timer
   value must not poison the payload);
+* stage names that collide with the reserved summary keys are dropped so
+  a future stage cannot silently overwrite ``total_seconds``,
+  ``stage_count``, ``per_agent_ms`` or ``end_to_end_seconds``;
 * durations are rounded to 4 decimal places so the JSONB payload stays
   compact and deterministic enough to read;
 * ``total_seconds`` is the sum of the accounted stages, and
@@ -25,6 +28,16 @@ from __future__ import annotations
 
 import math
 from typing import Any
+
+_RESERVED_SUMMARY_KEYS = frozenset(
+    {
+        "total_seconds",
+        "stage_count",
+        "per_agent_ms",
+        "end_to_end_seconds",
+        "failed_during",
+    }
+)
 
 
 def _safe_seconds(value: object) -> float | None:
@@ -45,28 +58,40 @@ def build_pipeline_timing(
     *,
     total_agents: int | None = None,
     end_to_end_seconds: float | None = None,
+    failed_during: str | None = None,
 ) -> dict[str, Any]:
     """Build the persisted ``pipeline_timing`` payload for a simulation run.
 
     Args:
         stage_seconds: mapping of stage name -> wall-clock duration. Names
             must be non-empty strings; durations must be finite, non-negative
-            numbers or they are dropped.
+            numbers or they are dropped. Names colliding with the summary
+            keys (``total_seconds``, ``stage_count``, ``per_agent_ms``,
+            ``end_to_end_seconds``, ``failed_during``) are dropped.
         total_agents: simulated population size, used to derive
             ``per_agent_ms``. ``None`` or non-positive values yield ``None``.
         end_to_end_seconds: optional independently measured worker runtime
             (from the RUNNING status flip to result serialisation). Included
             only when finite and non-negative.
+        failed_during: optional name of the stage that was in progress when
+            a run failed. Included only when a non-empty string is supplied;
+            it marks the payload as partial diagnostics rather than a
+            completed run's timing.
 
     Returns:
         A dict with one key per valid stage (seconds, rounded to 4 decimals),
         plus ``total_seconds``, ``stage_count``, ``per_agent_ms`` and, when
-        provided, ``end_to_end_seconds``. Never raises: malformed input
-        produces a zeroed summary rather than a failed simulation.
+        provided, ``end_to_end_seconds`` and ``failed_during``. Never
+        raises: malformed input produces a zeroed summary rather than a
+        failed simulation.
     """
     cleaned: dict[str, float] = {}
     for name, raw in (stage_seconds or {}).items():
-        if not isinstance(name, str) or not name.strip():
+        if (
+            not isinstance(name, str)
+            or not name.strip()
+            or name in _RESERVED_SUMMARY_KEYS
+        ):
             continue
         seconds = _safe_seconds(raw)
         if seconds is None:
@@ -95,6 +120,12 @@ def build_pipeline_timing(
     end_to_end = _safe_seconds(end_to_end_seconds)
     if end_to_end is not None:
         payload["end_to_end_seconds"] = round(end_to_end, 4)
+    if (
+        isinstance(failed_during, str)
+        and failed_during.strip()
+        and failed_during not in _RESERVED_SUMMARY_KEYS
+    ):
+        payload["failed_during"] = failed_during.strip()
     return payload
 
 
