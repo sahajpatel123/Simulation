@@ -129,6 +129,34 @@ class OutcomeTrackerRevenueForecastOut(BaseModel):
     key_signals: list[dict] = Field(default_factory=list)
 
 
+class OutcomeTrackerForecastAccuracyPoint(BaseModel):
+    """One horizon's historical forecast-accuracy summary."""
+
+    horizon_days: int
+    sample_count: int = 0
+    mean_abs_error: float | None = None
+    mean_abs_pct_error: float | None = None
+    bias: float | None = None
+    bias_direction: str = "INSUFFICIENT_DATA"
+    accuracy_score: float | None = None
+    within_2pp_rate: float | None = None
+
+
+class OutcomeTrackerForecastAccuracyOut(BaseModel):
+    """Forecast-reliability payload for GET /projects/{id}/outcome-tracker/forecast-accuracy."""
+
+    project_id: int
+    total_verifications: int = 0
+    overall_accuracy_score: float | None = None
+    overall_mean_abs_error: float | None = None
+    overall_bias: float | None = None
+    overall_bias_direction: str = "INSUFFICIENT_DATA"
+    overall_verdict: str = "INSUFFICIENT_DATA"
+    confidence: str = "INSUFFICIENT_DATA"
+    narrative: str = ""
+    horizons: list[OutcomeTrackerForecastAccuracyPoint] = Field(default_factory=list)
+
+
 __all__ = [
     "OutcomeTrackerCreate",
     "OutcomeTrackerPoint",
@@ -137,4 +165,6 @@ __all__ = [
     "OutcomeTrackerForecastOut",
     "OutcomeTrackerRevenueForecastPoint",
     "OutcomeTrackerRevenueForecastOut",
+    "OutcomeTrackerForecastAccuracyPoint",
+    "OutcomeTrackerForecastAccuracyOut",
 ]
