@@ -6,12 +6,13 @@ predicted values from the project's latest simulation. These schemas cover
 ``POST /projects/{id}/outcome-tracker``,
 ``PATCH /projects/{id}/outcome-tracker/{point_id}`` and
 ``DELETE /projects/{id}/outcome-tracker/{point_id}`` (checkpoint correction),
-``GET /projects/{id}/outcome-tracker``, plus the trajectory forecast at
-``GET /projects/{id}/outcome-tracker/forecast``.
+``GET /projects/{id}/outcome-tracker``, the trajectory forecasts, and the
+goal-pacing verdict at
+``GET /projects/{id}/outcome-tracker/goal-pacing``.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -254,6 +255,41 @@ class OutcomeTrackerDriftOut(BaseModel):
     checks: list[OutcomeTrackerDriftCheck] = Field(default_factory=list)
 
 
+class OutcomeTrackerGoalMetric(BaseModel):
+    """One metric's goal-pacing verdict (conversion or revenue)."""
+
+    metric: str
+    target_value: float
+    latest_actual: float | None = None
+    sample_count: int = 0
+    span_days: float | None = None
+    slope_per_day: float | None = None
+    r_squared: float | None = None
+    trend_label: str = "INSUFFICIENT_DATA"
+    projected_value_at_deadline: float | None = None
+    days_to_target: float | None = None
+    deadline_days: float | None = None
+    gap_at_deadline: float | None = None
+    required_slope_per_day: float | None = None
+    slope_gap_per_day: float | None = None
+    status: str = "INSUFFICIENT_DATA"
+    confidence: str = "INSUFFICIENT_DATA"
+    narrative: str = ""
+    signals: list[dict] = Field(default_factory=list)
+
+
+class OutcomeTrackerGoalPacingOut(BaseModel):
+    """Goal-pacing payload for GET /projects/{id}/outcome-tracker/goal-pacing."""
+
+    project_id: int
+    deadline: date | None = None
+    deadline_days: float | None = None
+    metrics: list[OutcomeTrackerGoalMetric] = Field(default_factory=list)
+    overall_status: str = "INSUFFICIENT_DATA"
+    narrative: str = ""
+    key_signals: list[dict] = Field(default_factory=list)
+
+
 __all__ = [
     "OutcomeTrackerCreate",
     "OutcomeTrackerUpdate",
@@ -269,4 +305,6 @@ __all__ = [
     "OutcomeTrackerForecastAccuracyOut",
     "OutcomeTrackerDriftCheck",
     "OutcomeTrackerDriftOut",
+    "OutcomeTrackerGoalMetric",
+    "OutcomeTrackerGoalPacingOut",
 ]

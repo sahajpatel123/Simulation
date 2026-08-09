@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -67,6 +67,7 @@ from app.schemas.outcome_tracker import (
     OutcomeTrackerDriftOut,
     OutcomeTrackerForecastAccuracyOut,
     OutcomeTrackerForecastOut,
+    OutcomeTrackerGoalPacingOut,
     OutcomeTrackerPoint,
     OutcomeTrackerRevenueForecastAccuracyOut,
     OutcomeTrackerRevenueForecastOut,
@@ -110,6 +111,9 @@ from app.simulation.outcome_tracker_forecast import (
 )
 from app.simulation.outcome_tracker_forecast_accuracy import (
     build_outcome_tracker_forecast_accuracy,
+)
+from app.simulation.outcome_tracker_goal_pacing import (
+    build_outcome_tracker_goal_pacing,
 )
 from app.simulation.outcome_tracker_read import (
     build_outcome_tracker_timeline,
@@ -1164,6 +1168,88 @@ def get_outcome_tracker_drift(
         predicted_conversion_rate=predicted,
     )
     return OutcomeTrackerDriftOut(**payload)
+
+
+@router.get(
+    "/{project_id}/outcome-tracker/goal-pacing",
+    response_model=OutcomeTrackerGoalPacingOut,
+    summary="Check whether tracked conversion/revenue will hit founder-set goals by a deadline",
+)
+def get_outcome_tracker_goal_pacing(
+    project_id: int,
+    target_conversion_rate: float | None = Query(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        allow_inf_nan=False,
+        description=(
+            "Founder-set conversion goal in [0, 1]. Provide at least one "
+            "of target_conversion_rate / target_revenue."
+        ),
+    ),
+    target_revenue: float | None = Query(
+        default=None,
+        ge=0.0,
+        allow_inf_nan=False,
+        description=(
+            "Founder-set revenue goal (non-negative currency). Provide at "
+            "least one of target_conversion_rate / target_revenue."
+        ),
+    ),
+    deadline: date | None = Query(
+        default=None,
+        description=(
+            "ISO date (YYYY-MM-DD) by which the goal should be reached. "
+            "Omit to get trend-based days-to-goal only."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> OutcomeTrackerGoalPacingOut:
+    """Evaluate pacing toward a founder's own conversion/revenue goals.
+
+    Fits the same deterministic linear trend used by the trajectory
+    forecasts, then answers the question those endpoints do not: will the
+    tracked metric reach the founder's *own* target by the founder's
+    deadline — and how much faster does growth need to be? Supports
+    conversion and/or revenue goals in one call; all arithmetic lives in
+    the pure helper module.
+    """
+    if target_conversion_rate is None and target_revenue is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Provide at least one of target_conversion_rate or "
+                "target_revenue"
+            ),
+        )
+    if target_conversion_rate is not None and target_conversion_rate <= 0.0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="target_conversion_rate must be greater than 0",
+        )
+    if target_revenue is not None and target_revenue <= 0.0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="target_revenue must be greater than 0",
+        )
+
+    get_owned_project(db, current_user.id, project_id)
+
+    rows = (
+        db.query(OutcomeTracker)
+        .filter(OutcomeTracker.project_id == project_id)
+        .order_by(OutcomeTracker.recorded_at.asc())
+        .all()
+    )
+    payload = build_outcome_tracker_goal_pacing(
+        [r.__dict__ for r in rows],
+        project_id=project_id,
+        target_conversion_rate=target_conversion_rate,
+        target_revenue=target_revenue,
+        deadline=deadline,
+    )
+    return OutcomeTrackerGoalPacingOut(**payload)
 
 
 @router.get(
