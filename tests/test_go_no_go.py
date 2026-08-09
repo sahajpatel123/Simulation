@@ -348,6 +348,129 @@ def test_out_of_range_scores_are_clamped() -> None:
     assert out.go_no_go_score is None or 0 <= out.go_no_go_score <= 100
 
 
+def test_premortem_without_breakdown_is_insufficient() -> None:
+    from app.simulation.go_no_go import build_go_no_go
+
+    now = _now()
+    inputs = _full_inputs(now)
+    inputs["premortem"] = {
+        "premortem_count": 3,
+        "severity_breakdown": None,
+    }
+    out = build_go_no_go(
+        **inputs,
+        project_id=7,
+        latest_simulation_id=11,
+        now=now,
+    )
+    premortem = next(p for p in out.pillars if p.key == "premortem")
+    assert premortem.score is None
+    assert premortem.verdict == "INSUFFICIENT_DATA"
+    # The malformed read must not surface as a clean risk posture.
+    assert "clean" not in premortem.summary.lower()
+    risk_gate = next(g for g in out.gates if g.id == "risk_gate")
+    assert risk_gate.evaluated is False
+
+
+def test_premortem_breakdown_only_payload_is_supported() -> None:
+    from app.simulation.go_no_go import build_go_no_go
+
+    now = _now()
+    inputs = _full_inputs(now)
+    inputs["premortem"] = {
+        "severity_breakdown": {"HIGH": 1, "MEDIUM": 2},
+    }
+    out = build_go_no_go(
+        **inputs,
+        project_id=7,
+        latest_simulation_id=11,
+        now=now,
+    )
+    premortem = next(p for p in out.pillars if p.key == "premortem")
+    assert premortem.score == 84
+    assert premortem.verdict == "STRONG"
+    risk_gate = next(g for g in out.gates if g.id == "risk_gate")
+    assert risk_gate.evaluated is True
+    assert risk_gate.passed is True
+
+
+def test_unknown_premortem_severity_is_conservative() -> None:
+    from app.simulation.go_no_go import (
+        VERDICT_CONDITIONAL_GO,
+        build_go_no_go,
+    )
+
+    now = _now()
+    inputs = _full_inputs(now)
+    inputs["premortem"] = {
+        "premortem_count": 3,
+        "severity_breakdown": {"MAJOR": 2, "HIGH": 1},
+    }
+    out = build_go_no_go(
+        **inputs,
+        project_id=7,
+        latest_simulation_id=11,
+        now=now,
+    )
+    premortem = next(p for p in out.pillars if p.key == "premortem")
+    # 2 unknown severities are penalised as CRITICAL-equivalent.
+    assert premortem.score is not None and premortem.score <= 60
+    assert any("unknown-severity" in line for line in premortem.evidence)
+    risk_gate = next(g for g in out.gates if g.id == "risk_gate")
+    assert risk_gate.evaluated is True
+    assert risk_gate.passed is False
+    # A high score elsewhere cannot mask the unmet risk gate.
+    assert out.verdict == VERDICT_CONDITIONAL_GO
+
+
+def test_coverage_without_category_list_is_insufficient() -> None:
+    from app.simulation.go_no_go import build_go_no_go
+
+    now = _now()
+    inputs = _full_inputs(now)
+    inputs["coverage"] = {
+        "total_assumption_count": 5,
+        "sensitivity_breakdown": {"HIGH": 2},
+    }
+    out = build_go_no_go(
+        **inputs,
+        project_id=7,
+        latest_simulation_id=11,
+        now=now,
+    )
+    coverage = next(p for p in out.pillars if p.key == "coverage")
+    assert coverage.score is None
+    assert coverage.verdict == "INSUFFICIENT_DATA"
+    coverage_gate = next(
+        g for g in out.gates if g.id == "coverage_gate"
+    )
+    assert coverage_gate.evaluated is False
+
+
+def test_coverage_without_sensitivity_breakdown_is_insufficient() -> None:
+    from app.simulation.go_no_go import build_go_no_go
+
+    now = _now()
+    inputs = _full_inputs(now)
+    inputs["coverage"] = {
+        "total_assumption_count": 5,
+        "missing_categories": [],
+    }
+    out = build_go_no_go(
+        **inputs,
+        project_id=7,
+        latest_simulation_id=11,
+        now=now,
+    )
+    coverage = next(p for p in out.pillars if p.key == "coverage")
+    assert coverage.score is None
+    assert coverage.verdict == "INSUFFICIENT_DATA"
+    coverage_gate = next(
+        g for g in out.gates if g.id == "coverage_gate"
+    )
+    assert coverage_gate.evaluated is False
+
+
 # ---------------------------------------------------------------------------
 # Freshness
 # ---------------------------------------------------------------------------
@@ -512,8 +635,6 @@ def test_narrative_reflects_verdict() -> None:
 
 
 def test_pydantic_model_inputs_are_accepted() -> None:
-    from app.simulation.go_no_go import build_go_no_go
-
     from app.schemas.launch_checklist import (
         LaunchChecklistOut,
         LaunchChecklistSummary,
@@ -522,6 +643,7 @@ def test_pydantic_model_inputs_are_accepted() -> None:
         SimulationQualityOut,
         SimulationQualitySummary,
     )
+    from app.simulation.go_no_go import build_go_no_go
 
     now = _now()
     readiness = LaunchChecklistOut(

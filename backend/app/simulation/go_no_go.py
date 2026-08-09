@@ -33,7 +33,11 @@ No DB / I/O — verifiable without FastAPI or PostgreSQL. The route layer
 supplies the six pillar payloads; all arithmetic is deterministic and
 defensively sanitised: non-finite values are treated as missing and
 out-of-range numbers are clamped so malformed legacy payloads cannot
-distort the verdict.
+distort the verdict. Malformed premortem severities (missing or empty
+severity breakdowns, unknown severity buckets) and malformed coverage
+reads (missing category or sensitivity structures) are treated as
+unavailable or conservatively penalised so corrupt legacy data cannot
+inflate the launch verdict.
 """
 from __future__ import annotations
 
@@ -141,6 +145,14 @@ HIGH_PENALTY: float = 8.0
 MEDIUM_PENALTY: float = 4.0
 LOW_PENALTY: float = 1.0
 
+# Known premortem severity buckets. Unknown/legacy severities (e.g. a
+# raw "MAJOR" from an old payload) are treated as CRITICAL-equivalent
+# so malformed data cannot hide risk from the score or the risk gate.
+_KNOWN_SEVERITIES: frozenset[str] = frozenset(
+    {"CRITICAL", "HIGH", "MEDIUM", "LOW"}
+)
+UNKNOWN_SEVERITY_PENALTY: float = 20.0
+
 # Assumption-coverage penalties.
 MISSING_CATEGORY_PENALTY: float = 15.0
 NO_HIGH_SENSITIVITY_PENALTY: float = 10.0
@@ -175,7 +187,7 @@ ACTION_TEMPLATES: dict[str, str] = {
 }
 
 # Gate metadata: (id, label, remediation detail).
-GATE_SPECS: dict[str, tuple[str, str, str]] = {
+GATE_SPECS: dict[str, tuple[str, str]] = {
     "readiness_gate": (
         "Launch readiness is strong enough",
         "Launch-checklist readiness must reach 80/100",
@@ -300,36 +312,57 @@ def _premortem_pillar(payload: dict[str, Any] | None) -> GoNoGoPillar:
         return _insufficient_pillar(
             "premortem", "Premortem read unavailable"
         )
+    breakdown = payload.get("severity_breakdown")
+    if not isinstance(breakdown, dict) or not breakdown:
+        return _insufficient_pillar(
+            "premortem",
+            "Premortem severity breakdown is missing or malformed",
+        )
     total = _safe_int(payload.get("premortem_count"))
+    if total <= 0:
+        # Legacy payloads sometimes carry the breakdown without the
+        # explicit count — derive it rather than discarding the read.
+        total = sum(_safe_int(count) for count in breakdown.values())
     if total <= 0:
         return _insufficient_pillar(
             "premortem", "Premortem has not been run yet"
         )
-    breakdown = payload.get("severity_breakdown") or {}
-    if not isinstance(breakdown, dict):
-        breakdown = {}
     critical = _safe_int(breakdown.get("CRITICAL"))
     high = _safe_int(breakdown.get("HIGH"))
     medium = _safe_int(breakdown.get("MEDIUM"))
     low = _safe_int(breakdown.get("LOW"))
+    unknown = sum(
+        _safe_int(count)
+        for severity, count in breakdown.items()
+        if severity not in _KNOWN_SEVERITIES
+    )
+    critical_equivalent = critical + unknown
     score = _clamp_score(
         100.0
         - critical * CRITICAL_PENALTY
         - high * HIGH_PENALTY
         - medium * MEDIUM_PENALTY
         - low * LOW_PENALTY
+        - unknown * UNKNOWN_SEVERITY_PENALTY
     )
     evidence = [
         f"{total} premortem failure mode(s) identified",
         (
             f"{critical} CRITICAL · {high} HIGH · "
             f"{medium} MEDIUM · {low} LOW"
+            + (
+                f" · {unknown} unknown-severity "
+                "treated as CRITICAL"
+                if unknown
+                else ""
+            )
         ),
     ]
     summary = (
         "Risk posture is clean"
-        if critical == 0
-        else f"{critical} CRITICAL failure mode(s)"
+        if critical_equivalent == 0
+        else f"{critical_equivalent} CRITICAL-equivalent "
+        "failure mode(s)"
     )
     return GoNoGoPillar(
         key="premortem",
@@ -510,12 +543,18 @@ def _coverage_pillar(payload: dict[str, Any] | None) -> GoNoGoPillar:
         return _insufficient_pillar(
             "coverage", "No visible assumptions recorded yet"
         )
-    missing = payload.get("missing_categories") or []
+    missing = payload.get("missing_categories")
     if not isinstance(missing, list):
-        missing = []
-    sensitivity = payload.get("sensitivity_breakdown") or {}
+        return _insufficient_pillar(
+            "coverage",
+            "Assumption coverage categories are missing or malformed",
+        )
+    sensitivity = payload.get("sensitivity_breakdown")
     if not isinstance(sensitivity, dict):
-        sensitivity = {}
+        return _insufficient_pillar(
+            "coverage",
+            "Assumption sensitivity breakdown is missing or malformed",
+        )
     high_sensitivity = _safe_int(
         sensitivity.get("HIGH")
     ) + _safe_int(sensitivity.get("CRITICAL"))
@@ -574,15 +613,24 @@ def _build_gates(
 
     premortem = pillars.get("premortem")
     if premortem is not None and premortem.score is not None:
-        critical = 0
         breakdown = (premortem_payload or {}).get(
             "severity_breakdown"
         ) or {}
         if isinstance(breakdown, dict):
             critical = _safe_int(breakdown.get("CRITICAL"))
-        passed = critical <= RISK_GATE_MAX_CRITICAL
+            unknown = sum(
+                _safe_int(count)
+                for severity, count in breakdown.items()
+                if severity not in _KNOWN_SEVERITIES
+            )
+        else:
+            critical = 0
+            unknown = 0
+        critical_equivalent = critical + unknown
+        passed = critical_equivalent <= RISK_GATE_MAX_CRITICAL
         detail = (
-            f"{critical} CRITICAL premortem failure mode(s) "
+            f"{critical_equivalent} CRITICAL-equivalent premortem "
+            f"failure mode(s) "
             f"(max {RISK_GATE_MAX_CRITICAL})"
         )
     else:
