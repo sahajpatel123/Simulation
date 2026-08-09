@@ -31,10 +31,14 @@ What this architect does:
   contracts, purchase orders issued, pilot runs, units produced, MOQ
   met, dual sourcing confirmed) raises ``supply_chain_credibility`` to
   1.0, softens the funnel suppressor and earns a small purchase-stage
-  ``supply_chain_advantage_lift``. Evidence detection is negation- and
-  intent-aware: "no supplier contracts signed", "supply not secured"
-  and "we plan to secure suppliers" are gaps, never proof, while "No,
-  we already have suppliers signed" stays evidence.
+  ``supply_chain_advantage_lift``. Detection is phrase-aware: literal
+  phrases plus copular and perfect-tense forms ("MOQ is met",
+  "contracts have been signed", "units were produced") all count.
+  Evidence detection is negation- and intent-aware, with negation scope
+  bounded per coordinate phrase: "no supplier contracts signed",
+  "supply not secured" and "we plan to secure suppliers" are gaps,
+  never proof, while "No, we already have suppliers signed" and
+  "suppliers signed and no debt remains" stay evidence.
 * **Markov overrides** — only when supply-chain exposure is active:
   BROWSE→CONSIDER / CONSIDER→DECIDE are multiplied by the suppressor,
   DECIDE→PURCHASE by ``1 + supply_chain_advantage_lift`` when a working
@@ -69,6 +73,7 @@ _CHAIN_KEYWORDS: tuple[str, ...] = (
     "logistics", "shipping", "tariff", "tariffs", "import", "factory",
     "contract manufacturer", "foundry", "semiconductor", "chips",
     "wafer", "pcb", "printed circuit board",
+    "purchase order", "purchase orders",
 )
 
 _RISK_KEYWORDS: tuple[str, ...] = (
@@ -78,7 +83,11 @@ _RISK_KEYWORDS: tuple[str, ...] = (
     "supply chain risk", "supply-chain risk", "disruption", "disruptions",
     "shortage", "shortages", "scarcity", "chip shortage",
     "semiconductor shortage", "long lead time", "long lead-time",
-    "lead time", "lead-time", "backorder", "back-ordered", "backorders",
+    "extended lead time", "extended lead-time",
+    "significant lead time", "significant lead-time",
+    "lengthy lead time", "lengthy lead-time",
+    "lead time is long", "lead-time is long",
+    "backorder", "back-ordered", "backorders",
     "out of stock", "stockout", "stock-out", "unavailable", "allocation",
     "constrained", "bottleneck", "moq", "minimum order quantity",
     "dependency", "dependencies", "dependent", "reliant", "tariff",
@@ -108,12 +117,16 @@ _EVIDENCE_KEYWORDS: tuple[str, ...] = (
     "secured supply", "supply secured", "signed supplier",
     "suppliers signed", "supplier contracts signed", "contracts signed",
     "supplier agreements signed", "committed supplier", "confirmed supply",
-    "locked-in", "purchase orders", "po issued", "production ready",
+    "locked-in", "po issued", "purchase orders issued", "production ready",
     "pilot run", "first batch", "prototypes produced",
     "manufacturing line ready", "moq met", "dual sourced",
     "second source confirmed", "local supplier confirmed",
     "inventory secured", "stock secured", "units produced",
     "initial production", "shipments started", "orders shipped",
+    "contracts in place", "agreements in place",
+    "supply chain in place", "supply in place", "moq confirmed",
+    "pilot complete", "pilot completed", "in production",
+    "production in progress", "manufacturing in progress",
 )
 
 _TARIFF_KEYWORDS: tuple[str, ...] = (
@@ -143,6 +156,11 @@ _INTENT_MARKERS: frozenset[str] = frozenset({
     "aim", "aims", "hoping", "hope", "hopes", "want", "wants", "wanted",
     "scheduled", "upcoming", "due", "target", "targets", "targeting",
     "looking", "explore", "exploring", "evaluate", "evaluating",
+    "expect", "expects", "expected", "expecting",
+    "anticipate", "anticipates", "anticipated", "anticipating",
+    "aiming", "intending", "hopefully", "hoped",
+    "almost", "nearly", "maybe", "perhaps", "possibly", "probably",
+    "likely", "projected", "projection", "tentative", "tentatively",
 })
 
 # Contracted negations are expanded before matching so "we don't have a
@@ -166,6 +184,14 @@ _CLAUSE_BOUNDARY_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# Conjunctions and prepositions that open a new coordinate phrase. A
+# negation or intent marker after one of these does not qualify the
+# matched phrase: "suppliers signed and no debt" is real evidence, and
+# "single supplier with no backup" is still a concentration blocker.
+_COORDINATION_PATTERN = re.compile(
+    r"\b(?:and|or|nor|plus|with|without)\b", re.IGNORECASE
+)
+
 # Neutral baseline so hardware runs that never mention supply-chain
 # mechanics stay unchanged; explicit signals drive real exposure.
 _EXPOSURE_BASELINE: float = 0.12
@@ -186,6 +212,28 @@ def _keyword_pattern(keywords: tuple[str, ...]) -> re.Pattern[str]:
         r"\b(?:" + "|".join(re.escape(k) for k in keywords) + r")\b",
         re.IGNORECASE,
     )
+
+
+_EVIDENCE_FLEX_PATTERN = re.compile(
+    r"\b(?:"
+    r"(?:supplier\s+)?(?:contracts?|agreements?)\s+(?:are|were|"
+    r"have\s+been|has\s+been)\s+signed"
+    r"|suppliers\s+(?:are|were|have\s+been|have)\s+signed"
+    r"|supply(?:\s+chain)?\s+(?:is|was|has\s+been)\s+secured"
+    r"|purchase\s+orders\s+(?:are|were|have\s+been)\s+issued"
+    r"|po\s+(?:is|was|has\s+been)\s+issued"
+    r"|(?:moq|minimum\s+order\s+quantity)\s+(?:is|was|has\s+been)\s+"
+    r"(?:met|confirmed|satisfied)"
+    r"|pilot\s+run\s+(?:is|was|has\s+been)\s+(?:complete|completed)"
+    r"|(?:prototypes|units)\s+(?:are|were|have\s+been)\s+produced"
+    r"|(?:manufacturing|production)\s+line\s+(?:is\s+)?ready"
+    r"|(?:inventory|stock)\s+(?:is|was|has\s+been)\s+secured"
+    r"|orders\s+(?:have|have\s+been|are)\s+shipped"
+    r"|orders\s+are\s+shipping"
+    r"|(?:shipments|production)\s+(?:have|has)\s+started"
+    r")\b",
+    re.IGNORECASE,
+)
 
 
 def _normalise(text: str) -> str:
@@ -222,6 +270,9 @@ def _clause_token_windows(
 
     after_matches = list(_CLAUSE_BOUNDARY_PATTERN.finditer(text, end, len(text)))
     clause_end = after_matches[0].start() if after_matches else len(text)
+    coordination = _COORDINATION_PATTERN.search(text, end, clause_end)
+    if coordination is not None:
+        clause_end = coordination.start()
     after = re.findall(r"[a-z]+", text[end:clause_end])[:6]
     return before, after
 
@@ -285,6 +336,31 @@ def _has_keyword(
     return False
 
 
+def _has_evidence(assumptions: list[dict[str, Any]] | None) -> bool:
+    """
+    True when any assumption shows a working supply chain.
+
+    Checks the literal evidence phrases plus flexible copular and
+    perfect-tense forms ("MOQ is met", "contracts have been signed",
+    "units were produced"), with negation- and intent-aware guards so
+    "no supplier contracts are signed", "MOQ is not met" and
+    "production is expected to start" never count as proof.
+    """
+    for text in _assumption_texts(assumptions):
+        for match in _EVIDENCE_FLEX_PATTERN.finditer(text):
+            if _is_negated(text, match.start(), match.end()):
+                continue
+            if _is_intent(text, match.start(), match.end()):
+                continue
+            return True
+    return _has_keyword(
+        assumptions,
+        _EVIDENCE_KEYWORDS,
+        guard_negation=True,
+        guard_intent=True,
+    )
+
+
 def _trait(traits: dict[str, Any], key: str, default: float = 0.5) -> float:
     """Parse one trait value, falling back to ``default`` on garbage input."""
     value = traits.get(key, default)
@@ -340,19 +416,18 @@ class SupplyChainArchitect(BaseArchitect):
         mitigation_plan = _has_keyword(
             assumptions, _MITIGATION_KEYWORDS, guard_negation=True
         )
-        evidence = _has_keyword(
-            assumptions,
-            _EVIDENCE_KEYWORDS,
-            guard_negation=True,
-            guard_intent=True,
-        )
+        evidence = _has_evidence(assumptions)
         tariff_mentioned = _has_keyword(
             assumptions, _TARIFF_KEYWORDS, guard_negation=True
         )
 
         # Mitigation planning dampens risk below; it must not inflate
-        # exposure the way risk language does.
-        mentioned = int(chain_mentioned) + int(risk_mentioned)
+        # exposure the way risk language does. Proven supply-chain
+        # evidence counts as engagement so it can earn the advantage
+        # lift even when the text never uses generic chain vocabulary.
+        mentioned = (
+            int(chain_mentioned) + int(risk_mentioned) + int(evidence)
+        )
         exposure = round(
             min(
                 _EXPOSURE_CAP,

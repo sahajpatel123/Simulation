@@ -242,6 +242,110 @@ def test_discourse_negation_keeps_real_evidence() -> None:
     assert out.metrics["supply_chain_advantage_lift"] > 0.0
 
 
+def test_copular_evidence_variants_are_recognized() -> None:
+    out = _compute(
+        assumptions=[
+            {"text": "Our MOQ is met, supplier contracts are signed, "
+                     "and purchase orders have been issued"}
+        ],
+    )
+    assert out.metrics["supply_chain_credibility"] == 1.0
+    assert out.flags["supply_chain_advantage"] is True
+    assert out.metrics["supply_chain_advantage_lift"] > 0.0
+    assert out.flags["single_source_blocker"] is False
+    assert out.severity == "INFO"
+
+
+def test_evidence_only_mention_activates_advantage() -> None:
+    out = _compute(
+        assumptions=[
+            {"text": "Orders shipped last week"},
+        ],
+    )
+    assert out.metrics["supply_chain_exposure"] > 0.15
+    assert out.metrics["supply_chain_credibility"] == 1.0
+    assert out.flags["supply_chain_advantage"] is True
+    assert out.metrics["supply_chain_advantage_lift"] > 0.0
+    assert out.severity == "INFO"
+
+
+def test_units_have_been_produced_is_evidence() -> None:
+    out = _compute(
+        assumptions=[
+            {"text": "Units have been produced in the pilot run"},
+        ],
+    )
+    assert out.metrics["supply_chain_credibility"] == 1.0
+    assert out.flags["supply_chain_advantage"] is True
+
+
+def test_aspirational_hedges_are_not_evidence() -> None:
+    for text in (
+        "Initial production expected in Q3",
+        "We are almost production ready",
+        "MOQ is expected to be met in Q2",
+        "Production line probably ready next month",
+    ):
+        out = _compute(assumptions=[{"text": text}])
+        assert out.metrics["supply_chain_credibility"] < 1.0, text
+        assert out.flags["supply_chain_advantage"] is False, text
+        assert out.metrics["supply_chain_advantage_lift"] == 0.0, text
+
+
+def test_negation_scope_stops_at_coordinate_phrase() -> None:
+    out = _compute(
+        assumptions=[
+            {"text": "Supplier contracts are signed and no debt remains"},
+        ],
+    )
+    assert out.metrics["supply_chain_credibility"] == 1.0
+    assert out.flags["supply_chain_advantage"] is True
+
+
+def test_negated_copular_evidence_is_gap() -> None:
+    out = _compute(
+        assumptions=[
+            {"text": "No supplier contracts are signed and no purchase "
+                     "orders are issued"}
+        ],
+    )
+    assert out.metrics["supply_chain_credibility"] < 1.0
+    assert out.flags["supply_chain_advantage"] is False
+    assert out.metrics["supply_chain_advantage_lift"] == 0.0
+
+
+def test_single_supplier_with_no_backup_is_still_blocker() -> None:
+    out = _compute(
+        assumptions=[
+            {"text": "We rely on a single supplier with no backup"},
+        ],
+    )
+    assert out.metrics["single_source_dependency"] >= 0.55
+    assert out.flags["single_source_blocker"] is True
+    assert out.severity == "CRITICAL"
+
+
+def test_neutral_lead_time_mention_is_not_risk_language() -> None:
+    neutral = _compute(
+        assumptions=[
+            {"text": "Our lead time is two weeks from order"},
+        ],
+    )
+    long = _compute(
+        patience=0.3,
+        assumptions=[
+            {"text": "We have a long lead time on components"},
+        ],
+    )
+    assert neutral.metrics["supply_chain_exposure"] == 0.30
+    assert neutral.metrics["lead_time_risk"] < long.metrics["lead_time_risk"]
+    assert neutral.flags["sourcing_gap"] is False
+    assert neutral.flags["stockout_gap"] is False
+    assert neutral.severity == "INFO"
+    assert long.flags["stockout_gap"] is True
+    assert long.severity == "WARNING"
+
+
 # ---------------------------------------------------------------------------
 # Markov transition overrides
 # ---------------------------------------------------------------------------
