@@ -1,7 +1,7 @@
 """Tests for the pure outcomes-export helper."""
 from __future__ import annotations
 
-from app.simulation.outcomes_export import outcomes_to_csv
+from app.simulation.outcomes_export import outcome_count_to_csv, outcomes_to_csv
 
 
 def test_outcomes_to_csv_contains_header_and_rows() -> None:
@@ -41,3 +41,14 @@ def test_outcomes_to_csv_handles_missing_fields() -> None:
     csv_text = outcomes_to_csv([{"id": 2}])
 
     assert "2," in csv_text
+
+
+def test_outcome_count_to_csv_contains_header_and_row() -> None:
+    csv_text = outcome_count_to_csv(
+        {"project_id": 10, "outcome_count": 5},
+        metadata={"generated_at": "now", "user_id": 42},
+    )
+
+    assert "project_id,outcome_count" in csv_text
+    assert "10,5" in csv_text
+    assert "generated_at,now" in csv_text

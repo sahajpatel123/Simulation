@@ -74,4 +74,28 @@ def outcomes_to_csv(outcomes: list[dict[str, Any]]) -> str:
     return buffer.getvalue()
 
 
-__all__ = ["outcomes_to_csv"]
+def outcome_count_to_csv(
+    row: dict[str, Any],
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    """Render an outcome-count row as a single-row CSV table."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+
+    if metadata:
+        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
+        writer.writerow(["user_id", _text(metadata.get("user_id"))])
+        writer.writerow(["format_version", _text(metadata.get("format_version", "1"))])
+        writer.writerow([])
+
+    writer.writerow(["project_id", "outcome_count"])
+    writer.writerow(
+        [
+            _text(row.get("project_id")),
+            _text(row.get("outcome_count")),
+        ]
+    )
+    return buffer.getvalue()
+
+
+__all__ = ["outcome_count_to_csv", "outcomes_to_csv"]

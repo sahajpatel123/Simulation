@@ -198,6 +198,7 @@ from app.simulation.project_search import build_search_filters
 from app.simulation.project_simulations_export import simulations_to_csv
 from app.simulation.project_simulations_export import simulation_count_to_csv
 from app.simulation.decisions_export import decision_count_to_csv
+from app.simulation.outcomes_export import outcome_count_to_csv
 from app.simulation.project_tags import (
     normalise_tags,
     remove_tag_from_list,
@@ -7868,6 +7869,72 @@ def export_decision_count(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="decision-count-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/outcome-count/export",
+    summary="Export a project's outcome count as CSV or JSON",
+    response_class=StreamingResponse,
+)
+def export_outcome_count(
+    project_id: int,
+    format: Literal["csv", "json"] = Query(
+        default="csv",
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "outcome-count row."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Export a project's outcome count as CSV (default) or JSON."""
+    get_owned_project(db, current_user.id, project_id)
+    count = db.query(Outcome).filter(Outcome.project_id == project_id).count()
+    row = {"project_id": project_id, "outcome_count": count}
+
+    if format == "json":
+        json_text = json.dumps(
+            {
+                "generated_at": datetime.now(UTC).isoformat(),
+                "project_id": project_id,
+                "outcome_count": count,
+            },
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="outcome-count-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = outcome_count_to_csv(
+        row,
+        metadata={
+            "generated_at": datetime.now(UTC).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="outcome-count-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },
