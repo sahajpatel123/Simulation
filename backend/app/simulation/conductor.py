@@ -318,6 +318,14 @@ for _stack in ARCHITECT_STACKS.values():
     if "FounderExecutionArchitect" not in _stack:
         _stack.insert(len(_stack) - 1, "FounderExecutionArchitect")
 
+# AISkepticismArchitect is universal as well: any pitch can lead with AI.
+# Evaluate it right before FounderExecutionArchitect so its DECIDE->PURCHASE
+# override reflects the same late-funnel demand picture, and the stack keeps
+# its stable tail (..., FounderExecution, AssumptionCascade).
+for _stack in ARCHITECT_STACKS.values():
+    if "AISkepticismArchitect" not in _stack:
+        _stack.insert(len(_stack) - 2, "AISkepticismArchitect")
+
 # Inter-architect dependency map
 # key = architect that needs input, value = {param_name: (source_architect, metric_key)}
 DEPENDENCY_MAP: dict[str, dict[str, tuple[str, str]]] = {
@@ -482,6 +490,7 @@ def _build_architect_registry() -> dict[str, Any]:
         AccessibilityInclusionArchitect,
     )
     from app.simulation.architects.aftersales_lifecycle import AftersalesLifecycleArchitect
+    from app.simulation.architects.ai_skepticism import AISkepticismArchitect
     from app.simulation.architects.assumption_cascade import AssumptionCascadeArchitect
     from app.simulation.architects.competitive_dynamics import CompetitiveDynamicsArchitect
     from app.simulation.architects.cultural_context import CulturalContextArchitect
@@ -555,6 +564,7 @@ def _build_architect_registry() -> dict[str, Any]:
         "HealthSafetyHardwareArchitect":   HealthSafetyHardwareArchitect(),
         "RegulatoryComplianceArchitect":   RegulatoryComplianceArchitect(),
         "RunwayArchitect":                 RunwayArchitect(),
+        "AISkepticismArchitect":           AISkepticismArchitect(),
         "FounderExecutionArchitect":       FounderExecutionArchitect(),
     }
 

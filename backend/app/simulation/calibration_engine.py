@@ -38,6 +38,7 @@ ALL_ARCHITECT_NAMES = [
     "RunwayArchitect",
     "MessagingClarityArchitect",
     "FounderExecutionArchitect",
+    "AISkepticismArchitect",
 ]
 
 

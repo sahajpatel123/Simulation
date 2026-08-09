@@ -112,6 +112,12 @@ class AccountabilityEngine:
         "execution_credibility_score": 0.70,
         "delivery_risk": 0.25,
         "execution_funnel_suppressor": 1.0,
+        "ai_risk_load": 0.30,
+        "ai_skepticism": 0.40,
+        "ai_mitigation_credibility": 1.0,
+        "perceived_ai_risk": 0.20,
+        "ai_trust_gap": 0.20,
+        "ai_funnel_suppressor": 1.0,
     }
 
     LOWER_IS_BETTER: frozenset[str] = frozenset({
@@ -145,6 +151,10 @@ class AccountabilityEngine:
         "comprehension_risk",
         "vague_language_density",
         "delivery_risk",
+        "ai_risk_load",
+        "ai_skepticism",
+        "perceived_ai_risk",
+        "ai_trust_gap",
     })
 
     FINDING_TEMPLATES: dict[str, str] = {
@@ -353,6 +363,30 @@ class AccountabilityEngine:
             "Weak execution evidence leaves {cluster} at {pct:.0f}% "
             "purchase funnel strength (benchmark {bench:.0f}%)"
         ),
+        "ai_risk_load": (
+            "{cluster} carries {pct:.0f}% AI risk exposure from the "
+            "pitch (benchmark {bench:.0f}%)"
+        ),
+        "ai_skepticism": (
+            "{cluster} scores {pct:.0f}% AI skepticism "
+            "(benchmark {bench:.0f}%)"
+        ),
+        "ai_mitigation_credibility": (
+            "{cluster} sees only {pct:.0f}% AI trust mitigation "
+            "(benchmark {bench:.0f}%)"
+        ),
+        "perceived_ai_risk": (
+            "{cluster} perceives {pct:.0f}% AI risk "
+            "(benchmark {bench:.0f}%)"
+        ),
+        "ai_trust_gap": (
+            "{cluster} has a {pct:.0f}% AI trust gap "
+            "(benchmark {bench:.0f}%)"
+        ),
+        "ai_funnel_suppressor": (
+            "AI skepticism leaves {cluster} at {pct:.0f}% purchase "
+            "funnel strength (benchmark {bench:.0f}%)"
+        ),
     }
 
     RECOMMENDED_ACTIONS: dict[str, str] = {
@@ -518,6 +552,28 @@ class AccountabilityEngine:
         "execution_funnel_suppressor": (
             "Add execution proof points (prototype, beta users, team, "
             "support) above the fold"
+        ),
+        "ai_risk_load": (
+            "Reduce AI opacity: name human oversight and explainable "
+            "decisions in the pitch"
+        ),
+        "ai_skepticism": (
+            "Target skeptical segments with concrete AI accuracy and "
+            "audit evidence"
+        ),
+        "ai_mitigation_credibility": (
+            "Add human fallback, explainability, and data-control opt-outs"
+        ),
+        "perceived_ai_risk": (
+            "Publish AI accuracy benchmarks and a human escalation path"
+        ),
+        "ai_trust_gap": (
+            "Publish AI trust evidence (human review, fact-checking, "
+            "opt-outs) above the fold"
+        ),
+        "ai_funnel_suppressor": (
+            "Add human fallback, fact-checking, and data opt-outs to "
+            "restore purchase confidence"
         ),
     }
 

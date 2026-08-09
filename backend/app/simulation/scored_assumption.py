@@ -158,6 +158,12 @@ SPECIFICITY_RULES: dict[str, dict[float, str]] = {
         0.2: "execution vocabulary only (team, prototype, launch)",
         0.0: "no team or delivery-capability claim",
     },
+    "AISkepticismArchitect": {
+        1.0: "named AI mechanism AND a concrete trust guardrail (accuracy %, human review, audit, opt-out)",
+        0.6: "AI mechanism OR trust guardrail named without the other",
+        0.2: "AI vocabulary only (AI, ML, chatbot, automation)",
+        0.0: "no AI claim",
+    },
     "NetworkEffectArchitect": {
         1.0: "specific network effect mechanism with measured or observed data",
         0.6: "network effect described with mechanism but unmeasured",
@@ -284,6 +290,34 @@ _NAMED_COMP_RE    = re.compile(r"(?:vs\.?|versus|compared to|unlike|better than)
 _COMP_CAT_RE      = re.compile(r"\b(?:competitor|alternative|incumbent|substitute|rival)\b", re.I)
 _DIFFER_RE        = re.compile(r"\b(?:unique|differentiat|superior|advantage|unlike others)\b", re.I)
 
+_AI_MECHANISM_RE = re.compile(
+    r"\b(?:ai|a\.i\.|machine learning|llm|chatbot|copilot|"
+    r"automation|autonomous|recommendation engine|predictive)\b",
+    re.I,
+)
+_AI_GUARDRAIL_RE = re.compile(
+    r"\b(?:human in the loop|human-in-the-loop|human review|"
+    r"explainability|explainable|fact-?check|guardrails?|"
+    r"third-?party audit|accuracy|error rate|hallucination rate|"
+    r"confidence score|opt-?out|on-?device|privacy policy|consent|"
+    r"encryption)\b",
+    re.I,
+)
+_AI_MEASURE_RE = re.compile(
+    r"\d+(?:\.\d+)?\s*%?\s*(?:accuracy|accurate|error rate|hallucination rate|"
+    r"benchmark|human review)\b"
+    r"|\b(?:accuracy|accurate|error rate|hallucination rate|benchmark|human review)"
+    r"\s*[:\-]?\s*\d+(?:\.\d+)?\s*%?"
+    r"|\b(?:gpt-?4|gpt-?5|claude|gemini|llama|mistral)\b",
+    re.I,
+)
+_AI_DENIAL_RE = re.compile(
+    r"\b(?:no|not|without|never|isn't|is not|aren't|are not)\s+"
+    r"(?:a\s+|an\s+)?"
+    r"(?:ai|a\.i\.|chatbot|automation|llm|machine learning)\b",
+    re.I,
+)
+
 
 def _score_specificity(architect: str, claim: str) -> float:
     """
@@ -351,6 +385,18 @@ def _score_specificity(architect: str, claim: str) -> float:
             return 0.6
         if _DIFFER_RE.search(lower):
             return 0.2
+        return 0.0
+
+    if architect == "AISkepticismArchitect":
+        if _AI_DENIAL_RE.search(lower):
+            return 0.0
+        has_measure = bool(_AI_MEASURE_RE.search(claim))
+        has_guardrail = bool(_AI_GUARDRAIL_RE.search(lower))
+        has_mechanism = bool(_AI_MECHANISM_RE.search(lower))
+        if has_measure or (has_mechanism and has_guardrail):
+            return 1.0
+        if has_mechanism or has_guardrail:
+            return 0.6
         return 0.0
 
     # Generic fallback for architects in the rule table but without
