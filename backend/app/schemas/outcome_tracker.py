@@ -259,7 +259,13 @@ class OutcomeTrackerGoalMetric(BaseModel):
     """One metric's goal-pacing verdict (conversion or revenue)."""
 
     metric: str
-    target_value: float
+    target_value: float = Field(
+        allow_inf_nan=False,
+        description=(
+            "Sanitized goal used by the pacing math; 0.0 when the "
+            "supplied goal was unusable."
+        ),
+    )
     latest_actual: float | None = None
     sample_count: int = 0
     span_days: float | None = None

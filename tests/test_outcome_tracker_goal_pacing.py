@@ -1,8 +1,19 @@
 """Tests for the post-launch goal-pacing verdict feature."""
 from __future__ import annotations
 
+import math
+import sys
+import types
 from datetime import date
 from typing import Any
+
+import pytest
+from fastapi import HTTPException
+
+if "razorpay" not in sys.modules:
+    razorpay_stub = types.ModuleType("razorpay")
+    razorpay_stub.Client = object  # type: ignore[attr-defined]
+    sys.modules["razorpay"] = razorpay_stub
 
 
 def _row(
@@ -357,3 +368,194 @@ def test_pacing_schema_validates_payload() -> None:
     assert parsed.overall_status in {
         metric.status for metric in parsed.metrics
     }
+
+
+def test_pacing_out_of_range_conversion_target_is_clamped_and_echoed() -> None:
+    """A >100% conversion goal is clamped to 100% everywhere in the payload."""
+    out = _call_pacing(
+        _weekly_conversion_rows(),
+        target_conversion_rate=1.5,
+        deadline=date(2026, 8, 29),
+    )
+    metric = out["metrics"][0]
+    assert metric["target_value"] == 1.0
+    assert metric["status"] == "BEHIND"
+    assert "100.00% goal" in metric["narrative"]
+
+
+def test_pacing_non_finite_or_invalid_targets_degrade_to_no_goal() -> None:
+    """NaN/Infinity/boolean/non-positive goals never leak into the payload."""
+    rows = _weekly_conversion_rows()
+    for bad_target in (float("inf"), float("nan"), -0.5, True):
+        out = _call_pacing(rows, target_conversion_rate=bad_target)
+        metric = out["metrics"][0]
+        assert math.isfinite(metric["target_value"])
+        assert metric["target_value"] == 0.0
+        assert metric["status"] == "INSUFFICIENT_DATA"
+        assert "Set a valid conversion goal" in metric["narrative"]
+    for bad_target in (float("inf"), float("nan"), -100.0, True):
+        out = _call_pacing(rows, target_revenue=bad_target)
+        metric = out["metrics"][0]
+        assert math.isfinite(metric["target_value"])
+        assert metric["target_value"] == 0.0
+        assert metric["status"] == "INSUFFICIENT_DATA"
+        assert "Set a valid revenue goal" in metric["narrative"]
+
+
+def test_pacing_schema_rejects_non_finite_target_value() -> None:
+    from pydantic import ValidationError
+
+    from app.schemas.outcome_tracker import OutcomeTrackerGoalMetric
+
+    for bad_value in (float("inf"), float("nan")):
+        with pytest.raises(ValidationError):
+            OutcomeTrackerGoalMetric(
+                metric="conversion",
+                target_value=bad_value,
+            )
+
+
+# ---------------------------------------------------------------------------
+# Route smoke tests (fake session, no DB)
+# ---------------------------------------------------------------------------
+
+
+class _FakeProject:
+    def __init__(self, user_id: int = 42) -> None:
+        self.id = 7
+        self.user_id = user_id
+
+
+class _FakeQuery:
+    def __init__(self, items: list[Any] | None = None) -> None:
+        self.items = items if items is not None else []
+
+    def filter(self, *args: Any, **kwargs: Any) -> _FakeQuery:
+        return self
+
+    def order_by(self, *args: Any, **kwargs: Any) -> _FakeQuery:
+        return self
+
+    def first(self) -> Any:
+        return self.items[0] if self.items else None
+
+    def all(self) -> list[Any]:
+        return list(self.items)
+
+
+class _FakeSession:
+    def __init__(
+        self,
+        *,
+        project: _FakeProject | None = None,
+        project_items: list[Any] | None = None,
+        rows: list[Any] | None = None,
+    ) -> None:
+        self.project = project if project is not None else _FakeProject()
+        self.project_items = project_items
+        self.rows = rows if rows is not None else []
+
+    def query(self, model: Any, *args: Any, **kwargs: Any) -> _FakeQuery:
+        name = getattr(model, "__name__", "")
+        if name == "Project":
+            if self.project_items is not None:
+                return _FakeQuery(self.project_items)
+            return _FakeQuery([self.project])
+        if name == "OutcomeTracker":
+            return _FakeQuery(self.rows)
+        return _FakeQuery([])
+
+
+def _route_row(
+    rid: int,
+    *,
+    recorded_at: str,
+    actual: float | None = None,
+    revenue: float | None = None,
+) -> Any:
+    return types.SimpleNamespace(
+        id=rid,
+        project_id=7,
+        simulation_id=12,
+        recorded_at=recorded_at,
+        actual_conversion_rate=actual,
+        actual_revenue=revenue,
+        predicted_conversion_rate=None,
+        predicted_revenue=None,
+        variance=None,
+        notes=None,
+    )
+
+
+def _call_route(
+    *,
+    session: _FakeSession | None = None,
+    user_id: int = 42,
+    target_conversion_rate: float | None = None,
+    target_revenue: float | None = None,
+    deadline: date | None = None,
+) -> Any:
+    from app.api.v1 import outcomes as mod
+
+    return mod.get_outcome_tracker_goal_pacing(
+        project_id=7,
+        target_conversion_rate=target_conversion_rate,
+        target_revenue=target_revenue,
+        deadline=deadline,
+        db=session if session is not None else _FakeSession(),
+        current_user=type("U", (), {"id": user_id})(),
+    )
+
+
+def test_goal_pacing_route_returns_payload_for_both_metrics() -> None:
+    session = _FakeSession(
+        rows=[
+            _route_row(1, recorded_at="2026-08-01T00:00:00+00:00", actual=0.02, revenue=1000.0),
+            _route_row(2, recorded_at="2026-08-08T00:00:00+00:00", actual=0.03, revenue=2000.0),
+            _route_row(3, recorded_at="2026-08-15T00:00:00+00:00", actual=0.04, revenue=3000.0),
+            _route_row(4, recorded_at="2026-08-22T00:00:00+00:00", actual=0.05, revenue=4000.0),
+        ]
+    )
+    out = _call_route(
+        session=session,
+        target_conversion_rate=0.06,
+        target_revenue=6000.0,
+        deadline=date(2026, 8, 29),
+    )
+    assert out.project_id == 7
+    assert out.deadline == date(2026, 8, 29)
+    assert len(out.metrics) == 2
+    statuses = {metric.status for metric in out.metrics}
+    assert statuses == {"ON_TRACK", "BEHIND"}
+    assert out.overall_status == "BEHIND"
+
+
+def test_goal_pacing_route_rejects_missing_targets() -> None:
+    with pytest.raises(HTTPException) as exc:
+        _call_route()
+    assert exc.value.status_code == 422
+    assert "at least one" in exc.value.detail
+
+
+def test_goal_pacing_route_rejects_non_positive_targets() -> None:
+    for target_kwargs in (
+        {"target_conversion_rate": 0.0},
+        {"target_conversion_rate": -0.01},
+        {"target_revenue": 0.0},
+        {"target_revenue": -5.0},
+    ):
+        with pytest.raises(HTTPException) as exc:
+            _call_route(**target_kwargs)
+        assert exc.value.status_code == 422
+        assert "must be greater than 0" in exc.value.detail
+
+
+def test_goal_pacing_route_rejects_foreign_project() -> None:
+    # No owned project row matches, so ownership lookup raises 404.
+    session = _FakeSession(project_items=[])
+    with pytest.raises(HTTPException) as exc:
+        _call_route(
+            session=session,
+            target_conversion_rate=0.05,
+        )
+    assert exc.value.status_code == 404

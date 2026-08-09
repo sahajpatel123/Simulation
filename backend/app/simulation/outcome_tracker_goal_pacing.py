@@ -27,6 +27,9 @@ Logic (deliberately deterministic and conservative - no DB, no LLM):
 
 The module is pure-Python (numpy arithmetic only) and tolerates malformed,
 duplicate, or out-of-order rows so one bad checkpoint cannot crash it.
+Founder-supplied goals are sanitized the same way: non-finite, non-positive,
+or boolean targets degrade to "no usable goal" instead of leaking NaN or
+Infinity into the payload.
 """
 from __future__ import annotations
 
@@ -120,6 +123,20 @@ def _safe_revenue(value: Any) -> float | None:
     if not math.isfinite(parsed):
         return None
     return max(0.0, parsed)
+
+
+def _coerce_target(value: Any, *, revenue: bool) -> float | None:
+    """Sanitize a founder goal to the value the pacing math actually uses.
+
+    Conversion goals are clamped to ``[0, 1]`` and revenue goals to
+    non-negative finite numbers. Non-finite, boolean, or non-positive goals
+    return ``None`` so callers can treat them as "no usable goal" instead of
+    letting NaN/Infinity flow into the response payload.
+    """
+    target = _safe_revenue(value) if revenue else _safe_rate(value)
+    if target is not None and target <= 0.0:
+        return None
+    return target
 
 
 def _timestamp_seconds(value: Any) -> float | None:
@@ -340,6 +357,20 @@ def _metric_label(revenue: bool) -> str:
     return METRIC_REVENUE if revenue else METRIC_CONVERSION
 
 
+def _insufficient_narrative(*, revenue: bool, target: float | None) -> str:
+    """Narrative for metrics with too little data or an unusable goal."""
+    label = _metric_label(revenue)
+    if target is None:
+        return (
+            f"Set a valid {label} goal (finite and greater than 0) to "
+            "evaluate pacing toward it."
+        )
+    return (
+        f"Log at least 2 {label} checkpoints on different dates to "
+        f"evaluate pacing toward the {_fmt_value(target, revenue=revenue)} goal."
+    )
+
+
 def _fmt_rate(value: float) -> str:
     return f"{value:.2%}"
 
@@ -429,10 +460,7 @@ def _metric_narrative(
     label = _metric_label(revenue)
     target_text = _fmt_value(target, revenue=revenue) if target is not None else ""
     if sample_count < MIN_POINTS or latest is None or target is None:
-        return (
-            f"Log at least 2 {label} checkpoints on different dates to "
-            f"evaluate pacing toward the {target_text} goal."
-        )
+        return _insufficient_narrative(revenue=revenue, target=target)
     if status == STATUS_ALREADY_ACHIEVED:
         return (
             f"Latest {label} ({_fmt_value(latest, revenue=revenue)}) already "
@@ -635,22 +663,13 @@ def _evaluate_metric(
     points, latest_ts = _usable_series(rows, revenue=revenue)
     sample_count = len(points)
     latest = points[-1][1] if points else None
-    target = (
-        _safe_revenue(target_value)
-        if revenue
-        else _safe_rate(target_value)
-    )
-    if target is not None and target <= 0.0:
-        target = None
+    target = _coerce_target(target_value, revenue=revenue)
+    # Echo the goal actually used by the math. Unusable goals (non-finite,
+    # non-positive, or boolean) surface as 0.0 so the payload never contains
+    # NaN/Infinity, which would break JSON serialization downstream.
+    echoed_target = target if target is not None else 0.0
 
     if sample_count < MIN_POINTS:
-        label = _metric_label(revenue)
-        target_text = _fmt_value(target, revenue=revenue) if target is not None else ""
-        echoed_target = (
-            target
-            if target is not None
-            else round(float(target_value), 2 if revenue else 6)
-        )
         return {
             "metric": metric,
             "target_value": echoed_target,
@@ -668,9 +687,9 @@ def _evaluate_metric(
             "slope_gap_per_day": None,
             "status": STATUS_INSUFFICIENT_DATA,
             "confidence": CONFIDENCE_INSUFFICIENT_DATA,
-            "narrative": (
-                f"Log at least 2 {label} checkpoints on different dates to "
-                f"evaluate pacing toward the {target_text} goal."
+            "narrative": _insufficient_narrative(
+                revenue=revenue,
+                target=target,
             ),
             "signals": [],
         }
@@ -762,11 +781,7 @@ def _evaluate_metric(
     )
     return {
         "metric": metric,
-        "target_value": (
-            target
-            if target is not None
-            else round(float(target_value), 2 if revenue else 6)
-        ),
+        "target_value": echoed_target,
         "latest_actual": latest,
         "sample_count": sample_count,
         "span_days": span_days,
