@@ -32,7 +32,10 @@ critical findings, and a ranked list of top actions (weakest-pillar
 action first, then recommendations from the readiness and quality
 reads). No DB / I/O — verifiable without FastAPI or PostgreSQL. The
 route layer supplies the six pillar payloads; all arithmetic is
-deterministic.
+deterministic. Pillar inputs are sanitised defensively: non-finite
+values are treated as missing and negative / out-of-range numbers are
+clamped to their natural domains (shares to 0..1, market counts to
+non-negative) so malformed legacy payloads cannot distort the digest.
 """
 from __future__ import annotations
 
@@ -166,6 +169,18 @@ def _clamp_score(score: float) -> int:
     return max(0, min(100, int(round(score))))
 
 
+def _clamp_unit(value: float) -> float:
+    """Clamp a share/ratio into the 0..1 unit interval."""
+    return max(0.0, min(1.0, value))
+
+
+# Display caps for malformed extreme values. Scoring still uses the raw
+# (non-negative) value; only the evidence string is bounded so a corrupt
+# payload cannot print a 300-digit ratio or payback period.
+ECONOMICS_RATIO_DISPLAY_CAP: float = 99.99
+ECONOMICS_PAYBACK_DISPLAY_CAP: float = 999.0
+
+
 def _pillar_verdict(score: int | None) -> str:
     if score is None:
         return PILLAR_VERDICT_INSUFFICIENT
@@ -195,6 +210,14 @@ def _market_pillar(payload: dict[str, Any] | None) -> InvestorPillar:
     sam = _safe_int(payload.get("sam_customers"))
     som = _safe_int(payload.get("som_customers"))
     revenue = _safe_float(payload.get("annual_revenue"))
+    if revenue is not None and revenue < 0.0:
+        revenue = None
+    if tam is not None:
+        tam = max(0, tam)
+    if sam is not None:
+        sam = max(0, sam)
+    if som is not None:
+        som = max(0, som)
 
     if tam is None and som is None:
         return _insufficient_pillar("market", "Market sizing read unavailable")
@@ -255,7 +278,10 @@ def _economics_pillar(payload: dict[str, Any] | None) -> InvestorPillar:
         return _insufficient_pillar(
             "economics", "Not enough unit-economics data"
         )
+    ratio = max(0.0, ratio)
     payback = _safe_float(payload.get("blended_payback_months"))
+    if payback is not None and payback < 0.0:
+        payback = None
 
     if ratio >= 3.0:
         score = 100.0
@@ -274,9 +300,11 @@ def _economics_pillar(payload: dict[str, Any] | None) -> InvestorPillar:
         elif payback > 36.0:
             score = max(0.0, score - 5.0)
 
-    evidence = [f"Blended LTV:CAC {ratio:.2f}x"]
+    evidence = [f"Blended LTV:CAC {min(ratio, ECONOMICS_RATIO_DISPLAY_CAP):.2f}x"]
     if payback is not None:
-        evidence.append(f"Blended payback {payback:.0f} months")
+        evidence.append(
+            f"Blended payback {min(payback, ECONOMICS_PAYBACK_DISPLAY_CAP):.0f} months"
+        )
     summary = (
         "Unit economics support a priced round"
         if ratio >= 3.0
@@ -309,7 +337,9 @@ def _retention_pillar(payload: dict[str, Any] | None) -> InvestorPillar:
         return _insufficient_pillar(
             "retention", "Not enough retention data"
         )
+    day30 = _clamp_unit(day30)
     day90 = _safe_float(payload.get("weighted_day90_survival"), 0.0)
+    day90 = _clamp_unit(day90)
 
     if day30 >= 0.30:
         score = 100.0
@@ -324,7 +354,7 @@ def _retention_pillar(payload: dict[str, Any] | None) -> InvestorPillar:
     else:
         score = 15.0
 
-    if day90 is not None and day90 >= 0.10:
+    if day90 >= 0.10:
         score = min(100.0, score + 5.0)
 
     evidence = [
@@ -363,6 +393,7 @@ def _moat_pillar(payload: dict[str, Any] | None) -> InvestorPillar:
         return _insufficient_pillar(
             "moat", "Not enough defensibility data"
         )
+    index = _clamp_unit(index)
 
     if index >= 0.60:
         score = 100.0
@@ -413,6 +444,7 @@ def _readiness_pillar(payload: dict[str, Any] | None) -> InvestorPillar:
         return _insufficient_pillar(
             "readiness", "Not enough launch-readiness data"
         )
+    score_01 = _clamp_unit(score_01)
 
     if score_01 >= 0.80:
         score = 100.0
@@ -455,6 +487,7 @@ def _trust_pillar(payload: dict[str, Any] | None) -> InvestorPillar:
     trust = _safe_float(payload.get("trust_score"))
     if trust is None:
         return _insufficient_pillar("trust", "Quality-gate read unavailable")
+    trust = _clamp_unit(trust)
 
     if trust >= 0.80:
         score = 100.0
@@ -506,8 +539,9 @@ def _overall_verdict(score: int | None) -> tuple[str, str]:
 def _headline_conversion(results: dict[str, Any]) -> float | None:
     for key in ("population_weighted_conversion", "mean_conversion_rate", "conversion_rate"):
         value = _safe_float(results.get(key))
-        if value is not None:
-            return value
+        if value is None or value < 0.0:
+            continue
+        return min(1.0, value)
     return None
 
 

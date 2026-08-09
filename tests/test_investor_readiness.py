@@ -107,9 +107,10 @@ def _build(
     quality: Any | None = None,
     findings: list[Any] | None = None,
     signal_quality: float | None = 0.85,
+    results: Any | None = None,
 ) -> InvestorReadinessOut:
     return build_investor_readiness(
-        {"population_weighted_conversion": 0.04},
+        {"population_weighted_conversion": 0.04} if results is None else results,
         simulation_id=1,
         project_id=10,
         status="COMPLETED",
@@ -267,3 +268,124 @@ def test_no_findings_means_no_finding_risks() -> None:
     )
 
     assert not any(risk.startswith("Finding:") for risk in out.risks)
+
+
+def test_out_of_range_pillar_values_are_sanitised() -> None:
+    out = _build(
+        market={
+            "annual_revenue": -1000.0,
+            "tam_customers": -5,
+            "sam_customers": -10,
+            "som_customers": -20,
+        },
+        economics={
+            "blended_ltv_cac_ratio": -2.0,
+            "blended_payback_months": -12.0,
+            "verdict": "UNPROFITABLE",
+        },
+        retention={
+            "weighted_day30_survival": 1.5,
+            "weighted_day90_survival": -0.2,
+            "verdict": "STRONG",
+        },
+        moat={"moat_index": 3.0, "verdict": "STRONG"},
+        readiness={"readiness_score": 2.0, "verdict": "READY"},
+        quality={"trust_score": -1.0, "verdict": "FAIL"},
+    )
+
+    pillars = {p.key: p for p in out.pillars}
+    assert all(p.score is not None for p in out.pillars)
+
+    market = pillars["market"]
+    assert market.score == 10
+    assert "TAM 0 · SAM 0 · SOM 0" in market.evidence[0]
+    assert not any("revenue" in line.lower() for line in market.evidence)
+
+    economics = pillars["economics"]
+    assert economics.score == 15
+    assert economics.evidence == ["Blended LTV:CAC 0.00x"]
+    assert not any("payback" in line.lower() for line in economics.evidence)
+
+    retention = pillars["retention"]
+    assert retention.score == 100
+    assert "Day-30 survival 100%" in retention.evidence[0]
+    assert "Day-90 survival 0%" in retention.evidence[1]
+
+    moat = pillars["moat"]
+    assert moat.score == 100
+    assert "Moat index 1.00" in moat.evidence[0]
+
+    readiness = pillars["readiness"]
+    assert readiness.score == 100
+    assert "Launch readiness 100%" in readiness.evidence[0]
+
+    trust = pillars["trust"]
+    assert trust.score == 15
+    assert "Trust score 0%" in trust.evidence[0]
+
+
+def test_extreme_economics_evidence_is_bounded() -> None:
+    out = _build(
+        market=_strong_market(),
+        economics={
+            "blended_ltv_cac_ratio": 1e18,
+            "blended_payback_months": 1e9,
+            "verdict": "STRONG",
+        },
+        retention=_strong_retention(),
+        moat=_strong_moat(),
+        readiness=_strong_readiness(),
+        quality=_strong_quality(),
+    )
+
+    economics = next(p for p in out.pillars if p.key == "economics")
+    # Payback beyond 36 months correctly deducts 5 points even though the
+    # evidence string is display-capped.
+    assert economics.score == 95
+    assert "Blended LTV:CAC 99.99x" in economics.evidence[0]
+    assert "Blended payback 999 months" in economics.evidence[1]
+
+
+def test_negative_headline_conversion_falls_back_to_next_key() -> None:
+    out = _build(
+        market=_strong_market(),
+        economics=_strong_economics(),
+        retention=_strong_retention(),
+        moat=_strong_moat(),
+        readiness=_strong_readiness(),
+        quality=_strong_quality(),
+        results={
+            "population_weighted_conversion": -0.5,
+            "mean_conversion_rate": 0.07,
+        },
+    )
+
+    assert out.meta["headline_conversion"] == 0.07
+
+
+def test_headline_conversion_above_one_is_clamped() -> None:
+    out = _build(
+        market=_strong_market(),
+        economics=_strong_economics(),
+        retention=_strong_retention(),
+        moat=_strong_moat(),
+        readiness=_strong_readiness(),
+        quality=_strong_quality(),
+        results={"population_weighted_conversion": 1.7},
+    )
+
+    assert out.meta["headline_conversion"] == 1.0
+
+
+def test_signal_quality_out_of_range_is_sanitised() -> None:
+    out = _build(
+        market=_strong_market(),
+        economics=_strong_economics(),
+        retention=_strong_retention(),
+        moat=_strong_moat(),
+        readiness=_strong_readiness(),
+        quality=_strong_quality(),
+        signal_quality=1.5,
+    )
+
+    assert out.signal_quality is None
