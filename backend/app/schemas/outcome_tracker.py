@@ -3,7 +3,9 @@
 The ``outcome_tracker`` table stores lightweight checkpoints a founder can
 log over time (conversion / revenue at week 1, week 4, etc.) alongside the
 predicted values from the project's latest simulation. These schemas cover
-``POST /projects/{id}/outcome-tracker`` and
+``POST /projects/{id}/outcome-tracker``,
+``PATCH /projects/{id}/outcome-tracker/{point_id}`` and
+``DELETE /projects/{id}/outcome-tracker/{point_id}`` (checkpoint correction),
 ``GET /projects/{id}/outcome-tracker``, plus the trajectory forecast at
 ``GET /projects/{id}/outcome-tracker/forecast``.
 """
@@ -40,6 +42,30 @@ class OutcomeTrackerCreate(BaseModel):
             raise ValueError(
                 "Provide at least one of actual_conversion_rate or actual_revenue"
             )
+        return self
+
+
+class OutcomeTrackerUpdate(BaseModel):
+    """Body for correcting a logged conversion-tracking checkpoint.
+
+    Omitted fields are left unchanged; an explicit ``null`` clears an
+    optional field. At least one field must be provided, and the merged
+    checkpoint must keep at least one of ``actual_conversion_rate`` /
+    ``actual_revenue`` (enforced by the route once the stored row is known).
+    """
+
+    model_config = {"extra": "forbid"}
+
+    simulation_id: int | None = Field(default=None, ge=1)
+    actual_conversion_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    actual_revenue: float | None = Field(default=None, ge=0.0)
+    recorded_at: datetime | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _require_at_least_one_field(self) -> OutcomeTrackerUpdate:
+        if not self.model_fields_set:
+            raise ValueError("Provide at least one field to update")
         return self
 
 
@@ -219,6 +245,7 @@ class OutcomeTrackerDriftOut(BaseModel):
 
 __all__ = [
     "OutcomeTrackerCreate",
+    "OutcomeTrackerUpdate",
     "OutcomeTrackerPoint",
     "OutcomeTrackerTimelineOut",
     "OutcomeTrackerForecastPoint",

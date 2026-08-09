@@ -274,6 +274,35 @@ def test_schema_rejects_extra_keys() -> None:
         OutcomeTrackerCreate(actual_conversion_rate=0.05, spam=True)
 
 
+def test_update_schema_requires_at_least_one_field() -> None:
+    from app.schemas.outcome_tracker import OutcomeTrackerUpdate
+
+    with pytest.raises(ValueError):
+        OutcomeTrackerUpdate()
+
+    ok = OutcomeTrackerUpdate(notes="corrected typo")
+    assert ok.notes == "corrected typo"
+    assert "actual_conversion_rate" not in ok.model_fields_set
+
+
+def test_update_schema_rejects_extra_keys() -> None:
+    from pydantic import ValidationError
+    from app.schemas.outcome_tracker import OutcomeTrackerUpdate
+
+    with pytest.raises(ValidationError):
+        OutcomeTrackerUpdate(actual_conversion_rate=0.05, spam=True)
+
+
+def test_update_schema_rejects_out_of_range_values() -> None:
+    from pydantic import ValidationError
+    from app.schemas.outcome_tracker import OutcomeTrackerUpdate
+
+    with pytest.raises(ValidationError):
+        OutcomeTrackerUpdate(actual_conversion_rate=1.5)
+    with pytest.raises(ValidationError):
+        OutcomeTrackerUpdate(actual_revenue=-5.0)
+
+
 # ---------------------------------------------------------------------------
 # Route smoke tests (fake session, no DB)
 # ---------------------------------------------------------------------------
@@ -332,6 +361,7 @@ class _FakeSession:
         self.sim_items = sim_items
         self.rows = rows if rows is not None else []
         self.added: list[Any] = []
+        self.deleted: list[Any] = []
         self.committed = 0
         self.refreshed: list[Any] = []
 
@@ -351,6 +381,9 @@ class _FakeSession:
 
     def add(self, obj: Any) -> None:
         self.added.append(obj)
+
+    def delete(self, obj: Any) -> None:
+        self.deleted.append(obj)
 
     def commit(self) -> None:
         self.committed += 1
@@ -390,6 +423,68 @@ def _call_get(
 
     return mod.get_outcome_tracker_timeline(
         project_id=7,
+        db=session if session is not None else _FakeSession(),
+        current_user=type("U", (), {"id": user_id})(),
+    )
+
+
+def _tracker_row(
+    rid: int = 1,
+    *,
+    actual: float = 0.06,
+    revenue: float = 100.0,
+    predicted: float = 0.05,
+    pred_rev: float = 1000.0,
+    variance: float = 20.0,
+    recorded_at: datetime = datetime(2026, 8, 1, tzinfo=timezone.utc),
+) -> Any:
+    from app.models.outcome_tracker import OutcomeTracker
+
+    return OutcomeTracker(
+        id=rid,
+        project_id=7,
+        simulation_id=12,
+        actual_conversion_rate=actual,
+        actual_revenue=revenue,
+        predicted_conversion_rate=predicted,
+        predicted_revenue=pred_rev,
+        variance=variance,
+        notes="original",
+        recorded_at=recorded_at,
+    )
+
+
+def _call_patch(
+    *,
+    session: _FakeSession | None = None,
+    payload: dict | None = None,
+    user_id: int = 42,
+    point_id: int = 1,
+) -> Any:
+    from app.api.v1 import outcomes as mod
+    from app.schemas.outcome_tracker import OutcomeTrackerUpdate
+
+    body = OutcomeTrackerUpdate(**(payload if payload is not None else {"notes": "x"}))
+    return mod.update_outcome_tracker_point(
+        project_id=7,
+        point_id=point_id,
+        payload=body,
+        db=session if session is not None else _FakeSession(),
+        current_user=type("U", (), {"id": user_id})(),
+    )
+
+
+def _call_delete(
+    *,
+    session: _FakeSession | None = None,
+    user_id: int = 42,
+    point_id: int = 1,
+) -> Any:
+    from app.api.v1 import outcomes as mod
+
+    return mod.delete_outcome_tracker_point(
+        project_id=7,
+        point_id=point_id,
         db=session if session is not None else _FakeSession(),
         current_user=type("U", (), {"id": user_id})(),
     )
@@ -467,4 +562,137 @@ def test_get_requires_project_ownership() -> None:
     session = _FakeSession(project_items=[])
     with pytest.raises(HTTPException) as exc:
         _call_get(session=session, user_id=42)
+    assert exc.value.status_code == 404
+
+
+def test_patch_updates_fields_and_recomputes_variance() -> None:
+    session = _FakeSession(rows=[_tracker_row()])
+    out = _call_patch(
+        session=session,
+        payload={"actual_conversion_rate": 0.04, "notes": "fixed typo"},
+    )
+
+    assert session.committed == 1
+    assert out.actual_conversion_rate == 0.04
+    assert out.variance == -20.0
+    assert out.predicted_conversion_rate == 0.05
+    assert out.notes == "fixed typo"
+
+
+def test_patch_changes_simulation_and_recomputes_predictions() -> None:
+    sim = _FakeSimulation(
+        sim_id=99,
+        results={"mean_conversion_rate": 0.08, "mean_revenue": 2000.0},
+    )
+    session = _FakeSession(rows=[_tracker_row()], sim=sim)
+
+    out = _call_patch(session=session, payload={"simulation_id": 99})
+
+    assert out.simulation_id == 99
+    assert out.predicted_conversion_rate == 0.08
+    assert out.predicted_revenue == 2000.0
+    # Variance is recomputed against the new prediction (0.06 vs 0.08).
+    assert out.variance == -25.0
+
+
+def test_patch_keeps_existing_simulation_when_not_supplied() -> None:
+    session = _FakeSession(rows=[_tracker_row()])
+    out = _call_patch(session=session, payload={"actual_revenue": 250.0})
+
+    assert out.simulation_id == 12
+    assert out.actual_revenue == 250.0
+    assert out.predicted_conversion_rate == 0.05
+    assert out.variance == 20.0
+
+
+def test_patch_detaches_simulation_with_explicit_null() -> None:
+    session = _FakeSession(rows=[_tracker_row()])
+    out = _call_patch(session=session, payload={"simulation_id": None})
+
+    assert out.simulation_id is None
+    assert out.predicted_conversion_rate is None
+    assert out.predicted_revenue is None
+    assert out.variance is None
+    assert out.actual_conversion_rate == 0.06
+
+
+def test_patch_clears_conversion_rate_but_keeps_revenue() -> None:
+    session = _FakeSession(rows=[_tracker_row()])
+    out = _call_patch(
+        session=session,
+        payload={"actual_conversion_rate": None},
+    )
+
+    assert out.actual_conversion_rate is None
+    assert out.actual_revenue == 100.0
+    assert out.variance is None
+
+
+def test_patch_rejects_merged_state_without_any_actual() -> None:
+    session = _FakeSession(rows=[_tracker_row()])
+
+    with pytest.raises(HTTPException) as exc:
+        _call_patch(
+            session=session,
+            payload={
+                "actual_conversion_rate": None,
+                "actual_revenue": None,
+            },
+        )
+    assert exc.value.status_code == 422
+
+
+def test_patch_updates_recorded_at() -> None:
+    session = _FakeSession(rows=[_tracker_row()])
+    out = _call_patch(
+        session=session,
+        payload={"recorded_at": "2026-08-15T00:00:00+00:00"},
+    )
+
+    assert out.recorded_at == datetime(2026, 8, 15, tzinfo=timezone.utc)
+
+
+def test_patch_404_unknown_point() -> None:
+    session = _FakeSession(rows=[])
+    with pytest.raises(HTTPException) as exc:
+        _call_patch(session=session, payload={"notes": "x"})
+    assert exc.value.status_code == 404
+
+
+def test_patch_404_simulation_from_another_project() -> None:
+    session = _FakeSession(rows=[_tracker_row()], sim_items=[])
+    with pytest.raises(HTTPException) as exc:
+        _call_patch(session=session, payload={"simulation_id": 999})
+    assert exc.value.status_code == 404
+
+
+def test_patch_requires_project_ownership() -> None:
+    session = _FakeSession(project_items=[])
+    with pytest.raises(HTTPException) as exc:
+        _call_patch(session=session, payload={"notes": "x"}, user_id=42)
+    assert exc.value.status_code == 404
+
+
+def test_delete_removes_point() -> None:
+    row = _tracker_row()
+    session = _FakeSession(rows=[row])
+
+    result = _call_delete(session=session)
+
+    assert result.status_code == 204
+    assert session.deleted == [row]
+    assert session.committed == 1
+
+
+def test_delete_404_unknown_point() -> None:
+    session = _FakeSession(rows=[])
+    with pytest.raises(HTTPException) as exc:
+        _call_delete(session=session)
+    assert exc.value.status_code == 404
+
+
+def test_delete_requires_project_ownership() -> None:
+    session = _FakeSession(project_items=[])
+    with pytest.raises(HTTPException) as exc:
+        _call_delete(session=session, user_id=42)
     assert exc.value.status_code == 404

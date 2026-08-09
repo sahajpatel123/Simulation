@@ -5,7 +5,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
@@ -71,6 +71,7 @@ from app.schemas.outcome_tracker import (
     OutcomeTrackerRevenueForecastAccuracyOut,
     OutcomeTrackerRevenueForecastOut,
     OutcomeTrackerTimelineOut,
+    OutcomeTrackerUpdate,
 )
 from app.simulation.architect_accuracy_bridge import (
     bridge_architect_accuracy,
@@ -773,6 +774,141 @@ def log_outcome_tracker_point(
     db.commit()
     db.refresh(row)
     return _hydrate_tracker_point(row)
+
+
+@router.patch(
+    "/{project_id}/outcome-tracker/{point_id}",
+    response_model=OutcomeTrackerPoint,
+    summary="Correct a logged conversion-tracking checkpoint",
+    # DB write — cap path-spam at 30/min/IP for the same reason as the
+    # simulations POST limit.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def update_outcome_tracker_point(
+    project_id: int,
+    point_id: int,
+    payload: OutcomeTrackerUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> OutcomeTrackerPoint:
+    """Fix a mis-entered conversion/revenue checkpoint in place.
+
+    Omitted fields stay untouched, so a founder can correct a typo in one
+    field (e.g. ``recorded_at``) without losing the rest of the row. When a
+    ``simulation_id`` is supplied the predicted values are recomputed from
+    that simulation; otherwise the checkpoint's captured prediction is kept.
+    The stored ``variance`` is always recomputed from the merged values so
+    the drift / forecast / accuracy endpoints never serve stale numbers.
+    """
+    get_owned_project(db, current_user.id, project_id)
+
+    row = (
+        db.query(OutcomeTracker)
+        .filter(
+            OutcomeTracker.id == point_id,
+            OutcomeTracker.project_id == project_id,
+        )
+        .first()
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Outcome tracker point not found",
+        )
+
+    if "simulation_id" in payload.model_fields_set:
+        if payload.simulation_id is None:
+            # Explicit detach: drop the simulation link and its predictions
+            # so the checkpoint no longer claims a captured target.
+            row.simulation_id = None
+            row.predicted_conversion_rate = None
+            row.predicted_revenue = None
+        else:
+            sim = (
+                db.query(Simulation)
+                .filter(
+                    Simulation.id == payload.simulation_id,
+                    Simulation.project_id == project_id,
+                )
+                .first()
+            )
+            if not sim:
+                raise HTTPException(status_code=404, detail="Simulation not found")
+            row.simulation_id = sim.id
+            if sim.results_json:
+                row.predicted_conversion_rate = _predicted_from_results(sim.results_json)
+                row.predicted_revenue = _predicted_revenue_from_results(sim.results_json)
+            else:
+                row.predicted_conversion_rate = None
+                row.predicted_revenue = None
+
+    if "actual_conversion_rate" in payload.model_fields_set:
+        row.actual_conversion_rate = payload.actual_conversion_rate
+    if "actual_revenue" in payload.model_fields_set:
+        row.actual_revenue = payload.actual_revenue
+    if "recorded_at" in payload.model_fields_set:
+        row.recorded_at = payload.recorded_at
+    if "notes" in payload.model_fields_set:
+        row.notes = payload.notes
+
+    if row.actual_conversion_rate is None and row.actual_revenue is None:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "A checkpoint must keep at least one of "
+                "actual_conversion_rate or actual_revenue"
+            ),
+        )
+
+    # Recompute from the merged values so a simulation change or a cleared
+    # conversion rate can never leave a stale variance behind.
+    row.variance = (
+        _variance_pct(row.actual_conversion_rate, row.predicted_conversion_rate)
+        if row.actual_conversion_rate is not None
+        and row.predicted_conversion_rate is not None
+        else None
+    )
+
+    db.commit()
+    db.refresh(row)
+    return _hydrate_tracker_point(row)
+
+
+@router.delete(
+    "/{project_id}/outcome-tracker/{point_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a logged conversion-tracking checkpoint",
+    responses={204: {"description": "Outcome tracker point deleted"}},
+    # Destructive — cap path-spam at 10/min/IP so a runaway script
+    # can't churn through deletes.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
+)
+def delete_outcome_tracker_point(
+    project_id: int,
+    point_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    """Remove a mis-logged checkpoint so it stops skewing tracker insights."""
+    get_owned_project(db, current_user.id, project_id)
+
+    row = (
+        db.query(OutcomeTracker)
+        .filter(
+            OutcomeTracker.id == point_id,
+            OutcomeTracker.project_id == project_id,
+        )
+        .first()
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Outcome tracker point not found",
+        )
+
+    db.delete(row)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(
