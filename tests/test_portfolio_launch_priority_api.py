@@ -1,6 +1,7 @@
 """Route-level tests for ``GET /simulations/portfolio-launch-priority``."""
 from __future__ import annotations
 
+import asyncio
 import sys
 import types
 from datetime import UTC, datetime, timedelta
@@ -420,3 +421,109 @@ def test_large_portfolio_payload_is_capped() -> None:
     assert out.project_count == 30
     assert out.evaluated_count == 30
     assert len(out.launch_sequence) == 25
+
+
+def _call_export_route(
+    *,
+    session: _FakeSession | None = None,
+    limit: int = 25,
+    format: str = "csv",
+    current_user_id: int = 42,
+):
+    from app.api.v1 import simulations as simulations_mod
+
+    db = session or _FakeSession()
+    return simulations_mod.export_portfolio_launch_priority(
+        limit=limit,
+        format=format,
+        db=db,
+        current_user=type("U", (), {"id": current_user_id})(),
+    )
+
+
+async def _collect(resp) -> bytes:
+    chunks = []
+    async for chunk in resp.body_iterator:
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _body(resp) -> bytes:
+    return asyncio.run(_collect(resp))
+
+
+def test_export_route_returns_csv_digest() -> None:
+    session = _FakeSession(
+        projects=[
+            _FakeProjectRow(
+                10,
+                title="Launchable",
+                premortem_json={
+                    "failure_modes": [
+                        {
+                            "title": "Competitors copy",
+                            "severity": "LOW",
+                            "impact": 3,
+                        },
+                    ]
+                },
+                competitive_json={
+                    "overall_competitive_position": "STRONG",
+                    "competitors": [
+                        {"name": "TinyCo", "threat_level": "LOW"},
+                    ],
+                },
+            ),
+        ],
+        sims=[_FakeSimRow(100, 10)],
+        assumptions=[
+            _FakeAssumptionRow(10, "Pricing"),
+            _FakeAssumptionRow(10, "Trust"),
+            _FakeAssumptionRow(10, "Onboarding"),
+            _FakeAssumptionRow(10, "Retention"),
+            _FakeAssumptionRow(10, "DistributionChannel"),
+            _FakeAssumptionRow(10, "Market"),
+        ],
+        outcomes=[_FakeOutcomeRow(10)],
+    )
+
+    resp = _call_export_route(session=session)
+
+    assert resp.media_type == "text/csv; charset=utf-8"
+    assert (
+        'filename="thecee-portfolio-launch-priority.csv"'
+        in resp.headers["Content-Disposition"]
+    )
+    body = _body(resp).decode("utf-8")
+    assert "section,Portfolio Launch Priority Summary" in body
+    assert "section,Launch Sequence" in body
+    assert "evaluated_count,1" in body
+    assert "Launchable" in body
+    assert ",10," in body
+
+
+def test_export_route_returns_json_envelope() -> None:
+    resp = _call_export_route(format="json")
+
+    assert resp.media_type == "application/json; charset=utf-8"
+    assert (
+        'filename="thecee-portfolio-launch-priority.json"'
+        in resp.headers["Content-Disposition"]
+    )
+    body = _body(resp).decode("utf-8")
+    assert '"metadata"' in body
+    assert '"portfolio"' in body
+    assert '"portfolio_verdict"' in body
+    assert '"launch_sequence"' in body
+
+
+def test_export_route_is_registered_before_dynamic_export() -> None:
+    from app.api.v1 import simulations as sim_mod
+
+    paths = [r.path for r in sim_mod.router.routes]
+    static_index = paths.index(
+        "/simulations/portfolio-launch-priority/export"
+    )
+    dynamic_index = paths.index("/simulations/{simulation_id}/export")
+
+    assert static_index < dynamic_index

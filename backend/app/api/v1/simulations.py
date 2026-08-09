@@ -291,6 +291,9 @@ from app.simulation.outlier_detection import (
 from app.simulation.portfolio_launch_priority import (
     build_portfolio_launch_priority,
 )
+from app.simulation.portfolio_launch_priority_export import (
+    portfolio_launch_priority_to_csv,
+)
 from app.simulation.portfolio_narrative import (
     build_portfolio_narrative,
 )
@@ -3574,6 +3577,99 @@ def get_portfolio_launch_priority(
 
     payload = build_portfolio_launch_priority(project_payloads)
     return PortfolioLaunchPriorityOut(**payload)
+
+
+@router.get(
+    "/portfolio-launch-priority/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Spreadsheet export of the portfolio launch-priority digest — "
+        "same data as /portfolio-launch-priority as multi-section CSV "
+        "(or JSON when ?format=json)"
+    ),
+    # Same bounded per-project composition as the JSON endpoint.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_portfolio_launch_priority(
+    limit: int = Query(
+        default=_PORTFOLIO_LAUNCH_PRIORITY_MAX_PROJECTS,
+        ge=1,
+        le=50,
+        description=(
+            "Maximum number of active projects to evaluate. Default "
+            f"{_PORTFOLIO_LAUNCH_PRIORITY_MAX_PROJECTS}, capped at "
+            "50 so the digest stays fast on large portfolios."
+        ),
+    ),
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly multi-section document; "
+            "``json`` returns the raw portfolio launch-priority "
+            "payload as JSON."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Spreadsheet / machine export of the portfolio launch-priority digest.
+
+    Reuses the exact same query + go/no-go composition as the JSON
+    endpoint, so the export can never disagree with the dashboard. CSV
+    output includes provenance metadata (generated_at, user_id,
+    project_count) plus summary, bucket, and ranked launch-sequence
+    sections. ``format=json`` returns the same digest payload in a
+    metadata envelope for machine-to-machine consumers.
+    """
+    payload = get_portfolio_launch_priority(
+        limit=limit,
+        db=db,
+        current_user=current_user,
+    )
+    data = payload.model_dump()
+    metadata = {
+        "generated_at": datetime.now(tz=UTC).isoformat(),
+        "user_id": current_user.id,
+        "project_count": data.get("project_count", 0),
+        "evaluated_count": data.get("evaluated_count", 0),
+        "portfolio_verdict": data.get(
+            "portfolio_verdict", "INSUFFICIENT_DATA"
+        ),
+        "format_version": "1",
+    }
+
+    fmt = format.strip().lower() if format else "csv"
+    if fmt == "json":
+        body = json.dumps(
+            {"metadata": metadata, "portfolio": data},
+            default=str,
+            indent=2,
+        ).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="thecee-portfolio-launch-priority.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = portfolio_launch_priority_to_csv(data, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="thecee-portfolio-launch-priority.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
 
 
 @router.get(
