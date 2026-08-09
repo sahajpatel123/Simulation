@@ -64,6 +64,12 @@ Simulation completes
            cluster_parameters.calibrated_value updated
            AccountabilityEngine benchmarks adjusted
            Accuracy score published to landing page
+           Feedback loop closed: the next simulation run loads
+           architect_corrections once in Conductor.run() and applies
+           the highest-confidence scalar (cluster-specific or ALL) to
+           each architect's probability/score metrics before the Markov
+           funnel — so real outcome data changes future predictions,
+           not just the calibration dashboard.
 ```
 
 ## CognitiveState Mutation Flow

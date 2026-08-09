@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable
 
-from sqlalchemy import delete
+from sqlalchemy import delete, text
 
 from app.simulation.architects.base import ArchitectOutput, DomainReport
 from app.simulation.cancellation import SimulationCancelled
@@ -19,6 +19,12 @@ from app.simulation.cluster_reweighting import ClusterReweightingEngine
 from app.simulation.clusters.definitions import ClusterDefinition
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.cognitive_state import CognitiveStateMutator
+from app.simulation.correction_application import (
+    MIN_CONFIDENCE_WEIGHT,
+    Correction,
+    apply_correction_to_output,
+    index_corrections,
+)
 from app.simulation.markov import MarkovBehaviourModel
 from app.simulation.product_type import ProductType
 
@@ -486,12 +492,15 @@ class ConductorDiagnostics:
     Surfaces the failures the Conductor used to absorb with a log line only:
     an architect whose ``compute()`` raised for one or more clusters, or whose
     cross-cluster ``generate_report()`` raised, now appears in the persisted
-    result payload instead of silently degrading the simulation.
+    result payload instead of silently degrading the simulation. Also counts
+    the learned calibration corrections applied during the run so founders
+    can see when the learning loop actually adjusted their simulation.
     """
 
     architect_stats: list[ArchitectDiagnostics] = field(default_factory=list)
     report_failures: int = 0
     failed_report_architects: list[str] = field(default_factory=list)
+    applied_corrections: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         stats = sorted(self.architect_stats, key=lambda s: s.architect_name)
@@ -505,6 +514,7 @@ class ConductorDiagnostics:
             ),
             "report_failures": self.report_failures,
             "failed_report_architects": sorted(self.failed_report_architects),
+            "applied_corrections": self.applied_corrections,
         }
 
 
@@ -675,6 +685,39 @@ class Conductor:
                     resolved[param_name] = val
         return resolved
 
+    def _load_corrections(
+        self,
+        db: Any,
+        product_type: str,
+    ) -> dict[tuple[str, str], Correction] | None:
+        """Load the best current calibration corrections for one run.
+
+        Returns an empty mapping when the table has no eligible rows and
+        ``None`` when the read fails, so a calibration outage can never
+        break a simulation -- the run simply proceeds uncalibrated.
+        """
+        if db is None:
+            return None
+        try:
+            rows = db.execute(
+                text("""
+                    SELECT architect_name, product_type, product_attribute,
+                           cluster_id, correction_scalar, confidence_weight,
+                           effective_sample_count, scope
+                    FROM architect_corrections
+                    WHERE product_type = :pt
+                      AND confidence_weight >= :min_conf
+                """),
+                {"pt": product_type, "min_conf": MIN_CONFIDENCE_WEIGHT},
+            ).mappings().all()
+        except Exception:
+            logger.exception(
+                "Could not load architect corrections for %s",
+                product_type,
+            )
+            return None
+        return index_corrections(rows, product_type)
+
     def run(
         self,
         agents: list[Any],
@@ -710,6 +753,7 @@ class Conductor:
             claim_conf_dist = getattr(simulation, "claim_confidence_distribution", None)
         stack = ARCHITECT_STACKS.get(product_type, ARCHITECT_STACKS[ProductType.SAAS])
         all_clusters = self._registry.all_clusters()
+        corrections = self._load_corrections(db, product_type.value)
 
         total_agents = len(agents) if agents else 10000
         cluster_agent_counts = {
@@ -784,6 +828,10 @@ class Conductor:
                         assumptions=assumptions,
                         env_params=env_params,
                     )
+                    corrected = apply_correction_to_output(output, corrections)
+                    if corrected is not output:
+                        diagnostics.applied_corrections += 1
+                        output = corrected
                     cluster_outputs[arch_name] = output
                     stats.record_success(output)
                 except Exception:
