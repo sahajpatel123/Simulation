@@ -229,6 +229,7 @@ from app.simulation.status_banner import build_status_banner
 from app.simulation.status_export import status_to_csv
 from app.simulation.tag_suggestions import suggest_tags
 from app.simulation.tags_export import tags_to_csv
+from app.simulation.tags_export import tag_count_to_csv
 from app.simulation.title_export import title_to_csv
 from app.tasks.simulation_tasks import run_full_simulation
 from app.tasks.stress_test_tasks import run_assumption_stress_test
@@ -8002,6 +8003,72 @@ def export_assumption_count(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="assumption-count-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/tag-count/export",
+    summary="Export a project's tag count as CSV or JSON",
+    response_class=StreamingResponse,
+)
+def export_tag_count(
+    project_id: int,
+    format: Literal["csv", "json"] = Query(
+        default="csv",
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "tag-count row."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Export a project's tag count as CSV (default) or JSON."""
+    project = get_owned_project(db, current_user.id, project_id)
+    count = len(project.tags or [])
+    row = {"project_id": project_id, "tag_count": count}
+
+    if format == "json":
+        json_text = json.dumps(
+            {
+                "generated_at": datetime.now(UTC).isoformat(),
+                "project_id": project_id,
+                "tag_count": count,
+            },
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="tag-count-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = tag_count_to_csv(
+        row,
+        metadata={
+            "generated_at": datetime.now(UTC).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="tag-count-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },
