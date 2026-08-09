@@ -46,6 +46,24 @@ def _safe_finite(value: Any, default: float | None = None) -> float | None:
     return parsed
 
 
+def _safe_count(value: Any, default: int = 0) -> int:
+    """Coerce a metric count to a non-negative int or return ``default``.
+
+    The internal registry only stores integer counts, but the digest accepts
+    arbitrary snapshots (tests, future callers, partially updated state), so
+    guarding here keeps a malformed or stale snapshot from producing negative
+    totals — which would fail ``RequestHealthOut`` validation and 500 the
+    observability endpoint it is meant to protect.
+    """
+    if value is None or isinstance(value, bool):
+        return default
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else 0
+
+
 def _histogram_percentile_ms(
     buckets: list[float],
     counts: list[int],
@@ -169,10 +187,19 @@ def build_request_health(
     total_requests = 0
     total_errors = 0
     for (method, path), row in routes.items():
-        request_count = row["counts"][-1] if row["counts"] else 0
+        request_count = _safe_count(row["counts"][-1] if row["counts"] else 0)
+        # ``metrics.http_request()`` bumps the status counter and observes the
+        # latency histogram in two separate lock acquisitions, so a snapshot
+        # can briefly see more error counters than histogram observations
+        # (e.g. a 5xx counter bumped while the histogram entry is still from
+        # the previous request). Clamp per-route errors to the observed request
+        # count so the digest can never emit error_count > request_count,
+        # which would fail schema validation and 500 this endpoint.
+        error_count = min(_safe_count(row["error_count"]), request_count)
         row["request_count"] = request_count
+        row["error_count"] = error_count
         total_requests += request_count
-        total_errors += row["error_count"]
+        total_errors += error_count
 
     overall_error_rate = (
         round(total_errors / total_requests, 6) if total_requests > 0 else None
@@ -194,17 +221,26 @@ def build_request_health(
             "request_count": request_count,
             "error_count": error_count,
             "error_rate": (
-                round(error_count / request_count, 6)
+                min(1.0, round(error_count / request_count, 6))
                 if request_count > 0 else None
             ),
             "mean_latency_ms": (
-                round(mean, 3) if mean is not None else None
+                round(max(0.0, mean), 3) if mean is not None else None
             ),
-            "p50_latency_ms": round(p50, 3) if p50 is not None else None,
-            "p95_latency_ms": round(p95, 3) if p95 is not None else None,
-            "p99_latency_ms": round(p99, 3) if p99 is not None else None,
+            "p50_latency_ms": (
+                round(max(0.0, p50), 3) if p50 is not None else None
+            ),
+            "p95_latency_ms": (
+                round(max(0.0, p95), 3) if p95 is not None else None
+            ),
+            "p99_latency_ms": (
+                round(max(0.0, p99), 3) if p99 is not None else None
+            ),
             "max_bucket_ms": (
-                round(row["buckets"][-1] * 1000.0, 3)
+                round(
+                    max(0.0, _safe_finite(row["buckets"][-1], 0.0)) * 1000.0,
+                    3,
+                )
                 if row["buckets"] else None
             ),
         })

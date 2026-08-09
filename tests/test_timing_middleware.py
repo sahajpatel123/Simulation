@@ -8,8 +8,8 @@ forever), so the middleware extracts the matched route
 template from ``request.scope[\"route\"]``.
 
 These tests pin:
-* ``_METRICS_EXEMPT_PATHS`` excludes /metrics, /health, /readyz
-  so the scrape loop doesn't pollute its own histogram
+* ``_METRICS_EXEMPT_PATHS`` excludes /metrics, /health, /readyz and the
+  request-health digest so probe traffic doesn't pollute its own histogram
 * ``_normalise_path`` returns the matched template, or
   ``\"unmatched\"`` for routes Starlette didn't match
 """
@@ -24,17 +24,20 @@ from app.core.timing_middleware import (
 
 
 def test_metrics_exempt_paths_includes_probes() -> None:
-    """``/metrics``, ``/health``, ``/readyz`` are exempt.
+    """``/metrics``, ``/health``, ``/readyz`` and request-health are exempt.
 
     Including /metrics in the histogram would create a
     feedback loop: scraping creates observations which
     show up as 'slow requests' on dashboards which
     trigger more scraping. /health and /readyz are cheap
-    probes that don't represent real application load.
+    probes that don't represent real application load, and the
+    request-health digest is the same — every dashboard poll of it would
+    otherwise add a self-observation to the histogram it reports on.
     """
     assert "/metrics" in _METRICS_EXEMPT_PATHS
     assert "/health" in _METRICS_EXEMPT_PATHS
     assert "/readyz" in _METRICS_EXEMPT_PATHS
+    assert "/api/v1/system/request-health" in _METRICS_EXEMPT_PATHS
 
 
 def test_normalise_path_returns_template_when_route_matches() -> None:

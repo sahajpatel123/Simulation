@@ -16,8 +16,15 @@ logger = logging.getLogger("thecee.timing")
 # every scrape interval), which both skews the latency distribution and
 # creates a feedback loop where scraping creates more work for the scraper.
 # ``/health`` / ``/readyz`` are cheap probes that don't represent real
-# application load, so we exclude them too.
-_METRICS_EXEMPT_PATHS = frozenset({"/metrics", "/health", "/readyz"})
+# application load, so we exclude them too. ``/api/v1/system/request-health``
+# is the same class of ops probe: every dashboard poll would otherwise add a
+# self-observation to the exact histogram the digest reports on.
+_METRICS_EXEMPT_PATHS = frozenset({
+    "/metrics",
+    "/health",
+    "/readyz",
+    "/api/v1/system/request-health",
+})
 
 
 def _normalise_path(request: Request) -> str:

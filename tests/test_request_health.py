@@ -257,3 +257,92 @@ def test_route_returns_typed_summary_from_registry_snapshot(
     assert payload["routes"][0]["path"] == "/projects/{id}"
     assert payload["routes"][0]["request_count"] == 7
     assert isinstance(RequestHealthOut(**payload), RequestHealthOut)
+
+
+def test_snapshot_race_cannot_produce_error_rate_above_one() -> None:
+    """A counter/histogram snapshot taken mid-request must not 500 the digest.
+
+    ``metrics.http_request()`` bumps the status counter and observes the
+    latency histogram in two separate lock acquisitions, so a snapshot can
+    briefly see more error counters than histogram observations (a 5xx
+    counter bumped before its histogram entry). The digest clamps per-route
+    errors to the observed request count instead of emitting error_rate > 1,
+    which ``RequestHealthOut`` would reject and turn into a 500.
+    """
+    route = {"method": "GET", "path": "/projects/{id}"}
+    counters = {
+        _counter_key(
+            "thecee_http_requests_total",
+            {**route, "status": "5xx"},
+        ): 2.0,
+    }
+    histograms = {
+        _histogram_key(
+            "thecee_http_request_duration_seconds",
+            route,
+        ): ([0.5, 1.0], [1, 1], 0.25),
+    }
+    payload = build_request_health(
+        _snapshot(counters=counters, histograms=histograms),
+        generated_at="now",
+    )
+
+    row = payload["routes"][0]
+    assert row["request_count"] == 1
+    assert row["error_count"] == 1
+    assert row["error_rate"] == 1.0
+    assert payload["total_requests"] == 1
+    assert payload["total_errors"] == 1
+    assert payload["overall_error_rate"] == 1.0
+    assert isinstance(RequestHealthOut(**payload), RequestHealthOut)
+
+
+def test_malformed_negative_counts_never_break_schema() -> None:
+    """Negative or non-monotonic counts are clamped so totals stay valid."""
+    histograms = {
+        _histogram_key(
+            "thecee_http_request_duration_seconds",
+            {"method": "GET", "path": "/negative"},
+        ): ([0.5, 1.0], [-5, -5], -1.0),
+        _histogram_key(
+            "thecee_http_request_duration_seconds",
+            {"method": "GET", "path": "/non-monotonic"},
+        ): ([0.5, 1.0], [5, 3], 4.0),
+    }
+    payload = build_request_health(
+        _snapshot(histograms=histograms),
+        min_requests=0,
+        generated_at="now",
+    )
+
+    assert payload["total_requests"] == 3  # negative route contributes 0
+    assert payload["total_errors"] == 0
+    assert payload["overall_error_rate"] == 0.0
+    by_path = {row["path"]: row for row in payload["routes"]}
+    assert by_path["/negative"]["request_count"] == 0
+    assert by_path["/negative"]["mean_latency_ms"] is None
+    assert by_path["/non-monotonic"]["request_count"] == 3
+    assert isinstance(RequestHealthOut(**payload), RequestHealthOut)
+
+
+def test_negative_latency_inputs_are_clamped_not_rejected() -> None:
+    """Negative histogram sums / buckets never produce schema-invalid rows."""
+    histograms = {
+        _histogram_key(
+            "thecee_http_request_duration_seconds",
+            {"method": "POST", "path": "/simulations"},
+        ): ([-2.0, -1.0], [10, 10], -50.0),
+    }
+    payload = build_request_health(
+        _snapshot(histograms=histograms),
+        generated_at="now",
+    )
+
+    row = payload["routes"][0]
+    assert row["request_count"] == 10
+    assert row["mean_latency_ms"] == 0.0
+    assert row["p50_latency_ms"] == 0.0
+    assert row["p95_latency_ms"] == 0.0
+    assert row["p99_latency_ms"] == 0.0
+    assert row["max_bucket_ms"] == 0.0
+    assert isinstance(RequestHealthOut(**payload), RequestHealthOut)
