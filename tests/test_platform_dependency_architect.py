@@ -195,6 +195,118 @@ def test_low_trust_risk_averse_cluster_raises_risk() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Negation-aware exposure detection
+# ---------------------------------------------------------------------------
+
+
+def test_explicit_disclaimer_does_not_create_exposure() -> None:
+    for text in (
+        "We do not use the app store",
+        "We don't rely on Google ads",
+        "No reliance on any cloud provider",
+        "We avoid app store dependence entirely",
+        "We are independent of any app store",
+        "We don't use AWS or Stripe",
+    ):
+        out = _compute(assumptions=[{"text": text}])
+        assert out.metrics["platform_dependency_exposure"] == 0.08, text
+        assert out.metrics["dependency_concentration"] == 0.0, text
+        assert out.metrics["platform_gate_risk"] == 0.0, text
+        assert out.metrics["platform_risk_suppressor"] == 1.0, text
+        assert not any(out.flags.values()), text
+        assert out.severity == "INFO", text
+
+
+def test_negated_list_disclaimer_does_not_create_exposure() -> None:
+    for text in (
+        "We avoid the app store and Google Play",
+        "We don't use the app store or Google Play",
+        "We are independent of AWS and Google cloud",
+    ):
+        out = _compute(assumptions=[{"text": text}])
+        assert out.metrics["platform_dependency_exposure"] == 0.08, text
+        assert out.metrics["dependency_concentration"] == 0.0, text
+        assert out.severity == "INFO", text
+
+
+def test_disclaimer_in_one_clause_does_not_mask_dependence_in_another() -> None:
+    out = _compute(
+        assumptions=[
+            {"text": "We don't use the app store but depend on Google ads"}
+        ]
+    )
+    assert out.flags["app_store_gate"] is False
+    assert out.flags["algorithm_dependency"] is True
+    assert out.metrics["platform_dependency_exposure"] == 0.28
+    assert out.severity == "WARNING"
+
+
+def test_pending_status_mentions_still_count_as_exposure() -> None:
+    for text in (
+        "App store approval not yet received",
+        "We don't have app store approval yet",
+        "No app store approval yet",
+        "We don't have app store approval",
+    ):
+        out = _compute(assumptions=[{"text": text}])
+        assert out.metrics["platform_dependency_exposure"] == 0.28, text
+        assert out.flags["app_store_gate"] is True, text
+        assert out.severity == "WARNING", text
+
+
+def test_partial_reliance_qualifier_keeps_exposure() -> None:
+    out = _compute(
+        assumptions=[{"text": "We don't rely solely on the app store"}]
+    )
+    assert out.metrics["platform_dependency_exposure"] == 0.28
+    # "not rely solely" still means partial dependence, so the mention is
+    # not a disclaimer; the negation itself is also treated as mitigation
+    # evidence ("we do not rely" on a single channel).
+    assert out.flags["platform_mitigation_advantage"] is True
+    assert out.flags["app_store_gate"] is False
+    assert out.severity == "INFO"
+
+
+def test_discourse_focus_keeps_exposure() -> None:
+    out = _compute(
+        assumptions=[
+            {"text": "We use not only the app store but also our own website"}
+        ]
+    )
+    assert out.metrics["platform_dependency_exposure"] == 0.28
+    # "not only X but also Y" presupposes the app-store mention (exposure
+    # stays active) while "own website" is credible mitigation evidence.
+    assert out.flags["app_store_gate"] is False
+    assert out.flags["platform_mitigation_advantage"] is True
+
+
+def test_not_independent_keeps_exposure() -> None:
+    out = _compute(
+        assumptions=[{"text": "We are not independent of the app store"}]
+    )
+    assert out.metrics["platform_dependency_exposure"] == 0.28
+    assert out.flags["app_store_gate"] is True
+    assert out.severity == "WARNING"
+
+
+def test_none_assumptions_are_neutral() -> None:
+    from app.simulation.architects.platform_dependency import (
+        PlatformDependencyArchitect,
+    )
+
+    out = PlatformDependencyArchitect().compute(
+        cluster=_cluster(),
+        agent_profile={},
+        assumptions=None,
+        env_params={"product_type": "mobile_app"},
+    )
+    assert out.metrics["platform_dependency_exposure"] == 0.08
+    assert out.metrics["platform_risk_suppressor"] == 1.0
+    assert not any(out.flags.values())
+    assert out.severity == "INFO"
+
+
+# ---------------------------------------------------------------------------
 # Mitigation evidence handling
 # ---------------------------------------------------------------------------
 

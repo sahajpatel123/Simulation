@@ -16,9 +16,13 @@ What this architect does:
   groups: app-store/OS marketplaces (approval, review, commission,
   in-app purchase), search/ad/social algorithms (SEO, ads, influencer
   reach), third-party API/cloud providers (LLM APIs, AWS, Stripe,
-  rate limits) and platform policy/lock-in language. A small baseline
-  keeps funnels neutral until the founder actually mentions platform
-  dependence.
+  rate limits) and platform policy/lock-in language. Detection is
+  negation-aware: "we don't use the app store", "no reliance on any
+  cloud provider" and "we are independent of any app store" are
+  disclaimers, not dependencies, while pending status ("app store
+  approval not yet received") still counts because the founder is
+  engaging with the platform. A small baseline keeps funnels neutral
+  until the founder actually mentions platform dependence.
 * **Concentration modelling** — exposure scales with distrustful,
   risk-averse, low-literacy and socially-oriented clusters, which are
   exactly the segments that abandon a product when a store, algorithm
@@ -192,13 +196,232 @@ def _assumption_texts(
     return texts
 
 
+# ── Negation-aware exposure detection ───────────────────────────────────
+#
+# A platform mention is exposure only when the founder is (or plans to
+# be) on that platform. "We don't use the app store", "no reliance on
+# any cloud provider" and "we are independent of any app store" are
+# disclaimers, not dependencies; but status/gate statements ("app store
+# approval not yet received", "we don't have app store approval yet")
+# still signal engagement with the platform and stay exposure.
+_SIGNAL_NEGATORS: frozenset[str] = frozenset({
+    "no", "not", "never", "without", "none", "neither",
+    "avoid", "avoids", "avoided", "avoiding",
+    "stopped", "quit", "ceased",
+})
+
+_SIGNAL_DEPENDENCE_VERBS: frozenset[str] = frozenset({
+    "use", "uses", "used", "using",
+    "rely", "relies", "relied", "relying",
+    "depend", "depends", "depended", "depending",
+    "need", "needs", "needed", "require", "requires", "required",
+    "want", "wants", "wanted",
+    "offer", "offers", "offered", "offering",
+    "sell", "sells", "sold", "selling",
+    "accept", "accepts", "accepted", "accepting",
+    "take", "takes", "took", "taking",
+    "run", "runs", "ran", "running",
+    "host", "hosts", "hosted", "hosting",
+    "advertise", "advertises", "advertised", "advertising",
+    "build", "builds", "built", "building",
+    "integrate", "integrates", "integrated", "integrating",
+    "have", "has", "had",
+    "pay", "pays", "paid", "paying",
+    "ship", "ships", "shipped", "shipping",
+    "distribute", "distributes", "distributed", "distributing",
+})
+
+_SIGNAL_RELIANCE_NOUNS: frozenset[str] = frozenset({
+    "reliance", "dependency", "dependence", "dependencies", "dependences",
+    "reliant", "dependent", "tied",
+})
+
+# Words that turn a mention into a gate/status statement ("app store
+# approval", "search engine rankings", "api quota"). Negating a status
+# ("no approval yet") still means the founder is pursuing that platform,
+# so those mentions stay exposure — except when the negation explicitly
+# removes the need ("we don't need app store approval").
+_SIGNAL_GATE_WORDS: frozenset[str] = frozenset({
+    "approval", "approvals", "approved", "review", "reviews",
+    "policy", "policies", "commission", "commissions",
+    "listing", "listings", "rank", "ranks", "ranking", "rankings",
+    "quota", "quotas", "limit", "limits", "pricing", "price",
+    "suspension", "suspensions", "delisting", "terms",
+    "agreement", "agreements", "acceptance", "pending",
+    "permission", "permissions", "authorization", "authorisation",
+    "certification", "consent", "status",
+})
+
+_SIGNAL_QUALIFIERS: frozenset[str] = frozenset({
+    "solely", "only", "just", "exclusively", "entirely", "alone",
+    "primarily", "mainly", "mostly",
+})
+
+# Pending/future markers: "not yet" / "soon" means the founder still
+# plans platform engagement, so the mention stays exposure.
+_SIGNAL_PENDING_MARKERS: frozenset[str] = frozenset({"yet", "soon"})
+
+_SIGNAL_INDEPENDENCE_PHRASES: tuple[str, ...] = (
+    "independent of", "independent from",
+    "not tied to", "not dependent on", "not reliant on",
+    "no reliance on", "no dependency on", "no dependence on",
+    "no longer use", "no longer rely", "no longer depend",
+    "not part of",
+)
+
+_SIGNAL_AFTER_VOID_PATTERN = re.compile(
+    r"\bnot (?:required|needed|necessary|applicable|relevant|part of)\b"
+)
+
+_TRAILING_ARTICLE_WORDS: frozenset[str] = frozenset({
+    "the", "a", "an", "any", "some",
+})
+
+
+def _signal_match_is_voided(
+    text: str,
+    start: int,
+    end: int,
+) -> bool:
+    """True when a platform mention is an explicit dependence disclaimer."""
+    clause_matches_before = list(_CLAUSE_BOUNDARY_PATTERN.finditer(text, 0, start))
+    clause_start = clause_matches_before[-1].end() if clause_matches_before else 0
+    before = re.findall(r"[a-z]+", text[clause_start:start])[-12:]
+
+    clause_matches_after = list(_CLAUSE_BOUNDARY_PATTERN.finditer(text, end, len(text)))
+    clause_end = clause_matches_after[0].start() if clause_matches_after else len(text)
+    after = re.findall(r"[a-z]+", text[end:clause_end])[:8]
+
+    before_text = " ".join(before)
+    for article in _TRAILING_ARTICLE_WORDS:
+        if before_text.endswith(f" {article}"):
+            before_text = before_text[: -len(article) - 1]
+            break
+    # "we are independent of X" (and variants) can govern a short list:
+    # "independent of AWS and Google Cloud". "Not independent of X" is
+    # the opposite, so it must never be treated as a disclaimer.
+    if not re.search(
+        r"\b(?:no longer|not(?:\s+[a-z]+){0,3})\s+independent\b",
+        before_text,
+    ):
+        if any(
+            re.search(
+                re.escape(phrase) + r"(?:\s+[a-z]+){0,4}$",
+                before_text,
+            )
+            for phrase in _SIGNAL_INDEPENDENCE_PHRASES
+        ):
+            return True
+
+    pending = bool(_SIGNAL_PENDING_MARKERS & (set(before) | set(after)))
+    if not pending and clause_end < len(text):
+        # "yet"/"soon" is also a clause-boundary word, so when it is the
+        # boundary immediately after the mention it never appears in the
+        # after-token window. A trailing "not yet" means platform
+        # engagement is still planned, so the mention stays exposure.
+        pending = re.match(r"\b(?:yet|soon)\b", text[clause_end:]) is not None
+    if pending:
+        return False
+
+    if not before:
+        # Post-posed disclaimer: "app store is not part of our strategy",
+        # "approval is not required for our model".
+        if after and _SIGNAL_AFTER_VOID_PATTERN.search(" ".join(after)):
+            return True
+        return False
+
+    neg_positions = [
+        i for i, token in enumerate(before)
+        if token in _SIGNAL_NEGATORS
+        and not any(
+            before[j] == "independent"
+            for j in range(i + 1, min(i + 4, len(before)))
+        )
+    ]
+    if not neg_positions:
+        return False
+
+    # "not only/just/merely/simply" focus presupposes the mention and
+    # never voids it by itself ("not only the app store but also...").
+    neg_positions = [
+        i for i in neg_positions
+        if not (
+            i + 1 < len(before)
+            and before[i + 1] in _DISCOURSE_FOCUS_MARKERS
+        )
+    ]
+    if not neg_positions:
+        return False
+
+    gate_after = any(token in _SIGNAL_GATE_WORDS for token in after[:3])
+    reliance_words = set(before) & _SIGNAL_RELIANCE_NOUNS
+    verb_positions = [
+        i for i, token in enumerate(before)
+        if token in _SIGNAL_DEPENDENCE_VERBS
+    ]
+
+    for neg_pos in neg_positions:
+        # Direct disclaimer: "no app store", "without the app store",
+        # "we avoid the app store". Gate words protect have-style status
+        # statements ("we don't have app store approval").
+        if len(before) - neg_pos <= 3:
+            have_style = any(
+                before[verb_pos] in {"have", "has", "had"}
+                for verb_pos in verb_positions
+            )
+            if not (gate_after and have_style):
+                return True
+        # Bare disclaimers can also govern a short list: "avoid the app
+        # store and Google Play", "no app store or Play Store presence".
+        if (
+            len(before) - neg_pos <= 6
+            and not any(verb_pos >= neg_pos for verb_pos in verb_positions)
+            and not reliance_words
+            and not any(
+                qualifier in _SIGNAL_QUALIFIERS
+                for qualifier in before[neg_pos:]
+            )
+        ):
+            have_style = any(
+                before[verb_pos] in {"have", "has", "had"}
+                for verb_pos in verb_positions
+            )
+            if not (gate_after and have_style):
+                return True
+        # Negated dependence verb in the same window: "we do not use the
+        # app store", "don't rely on Google ads", "stopped shipping IAPs".
+        for verb_pos in verb_positions:
+            if (
+                abs(verb_pos - neg_pos) <= 6
+                and len(before) - max(neg_pos, verb_pos) <= 6
+            ):
+                if any(
+                    qualifier in _SIGNAL_QUALIFIERS
+                    for qualifier in before[min(neg_pos, verb_pos):]
+                ):
+                    # "not rely solely on X" / "don't depend only on X"
+                    # still means partial dependence — keep the mention.
+                    continue
+                if gate_after and before[verb_pos] in {"have", "has", "had"}:
+                    continue
+                return True
+        if reliance_words:
+            return True
+
+    return False
+
+
 def _has_signal(
     assumptions: list[dict[str, Any]] | None,
     keywords: tuple[str, ...],
 ) -> bool:
-    """Raw word-boundary keyword presence (used for exposure detection)."""
+    """Keyword presence after voiding explicit dependence disclaimers."""
     pattern = _keyword_pattern(keywords)
-    return any(pattern.search(text) for text in _assumption_texts(assumptions))
+    for text in _assumption_texts(assumptions):
+        for match in pattern.finditer(text):
+            if not _signal_match_is_voided(text, match.start(), match.end()):
+                return True
+    return False
 
 
 # "not only"/"not just" (and variants) are discourse-focus constructions:
