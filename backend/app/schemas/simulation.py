@@ -1029,6 +1029,16 @@ class SimulationResultOut(BaseModel):
             "results persisted before the diagnostics feature shipped."
         ),
     )
+    pipeline_timing: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Per-stage wall-clock timings for the run (agent-profile "
+            "generation, conductor, accountability/funnel, aggregation/"
+            "serialisation), plus total_seconds, stage_count, per_agent_ms and "
+            "end_to_end_seconds. Empty for legacy results persisted before the "
+            "pipeline-timing feature shipped."
+        ),
+    )
 
     model_config = {"from_attributes": True}
 

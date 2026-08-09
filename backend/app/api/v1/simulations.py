@@ -4165,6 +4165,7 @@ def get_simulation_results(
         product_type_detected=results_json.get("product_type_detected", ""),
         cluster_narrative=results_json.get("cluster_narrative", ""),
         conductor_diagnostics=results_json.get("conductor_diagnostics", {}),
+        pipeline_timing=results_json.get("pipeline_timing", {}),
         signal_quality=float(sim.signal_quality or 0.0),
         user_blindspots=user_blindspots,
     )

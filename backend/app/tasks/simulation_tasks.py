@@ -29,6 +29,7 @@ from app.simulation.funnel import (
 )
 from app.simulation.journey_analytics import serialise_per_cluster_matrices
 from app.simulation.markov import STATES
+from app.simulation.pipeline_timing import build_pipeline_timing
 from app.simulation.profiles import AgentProfileGenerator
 from app.simulation.reproducibility import stable_result_fingerprint
 from app.simulation.simulation_webhook_delivery import (
@@ -497,6 +498,14 @@ def run_full_simulation(self, simulation_id: int) -> dict:
     sim: Simulation | None = None
 
     try:
+        # Per-stage wall-clock accounting for the persisted pipeline_timing
+        # payload. Stages are recorded around the compute work only; the
+        # terminal results_json write cannot time itself, so persistence is
+        # intentionally excluded and the overall worker runtime is captured
+        # separately as end_to_end_seconds.
+        stage_timings: dict[str, float] = {}
+        _stage_t0 = time.perf_counter()
+
         sim = self.db.query(Simulation).filter(Simulation.id == simulation_id).first()
         if not sim:
             raise ValueError(f"Simulation {simulation_id} not found in DB")
@@ -590,6 +599,8 @@ def run_full_simulation(self, simulation_id: int) -> dict:
             except Exception:
                 pass
 
+        stage_timings["load_project_data"] = time.perf_counter() - _stage_t0
+
         logger.info(
             f"[Simulation] Data loaded - project_id={sim.project_id} "
             f"assumptions={len(assumption_dicts)} volume={sim.consumer_volume}"
@@ -598,6 +609,7 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         self.update_state(state="PROGRESS", meta={"stage": "Generating agent population", "pct": 15})
         sync_broadcast(simulation_id, "RUNNING", "Generating agent population", 15)
 
+        _stage_t0 = time.perf_counter()
         generator = AgentProfileGenerator()
         agents = generator.generate_population(
             volume=sim.consumer_volume,
@@ -605,6 +617,7 @@ def run_full_simulation(self, simulation_id: int) -> dict:
             scenario_type=scenario_type,
             seed=resolve_simulation_seed(sim.seed, simulation_id),
         )
+        stage_timings["agent_profile_generation"] = time.perf_counter() - _stage_t0
 
         logger.info(f"[Simulation] Population generated - n={len(agents)}")
 
@@ -631,7 +644,9 @@ def run_full_simulation(self, simulation_id: int) -> dict:
             cancel_check=lambda: _simulation_is_cancelled(self.db, simulation_id),
         )
         wall_s = time.perf_counter() - t0
+        stage_timings["conductor_run"] = wall_s
 
+        _stage_t0 = time.perf_counter()
         accountability = AccountabilityEngine()
         ranked = accountability.generate_domain_findings(
             conductor_result,
@@ -646,6 +661,7 @@ def run_full_simulation(self, simulation_id: int) -> dict:
             seed=seed,
             wall_time_seconds=wall_s,
         )
+        stage_timings["accountability_and_funnel"] = time.perf_counter() - _stage_t0
 
         logger.info(
             f"[Simulation] Conductor complete - "
@@ -664,6 +680,7 @@ def run_full_simulation(self, simulation_id: int) -> dict:
             sim.consumer_volume,
         )
 
+        _stage_t0 = time.perf_counter()
         aggregator = ResultsAggregator()
         agg_result = aggregator.aggregate(
             results=[funnel_result],
@@ -694,6 +711,20 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         )
         results_dict["conductor_diagnostics"] = conductor_result.diagnostics.to_dict()
         results_fingerprint = stable_result_fingerprint(results_dict)
+        stage_timings["aggregation_and_serialization"] = time.perf_counter() - _stage_t0
+
+        # Timing is volatile by nature: identical-input replays must still
+        # match, so it is added after the fingerprint is computed and is
+        # listed in VOLATILE_RESULT_KEYS for any read-back verification.
+        results_dict["pipeline_timing"] = build_pipeline_timing(
+            stage_timings,
+            total_agents=len(agents),
+            end_to_end_seconds=(
+                time.monotonic() - self._metrics_start
+                if getattr(self, "_metrics_start", None) is not None
+                else None
+            ),
+        )
 
         if _simulation_is_cancelled(self.db, simulation_id):
             logger.info(
