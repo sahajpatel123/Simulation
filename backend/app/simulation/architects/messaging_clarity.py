@@ -259,19 +259,32 @@ def _collect_texts(
     assumptions: list[dict[str, Any]] | None,
     env_params: dict[str, Any] | None,
 ) -> list[str]:
-    """Gather the pitch texts: scored assumptions plus project description."""
+    """Gather the pitch texts: scored assumptions plus project description.
+
+    Null or blank entries are not evidence: a database row with ``text=None``
+    must not be read as the literal string "None". Identical texts are
+    de-duplicated so the same pitch repeated in an assumption and the
+    description is not counted multiple times.
+    """
     texts: list[str] = []
     for assumption in assumptions or []:
         if isinstance(assumption, dict):
-            raw = str(assumption.get("text", assumption.get("assumption", "")))
+            raw = assumption.get("text", assumption.get("assumption", ""))
         else:
-            raw = str(assumption)
-        if raw.strip():
-            texts.append(_normalise(raw))
-    description = str((env_params or {}).get("description", "")).strip()
-    if description:
-        texts.append(_normalise(description))
-    return texts
+            raw = assumption
+        if raw is None:
+            continue
+        raw = str(raw)
+        if not raw.strip():
+            continue
+        texts.append(_normalise(raw))
+    description = (env_params or {}).get("description", "")
+    if description is not None:
+        description = str(description).strip()
+        if description:
+            texts.append(_normalise(description))
+    # Preserve order while removing duplicate pitch texts.
+    return list(dict.fromkeys(texts))
 
 
 def _signal_scores(texts: list[str]) -> dict[str, float]:
@@ -494,7 +507,9 @@ class MessagingClarityArchitect(BaseArchitect):
                 f"funnel drop-off"
             ),
             affected_cluster_ids=affected,
-            population_fraction=round(len(affected) * 0.03, 3),
+            # Flat per-cluster share approximation (0.03) must never
+            # exceed the whole population.
+            population_fraction=round(min(1.0, len(affected) * 0.03), 3),
             conversion_impact=round(
                 len(critical) * 0.04 + (len(gaps) - len(critical)) * 0.015,
                 3,

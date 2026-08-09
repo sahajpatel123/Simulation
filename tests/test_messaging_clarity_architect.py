@@ -58,17 +58,22 @@ def _compute(
     assumptions: list[Any] | None = None,
     description: str = "",
     average_order_value: float = 999.0,
+    env_params: dict[str, Any] | None = None,
 ) -> Any:
     from app.simulation.architects.messaging_clarity import (
         MessagingClarityArchitect,
     )
 
-    params: dict[str, Any] = {
-        "product_type": "saas",
-        "average_order_value": average_order_value,
-    }
-    if description:
-        params["description"] = description
+    if env_params is not None:
+        params = dict(env_params)
+        params.setdefault("product_type", "saas")
+    else:
+        params: dict[str, Any] = {
+            "product_type": "saas",
+            "average_order_value": average_order_value,
+        }
+        if description:
+            params["description"] = description
     return MessagingClarityArchitect().compute(
         cluster=_cluster(
             literacy=literacy,
@@ -122,6 +127,90 @@ def test_baseline_compute_is_neutral_when_no_messaging_evidence() -> None:
     assert out.flags["clarity_gap"] is False
     assert out.severity == "INFO"
     assert _architect().transition_overrides(out) == {}
+
+
+# ---------------------------------------------------------------------------
+# Null / empty evidence hardening
+# ---------------------------------------------------------------------------
+
+
+def test_null_assumption_text_is_not_evidence() -> None:
+    out = _compute(assumptions=[{"text": None, "category": "pricing"}])
+    assert out.metrics["messaging_clarity_score"] == 1.0
+    assert out.metrics["comprehension_risk"] == 0.0
+    assert out.metrics["clarity_funnel_suppressor"] == 1.0
+    assert out.flags["messaging_evidence_absent"] is True
+    assert out.flags["clarity_gap"] is False
+    assert out.severity == "INFO"
+    assert _architect().transition_overrides(out) == {}
+
+
+def test_null_description_is_not_evidence() -> None:
+    out = _compute(
+        env_params={
+            "product_type": "saas",
+            "average_order_value": 999.0,
+            "description": None,
+        },
+    )
+    assert out.metrics["messaging_clarity_score"] == 1.0
+    assert out.metrics["clarity_funnel_suppressor"] == 1.0
+    assert out.flags["messaging_evidence_absent"] is True
+    assert out.severity == "INFO"
+
+
+def test_none_and_blank_assumption_entries_are_skipped() -> None:
+    out = _compute(
+        assumptions=[
+            None,
+            {"text": None},
+            {"text": ""},
+            {"text": "   "},
+        ],
+    )
+    assert out.metrics["messaging_clarity_score"] == 1.0
+    assert out.flags["messaging_evidence_absent"] is True
+    assert out.flags["clarity_gap"] is False
+
+
+def test_null_assumptions_do_not_mask_real_evidence() -> None:
+    out = _compute(
+        literacy=0.1,
+        motivation=0.3,
+        trust=0.3,
+        assumptions=[None, {"text": None}, {"text": _VAGUE_PITCH}],
+    )
+    assert out.flags["messaging_evidence_absent"] is False
+    assert out.metrics["messaging_clarity_score"] < 0.40
+    assert out.flags["clarity_gap"] is True
+    assert out.severity == "CRITICAL"
+
+
+def test_duplicate_pitch_texts_are_counted_once() -> None:
+    from app.simulation.architects.messaging_clarity import _collect_texts
+
+    pitch = (
+        "An AI-powered CRM for small businesses that cuts follow-up "
+        "time by 40%"
+    )
+    assert _collect_texts(
+        [{"text": pitch}],
+        {"description": pitch},
+    ) == [pitch.lower()]
+
+    once = _compute(description=pitch)
+    twice = _compute(
+        assumptions=[{"text": pitch}],
+        description=pitch,
+    )
+    assert (
+        twice.metrics["vague_language_density"]
+        == once.metrics["vague_language_density"]
+    )
+    assert (
+        twice.metrics["messaging_clarity_score"]
+        == once.metrics["messaging_clarity_score"]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -332,6 +421,26 @@ def test_generate_report_aggregates_critical_and_warning_clusters() -> None:
     }
     assert report.conversion_impact > 0.0
     assert "plain language" in report.recommended_action.lower()
+
+
+def test_generate_report_population_fraction_capped_at_one() -> None:
+    from app.simulation.architects.base import ArchitectOutput
+
+    architect = _architect()
+    outputs = [
+        ArchitectOutput(
+            architect_name=architect.name,
+            cluster_id=f"cluster_{i}",
+            metrics={},
+            flags={"clarity_gap": True},
+            narrative_findings=[],
+            severity="WARNING",
+        )
+        for i in range(52)
+    ]
+    report = architect.generate_report(outputs)
+    assert len(report.affected_cluster_ids) == 52
+    assert 0.0 < report.population_fraction <= 1.0
 
 
 # ---------------------------------------------------------------------------
