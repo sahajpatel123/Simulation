@@ -157,6 +157,35 @@ class OutcomeTrackerForecastAccuracyOut(BaseModel):
     horizons: list[OutcomeTrackerForecastAccuracyPoint] = Field(default_factory=list)
 
 
+class OutcomeTrackerDriftCheck(BaseModel):
+    """One tracked step: the model's expected conversion vs what was logged."""
+
+    expected_conversion_rate: float
+    actual_conversion_rate: float
+    deviation_pp: float
+    days_since_first: float
+    gap_days: float
+
+
+class OutcomeTrackerDriftOut(BaseModel):
+    """Tracking-drift payload for GET /projects/{id}/outcome-tracker/drift."""
+
+    project_id: int
+    sample_count: int = 0
+    span_days: float | None = None
+    latest_actual: float | None = None
+    predicted_conversion_rate: float | None = None
+    mean_tracking_error_pp: float | None = None
+    mean_abs_tracking_error_pp: float | None = None
+    latest_tracking_error_pp: float | None = None
+    tracking_status: str = "INSUFFICIENT_DATA"
+    gap_slope_pp_per_check: float | None = None
+    drift_direction: str = "INSUFFICIENT_DATA"
+    severity: str = "watch"
+    narrative: str = ""
+    checks: list[OutcomeTrackerDriftCheck] = Field(default_factory=list)
+
+
 __all__ = [
     "OutcomeTrackerCreate",
     "OutcomeTrackerPoint",
@@ -167,4 +196,6 @@ __all__ = [
     "OutcomeTrackerRevenueForecastOut",
     "OutcomeTrackerForecastAccuracyPoint",
     "OutcomeTrackerForecastAccuracyOut",
+    "OutcomeTrackerDriftCheck",
+    "OutcomeTrackerDriftOut",
 ]

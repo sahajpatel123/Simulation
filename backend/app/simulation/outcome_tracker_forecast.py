@@ -222,7 +222,7 @@ def _ceiling(target: float | None, max_observed: float) -> float:
 def _projected(
     latest: float,
     slope: float,
-    horizon_days: int,
+    horizon_days: float,
     ceiling: float,
 ) -> float:
     raw = latest + slope * horizon_days

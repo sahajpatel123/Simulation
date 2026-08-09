@@ -64,6 +64,7 @@ from app.schemas.outcome import (
 from app.schemas.outcome_benchmark import OutcomeBenchmarkOut
 from app.schemas.outcome_tracker import (
     OutcomeTrackerCreate,
+    OutcomeTrackerDriftOut,
     OutcomeTrackerForecastAccuracyOut,
     OutcomeTrackerForecastOut,
     OutcomeTrackerPoint,
@@ -95,6 +96,9 @@ from app.simulation.outcome_benchmark_export import (
 from app.simulation.outcome_benchmark_export import (
     outcome_benchmark_to_csv,
     outcome_benchmark_to_json,
+)
+from app.simulation.outcome_tracker_drift import (
+    build_outcome_tracker_drift,
 )
 from app.simulation.outcome_tracker_export import (
     outcome_tracker_to_csv,
@@ -917,6 +921,62 @@ def get_outcome_tracker_forecast_accuracy(
         predicted_conversion_rate=predicted,
     )
     return OutcomeTrackerForecastAccuracyOut(**payload)
+
+
+@router.get(
+    "/{project_id}/outcome-tracker/drift",
+    response_model=OutcomeTrackerDriftOut,
+    summary="Detect post-launch conversion drift versus the model's expected path",
+)
+def get_outcome_tracker_drift(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> OutcomeTrackerDriftOut:
+    """Early-warning signal for divergence between actual and expected conversion.
+
+    Rebuilds the projection the trajectory forecast would have made at each
+    checkpoint, compares it with the conversion actually logged at the next
+    checkpoint, and reports whether the project is tracking, ahead of, or
+    behind the model's expected path — plus whether any gap is widening,
+    narrowing, or stable.
+    """
+    get_owned_project(db, current_user.id, project_id)
+
+    rows = (
+        db.query(OutcomeTracker)
+        .filter(OutcomeTracker.project_id == project_id)
+        .order_by(OutcomeTracker.recorded_at.asc())
+        .all()
+    )
+    sim = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc())
+        .first()
+    )
+
+    predicted: float | None = None
+    if sim is not None and sim.results_json:
+        raw_pred = _predicted_from_results(sim.results_json)
+        if raw_pred and raw_pred > 0.0:
+            predicted = float(raw_pred)
+    if predicted is None:
+        # Legacy rows carry the prediction captured at checkpoint time —
+        # fall back to the newest one so older projects still get a target.
+        for row in rows:
+            if row.predicted_conversion_rate and row.predicted_conversion_rate > 0.0:
+                predicted = float(row.predicted_conversion_rate)
+
+    payload = build_outcome_tracker_drift(
+        [r.__dict__ for r in rows],
+        project_id=project_id,
+        predicted_conversion_rate=predicted,
+    )
+    return OutcomeTrackerDriftOut(**payload)
 
 
 @router.get(
