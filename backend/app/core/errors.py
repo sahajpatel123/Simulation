@@ -16,18 +16,31 @@ class TheCeeError(Exception):
         self.status = status
 
 
-async def thecee_error_handler(_request: Request, exc: TheCeeError) -> JSONResponse:
+def _request_id(request: Request) -> str | None:
+    """Best-effort read of the correlation ID stamped by RequestIdMiddleware."""
+    value = getattr(request.state, "request_id", None)
+    return value if isinstance(value, str) and value else None
+
+
+async def thecee_error_handler(request: Request, exc: TheCeeError) -> JSONResponse:
+    request_id = _request_id(request)
+    headers = {"X-Request-ID": request_id} if request_id else None
     return JSONResponse(
         status_code=exc.status,
         content={
             "code": exc.code,
             "message": exc.message,
             "detail": exc.detail,
+            "request_id": request_id,
         },
+        headers=headers,
     )
 
 
-async def generic_error_handler(_request: Request, exc: Exception) -> JSONResponse:
+async def generic_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    request_id = _request_id(request)
+    headers = {"X-Request-ID": request_id} if request_id else None
+
     if isinstance(exc, RequestValidationError):
         detail = (
             exc.errors() if settings.ENVIRONMENT.lower() != "production" else {}
@@ -40,7 +53,9 @@ async def generic_error_handler(_request: Request, exc: Exception) -> JSONRespon
                 if settings.ENVIRONMENT.lower() == "production"
                 else "Invalid request",
                 "detail": detail,
+                "request_id": request_id,
             },
+            headers=headers,
         )
     if isinstance(exc, StarletteHTTPException):
         return JSONResponse(
@@ -49,7 +64,9 @@ async def generic_error_handler(_request: Request, exc: Exception) -> JSONRespon
                 "code": "HTTP_ERROR",
                 "message": str(exc.detail),
                 "detail": str(exc.detail),
+                "request_id": request_id,
             },
+            headers=headers,
         )
     if isinstance(exc, HTTPException):
         return JSONResponse(
@@ -58,7 +75,9 @@ async def generic_error_handler(_request: Request, exc: Exception) -> JSONRespon
                 "code": "HTTP_ERROR",
                 "message": str(exc.detail),
                 "detail": str(exc.detail),
+                "request_id": request_id,
             },
+            headers=headers,
         )
     return JSONResponse(
         status_code=500,
@@ -66,5 +85,7 @@ async def generic_error_handler(_request: Request, exc: Exception) -> JSONRespon
             "code": "INTERNAL_ERROR",
             "message": "Something went wrong. Our team has been notified.",
             "detail": "",
+            "request_id": request_id,
         },
+        headers=headers,
     )

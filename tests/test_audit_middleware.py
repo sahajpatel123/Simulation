@@ -20,13 +20,15 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from starlette.requests import Request
+
 from app.core.audit_middleware import (
     _AUDIT_EXEMPT_PATHS,
     _MUTATING_METHODS,
     _normalise_route,
+    _resolve_request_id,
     _resolve_user_id,
 )
-
 
 # ---------------------------------------------------------------------------
 # Filter constants
@@ -146,3 +148,54 @@ def test_resolve_user_id_returns_none_on_decode_exception() -> None:
         side_effect=RuntimeError("boom"),
     ):
         assert _resolve_user_id(request) is None
+
+
+# ---------------------------------------------------------------------------
+# _resolve_request_id helper
+# ---------------------------------------------------------------------------
+
+
+def _scope_request(
+    *,
+    state: dict[str, object] | None = None,
+    headers: dict[str, str] | None = None,
+) -> Request:
+    """Build a real ``Request`` with optional shared state / headers."""
+    raw_headers = [
+        (name.lower().encode(), value.encode())
+        for name, value in (headers or {}).items()
+    ]
+    scope: dict[str, object] = {
+        "type": "http",
+        "method": "POST",
+        "path": "/projects/1/simulate",
+        "headers": raw_headers,
+        "query_string": b"",
+    }
+    if state is not None:
+        scope["state"] = state
+    return Request(scope)
+
+
+def test_resolve_request_id_prefers_state_over_header() -> None:
+    """RequestIdMiddleware stamps ``request.state.request_id``; that value
+    wins even when a client also sent a header (it is already normalised)."""
+    request = _scope_request(
+        state={"request_id": "state-id"},
+        headers={"X-Request-ID": "header-id"},
+    )
+    assert _resolve_request_id(request) == "state-id"
+
+
+def test_resolve_request_id_falls_back_to_header() -> None:
+    """Without the outer middleware (unit stubs / embedded deployments),
+    the raw client header is still captured."""
+    request = _scope_request(headers={"X-Request-ID": "header-id"})
+    assert _resolve_request_id(request) == "header-id"
+
+
+def test_resolve_request_id_returns_none_when_absent() -> None:
+    """No state and no header means the audit row is stored without an ID —
+    never a crash, never a fabricated value."""
+    request = _scope_request()
+    assert _resolve_request_id(request) is None

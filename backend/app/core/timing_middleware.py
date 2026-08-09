@@ -58,6 +58,11 @@ class TimingMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         elapsed_ms = (time.perf_counter() - start) * 1000
 
+        # Correlation ID set by RequestIdMiddleware (outermost middleware).
+        # Including it lets ops correlate a slow request with its audit row
+        # and error response without grepping for a client-provided header.
+        request_id = getattr(request.state, "request_id", None)
+
         # Status-class bucketing: 200 → "2xx", 404 → "4xx", 503 → "5xx".
         # Anything outside 100-599 falls back to "other" so a malformed
         # proxy response doesn't poison the counter.
@@ -71,7 +76,8 @@ class TimingMiddleware(BaseHTTPMiddleware):
         level = logging.WARNING if elapsed_ms > 500 else logging.DEBUG
         logger.log(
             level,
-            f"{request.method} {request.url.path} → {elapsed_ms:.1f}ms",
+            f"{request.method} {request.url.path} → {elapsed_ms:.1f}ms "
+            f"request_id={request_id}",
         )
 
         # Feed the metrics registry only for real application routes.

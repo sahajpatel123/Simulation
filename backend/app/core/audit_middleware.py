@@ -71,6 +71,22 @@ def _resolve_user_id(request: Request) -> int | None:
         return None
 
 
+def _resolve_request_id(request: Request) -> str | None:
+    """Return the correlation ID for this request, if one exists.
+
+    ``RequestIdMiddleware`` (added outside this middleware) stores the
+    generated or client-supplied ID on ``request.state.request_id``.
+    Prefer that state — it is guaranteed safe and bounded — and fall
+    back to the raw header only for paths where the outer middleware
+    did not run (unit-test stubs, unusual embedded deployments).
+    """
+    state = request.scope.get("state") or {}
+    state_id = state.get("request_id")
+    if state_id:
+        return str(state_id)
+    return request.headers.get("x-request-id")
+
+
 class AuditLogMiddleware(BaseHTTPMiddleware):
     """Persist one row per mutating request to ``api_audit_log``.
 
@@ -101,7 +117,7 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
                 status=response.status_code,
                 duration_ms=elapsed_ms,
                 ip_address=request.client.host if request.client else None,
-                request_id=request.headers.get("x-request-id"),
+                request_id=_resolve_request_id(request),
             )
         except Exception as exc:  # noqa: BLE001 — audit must never break the response.
             logger.warning("audit log write failed: %s", exc)

@@ -17,6 +17,7 @@ from app.core.logging_config import configure_logging
 from app.core.metrics import metrics
 from app.core.progress_bridge import progress_bridge
 from app.core.redis_client import get_redis_client
+from app.core.request_id_middleware import RequestIdMiddleware
 from app.core.timing_middleware import TimingMiddleware
 from app.worker import celery_app as _celery_app
 
@@ -100,8 +101,20 @@ app.add_middleware(
     # Origin so the CORS handshake itself can negotiate).
     allow_methods=["GET", "POST"],
     allow_headers=["Authorization", "Content-Type", "X-Forwarded-For", "Origin"],
-    expose_headers=["Content-Disposition", "Content-Length", "X-Response-Time"],
+    expose_headers=[
+        "Content-Disposition",
+        "Content-Length",
+        "X-Response-Time",
+        "X-Request-ID",
+    ],
 )
+
+# Request correlation IDs must be the outermost application middleware so
+# every downstream middleware (audit, timing) and route handler sees
+# ``request.state.request_id`` before doing any work, and every response —
+# including CORS preflights — carries the ``X-Request-ID`` header back to
+# the caller. Added after CORS so it also wraps the CORS middleware.
+app.add_middleware(RequestIdMiddleware)
 
 
 @app.middleware("http")
