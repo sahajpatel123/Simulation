@@ -8577,7 +8577,8 @@ def export_readings_count(
 ) -> StreamingResponse:
     """Export a project's readings count as CSV (default) or JSON."""
     project = get_owned_project(db, current_user.id, project_id)
-    count = 1 if getattr(project, "readings_json", None) else 0
+    normalized = readings_payload(getattr(project, "readings_json", None))
+    count = len(normalized["readings"])
     row = {"project_id": project_id, "readings_count": count}
 
     if format == "json":

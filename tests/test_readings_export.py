@@ -113,10 +113,12 @@ def test_readings_payload_handles_none() -> None:
 
 def test_readings_count_to_csv_contains_header_and_row() -> None:
     csv_text = readings_count_to_csv(
-        {"project_id": 10, "readings_count": 1},
+        {"project_id": 10, "readings_count": 2},
         metadata={"generated_at": "now", "user_id": 42},
     )
 
     assert "project_id,readings_count" in csv_text
-    assert "10,1" in csv_text
+    assert "10,2" in csv_text
     assert "generated_at,now" in csv_text
+    assert "user_id,42" in csv_text
+    assert "format_version,1" in csv_text
