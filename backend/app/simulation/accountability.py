@@ -125,6 +125,11 @@ class AccountabilityEngine:
         "choice_overload_risk": 0.30,
         "default_bias_exposure": 0.30,
         "behavioral_funnel_suppressor": 1.0,
+        "integration_evidence_score": 0.60,
+        "integration_gap_score": 0.15,
+        "workflow_fit_score": 0.70,
+        "integration_friction": 0.20,
+        "integration_funnel_suppressor": 1.0,
     }
 
     LOWER_IS_BETTER: frozenset[str] = frozenset({
@@ -166,6 +171,8 @@ class AccountabilityEngine:
         "perceived_purchase_risk",
         "choice_overload_risk",
         "default_bias_exposure",
+        "integration_gap_score",
+        "integration_friction",
     })
 
     FINDING_TEMPLATES: dict[str, str] = {
@@ -426,6 +433,25 @@ class AccountabilityEngine:
             "Behavioural heuristics leave {cluster} at {pct:.0f}% "
             "purchase funnel strength (benchmark {bench:.0f}%)"
         ),
+        "integration_evidence_score": (
+            "{cluster} integration evidence {val:.2f} "
+            "(benchmark {bench:.2f})"
+        ),
+        "integration_gap_score": (
+            "{cluster} has a {pct:.0f}% integration-gap score "
+            "(benchmark {bench:.0f}%)"
+        ),
+        "workflow_fit_score": (
+            "{cluster} workflow fit {val:.2f} (benchmark {bench:.2f})"
+        ),
+        "integration_friction": (
+            "{cluster} faces {pct:.0f}% integration friction "
+            "(benchmark {bench:.0f}%)"
+        ),
+        "integration_funnel_suppressor": (
+            "Integration gaps leave {cluster} at {pct:.0f}% purchase "
+            "funnel strength (benchmark {bench:.0f}%)"
+        ),
     }
 
     RECOMMENDED_ACTIONS: dict[str, str] = {
@@ -640,6 +666,26 @@ class AccountabilityEngine:
         "behavioral_funnel_suppressor": (
             "Fix the dominant behavioural blocker: risk reversal, choice "
             "overload, manipulative scarcity, or default-bias surprise"
+        ),
+        "integration_evidence_score": (
+            "Name concrete integration proof: API/SDK, native "
+            "integrations, import/export, SSO"
+        ),
+        "integration_gap_score": (
+            "Close the integration gaps: API, connectors, import/export, "
+            "SSO and data portability"
+        ),
+        "workflow_fit_score": (
+            "Show how the product fits the existing workflow: sync, "
+            "cross-platform, offline and calendar/meeting use"
+        ),
+        "integration_friction": (
+            "Add the missing integration evidence class (API/SDK, native "
+            "integrations, import/export, SSO, workflow fit)"
+        ),
+        "integration_funnel_suppressor": (
+            "Publish integration evidence for the segments that need "
+            "toolchain fit before they will buy"
         ),
     }
 

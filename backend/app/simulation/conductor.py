@@ -335,6 +335,27 @@ for _stack in ARCHITECT_STACKS.values():
     if "BehavioralEconomicsArchitect" not in _stack:
         _stack.insert(3, "BehavioralEconomicsArchitect")
 
+# IntegrationFrictionArchitect applies to software categories: API/SDK,
+# native integrations, import/export, SSO and workflow compatibility shape
+# whether a product fits the buyer's existing toolchain. Hardware ecosystem
+# fit is already covered by EcosystemCompatibilityArchitect, so only the
+# software stacks are extended. Evaluate it right after the behavioural-
+# economics pair so its CONSIDER->DECIDE override reflects comprehension
+# and decision heuristics assembled by the earlier architects.
+_SOFTWARE_INTEGRATION_STACKS = (
+    ProductType.SAAS,
+    ProductType.MARKETPLACE,
+    ProductType.MOBILE_APP,
+    ProductType.DEVELOPER_TOOL,
+    ProductType.ENTERPRISE_SOFTWARE,
+    ProductType.CONSUMER_APP,
+    ProductType.B2B_MARKETPLACE,
+    ProductType.PRODUCTIVITY_TOOL,
+)
+for _pt in _SOFTWARE_INTEGRATION_STACKS:
+    if "IntegrationFrictionArchitect" not in ARCHITECT_STACKS[_pt]:
+        ARCHITECT_STACKS[_pt].insert(4, "IntegrationFrictionArchitect")
+
 # Inter-architect dependency map
 # key = architect that needs input, value = {param_name: (source_architect, metric_key)}
 DEPENDENCY_MAP: dict[str, dict[str, tuple[str, str]]] = {
@@ -515,6 +536,9 @@ def _build_architect_registry() -> dict[str, Any]:
         FounderExecutionArchitect,
     )
     from app.simulation.architects.health_safety_hardware import HealthSafetyHardwareArchitect
+    from app.simulation.architects.integration_friction import (
+        IntegrationFrictionArchitect,
+    )
     from app.simulation.architects.macroeconomic import MacroeconomicArchitect
     from app.simulation.architects.market_timing import MarketTimingArchitect
     from app.simulation.architects.marketplace_liquidity import (
@@ -579,6 +603,7 @@ def _build_architect_registry() -> dict[str, Any]:
         "AISkepticismArchitect":           AISkepticismArchitect(),
         "FounderExecutionArchitect":       FounderExecutionArchitect(),
         "BehavioralEconomicsArchitect":    BehavioralEconomicsArchitect(),
+        "IntegrationFrictionArchitect":    IntegrationFrictionArchitect(),
     }
 
 

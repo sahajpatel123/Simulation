@@ -170,6 +170,12 @@ SPECIFICITY_RULES: dict[str, dict[float, str]] = {
         0.2: "quality adjectives only (easy, simple, risk-free, trusted)",
         0.0: "no behavioural or decision-lever claim",
     },
+    "IntegrationFrictionArchitect": {
+        1.0: "named API/SDK or named native tool with import/export or SSO evidence",
+        0.6: "named integration mechanism (API, integrations, import, SSO) without specifics",
+        0.2: "integration vocabulary only (connects, integrates, compatible)",
+        0.0: "no integration claim",
+    },
     "NetworkEffectArchitect": {
         1.0: "specific network effect mechanism with measured or observed data",
         0.6: "network effect described with mechanism but unmeasured",
@@ -388,6 +394,46 @@ _BEHAVIORAL_QUAL_RE = re.compile(
     re.I,
 )
 
+_INTEGRATION_NAMED_RE = re.compile(
+    r"\b(?:slack|salesforce|hubspot|zapier|make\s+automation|n8n|"
+    r"quickbooks|xero|shopify|notion|jira|asana|trello|calendly|stripe|"
+    r"github|gitlab|postgres|mysql|snowflake|bigquery|datadog|zendesk|"
+    r"intercom|gmail|outlook|google\s+workspace|microsoft\s+365|"
+    r"microsoft\s+teams|google\s+sheets|excel|okta|active\s+directory)\b",
+    re.I,
+)
+_INTEGRATION_MECHANISM_RE = re.compile(
+    r"\b(?:api|sdk|webhook|graphql|cli|integration|integrations|"
+    r"connector|connectors|plugin|plugins|import|export|migration|"
+    r"migrate|sso|single\s+sign-?on|saml|scim|ldap|rbac|oauth|"
+    r"portability|self-?host|on-?premise)\b",
+    re.I,
+)
+_INTEGRATION_QUAL_RE = re.compile(
+    r"\b(?:connects?|connected|integrated|integrates|compatible|"
+    r"works\s+with|syncs?|synced|seamless|turnkey|plug-?and-?play|"
+    r"cross-?platform|offline)\b",
+    re.I,
+)
+_INTEGRATION_DENIAL_RE = re.compile(
+    r"\b(?:no|not|without|never|cannot|can't|isn'?t|aren'?t|don'?t|"
+    r"doesn'?t|won'?t)\s+"
+    r"(?:a\s+|an\s+|any\s+)?"
+    r"(?:sdk|webhook|integration|integrations|connector|connectors|"
+    r"plugin|plugins|import|export|sso|saml|scim|ldap|oauth)\b"
+    r"|\bno\s+api\b(?!\s+keys?\b)"
+    r"|\b(?:do|does|did|will|would|can|could|should|must|cannot|can't)\s+"
+    r"(?:not|never)\s+(?:integrate|connect|sync|link)\s+(?:with|to)\b"
+    r"|\b(?:cannot|can't)\s+(?:integrate|connect|sync|link|import|export)\b"
+    r"|\b(?:do|does|did|will|would|can|could|should|must)\s+"
+    r"(?:not|never)\s+(?:integrate|connect|sync|link|import|export|"
+    r"support|offer|provide|include|feature|have)\s+"
+    r"(?:any\s+|the\s+|an?\s+|a\s+)?"
+    r"(?:api|sdk|webhook|integration|integrations|connector|connectors|"
+    r"plugin|plugins|import|export|sso|saml|scim|ldap|oauth)\b",
+    re.I,
+)
+
 
 def _score_specificity(architect: str, claim: str) -> float:
     """
@@ -477,6 +523,17 @@ def _score_specificity(architect: str, claim: str) -> float:
         if _BEHAVIORAL_MECHANISM_RE.search(lower):
             return 0.6
         if _BEHAVIORAL_QUAL_RE.search(lower):
+            return 0.2
+        return 0.0
+
+    if architect == "IntegrationFrictionArchitect":
+        if _INTEGRATION_DENIAL_RE.search(lower):
+            return 0.0
+        if _INTEGRATION_NAMED_RE.search(lower):
+            return 1.0
+        if _INTEGRATION_MECHANISM_RE.search(lower):
+            return 0.6
+        if _INTEGRATION_QUAL_RE.search(lower):
             return 0.2
         return 0.0
 

@@ -40,6 +40,7 @@ ALL_ARCHITECT_NAMES = [
     "FounderExecutionArchitect",
     "AISkepticismArchitect",
     "BehavioralEconomicsArchitect",
+    "IntegrationFrictionArchitect",
 ]
 
 
