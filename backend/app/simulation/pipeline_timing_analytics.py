@@ -126,6 +126,8 @@ def _clean_stages(payload: dict[str, Any]) -> dict[str, float]:
 
 def _run_from_row(row: dict[str, Any]) -> dict[str, Any] | None:
     """Normalise one persisted row; ``None`` when it has no usable payload."""
+    if not isinstance(row, dict):
+        return None
     payload_raw = row.get("pipeline_timing")
     if payload_raw is None and isinstance(row.get("results_json"), dict):
         payload_raw = row["results_json"].get("pipeline_timing")
@@ -152,6 +154,12 @@ def _run_from_row(row: dict[str, Any]) -> dict[str, Any] | None:
 
 def _stage_stats(stage: str, values: list[float], mean_total: float | None) -> dict[str, Any]:
     mean = _mean(values)
+    # A malformed/legacy payload can carry a stage longer than its recorded
+    # total; clamp the share to 100% so one bad row can never violate the
+    # response schema (mean_share <= 1.0) and 500 the admin endpoint.
+    mean_share: float | None = None
+    if mean is not None and mean_total:
+        mean_share = round(min(mean / mean_total, 1.0), 4)
     return {
         "stage": stage,
         "runs": len(values),
@@ -159,11 +167,7 @@ def _stage_stats(stage: str, values: list[float], mean_total: float | None) -> d
         "median_seconds": round(_percentile(values, 0.5), 4) if values else None,
         "p95_seconds": round(_percentile(values, 0.95), 4) if values else None,
         "max_seconds": round(max(values), 4) if values else None,
-        "mean_share": (
-            round(mean / mean_total, 4)
-            if mean is not None and mean_total
-            else None
-        ),
+        "mean_share": mean_share,
     }
 
 
@@ -180,7 +184,9 @@ def build_pipeline_timing_summary(
     Args:
         rows: raw DB rows, each with ``id``, ``project_id``, ``created_at``
             and either ``pipeline_timing`` or a ``results_json`` dict
-            containing it. Rows without a usable payload are skipped.
+            containing it. Non-dict rows and rows without a usable payload
+            are skipped; stage shares are clamped to 100% so a malformed
+            payload cannot break the response schema.
         total_completed: total completed simulations in the fleet (for
             coverage reporting). May be ``None`` when the caller has no
             count query.

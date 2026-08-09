@@ -234,6 +234,61 @@ def test_summary_coverage_clamps_and_handles_zero_completed() -> None:
     ] == 100.0
 
 
+def test_summary_clamps_mean_share_when_stage_exceeds_total() -> None:
+    """A malformed legacy payload must not break the response schema."""
+    rows = [
+        {
+            "id": 1,
+            "project_id": 10,
+            "created_at": "2026-08-01T00:00:00+00:00",
+            "pipeline_timing": {
+                "conductor_run": 5.0,
+                "total_seconds": 1.0,
+                "stage_count": 1,
+            },
+        },
+        {
+            "id": 2,
+            "project_id": 11,
+            "created_at": "2026-08-02T00:00:00+00:00",
+            "pipeline_timing": {
+                "conductor_run": 7.0,
+                "total_seconds": 2.0,
+                "stage_count": 1,
+            },
+        },
+    ]
+    out = build_pipeline_timing_summary(rows, total_completed=2, with_timing=2)
+    assert out["runs_analysed"] == 2
+    assert out["stages"][0]["stage"] == "conductor_run"
+    assert out["stages"][0]["mean_seconds"] == 6.0
+    assert out["stages"][0]["mean_share"] == 1.0
+    # The clamped payload must still validate against the route's response
+    # model — otherwise one bad row would turn the admin view into a 500.
+    validated = PipelineTimingSummaryOut(**out)
+    assert validated.stages[0].mean_share == 1.0
+
+
+def test_summary_skips_non_dict_rows_without_raising() -> None:
+    rows: list[Any] = [
+        None,
+        "not-a-row",
+        42,
+        [1, 2],
+        {
+            "id": 1,
+            "project_id": 10,
+            "created_at": "2026-08-03T00:00:00+00:00",
+            "pipeline_timing": {"agent_profile_generation": 1.0, "total_seconds": 1.0},
+        },
+    ]
+    out = build_pipeline_timing_summary(rows, total_completed=5, with_timing=1)
+    assert out["runs_analysed"] == 1
+    assert out["totals"]["runs"] == 1
+    assert out["totals"]["mean_seconds"] == 1.0
+    assert out["slowest_runs"][0]["simulation_id"] == 1
+
+
 # ---------------------------------------------------------------------------
 # Route wiring
 # ---------------------------------------------------------------------------
