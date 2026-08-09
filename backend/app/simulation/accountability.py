@@ -94,6 +94,13 @@ class AccountabilityEngine:
         "procurement_cycle_days": 30.0,
         "poc_requirement": 0.30,
         "procurement_credibility": 1.0,
+        "platform_dependency_exposure": 0.15,
+        "dependency_concentration": 0.25,
+        "single_channel_risk": 0.10,
+        "platform_gate_risk": 0.20,
+        "platform_risk_score": 0.25,
+        "platform_risk_suppressor": 1.0,
+        "mitigation_credibility": 1.0,
     }
 
     LOWER_IS_BETTER: frozenset[str] = frozenset({
@@ -117,6 +124,11 @@ class AccountabilityEngine:
         "vendor_list_barrier",
         "procurement_cycle_days",
         "poc_requirement",
+        "platform_dependency_exposure",
+        "dependency_concentration",
+        "single_channel_risk",
+        "platform_gate_risk",
+        "platform_risk_score",
     })
 
     FINDING_TEMPLATES: dict[str, str] = {
@@ -254,6 +266,33 @@ class AccountabilityEngine:
             "{cluster} sees weak procurement credibility "
             "({val:.2f} vs benchmark {bench:.2f})"
         ),
+        "platform_dependency_exposure": (
+            "{pct:.0f}% of {cluster} exposed to platform dependence "
+            "(benchmark {bench:.0f}%)"
+        ),
+        "dependency_concentration": (
+            "{cluster} platform concentration {val:.2f} (benchmark {bench:.2f})"
+        ),
+        "single_channel_risk": (
+            "{cluster} single-channel platform risk {val:.2f} "
+            "(benchmark {bench:.2f})"
+        ),
+        "platform_gate_risk": (
+            "{cluster} faces store/algorithm/API gate risk {val:.2f} "
+            "(benchmark {bench:.2f})"
+        ),
+        "platform_risk_score": (
+            "{cluster} platform dependence risk {val:.2f} "
+            "(benchmark {bench:.2f})"
+        ),
+        "platform_risk_suppressor": (
+            "Platform dependence leaves {cluster} at {pct:.0f}% funnel "
+            "strength (benchmark {bench:.0f}%)"
+        ),
+        "mitigation_credibility": (
+            "{cluster} sees weak platform mitigation credibility "
+            "({val:.2f} vs benchmark {bench:.2f})"
+        ),
     }
 
     RECOMMENDED_ACTIONS: dict[str, str] = {
@@ -348,6 +387,34 @@ class AccountabilityEngine:
         ),
         "procurement_credibility": (
             "Publish procurement evidence: security reports, signed contracts, case studies"
+        ),
+        "platform_dependency_exposure": (
+            "Diversify distribution and infrastructure: web-first/PWA access, "
+            "owned email list, multi-channel acquisition, multi-cloud/API fallbacks"
+        ),
+        "dependency_concentration": (
+            "Reduce platform concentration with alternative stores, channels "
+            "and providers"
+        ),
+        "single_channel_risk": (
+            "Remove single-platform dependence with an owned channel "
+            "(web/PWA, email list, direct sales)"
+        ),
+        "platform_gate_risk": (
+            "Address the app-store/algorithm/API gate with owned channels "
+            "and provider fallbacks"
+        ),
+        "platform_risk_score": (
+            "Diversify away from store, algorithm and API concentration "
+            "before scaling"
+        ),
+        "platform_risk_suppressor": (
+            "Publish platform mitigations: web/PWA access, owned channels, "
+            "multi-provider setup"
+        ),
+        "mitigation_credibility": (
+            "Ship and document mitigations: web app/PWA, email list, "
+            "multi-cloud, portability"
         ),
     }
 

@@ -103,6 +103,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
         "RegulatoryComplianceArchitect",
         "EnterpriseProcurementArchitect",
+        "PlatformDependencyArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.MARKETPLACE: [
@@ -114,6 +115,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "RetentionArchitect", "SupportFrictionArchitect", "ViralityArchitect",
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
         "RegulatoryComplianceArchitect",
+        "PlatformDependencyArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.MOBILE_APP: [
@@ -125,6 +127,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "SupportFrictionArchitect", "ViralityArchitect",
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
         "RegulatoryComplianceArchitect",
+        "PlatformDependencyArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.DEVELOPER_TOOL: [
@@ -137,6 +140,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
         "RegulatoryComplianceArchitect",
         "EnterpriseProcurementArchitect",
+        "PlatformDependencyArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.ENTERPRISE_SOFTWARE: [
@@ -223,6 +227,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "SupportFrictionArchitect", "ViralityArchitect",
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
         "RegulatoryComplianceArchitect",
+        "PlatformDependencyArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.DIRECT_TO_CONSUMER: [
@@ -233,6 +238,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "RetentionArchitect", "SupportFrictionArchitect",
         "ViralityArchitect", "MacroeconomicArchitect",
         "DemographicInteractionArchitect", "RegulatoryComplianceArchitect",
+        "PlatformDependencyArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.B2B_MARKETPLACE: [
@@ -245,6 +251,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
         "RegulatoryComplianceArchitect",
         "EnterpriseProcurementArchitect",
+        "PlatformDependencyArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.PRODUCTIVITY_TOOL: [
@@ -257,6 +264,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
         "RegulatoryComplianceArchitect",
         "EnterpriseProcurementArchitect",
+        "PlatformDependencyArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.SMART_HOME: [
@@ -452,6 +460,9 @@ def _build_architect_registry() -> dict[str, Any]:
     from app.simulation.architects.payment_friction import PaymentFrictionArchitect
     from app.simulation.architects.performance_threshold import PerformanceThresholdArchitect
     from app.simulation.architects.physical_sensory import PhysicalSensoryArchitect
+    from app.simulation.architects.platform_dependency import (
+        PlatformDependencyArchitect,
+    )
     from app.simulation.architects.pricing import PricingArchitect
     from app.simulation.architects.purchase_decision import PurchaseDecisionArchitect
     from app.simulation.architects.regulatory_compliance import (
@@ -473,6 +484,7 @@ def _build_architect_registry() -> dict[str, Any]:
         "MarketplaceLiquidityArchitect":  MarketplaceLiquidityArchitect(),
         "TrustArchitect":                  TrustArchitect(),
         "PaymentFrictionArchitect":        PaymentFrictionArchitect(),
+        "PlatformDependencyArchitect":     PlatformDependencyArchitect(),
         "PricingArchitect":                PricingArchitect(),
         "OnboardingArchitect":             OnboardingArchitect(),
         "FeatureAdoptionArchitect":        FeatureAdoptionArchitect(),
