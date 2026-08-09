@@ -78,6 +78,7 @@ from app.schemas.agent_routing import (
     AgentTierEnum,
     TierCounts,
 )
+from app.schemas.architect_stack import ArchitectStackRegistryOut
 from app.schemas.assumption_cascade import AssumptionCascadeOut
 from app.schemas.assumption_postmortem import AssumptionPostmortemOut
 from app.schemas.channel_attribution import ChannelAttributionOut
@@ -169,6 +170,7 @@ from app.simulation.architect_drill_down import (
 from app.simulation.architect_leaderboard import (
     build_architect_leaderboard,
 )
+from app.simulation.architect_stack import build_architect_stack_registry
 from app.simulation.assumption_cascade_read import build_assumption_cascade
 from app.simulation.assumption_postmortem import build_assumption_postmortem
 from app.simulation.calibration_health import (
@@ -202,7 +204,7 @@ from app.simulation.cluster_trend import (
 )
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.competitive_moat import build_competitive_moat
-from app.simulation.conductor import Conductor
+from app.simulation.conductor import ARCHITECT_STACKS, Conductor
 from app.simulation.cultural_fit import build_cultural_fit
 from app.simulation.distribution_channels import build_distribution_channels
 from app.simulation.ecosystem_compatibility import build_ecosystem_compatibility
@@ -7839,6 +7841,53 @@ def get_agent_routing_registry(
         cost_summary=cost_summary,
         clusters=clusters_out,
     )
+
+
+@router.get(
+    "/architect-stack",
+    response_model=ArchitectStackRegistryOut,
+    summary="Deterministic architect stack and product-type coverage registry",
+    responses=_JSON_200,
+    # Read-only, deterministic, but walkable by an authenticated actor to
+    # enumerate the full architect registry — cap at 30/min/IP like the
+    # other registry-style routes.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_architect_stack(
+    product_type: str | None = Query(
+        default=None,
+        max_length=32,
+        description=(
+            "Optional product-type filter, e.g. ``saas`` or "
+            "``consumer_hardware``. Without it the full registry and "
+            "per-product-type coverage are returned."
+        ),
+    ),
+    current_user: User = Depends(get_current_user),
+) -> ArchitectStackRegistryOut:
+    """Expose the conductor's deterministic architect stack.
+
+    Every simulation runs the architects listed in the requested product
+    type's stack in order; other registered architects are deliberately
+    excluded for that product type. This endpoint makes that decision
+    visible: founders can see which domain specialists actually evaluated
+    their brief, operators can see universal vs specialised coverage, and
+    the product-coverage table surfaces any stack entry that is missing
+    from the live registry.
+    """
+    try:
+        payload = build_architect_stack_registry(
+            registry=_architect_registry,
+            stacks=ARCHITECT_STACKS,
+            product_type=product_type,
+            all_product_types=list(ProductType),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    return ArchitectStackRegistryOut(**payload)
 
 
 _SIMULATION_ANOMALIES_CACHE_NAMESPACE = "simulation_anomalies"
