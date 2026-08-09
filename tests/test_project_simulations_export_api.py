@@ -33,6 +33,7 @@ class _Project:
     def __init__(self) -> None:
         self.id = 10
         self.tags = ["saas", "india"]
+        self.mvp_feature_list = ["Auth"]
 
 
 class _FakeQuery:
@@ -590,3 +591,20 @@ def test_export_competitive_count_invalid_format_rejected_with_422() -> None:
         )
 
     assert resp.status_code == 422
+
+
+def test_export_mvp_feature_count_returns_csv() -> None:
+    from app.api.v1 import projects as proj_mod
+
+    db = _FakeSession(simulations=[])
+    resp = proj_mod.export_mvp_feature_count(
+        project_id=10,
+        format="csv",
+        db=db,
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+    assert resp.media_type == "text/csv; charset=utf-8"
+    body = _body(resp).decode("utf-8")
+    assert "project_id,mvp_feature_count" in body
+    assert "10,1" in body
