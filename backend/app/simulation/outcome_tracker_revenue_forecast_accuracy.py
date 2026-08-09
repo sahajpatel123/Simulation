@@ -68,6 +68,12 @@ MIN_VERIFICATIONS_LOW: int = 3
 MIN_VERIFICATIONS_MEDIUM: int = 5
 MIN_VERIFICATIONS_HIGH: int = 10
 
+# The shortest verifiable horizon is 30 days, so a history whose first and
+# last checkpoints are closer than this cannot contain any horizon actual.
+# Guidance below this span tells the founder to keep logging; above it, a
+# lack of checks means the checkpoints themselves are too far apart.
+MIN_VERIFY_SPAN_DAYS: float = 30.0
+
 # The realized value for a horizon is the first checkpoint at/after the
 # deadline, but only when it lands within this grace window. Without the
 # bound, a 30-day forecast on a sparsely logged project would be judged
@@ -292,11 +298,34 @@ def _narrative(
     overall_mean_abs_pct_error: float | None,
     overall_bias: float | None,
     bias_direction: str,
+    *,
+    usable_points: int,
+    span_days: float | None,
 ) -> str:
-    if total_checks < MIN_VERIFICATIONS_LOW:
+    if usable_points < MIN_POINTS:
         return (
-            "Keep logging revenue checkpoints over a 30+ day span to "
-            "verify how accurate the revenue trajectory forecast has been."
+            "Log at least 2 revenue checkpoints on different dates to "
+            "unlock revenue-forecast verification."
+        )
+    if usable_points < MIN_POINTS + 1:
+        # The earliest anchor needs two history points (itself included),
+        # so exactly two checkpoints can never be verified.
+        return (
+            "Log at least 3 revenue checkpoints on different dates to "
+            "unlock revenue-forecast verification."
+        )
+    if total_checks < MIN_VERIFICATIONS_LOW:
+        if span_days is None or span_days < MIN_VERIFY_SPAN_DAYS:
+            return (
+                "Keep logging revenue checkpoints over a 30+ day span to "
+                "verify how accurate the revenue trajectory forecast has been."
+            )
+        return (
+            f"Your {usable_points} revenue checkpoints span "
+            f"{span_days:.0f} days, but fewer than 3 line up with a later "
+            "checkpoint inside the 30/60/90-day verification windows. Log "
+            "checkpoints more frequently (ideally at least every 30 days) "
+            "to unlock verification."
         )
     if bias_direction == BIAS_OVER_PREDICTS:
         bias_phrase = (
@@ -349,6 +378,10 @@ def build_outcome_tracker_revenue_forecast_accuracy(
         Dict matching :class:`OutcomeTrackerRevenueForecastAccuracyOut`.
     """
     points = _usable_points(rows)
+    usable_points = len(points)
+    span_days = (
+        round(points[-1][0] - points[0][0], 1) if usable_points >= 2 else None
+    )
     target = _safe_revenue(predicted_revenue)
     if target is not None and target <= 0.0:
         target = None
@@ -378,6 +411,8 @@ def build_outcome_tracker_revenue_forecast_accuracy(
             overall["overall_mean_abs_pct_error"],
             overall["overall_bias"],
             overall["overall_bias_direction"],
+            usable_points=usable_points,
+            span_days=span_days,
         ),
         "horizons": horizons,
     }
@@ -387,6 +422,7 @@ __all__ = [
     "MIN_VERIFICATIONS_LOW",
     "MIN_VERIFICATIONS_MEDIUM",
     "MIN_VERIFICATIONS_HIGH",
+    "MIN_VERIFY_SPAN_DAYS",
     "VERDICT_ACCURATE",
     "VERDICT_MODERATE",
     "VERDICT_IMPRECISE",

@@ -106,6 +106,49 @@ def test_short_span_cannot_verify_any_horizon() -> None:
     assert out["overall_verdict"] == VERDICT_INSUFFICIENT_DATA
 
 
+def test_insufficient_guidance_counts_usable_points() -> None:
+    """Single/two-point histories get exact minimum-data guidance."""
+    one = _call([_row(1, day=0.0, revenue=50_000.0)], predicted=50_000.0)
+    assert "at least 2 revenue checkpoints" in one["narrative"]
+
+    two = _call(
+        [_row(1, day=0.0, revenue=50_000.0), _row(2, day=60.0, revenue=70_000.0)],
+        predicted=50_000.0,
+    )
+    # Two checkpoints can never form an anchor (MIN_POINTS history points
+    # including the anchor itself) — the guidance must say 3, not "keep
+    # logging over 30 days", even though the span is already 60 days.
+    assert "at least 3 revenue checkpoints" in two["narrative"]
+    assert "Keep logging" not in two["narrative"]
+
+
+def test_insufficient_guidance_distinguishes_short_from_sparse_span() -> None:
+    """Long sparse histories get alignment advice instead of the 30-day pitch."""
+    short = _call(
+        [
+            _row(1, day=0.0, revenue=50_000.0),
+            _row(2, day=1.0, revenue=60_000.0),
+            _row(3, day=2.0, revenue=70_000.0),
+        ],
+        predicted=50_000.0,
+    )
+    assert "Keep logging revenue checkpoints over a 30+ day span" in short["narrative"]
+
+    sparse = _call(
+        [
+            _row(1, day=0.0, revenue=50_000.0),
+            _row(2, day=30.0, revenue=60_000.0),
+            _row(3, day=200.0, revenue=70_000.0),
+            _row(4, day=370.0, revenue=80_000.0),
+        ],
+        predicted=50_000.0,
+    )
+    assert sparse["total_verifications"] == 0
+    assert "span 370 days" in sparse["narrative"]
+    assert "fewer than 3 line up" in sparse["narrative"]
+    assert "Keep logging" not in sparse["narrative"]
+
+
 # ---------------------------------------------------------------------------
 # Pure builder — perfect and biased series
 # ---------------------------------------------------------------------------
@@ -174,6 +217,34 @@ def test_accelerating_series_is_under_predicted() -> None:
     assert out["overall_bias"] is not None and out["overall_bias"] < -2_000.0
 
 
+def test_verdict_and_confidence_thresholds() -> None:
+    """Three checks unlock a verdict; confidence ramps at 5 and 10 checks."""
+    low = _call(
+        [
+            _row(i + 1, day=day, revenue=100_000.0 - 500.0 * day)
+            for i, day in enumerate((0, 30, 60, 90))
+        ],
+        predicted=50_000.0,
+    )
+    assert low["total_verifications"] == 3
+    assert low["confidence"] == "LOW"
+    assert low["overall_verdict"] == VERDICT_ACCURATE
+
+    medium = _call(
+        [
+            _row(i + 1, day=day, revenue=100_000.0 - 500.0 * day)
+            for i, day in enumerate((0, 30, 60, 90, 120))
+        ],
+        predicted=50_000.0,
+    )
+    assert medium["total_verifications"] == 6
+    assert medium["confidence"] == "MEDIUM"
+
+    high = _call(_linear_rows(), predicted=50_000.0)
+    assert high["total_verifications"] == 12
+    assert high["confidence"] == "HIGH"
+
+
 # ---------------------------------------------------------------------------
 # Pure builder — robustness
 # ---------------------------------------------------------------------------
@@ -232,6 +303,31 @@ def test_duplicate_timestamps_keep_last_row() -> None:
     assert out["overall_bias_direction"] == exp["overall_bias_direction"]
 
 
+def test_out_of_order_rows_are_sorted_before_verification() -> None:
+    rows = [
+        _row(1, day=150.0, revenue=25_000.0),
+        _row(2, day=0.0, revenue=100_000.0),
+        _row(3, day=90.0, revenue=55_000.0),
+        _row(4, day=60.0, revenue=70_000.0),
+        _row(5, day=30.0, revenue=85_000.0),
+        _row(6, day=120.0, revenue=40_000.0),
+        _row(7, day=180.0, revenue=10_000.0),
+    ]
+    ordered = [
+        _row(1, day=0.0, revenue=100_000.0),
+        _row(2, day=30.0, revenue=85_000.0),
+        _row(3, day=60.0, revenue=70_000.0),
+        _row(4, day=90.0, revenue=55_000.0),
+        _row(5, day=120.0, revenue=40_000.0),
+        _row(6, day=150.0, revenue=25_000.0),
+        _row(7, day=180.0, revenue=10_000.0),
+    ]
+    out = _call(rows, predicted=50_000.0)
+    exp = _call(ordered, predicted=50_000.0)
+    assert out == exp
+    assert out["total_verifications"] == 12
+
+
 def test_extreme_values_stay_finite_and_bounded() -> None:
     """Zero actuals and near-ceiling revenue must not produce NaN scores."""
     rows = [
@@ -258,6 +354,57 @@ def test_extreme_values_stay_finite_and_bounded() -> None:
         if horizon["accuracy_score"] is not None:
             assert 0.0 <= horizon["accuracy_score"] <= 100.0
     assert math.isfinite(out["overall_accuracy_score"] or 0.0)
+
+
+def test_all_zero_actuals_stay_finite_without_pct_error() -> None:
+    """A flat zero-revenue history verifies perfectly and never divides by zero."""
+    rows = [_row(i + 1, day=day, revenue=0.0) for i, day in enumerate((0, 30, 60, 90, 120, 150))]
+    out = _call(rows, predicted=50_000.0)
+    assert out["total_verifications"] == 9
+    assert out["overall_accuracy_score"] == 100.0
+    assert out["overall_mean_abs_pct_error"] is None
+    assert out["overall_bias_direction"] == BIAS_BALANCED
+    for horizon in out["horizons"]:
+        assert horizon["mean_abs_pct_error"] is None
+        assert horizon["mean_abs_error"] == 0.0
+        assert horizon["within_tolerance_rate"] == 1.0
+        for key in ("mean_abs_error", "bias", "accuracy_score"):
+            assert math.isfinite(horizon[key])
+
+
+def test_no_target_uses_observed_max_ceiling() -> None:
+    """Without a prediction, the verifier still caps at observed max * 1.25."""
+    rows = [
+        _row(1, day=0.0, revenue=5_000.0),
+        _row(2, day=30.0, revenue=10_000.0),
+        _row(3, day=60.0, revenue=20_000.0),
+        _row(4, day=90.0, revenue=40_000.0),
+        _row(5, day=120.0, revenue=80_000.0),
+        _row(6, day=150.0, revenue=160_000.0),
+        _row(7, day=180.0, revenue=320_000.0),
+    ]
+    out = _call(rows, predicted=None)
+    assert out["total_verifications"] == 12
+    assert out["overall_bias_direction"] == BIAS_UNDER_PREDICTS
+    for horizon in out["horizons"]:
+        for key in (
+            "mean_abs_error",
+            "mean_abs_pct_error",
+            "bias",
+            "accuracy_score",
+            "within_tolerance_rate",
+        ):
+            value = horizon[key]
+            if value is not None:
+                assert math.isfinite(value)
+
+
+def test_unusable_target_values_are_treated_as_no_target() -> None:
+    rows = _linear_rows()
+    zero = _call(rows, predicted=0.0)
+    negative = _call(rows, predicted=-5_000.0)
+    none = _call(rows, predicted=None)
+    assert zero == negative == none
 
 
 # ---------------------------------------------------------------------------
@@ -299,6 +446,24 @@ def test_checkpoint_within_grace_still_verifies_horizon() -> None:
     assert by_horizon[30]["within_tolerance_rate"] == 1.0
     assert by_horizon[60]["sample_count"] == 0
     assert by_horizon[90]["sample_count"] == 0
+
+
+def test_grace_boundary_is_inclusive() -> None:
+    """A checkpoint exactly at deadline + grace counts; one day later does not."""
+    at_boundary = [
+        _row(1, day=0.0, revenue=5_000.0),
+        _row(2, day=30.0, revenue=8_000.0),
+        _row(3, day=75.0, revenue=9_000.0),  # deadline 60 + grace 15
+    ]
+    just_past = [
+        _row(1, day=0.0, revenue=5_000.0),
+        _row(2, day=30.0, revenue=8_000.0),
+        _row(3, day=76.0, revenue=9_000.0),
+    ]
+    by_horizon = {h["horizon_days"]: h for h in _call(at_boundary)["horizons"]}
+    assert by_horizon[30]["sample_count"] == 1
+    past = _call(just_past)
+    assert past["total_verifications"] == 0
 
 
 def test_sparse_gap_excludes_only_misaligned_horizon_checks() -> None:
@@ -435,6 +600,24 @@ def test_route_falls_back_to_row_prediction_when_no_simulation() -> None:
     session = _FakeSession(rows=rows, sim=None)
     out = _call_route(session=session)
     assert out.overall_verdict == VERDICT_ACCURATE
+
+
+def test_route_falls_back_when_simulation_prediction_is_unusable() -> None:
+    """A completed sim with a missing/zero revenue prediction must not block
+    the legacy row-prediction fallback."""
+    rows = [
+        _make_tracker_row(i, revenue=100_000.0 - 500.0 * day, day=day)
+        for i, day in enumerate(range(0, 181, 30))
+    ]
+    for row in rows:
+        row.predicted_revenue = 50_000.0
+    for results in ({"mean_revenue": 0.0}, {"other": 1.0}, {}):
+        session = _FakeSession(
+            rows=rows,
+            sim=_FakeSimulation(results=results),
+        )
+        out = _call_route(session=session)
+        assert out.overall_verdict == VERDICT_ACCURATE
 
 
 def test_route_empty_tracker_is_insufficient() -> None:
