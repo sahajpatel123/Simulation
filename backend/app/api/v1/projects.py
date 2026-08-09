@@ -233,6 +233,9 @@ from app.simulation.reweighting_preview import (
 from app.simulation.scored_assumption import score_assumptions, signal_quality_tier
 from app.simulation.similar_projects import find_similar_projects
 from app.simulation.simulation_evolution import build_simulation_evolution
+from app.simulation.simulation_history import (
+    build_simulation_history as _build_simulation_history,
+)
 from app.simulation.simulation_quality import build_simulation_quality
 from app.simulation.simulation_trend import (
     build_simulation_trend as _build_simulation_trend,
@@ -5298,7 +5301,7 @@ def re_simulate(
 
 @router.get(
     "/{project_id}/simulation-history",
-    summary="List completed runs with key metrics for charts",
+    summary="List simulation runs with key metrics for charts",
     responses=_JSON_200,
 )
 def get_simulation_history(
@@ -5308,54 +5311,33 @@ def get_simulation_history(
 ):
     get_owned_project(db, current_user.id, project_id)
 
-    sims = (
-        db.query(Simulation)
-        .filter(Simulation.project_id == project_id)
-        .order_by(Simulation.created_at.asc())
-        .all()
+    # Lightweight read: extract only the conversion-rate keys server-side
+    # instead of transferring and parsing every multi-MB results_json row.
+    rows = db.execute(
+        text(
+            """
+            SELECT
+                s.id,
+                s.status,
+                s.signal_quality,
+                s.created_at,
+                COALESCE(
+                    NULLIF(s.results_json->>'population_weighted_conversion', '')::float,
+                    NULLIF(s.results_json->>'conversion_rate', '')::float,
+                    0.0
+                ) AS conversion_rate
+            FROM simulations s
+            WHERE s.project_id = :pid
+            ORDER BY s.created_at ASC
+            """
+        ),
+        {"pid": project_id},
+    ).mappings().all()
+
+    return _build_simulation_history(
+        [dict(row) for row in rows],
+        project_id=project_id,
     )
-
-    history: list[dict] = []
-    prev_cr: float | None = None
-    for sim in sims:
-        results = (
-            sim.results_json
-            if isinstance(sim.results_json, dict)
-            else json.loads(sim.results_json or "{}")
-        )
-        cr = float(
-            results.get("population_weighted_conversion")
-            or results.get("conversion_rate")
-            or 0
-        )
-        delta_cr = round(cr - prev_cr, 4) if prev_cr is not None else None
-        if delta_cr is not None and delta_cr > 0:
-            direction = "UP"
-        elif delta_cr is not None and delta_cr < 0:
-            direction = "DOWN"
-        else:
-            direction = "FLAT" if delta_cr is not None else None
-        history.append(
-            {
-                "simulation_id": sim.id,
-                "status": sim.status,
-                "signal_quality": sim.signal_quality,
-                "conversion_rate": round(cr, 4),
-                "delta_from_prev": delta_cr,
-                "direction": direction,
-                "created_at": sim.created_at.isoformat() if sim.created_at else None,
-            }
-        )
-        prev_cr = cr
-
-    return {
-        "project_id": project_id,
-        "total_runs": len(history),
-        "history": history,
-        "best_run_id": max(history, key=lambda x: x["conversion_rate"])["simulation_id"]
-        if history
-        else None,
-    }
 
 
 @router.get(
@@ -5383,21 +5365,37 @@ def get_simulation_trend(
     from datetime import datetime
 
     get_owned_project(db, current_user.id, project_id)
-    sims = (
-        db.query(Simulation)
-        .filter(Simulation.project_id == project_id)
-        .order_by(Simulation.created_at.asc())
-        .all()
-    )
+    projected_rows = db.execute(
+        text(
+            """
+            SELECT
+                s.id,
+                s.status,
+                s.signal_quality,
+                s.created_at,
+                COALESCE(
+                    NULLIF(s.results_json->>'population_weighted_conversion', '')::float,
+                    NULLIF(s.results_json->>'conversion_rate', '')::float,
+                    0.0
+                ) AS conversion_rate
+            FROM simulations s
+            WHERE s.project_id = :pid
+            ORDER BY s.created_at ASC
+            """
+        ),
+        {"pid": project_id},
+    ).mappings().all()
     rows = [
         {
-            "id": s.id,
-            "status": s.status,
-            "signal_quality": s.signal_quality,
-            "results_json": s.results_json,
-            "created_at": s.created_at,
+            "id": row["id"],
+            "status": row["status"],
+            "signal_quality": row["signal_quality"],
+            "results_json": {
+                "population_weighted_conversion": row["conversion_rate"]
+            },
+            "created_at": row["created_at"],
         }
-        for s in sims
+        for row in projected_rows
     ]
     trend = _build_simulation_trend(rows, project_id=project_id)
     trend["generated_at"] = datetime.now(UTC).isoformat()
