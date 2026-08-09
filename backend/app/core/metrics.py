@@ -175,6 +175,26 @@ class _Metrics:
             labels={"method": method, "path": path},
         )
 
+    def snapshot(self) -> dict[str, object]:
+        """Return deep-enough copies of all registry state for read-only consumers.
+
+        Keys keep the internal tuple form
+        ``(name, ((label_key, label_value), ...))``; histograms are
+        ``(bucket_bounds, cumulative_counts, sum)`` triples. Consumers
+        (e.g. the request-health summary endpoint) use this instead of
+        reaching into the private ``_counters`` / ``_histograms`` dicts,
+        and the copies make the snapshot safe to read outside the lock.
+        """
+        with self._lock:
+            return {
+                "counters": dict(self._counters),
+                "gauges": dict(self._gauges),
+                "histograms": {
+                    key: (list(buckets), list(counts), total)
+                    for key, (buckets, counts, total) in self._histograms.items()
+                },
+            }
+
     def set_active_simulations(self, n: int) -> None:
         self.set_gauge("thecee_active_simulations", n)
 

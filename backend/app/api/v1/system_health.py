@@ -5,13 +5,20 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
+from app.core.metrics import metrics
 from app.core.redis_client import get_redis_client
-from app.schemas.system_health import SystemHealthOut
+from app.core.request_health import (
+    DEFAULT_LIMIT,
+    DEFAULT_MIN_REQUESTS,
+    MAX_LIMIT,
+    build_request_health,
+)
+from app.schemas.system_health import RequestHealthOut, SystemHealthOut
 from app.worker import celery_app
 
 router = APIRouter(prefix="/system", tags=["system"])
@@ -90,4 +97,38 @@ def system_health(
         database=_db_status(db),
         redis=_redis_status(),
         worker=_worker_status(),
+    )
+
+
+@router.get(
+    "/request-health",
+    summary="In-process per-route request health (latency percentiles + error rates)",
+    responses=_JSON_200,
+    response_model=RequestHealthOut,
+)
+def request_health(
+    limit: int = Query(
+        default=DEFAULT_LIMIT,
+        ge=1,
+        le=MAX_LIMIT,
+        description="Maximum number of routes to return (slowest p95 first).",
+    ),
+    min_requests: int = Query(
+        default=DEFAULT_MIN_REQUESTS,
+        ge=0,
+        description="Only include routes with at least this many requests.",
+    ),
+) -> dict[str, Any]:
+    """Return a human-readable per-route latency + error-rate digest.
+
+    Reads the in-process metrics registry that also feeds ``/metrics``, so
+    it reflects the current process's traffic without a Prometheus server:
+    request counts, error counts/rates, and mean / p50 / p95 / p99 latency
+    per matched route template.
+    """
+    return build_request_health(
+        metrics.snapshot(),
+        limit=limit,
+        min_requests=min_requests,
+        generated_at=datetime.now(UTC).isoformat(),
     )
