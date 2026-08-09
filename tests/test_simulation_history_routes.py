@@ -116,6 +116,44 @@ def test_history_uses_projected_sql_not_full_results_payload() -> None:
     assert "results_json FROM" not in sql
 
 
+def test_history_and_trend_share_one_projected_read() -> None:
+    history_calls: list[str] = []
+    trend_calls: list[str] = []
+    _call_history(sql_calls=history_calls)
+    _call_trend(sql_calls=trend_calls)
+
+    history_sql = "\n".join(history_calls)
+    trend_sql = "\n".join(trend_calls)
+    assert history_sql == trend_sql
+
+
+def test_projection_guards_malformed_jsonb_values() -> None:
+    calls: list[str] = []
+    _call_history(sql_calls=calls)
+    sql = "\n".join(calls)
+
+    # A scalar/array results_json or a boolean/array/object conversion value
+    # must degrade to NULL instead of raising a Postgres ``->>``/cast error.
+    assert "jsonb_typeof(s.results_json) = 'object'" in sql
+    assert (
+        "jsonb_typeof(s.results_json->'population_weighted_conversion')"
+        in sql
+    )
+    assert "jsonb_typeof(s.results_json->'conversion_rate')" in sql
+    assert "IN ('number', 'string')" in sql
+    # Casting happens in Python (_safe_float), never in SQL, so a bad value
+    # cannot abort the whole query.
+    assert "::float" not in sql
+
+
+def test_projection_orders_by_created_at_with_id_tiebreaker() -> None:
+    calls: list[str] = []
+    _call_history(sql_calls=calls)
+    sql = "\n".join(calls)
+
+    assert "ORDER BY s.created_at ASC, s.id ASC" in sql
+
+
 def test_history_builds_payload_from_projected_rows() -> None:
     out = _call_history()
 
@@ -136,6 +174,18 @@ def test_history_handles_empty_projection() -> None:
     assert out["total_runs"] == 0
     assert out["history"] == []
     assert out["best_run_id"] is None
+
+
+def test_history_parses_string_conversion_rates_from_projection() -> None:
+    rows = [
+        {**_rows()[0], "conversion_rate": "0.04"},
+        {**_rows()[1], "conversion_rate": "0.06"},
+    ]
+    out = _call_history(rows=rows)
+
+    assert [h["conversion_rate"] for h in out["history"]] == [0.04, 0.06]
+    assert out["history"][1]["delta_from_prev"] == 0.02
+    assert out["best_run_id"] == 2
 
 
 def test_trend_uses_projected_sql_not_full_results_payload() -> None:
@@ -170,3 +220,16 @@ def test_trend_handles_empty_projection() -> None:
     assert out.best_run is None
     assert out.worst_run is None
     assert out.latest_run is None
+
+
+def test_trend_parses_string_conversion_rates_from_projection() -> None:
+    rows = [
+        {**_rows()[0], "conversion_rate": "0.04"},
+        {**_rows()[1], "conversion_rate": "0.06"},
+    ]
+    out = _call_trend(rows=rows)
+
+    assert out.completed_runs == 2
+    assert out.best_run.simulation_id == 2
+    assert out.worst_run.simulation_id == 1
+    assert [h.conversion_rate for h in out.history] == [0.04, 0.06]

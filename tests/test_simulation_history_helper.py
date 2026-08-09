@@ -92,6 +92,48 @@ def test_missing_conversion_rate_falls_back_to_zero() -> None:
     assert out["best_run_id"] == 2
 
 
+def test_numeric_string_conversion_rate_is_parsed() -> None:
+    from app.simulation.simulation_history import build_simulation_history
+
+    out = build_simulation_history(
+        [_row(1, "0.05")],
+        project_id=7,
+    )
+    assert out["history"][0]["conversion_rate"] == 0.05
+
+
+def test_non_numeric_conversion_rate_falls_back_to_zero() -> None:
+    from app.simulation.simulation_history import build_simulation_history
+
+    out = build_simulation_history(
+        [_row(1, "oops")],
+        project_id=7,
+    )
+    assert out["history"][0]["conversion_rate"] == 0.0
+    assert out["best_run_id"] == 1
+
+
+def test_zero_conversion_rate_is_kept_as_primary_value() -> None:
+    from app.simulation.simulation_history import build_simulation_history
+
+    out = build_simulation_history(
+        [_row(1, 0.0), _row(2, 0.05)],
+        project_id=7,
+    )
+    assert out["history"][0]["conversion_rate"] == 0.0
+    assert out["history"][1]["delta_from_prev"] == 0.05
+    assert out["best_run_id"] == 2
+
+
+def test_missing_signal_quality_is_omitted_not_crashing() -> None:
+    from app.simulation.simulation_history import build_simulation_history
+
+    row = _row(1, 0.04)
+    row.pop("signal_quality")
+    out = build_simulation_history([row], project_id=7)
+    assert out["history"][0]["signal_quality"] is None
+
+
 def test_datetime_created_at_serialised_to_isoformat() -> None:
     from app.simulation.simulation_history import build_simulation_history
 

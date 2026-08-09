@@ -237,6 +237,7 @@ from app.simulation.simulation_history import (
     build_simulation_history as _build_simulation_history,
 )
 from app.simulation.simulation_quality import build_simulation_quality
+from app.simulation.simulation_run_projection import fetch_projected_run_rows
 from app.simulation.simulation_trend import (
     build_simulation_trend as _build_simulation_trend,
 )
@@ -5311,31 +5312,10 @@ def get_simulation_history(
 ):
     get_owned_project(db, current_user.id, project_id)
 
-    # Lightweight read: extract only the conversion-rate keys server-side
+    # Lightweight read: project only the conversion-rate keys server-side
     # instead of transferring and parsing every multi-MB results_json row.
-    rows = db.execute(
-        text(
-            """
-            SELECT
-                s.id,
-                s.status,
-                s.signal_quality,
-                s.created_at,
-                COALESCE(
-                    NULLIF(s.results_json->>'population_weighted_conversion', '')::float,
-                    NULLIF(s.results_json->>'conversion_rate', '')::float,
-                    0.0
-                ) AS conversion_rate
-            FROM simulations s
-            WHERE s.project_id = :pid
-            ORDER BY s.created_at ASC
-            """
-        ),
-        {"pid": project_id},
-    ).mappings().all()
-
     return _build_simulation_history(
-        [dict(row) for row in rows],
+        fetch_projected_run_rows(db, project_id),
         project_id=project_id,
     )
 
@@ -5362,29 +5342,8 @@ def get_simulation_trend(
       * ``stability_score`` — ``1 / (1 + cv)`` where ``cv = std / mean``
         (None when fewer than 2 completed runs or mean == 0).
     """
-    from datetime import datetime
-
     get_owned_project(db, current_user.id, project_id)
-    projected_rows = db.execute(
-        text(
-            """
-            SELECT
-                s.id,
-                s.status,
-                s.signal_quality,
-                s.created_at,
-                COALESCE(
-                    NULLIF(s.results_json->>'population_weighted_conversion', '')::float,
-                    NULLIF(s.results_json->>'conversion_rate', '')::float,
-                    0.0
-                ) AS conversion_rate
-            FROM simulations s
-            WHERE s.project_id = :pid
-            ORDER BY s.created_at ASC
-            """
-        ),
-        {"pid": project_id},
-    ).mappings().all()
+    projected_rows = fetch_projected_run_rows(db, project_id)
     rows = [
         {
             "id": row["id"],

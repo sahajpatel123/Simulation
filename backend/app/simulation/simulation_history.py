@@ -48,7 +48,9 @@ def build_simulation_history(
     ``conversion_rate`` (``signal_quality`` is optional). Rows are expected
     in ascending ``created_at`` order so ``delta_from_prev`` and
     ``direction`` match the previous run exactly as the legacy full-payload
-    implementation did.
+    implementation did. ``conversion_rate`` may be a float or numeric text
+    (the JSONB projection returns text); non-numeric values fall back to
+    ``0.0`` instead of raising.
     """
     history: list[dict[str, Any]] = []
     prev_cr: float | None = None
