@@ -64,6 +64,7 @@ from app.schemas.outcome import (
 from app.schemas.outcome_benchmark import OutcomeBenchmarkOut
 from app.schemas.outcome_tracker import (
     OutcomeTrackerCreate,
+    OutcomeTrackerForecastOut,
     OutcomeTrackerPoint,
     OutcomeTrackerTimelineOut,
 )
@@ -95,6 +96,9 @@ from app.simulation.outcome_benchmark_export import (
 )
 from app.simulation.outcome_tracker_export import (
     outcome_tracker_to_csv,
+)
+from app.simulation.outcome_tracker_forecast import (
+    build_outcome_tracker_forecast,
 )
 from app.simulation.outcome_tracker_read import (
     build_outcome_tracker_timeline,
@@ -738,6 +742,62 @@ def get_outcome_tracker_timeline(
         project_id=project_id,
     )
     return OutcomeTrackerTimelineOut(**payload)
+
+
+@router.get(
+    "/{project_id}/outcome-tracker/forecast",
+    response_model=OutcomeTrackerForecastOut,
+    summary="Forecast post-launch conversion trajectory from tracking checkpoints",
+)
+def get_outcome_tracker_forecast(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> OutcomeTrackerForecastOut:
+    """Project where the project's post-launch conversion is heading.
+
+    Fits a deterministic trend over the logged conversion checkpoints and
+    compares the 30-day projection (or the latest actual, when it already
+    meets the prediction) against the project's latest simulation
+    prediction. The route supplies the checkpoint rows and prediction; all
+    arithmetic lives in the pure helper module.
+    """
+    get_owned_project(db, current_user.id, project_id)
+
+    rows = (
+        db.query(OutcomeTracker)
+        .filter(OutcomeTracker.project_id == project_id)
+        .order_by(OutcomeTracker.recorded_at.asc())
+        .all()
+    )
+    sim = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc())
+        .first()
+    )
+
+    predicted: float | None = None
+    if sim is not None and sim.results_json:
+        raw_pred = _predicted_from_results(sim.results_json)
+        if raw_pred and raw_pred > 0.0:
+            predicted = float(raw_pred)
+    if predicted is None:
+        # Legacy rows carry the prediction captured at checkpoint time —
+        # fall back to the newest one so older projects still get a target.
+        for row in rows:
+            if row.predicted_conversion_rate and row.predicted_conversion_rate > 0.0:
+                predicted = float(row.predicted_conversion_rate)
+
+    payload = build_outcome_tracker_forecast(
+        [r.__dict__ for r in rows],
+        project_id=project_id,
+        predicted_conversion_rate=predicted,
+    )
+    return OutcomeTrackerForecastOut(**payload)
 
 
 @router.get(

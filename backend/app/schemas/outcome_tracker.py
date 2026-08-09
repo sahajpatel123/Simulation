@@ -1,10 +1,11 @@
-"""Pydantic schemas for the per-project conversion-tracking timeline.
+"""Pydantic schemas for the per-project conversion-tracking features.
 
 The ``outcome_tracker`` table stores lightweight checkpoints a founder can
 log over time (conversion / revenue at week 1, week 4, etc.) alongside the
 predicted values from the project's latest simulation. These schemas cover
 ``POST /projects/{id}/outcome-tracker`` and
-``GET /projects/{id}/outcome-tracker``.
+``GET /projects/{id}/outcome-tracker``, plus the trajectory forecast at
+``GET /projects/{id}/outcome-tracker/forecast``.
 """
 from __future__ import annotations
 
@@ -74,8 +75,37 @@ class OutcomeTrackerTimelineOut(BaseModel):
     bias_direction: str = "INSUFFICIENT_DATA"
 
 
+class OutcomeTrackerForecastPoint(BaseModel):
+    """One horizon in the trajectory forecast."""
+
+    horizon_days: int
+    projected_conversion_rate: float
+
+
+class OutcomeTrackerForecastOut(BaseModel):
+    """Trajectory forecast payload for GET /projects/{id}/outcome-tracker/forecast."""
+
+    project_id: int
+    sample_count: int = 0
+    span_days: float | None = None
+    latest_actual: float | None = None
+    predicted_conversion_rate: float | None = None
+    ceiling_conversion_rate: float | None = None
+    slope_per_day: float | None = None
+    r_squared: float | None = None
+    trend_label: str = "INSUFFICIENT_DATA"
+    confidence: str = "INSUFFICIENT_DATA"
+    verdict: str = "INSUFFICIENT_DATA"
+    forecasts: list[OutcomeTrackerForecastPoint] = Field(default_factory=list)
+    days_to_target: float | None = None
+    narrative: str = ""
+    key_signals: list[dict] = Field(default_factory=list)
+
+
 __all__ = [
     "OutcomeTrackerCreate",
     "OutcomeTrackerPoint",
     "OutcomeTrackerTimelineOut",
+    "OutcomeTrackerForecastPoint",
+    "OutcomeTrackerForecastOut",
 ]
