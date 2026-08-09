@@ -310,6 +310,14 @@ for _stack in ARCHITECT_STACKS.values():
     if "MessagingClarityArchitect" not in _stack:
         _stack.insert(2, "MessagingClarityArchitect")
 
+# FounderExecutionArchitect is universal too: every product type must be
+# buildable, shippable and supportable. Evaluate it late (just before the
+# assumption-cascade sweep) so its DECIDE→PURCHASE override reflects the
+# full demand/price/trust picture assembled by the earlier architects.
+for _stack in ARCHITECT_STACKS.values():
+    if "FounderExecutionArchitect" not in _stack:
+        _stack.insert(len(_stack) - 1, "FounderExecutionArchitect")
+
 # Inter-architect dependency map
 # key = architect that needs input, value = {param_name: (source_architect, metric_key)}
 DEPENDENCY_MAP: dict[str, dict[str, tuple[str, str]]] = {
@@ -482,6 +490,9 @@ def _build_architect_registry() -> dict[str, Any]:
     from app.simulation.architects.ecosystem_compatibility import EcosystemCompatibilityArchitect
     from app.simulation.architects.enterprise_procurement import EnterpriseProcurementArchitect
     from app.simulation.architects.feature_adoption import FeatureAdoptionArchitect
+    from app.simulation.architects.founder_execution import (
+        FounderExecutionArchitect,
+    )
     from app.simulation.architects.health_safety_hardware import HealthSafetyHardwareArchitect
     from app.simulation.architects.macroeconomic import MacroeconomicArchitect
     from app.simulation.architects.market_timing import MarketTimingArchitect
@@ -544,6 +555,7 @@ def _build_architect_registry() -> dict[str, Any]:
         "HealthSafetyHardwareArchitect":   HealthSafetyHardwareArchitect(),
         "RegulatoryComplianceArchitect":   RegulatoryComplianceArchitect(),
         "RunwayArchitect":                 RunwayArchitect(),
+        "FounderExecutionArchitect":       FounderExecutionArchitect(),
     }
 
 

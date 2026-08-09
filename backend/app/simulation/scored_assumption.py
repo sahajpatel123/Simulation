@@ -152,6 +152,12 @@ SPECIFICITY_RULES: dict[str, dict[float, str]] = {
         0.2: "generic value/hype words only (innovative, seamless, solution)",
         0.0: "no value-proposition claim",
     },
+    "FounderExecutionArchitect": {
+        1.0: "named team with track record AND working prototype/beta users",
+        0.6: "team or prototype evidence without the other",
+        0.2: "execution vocabulary only (team, prototype, launch)",
+        0.0: "no team or delivery-capability claim",
+    },
     "NetworkEffectArchitect": {
         1.0: "specific network effect mechanism with measured or observed data",
         0.6: "network effect described with mechanism but unmeasured",

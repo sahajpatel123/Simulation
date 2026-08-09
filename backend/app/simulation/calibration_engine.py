@@ -37,6 +37,7 @@ ALL_ARCHITECT_NAMES = [
     "SupplyChainArchitect",
     "RunwayArchitect",
     "MessagingClarityArchitect",
+    "FounderExecutionArchitect",
 ]
 
 

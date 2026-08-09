@@ -109,6 +109,9 @@ class AccountabilityEngine:
         "comprehension_risk": 0.25,
         "vague_language_density": 0.10,
         "clarity_funnel_suppressor": 1.0,
+        "execution_credibility_score": 0.70,
+        "delivery_risk": 0.25,
+        "execution_funnel_suppressor": 1.0,
     }
 
     LOWER_IS_BETTER: frozenset[str] = frozenset({
@@ -141,6 +144,7 @@ class AccountabilityEngine:
         "viability_risk",
         "comprehension_risk",
         "vague_language_density",
+        "delivery_risk",
     })
 
     FINDING_TEMPLATES: dict[str, str] = {
@@ -337,6 +341,18 @@ class AccountabilityEngine:
             "Unclear messaging leaves {cluster} at {pct:.0f}% funnel "
             "strength (benchmark {bench:.0f}%)"
         ),
+        "execution_credibility_score": (
+            "{cluster} sees only {pct:.0f}% execution credibility "
+            "(benchmark {bench:.0f}%)"
+        ),
+        "delivery_risk": (
+            "{cluster} faces {pct:.0f}% delivery risk from weak "
+            "team/prototype evidence (benchmark {bench:.0f}%)"
+        ),
+        "execution_funnel_suppressor": (
+            "Weak execution evidence leaves {cluster} at {pct:.0f}% "
+            "purchase funnel strength (benchmark {bench:.0f}%)"
+        ),
     }
 
     RECOMMENDED_ACTIONS: dict[str, str] = {
@@ -491,6 +507,17 @@ class AccountabilityEngine:
         "clarity_funnel_suppressor": (
             "Add a plain-language one-liner and concrete proof points "
             "above the fold"
+        ),
+        "execution_credibility_score": (
+            "Publish team, prototype and support evidence on the landing page"
+        ),
+        "delivery_risk": (
+            "Ship a working prototype or live MVP, add named technical "
+            "leadership, and publish a support plan"
+        ),
+        "execution_funnel_suppressor": (
+            "Add execution proof points (prototype, beta users, team, "
+            "support) above the fold"
         ),
     }
 
