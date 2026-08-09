@@ -93,6 +93,7 @@ from app.schemas.fix_leverage import FixLeverageOut
 from app.schemas.founder_action_plan import FounderActionPlanOut
 from app.schemas.founder_brief import FounderBriefOut
 from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
+from app.schemas.investor_readiness import InvestorReadinessOut
 from app.schemas.journey_analytics import JourneyAnalyticsOut
 from app.schemas.journey_benchmark import (
     JourneyBenchmarkOut,
@@ -234,6 +235,7 @@ from app.simulation.founder_action_plan_export import (
     founder_action_plan_to_json,
 )
 from app.simulation.founder_brief import build_founder_brief
+from app.simulation.investor_readiness import build_investor_readiness
 from app.simulation.journey_analytics import (
     build_journey_analytics,
     deserialise_per_cluster_matrices,
@@ -8572,6 +8574,276 @@ def get_founder_brief(
         target_market_fraction=target_market_fraction,
         average_order_value=average_order_value,
         purchase_frequency_per_year=purchase_frequency_per_year,
+    )
+
+
+def _build_investor_readiness_payload(
+    simulation_id: int,
+    current_user_id: int,
+    db: Session,
+    market_size: int = DEFAULT_MARKET_SIZE,
+    target_market_fraction: float = DEFAULT_TARGET_MARKET_FRACTION,
+    average_order_value: float = DEFAULT_AVERAGE_ORDER_VALUE,
+    purchase_frequency_per_year: float = DEFAULT_PURCHASE_FREQUENCY_PER_YEAR,
+    gross_margin: float = 0.60,
+    assumed_cac: float = 0.0,
+) -> InvestorReadinessOut:
+    """Compute the investor-readiness digest for an owned simulation."""
+    sim = _get_owned_simulation(simulation_id, current_user_id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — investor-readiness "
+                "analysis requires completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    environment = (
+        db.query(Environment)
+        .filter(Environment.id == sim.environment_id)
+        .first()
+    )
+    aov = 999.0
+    price_sensitivity = 0.5
+    market_maturity = 0.3
+    if environment:
+        aov = float(environment.average_order_value or 999.0)
+        price_sensitivity = float(environment.price_sensitivity or 0.5)
+        market_maturity = float(environment.market_maturity or 0.3)
+
+    # The project's visible assumptions shape the architect stack for the
+    # recomputed reads; feed them through so the digest matches the actual
+    # run instead of defaulting to neutral inputs.
+    assumptions = (
+        db.query(Assumption)
+        .filter(Assumption.project_id == sim.project_id, Assumption.is_hidden.is_(False))
+        .all()
+    )
+    assumption_dicts = [
+        {
+            "text": assumption.text,
+            "sensitivity": str(assumption.sensitivity or "MEDIUM"),
+            "impact_score": float(
+                assumption.impact_score
+                if assumption.impact_score is not None
+                else 5.0
+            ),
+        }
+        for assumption in assumptions
+    ]
+
+    product_type_name = str(
+        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
+    )
+    try:
+        product_type = ProductType(product_type_name)
+    except ValueError:
+        product_type = ProductType.SAAS
+    # Keep the read consistent with the stack actually recomputed below:
+    # an unknown persisted value falls back to the SAAS stack and read.
+    product_type_name = product_type.value
+
+    # Recompute the deterministic architect stack once so unit economics,
+    # retention and defensibility reads share the same per-cluster metrics.
+    # No DB writes are performed (no session passed to run()).
+    conductor = Conductor()
+    cond_result = conductor.run(
+        agents=[],
+        env_params={
+            "average_order_value": aov,
+            "price_sensitivity": price_sensitivity,
+            "market_maturity": market_maturity,
+        },
+        assumptions=assumption_dicts,
+        product_type=product_type,
+    )
+    conductor_results = {
+        cid: {
+            name: {"metrics": output.metrics, "flags": output.flags}
+            for name, output in arch_outputs.items()
+        }
+        for cid, arch_outputs in cond_result.cluster_results.items()
+    }
+    registry = [
+        {
+            "cluster_id": cluster.cluster_id,
+            "name": cluster.name,
+            "population_weight": cluster.population_weight,
+        }
+        for cluster in _clusters_map.values()
+    ]
+    registry_dict = {
+        str(entry["cluster_id"]): {
+            "name": entry["name"],
+            "population_weight": entry["population_weight"],
+        }
+        for entry in registry
+    }
+
+    results = sim.results_json
+    signal_quality = (
+        float(sim.signal_quality) if sim.signal_quality is not None else None
+    )
+
+    market = build_market_sizing(
+        results,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        market_size=market_size,
+        target_market_fraction=target_market_fraction,
+        average_order_value=average_order_value,
+        purchase_frequency_per_year=purchase_frequency_per_year,
+        cluster_registry=registry_dict,
+        signal_quality=signal_quality,
+    )
+    economics = build_unit_economics(
+        results,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        signal_quality=signal_quality,
+        conductor_results=conductor_results,
+        cluster_registry=registry,
+        average_order_value=aov,
+        gross_margin=gross_margin,
+        purchase_frequency_per_year=purchase_frequency_per_year,
+        assumed_cac=assumed_cac,
+    )
+    retention = build_retention_churn(
+        results,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        signal_quality=signal_quality,
+        conductor_results=conductor_results,
+        cluster_registry=registry,
+        product_type=product_type_name,
+    )
+    moat = build_competitive_moat(
+        results,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        signal_quality=signal_quality,
+        conductor_results=conductor_results,
+        cluster_registry=registry,
+        product_type=product_type_name,
+    )
+    readiness = build_launch_checklist(
+        results,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        signal_quality=signal_quality,
+        visible_assumption_count=len(assumptions),
+        product_type=product_type_name,
+        cluster_registry=registry,
+    )
+    quality = build_simulation_quality(
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        base_results=results,
+        status=sim.status,
+        signal_quality=signal_quality,
+    )
+
+    return build_investor_readiness(
+        results,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        signal_quality=signal_quality,
+        product_type=product_type_name,
+        market=market,
+        economics=economics,
+        retention=retention,
+        moat=moat,
+        readiness=readiness,
+        quality=quality,
+        domain_findings=(results or {}).get("domain_findings") or [],
+    )
+
+
+@router.get(
+    "/{simulation_id}/investor-readiness",
+    response_model=InvestorReadinessOut,
+    summary=(
+        "Investor readiness: one scorecard of market, unit economics, "
+        "retention, defensibility, launch readiness and data trust"
+    ),
+    responses=_JSON_200,
+)
+def get_investor_readiness(
+    simulation_id: int,
+    market_size: int = Query(
+        DEFAULT_MARKET_SIZE,
+        ge=MIN_MARKET_SIZE,
+        le=MAX_MARKET_SIZE,
+        description="Total addressable market (people) to reason about",
+    ),
+    target_market_fraction: float = Query(
+        DEFAULT_TARGET_MARKET_FRACTION,
+        ge=MIN_TARGET_MARKET_FRACTION,
+        le=MAX_TARGET_MARKET_FRACTION,
+        description="Share of the reachable market in the launch segment",
+    ),
+    average_order_value: float = Query(
+        DEFAULT_AVERAGE_ORDER_VALUE,
+        ge=0,
+        description="Revenue per converted customer (set 0 to skip revenue)",
+    ),
+    purchase_frequency_per_year: float = Query(
+        DEFAULT_PURCHASE_FREQUENCY_PER_YEAR,
+        ge=1.0,
+        description="Purchases per customer per year",
+    ),
+    gross_margin: float = Query(
+        0.60,
+        ge=0.0,
+        le=1.0,
+        description="Fraction of revenue retained after cost of goods",
+    ),
+    assumed_cac: float = Query(
+        0.0,
+        ge=0.0,
+        description="Founder-observed blended CAC (0 derives a default)",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> InvestorReadinessOut:
+    """
+    Investor-facing digest for a completed simulation.
+
+    Combines six deterministic reads into one scorecard: market size,
+    unit economics, retention, defensibility, launch readiness and data
+    trust. Each pillar gets a 0..100 score; the available pillars are
+    weighted into an overall investor score with strengths, risks and
+    top actions. Pure post-hoc analytics — no Celery, no LLM, no DB
+    writes.
+    """
+    return _build_investor_readiness_payload(
+        simulation_id=simulation_id,
+        current_user_id=current_user.id,
+        db=db,
+        market_size=market_size,
+        target_market_fraction=target_market_fraction,
+        average_order_value=average_order_value,
+        purchase_frequency_per_year=purchase_frequency_per_year,
+        gross_margin=gross_margin,
+        assumed_cac=assumed_cac,
     )
 
 
