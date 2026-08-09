@@ -187,10 +187,38 @@ def test_ai_free_and_negated_ai_are_not_presence() -> None:
         assert out.metrics["ai_funnel_suppressor"] == 1.0, description
 
 
+def test_trailing_denial_of_ai_is_not_presence() -> None:
+    for description in (
+        "AI is not used in our product; it is a plain rules engine.",
+        "AI is not part of the product; humans handle everything.",
+        "AI will not be involved in processing.",
+        "AI does not feature in our workflow.",
+    ):
+        out = _compute(description=description)
+        assert out.metrics["ai_presence_score"] == 0.0, description
+        assert out.flags["ai_powered_offer"] is False, description
+        assert out.metrics["ai_funnel_suppressor"] == 1.0, description
+        assert out.severity == "INFO", description
+
+
 def test_not_just_ai_still_counts_as_presence() -> None:
     out = _compute(
         description="It is not just an AI assistant; humans verify results."
     )
+    assert out.flags["ai_powered_offer"] is True
+    assert out.metrics["ai_presence_score"] > 0.0
+
+
+def test_trailing_focus_construction_still_counts_as_presence() -> None:
+    out = _compute(
+        description="AI is not just an assistant; humans verify every output."
+    )
+    assert out.flags["ai_powered_offer"] is True
+    assert out.metrics["ai_presence_score"] > 0.0
+
+
+def test_contrastive_ai_not_humans_still_counts_as_presence() -> None:
+    out = _compute(description="AI, not humans, handles the review.")
     assert out.flags["ai_powered_offer"] is True
     assert out.metrics["ai_presence_score"] > 0.0
 
@@ -216,6 +244,18 @@ def test_camera_free_device_is_not_a_data_risk() -> None:
     assert out.flags["ai_powered_offer"] is True
     assert out.flags["data_misuse_concern"] is False
     assert out.flags["data_control_mitigation_present"] is True
+
+
+def test_third_party_audit_is_not_a_data_misuse_concern() -> None:
+    for description in (
+        "Our AI assistant is independently audited by a third party every "
+        "quarter and explains its reasoning.",
+        "Our AI model undergoes a third-party audit each release.",
+    ):
+        out = _compute(description=description)
+        assert out.flags["ai_powered_offer"] is True, description
+        assert out.flags["data_misuse_concern"] is False, description
+        assert out.flags["ai_transparency_present"] is True, description
 
 
 def test_risk_groups_are_flagged() -> None:
@@ -248,6 +288,16 @@ def test_mitigations_cover_all_three_classes() -> None:
     assert out.flags["ai_trust_gap_active"] is False
     assert out.metrics["ai_funnel_suppressor"] == 1.0
     assert out.severity == "INFO"
+
+
+def test_hyphenated_human_review_counts_as_mitigation() -> None:
+    out = _compute(
+        description=(
+            "Our AI assistant returns human-reviewed answers and keeps "
+            "processing on-device."
+        )
+    )
+    assert out.flags["human_fallback_present"] is True
 
 
 def test_mitigations_reduce_but_do_not_erase_risk_when_partial() -> None:
@@ -435,6 +485,32 @@ def test_registered_in_calibration_and_specificity_rules() -> None:
     assert _score_specificity(
         "AISkepticismArchitect", "plain task tracker, no AI"
     ) == 0.0
+
+
+def test_specificity_scores_verb_gapped_ai_denials_as_zero() -> None:
+    from app.simulation.scored_assumption import _score_specificity
+
+    for claim in (
+        "Our product does not use AI at all",
+        "AI is not used in our product",
+        "AI will not be part of the product",
+        "We avoid AI; human agents only",
+        "No chatbot, no automation, no machine learning",
+    ):
+        assert _score_specificity("AISkepticismArchitect", claim) == 0.0, claim
+
+
+def test_specificity_keeps_focus_and_risk_denials_as_claims() -> None:
+    from app.simulation.scored_assumption import _score_specificity
+
+    assert _score_specificity(
+        "AISkepticismArchitect",
+        "AI is not just an assistant; it is audited quarterly",
+    ) == 1.0
+    assert _score_specificity(
+        "AISkepticismArchitect",
+        "Our tool does not have AI limitations",
+    ) == 0.6
 
 
 def test_accountability_benchmarks_cover_ai_metrics() -> None:

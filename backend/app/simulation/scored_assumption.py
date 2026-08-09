@@ -296,11 +296,12 @@ _AI_MECHANISM_RE = re.compile(
     re.I,
 )
 _AI_GUARDRAIL_RE = re.compile(
-    r"\b(?:human in the loop|human-in-the-loop|human review|"
-    r"explainability|explainable|fact-?check|guardrails?|"
-    r"third-?party audit|accuracy|error rate|hallucination rate|"
-    r"confidence score|opt-?out|on-?device|privacy policy|consent|"
-    r"encryption)\b",
+    r"\b(?:human in the loop|human-in-the-loop|human-?review(?:ed|s)?|"
+    r"human oversight|explainability|explainable|explains its reasoning|"
+    r"shows its work|fact-?check|guardrails?|third-?party audit|"
+    r"audit(?:ed|ing|s)?|citations?|cites sources|accuracy|error rate|"
+    r"hallucination rate|confidence score|opt-?out|on-?device|"
+    r"privacy policy|consent|encryption)\b",
     re.I,
 )
 _AI_MEASURE_RE = re.compile(
@@ -314,7 +315,29 @@ _AI_MEASURE_RE = re.compile(
 _AI_DENIAL_RE = re.compile(
     r"\b(?:no|not|without|never|isn't|is not|aren't|are not)\s+"
     r"(?:a\s+|an\s+)?"
-    r"(?:ai|a\.i\.|chatbot|automation|llm|machine learning)\b",
+    r"(?:ai|a\.i\.|chatbot|automation|llm|machine learning)\b"
+    r"(?!\s+(?:risks?|concerns?|problems?|issues?|biases?|worries?|fears?))"
+    r"|\b(?:do|does|did|will|would|can|could|should|must)\s+"
+    r"(?:not|never)\s+"
+    r"(?:use|uses|used|using|employ|employs|employed|employing|"
+    r"need|needs|require|requires|requiring|involve|involves|involving|"
+    r"feature|features|featuring|have|has|having)\s+"
+    r"(?:any\s+|the\s+|an?\s+|a\s+)?"
+    r"(?:ai|a\.i\.|chatbot|automation|llm|machine learning)\b"
+    r"(?!\s+(?:limitations?|problems?|issues?|risks?|concerns?|"
+    r"biases?|worries?|fears?))"
+    r"|\b(?:avoids?|avoided|excludes?|excluded|skips?|skipped)\s+"
+    r"(?:using\s+|the\s+|all\s+)?"
+    r"(?:ai|a\.i\.|chatbot|automation|llm|machine learning)\b"
+    r"|\b(?:ai|a\.i\.|chatbot|automation|llm|machine learning)\s+"
+    r"(?:is|are|was|were|remains?|stays?|does|do)\s+"
+    r"(?:not|never|no longer)\s+"
+    r"(?:used|involved|included|present|part|required|needed|feature|exist)\b"
+    r"|\b(?:ai|a\.i\.|chatbot|automation|llm|machine learning)\s+"
+    r"(?:will|would|shall)\s+(?:not|never)\s+be\s+"
+    r"(?:used|involved|included|present|required|needed|part)\b"
+    r"|\b(?:ai|a\.i\.|chatbot|automation|llm|machine learning|algorithm)\s*"
+    r"[- ]?free\b",
     re.I,
 )
 

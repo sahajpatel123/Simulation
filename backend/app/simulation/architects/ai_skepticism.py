@@ -18,13 +18,16 @@ What this architect does
   assumption texts and scores three evidence classes:
   - *AI presence*: explicit AI vocabulary (AI, machine learning, LLM,
     chatbot, copilot, automation, recommendation engine, ...). Detection is
-    negation-aware, so "no AI", "AI-free" and "not an AI product" are never
-    read as AI presence, while "not just an AI assistant" still is.
+    negation-aware, so "no AI", "AI-free", "not an AI product" and trailing
+    denials like "AI is not used in the product" are never read as AI
+    presence, while focus constructions like "AI is not just an assistant"
+    still are.
   - *risk exposure*: automation/opacity ("fully automated", "no human
     oversight"), hallucination/accuracy ("hallucination", "made up
     answers"), data misuse ("trained on your data", "microphone",
     "biometric") and displacement anxiety ("replaces jobs", "no human
-    touch"). Phrases such as "no human review" are gaps, never proof.
+    touch"). Phrases such as "no human review" are gaps, never proof, and
+    "third-party audit" is a transparency mitigation, not data sharing.
   - *trust mitigations*: human fallback ("human in the loop", "escalate
     to a human"), transparency ("explainability", "fact-checked",
     "third-party audit", "confidence score") and data controls ("opt-out",
@@ -105,6 +108,21 @@ _PRESENCE_EXCLUSION_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# Trailing denials: "AI is not used", "AI is not part of the product",
+# "AI will not be involved". Unlike the generic trailing-negation check
+# used for mitigations, this is deliberately narrow so contrastive
+# statements like "AI, not humans, does the work" are not misread as
+# absence.
+_TRAILING_ABSENCE_PATTERN = re.compile(
+    r"\b(?:is|are|was|were|remains?|stays?|being)\s+"
+    r"(?:not|never|no longer)\s+(?:a\s+|an\s+)?"
+    r"(?:used|involved|included|present|required|needed|employed|part)\b"
+    r"|\b(?:will|would|shall)\s+(?:not|never)\s+be\s+"
+    r"(?:used|involved|included|present|required|needed|employed|part)\b"
+    r"|\b(?:does|do)\s+not\s+(?:feature|appear|figure|play)\b",
+    re.IGNORECASE,
+)
+
 
 # ── AI risk-exposure vocabulary ─────────────────────────────────────────
 
@@ -155,11 +173,15 @@ _RISK_SELF_NEGATED: frozenset[str] = frozenset({
 })
 
 # "camera-free" / "microphone-free" products are privacy positives, not
-# data-collection risks. Spans overlapping these never count as risk.
+# data-collection risks, and "audited by a third party" is a transparency
+# mitigation, not data sharing. Spans overlapping these never count as risk.
 _RISK_EXCLUSION_PATTERN = re.compile(
     r"\b(?:camera|microphone|tracking)-?free\b"
     r"|\b(?:records?|tracks?|monitors?)\s+"
-    r"(?:no|not|nothing|none|never)\b",
+    r"(?:no|not|nothing|none|never)\b"
+    r"|\bthird[- ]?part(?:y|ies)\s+(?:audit|audits|audited|auditor|"
+    r"auditors|review|reviews|reviewed|assessment|assessments)\b"
+    r"|\baudit(?:ed|ing)?\s+by\s+(?:an?\s+)?third[- ]?part(?:y|ies)\b",
     re.IGNORECASE,
 )
 
@@ -174,6 +196,7 @@ _MITIGATION_HUMAN_KEYWORDS: tuple[str, ...] = (
     "escalate to a human", "escalation path", "manual review",
     "human check", "human override", "human confirmation",
     "human team", "fallback to human", "human fallback",
+    "human-reviewed", "human reviewed",
 )
 
 _MITIGATION_TRANSPARENCY_KEYWORDS: tuple[str, ...] = (
@@ -318,6 +341,7 @@ def _is_voided(
     *,
     self_negated: bool = False,
     check_trailing: bool = False,
+    trailing_absence_only: bool = False,
 ) -> bool:
     """True when a negation marker scopes onto a keyword match.
 
@@ -341,7 +365,12 @@ def _is_voided(
         clause_end = (
             boundaries_after[0].start() if boundaries_after else len(text)
         )
-        trailing = re.findall(r"[a-z]+", text[end:clause_end])[:3]
+        trailing_span = text[end:clause_end]
+        trailing = re.findall(r"[a-z]+", trailing_span)[:3]
+        if _is_discourse_negation(trailing):
+            return False
+        if trailing_absence_only:
+            return bool(_TRAILING_ABSENCE_PATTERN.search(trailing_span))
         if set(trailing) & _NEGATION_MARKERS:
             return True
     return False
@@ -354,6 +383,7 @@ def _count_matches(
     self_negated: frozenset[str] = frozenset(),
     exclusion_pattern: re.Pattern[str] | None = None,
     check_trailing: bool = False,
+    trailing_absence_only: bool = False,
 ) -> int:
     """Count unvoided keyword matches, honouring self-negated phrases."""
     excluded = (
@@ -373,6 +403,7 @@ def _count_matches(
             match.end(),
             self_negated=matched in self_negated,
             check_trailing=check_trailing,
+            trailing_absence_only=trailing_absence_only,
         ):
             continue
         count += 1
@@ -470,6 +501,8 @@ class AISkepticismArchitect(BaseArchitect):
             joined,
             _AI_PRESENCE_KEYWORDS,
             exclusion_pattern=_PRESENCE_EXCLUSION_PATTERN,
+            check_trailing=True,
+            trailing_absence_only=True,
         )
         ai_present = presence > 0
 
