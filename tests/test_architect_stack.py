@@ -16,6 +16,7 @@ from fastapi import HTTPException
 
 from app.schemas.architect_stack import ArchitectStackRegistryOut
 from app.simulation.architect_stack import build_architect_stack_registry
+from app.simulation.product_type import ProductType
 
 # Importing ``app.api.v1.simulations`` pulls in the whole API router, which
 # imports the billing router and the real ``razorpay`` SDK. On Python 3.14
@@ -150,6 +151,109 @@ def test_missing_stack_entry_is_counted_without_crashing() -> None:
     assert payload["total_architects"] == 3
 
 
+def test_filter_counts_stay_consistent_with_missing_stack_entry() -> None:
+    stacks = {
+        "saas": [
+            "UniversalArchitect",
+            "GhostArchitect",
+            "SpecializedArchitect",
+        ],
+        "marketplace": ["UniversalArchitect", "SpecializedArchitect"],
+        "consumer_hardware": ["UniversalArchitect", "HardwareArchitect"],
+    }
+    payload = _build(stacks=stacks, product_type="saas")
+
+    assert payload["stack_size"] == 3
+    assert payload["universal_count"] == 1
+    assert payload["specialized_count"] == 1
+    assert payload["missing_count"] == 1
+    assert payload["stack_size"] == (
+        payload["universal_count"]
+        + payload["specialized_count"]
+        + payload["missing_count"]
+    )
+
+    coverage = {row["product_type"]: row for row in payload["product_coverage"]}
+    assert coverage["saas"]["missing_count"] == 1
+
+    # Active entries keep declared evaluation order and positions, so the
+    # ghost between the two real architects is visible in the gap.
+    active = [
+        row for row in payload["architects"] if row["active_for_product_type"]
+    ]
+    assert [row["name"] for row in active] == [
+        "UniversalArchitect",
+        "SpecializedArchitect",
+    ]
+    assert [row["stack_position"] for row in active] == [1, 3]
+
+
+def test_full_registry_missing_count_sums_stack_gaps() -> None:
+    stacks = {
+        "saas": ["UniversalArchitect", "GhostA"],
+        "marketplace": ["UniversalArchitect", "GhostA"],
+        "consumer_hardware": [
+            "UniversalArchitect",
+            "HardwareArchitect",
+            "GhostB",
+        ],
+    }
+    payload = _build(stacks=stacks)
+
+    assert payload["missing_count"] == 3
+    coverage = {row["product_type"]: row for row in payload["product_coverage"]}
+    assert sum(row["missing_count"] for row in coverage.values()) == 3
+
+
+def test_enum_keyed_stacks_resolve_with_string_product_type() -> None:
+    stacks = {
+        ProductType.SAAS: ["UniversalArchitect", "SpecializedArchitect"],
+        ProductType.MARKETPLACE: ["UniversalArchitect", "SpecializedArchitect"],
+        ProductType.CONSUMER_HARDWARE: ["UniversalArchitect", "HardwareArchitect"],
+    }
+    payload = _build(
+        stacks=stacks,
+        all_product_types=list(ProductType),
+        product_type="saas",
+    )
+
+    assert payload["product_type"] == "saas"
+    assert payload["stack_size"] == 2
+    assert payload["missing_count"] == 0
+    active = [
+        row for row in payload["architects"] if row["active_for_product_type"]
+    ]
+    assert [row["name"] for row in active] == [
+        "UniversalArchitect",
+        "SpecializedArchitect",
+    ]
+
+    unfiltered = _build(stacks=stacks, all_product_types=list(ProductType))
+    by_name = {row["name"]: row for row in unfiltered["architects"]}
+    assert by_name["HardwareArchitect"]["stacked_product_types"] == [
+        "consumer_hardware"
+    ]
+
+
+def test_registry_key_divergence_uses_architect_name() -> None:
+    class NamedArchitect(_Architect):
+        pass
+
+    registry = {"SomeRegistryKey": NamedArchitect("CanonicalName", [])}
+    stacks = {
+        "saas": ["CanonicalName"],
+        "marketplace": [],
+        "consumer_hardware": [],
+    }
+    payload = _build(registry=registry, stacks=stacks, product_type="saas")
+
+    assert payload["total_architects"] == 1
+    assert payload["architects"][0]["name"] == "CanonicalName"
+    assert payload["architects"][0]["active_for_product_type"] is True
+    assert payload["architects"][0]["stack_position"] == 1
+    assert payload["missing_count"] == 0
+
+
 def test_generated_at_is_echoed() -> None:
     pinned = datetime(2026, 8, 9, 12, 0, tzinfo=UTC)
     payload = _build(generated_at=pinned)
@@ -174,6 +278,7 @@ def test_route_returns_typed_registry(monkeypatch: Any) -> None:
     assert out.product_type == "consumer_hardware"
     assert out.stack_size == 2
     assert len(out.architects) == 3
+    assert out.missing_count == 0
     assert out.product_coverage[0].product_type == "saas"
     assert out.architects[0].name == "UniversalArchitect"
     assert out.architects[0].stack_position == 1

@@ -77,6 +77,14 @@ class ArchitectStackRegistryOut(BaseModel):
     )
     universal_count: int = 0
     specialized_count: int = 0
+    missing_count: int = Field(
+        default=0,
+        description=(
+            "Stack entries that reference an architect absent from the live "
+            "registry. With a product-type filter this is that stack's gap; "
+            "without one it is the gap summed across every stack."
+        ),
+    )
     architects: list[ArchitectStackEntryOut] = Field(default_factory=list)
     product_coverage: list[ProductTypeStackCoverageOut] = Field(default_factory=list)
 

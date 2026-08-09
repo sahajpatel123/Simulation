@@ -15,6 +15,13 @@ activation metadata, and an optional product-type filter that shows both
 the active stack (in evaluation order) and the registered architects that
 are deliberately excluded for that product type.
 
+The helper is defensive about representation mismatches: product-type
+keys may be enum members or plain strings, stack entries are matched
+against each architect's canonical ``name`` (falling back to the registry
+key), and stack entries that reference an architect absent from the live
+registry are counted as ``missing_count`` rather than silently inflating
+the universal/specialised totals.
+
 Pure Python — no SQL, no I/O. The route layer supplies the live conductor
 registry/stacks; tests can pass small fixtures instead of importing the
 entire simulation engine.
@@ -90,13 +97,18 @@ def build_architect_stack_registry(
     )
     all_values = {_type_value(pt) for pt in all_types}
     requested = _normalise_product_type(product_type, all_values)
-    requested_key = next(
-        (pt for pt in all_types if _type_value(pt) == requested),
-        None,
-    )
+
+    # Normalise every stack key to its string value so enum-keyed and
+    # string-keyed stacks resolve identically regardless of how the caller
+    # constructed them.
+    stacks_by_value: dict[str, list[str]] = {}
+    for stack_key, stack in stacks.items():
+        stacks_by_value.setdefault(_type_value(stack_key), []).extend(
+            list(stack or [])
+        )
     requested_stack = (
-        list(stacks.get(requested_key, []))
-        if requested_key is not None
+        stacks_by_value.get(requested, [])
+        if requested is not None
         else []
     )
 
@@ -105,7 +117,7 @@ def build_architect_stack_registry(
     product_coverage: list[dict[str, Any]] = []
     for pt in all_types:
         pt_value = _type_value(pt)
-        stack = list(stacks.get(pt, []) or [])
+        stack = stacks_by_value.get(pt_value, [])
         universal_count = 0
         specialized_count = 0
         missing_count = 0
@@ -129,13 +141,14 @@ def build_architect_stack_registry(
     # Per-architect entries: activation filter, stack membership, and the
     # optional requested-product-type position.
     entries: list[dict[str, Any]] = []
-    for name, architect in registry.items():
+    for key, architect in registry.items():
+        name = str(getattr(architect, "name", None) or key)
         activation = _activation_types(architect)
         universal = not activation
         stacked_types: list[str] = []
         for pt in all_types:
             pt_value = _type_value(pt)
-            if name in (stacks.get(pt, []) or []):
+            if name in stacks_by_value.get(pt_value, []):
                 stacked_types.append(pt_value)
         stacked_types.sort()
 
@@ -146,7 +159,7 @@ def build_architect_stack_registry(
             else None
         )
         entries.append({
-            "name": str(name),
+            "name": name,
             "product_types": activation,
             "universal": universal,
             "stack_count": len(stacked_types),
@@ -163,17 +176,25 @@ def build_architect_stack_registry(
                 e["name"],
             )
         )
-        universal_count = sum(
+        active_entries = [
+            e for e in entries if e["active_for_product_type"]
+        ]
+        active_names = {e["name"] for e in active_entries}
+        universal_count = sum(1 for e in active_entries if e["universal"])
+        specialized_count = len(active_entries) - universal_count
+        missing_count = sum(
             1
-            for e in entries
-            if e["active_for_product_type"] and e["universal"]
+            for name in requested_stack
+            if name not in active_names
         )
-        specialized_count = len(requested_stack) - universal_count
         stack_size = len(requested_stack)
     else:
         entries.sort(key=lambda e: e["name"])
         universal_count = sum(1 for e in entries if e["universal"])
         specialized_count = len(entries) - universal_count
+        missing_count = sum(
+            row["missing_count"] for row in product_coverage
+        )
         stack_size = None
 
     return {
@@ -183,6 +204,7 @@ def build_architect_stack_registry(
         "stack_size": stack_size,
         "universal_count": universal_count,
         "specialized_count": specialized_count,
+        "missing_count": missing_count,
         "architects": entries,
         "product_coverage": product_coverage,
     }
