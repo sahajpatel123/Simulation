@@ -186,6 +186,7 @@ from app.simulation.precis_export import precis_to_csv
 from app.simulation.precis_fingerprint_export import precis_fingerprint_to_csv
 from app.simulation.premortem_digest import build_premortem_digest
 from app.simulation.premortem_export import premortem_to_csv
+from app.simulation.premortem_export import premortem_count_to_csv
 from app.simulation.product_type import ProductType
 from app.simulation.project_comparison import (
     build_project_comparison,
@@ -8275,6 +8276,72 @@ def export_outcome_tracker_count(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="outcome-tracker-count-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/premortem-count/export",
+    summary="Export a project's premortem count as CSV or JSON",
+    response_class=StreamingResponse,
+)
+def export_premortem_count(
+    project_id: int,
+    format: Literal["csv", "json"] = Query(
+        default="csv",
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "premortem-count row."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Export a project's premortem count as CSV (default) or JSON."""
+    project = get_owned_project(db, current_user.id, project_id)
+    count = 1 if getattr(project, "premortem_json", None) else 0
+    row = {"project_id": project_id, "premortem_count": count}
+
+    if format == "json":
+        json_text = json.dumps(
+            {
+                "generated_at": datetime.now(UTC).isoformat(),
+                "project_id": project_id,
+                "premortem_count": count,
+            },
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="premortem-count-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = premortem_count_to_csv(
+        row,
+        metadata={
+            "generated_at": datetime.now(UTC).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="premortem-count-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },
