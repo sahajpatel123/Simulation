@@ -196,6 +196,7 @@ from app.simulation.project_health_export import (
 from app.simulation.project_meta_export import project_meta_to_csv
 from app.simulation.project_search import build_search_filters
 from app.simulation.project_simulations_export import simulations_to_csv
+from app.simulation.project_simulations_export import simulation_count_to_csv
 from app.simulation.project_tags import (
     normalise_tags,
     remove_tag_from_list,
@@ -7734,6 +7735,40 @@ def export_project_simulations(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="simulations-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/simulation-count/export",
+    summary="Export a project's simulation count as CSV",
+    response_class=StreamingResponse,
+)
+def export_simulation_count(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Spreadsheet export of a project's simulation count."""
+    get_owned_project(db, current_user.id, project_id)
+    count = db.query(Simulation).filter(Simulation.project_id == project_id).count()
+    csv_text = simulation_count_to_csv(
+        {"project_id": project_id, "simulation_count": count},
+        metadata={
+            "generated_at": datetime.now(UTC).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="simulation-count-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },

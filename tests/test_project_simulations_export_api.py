@@ -45,6 +45,9 @@ class _FakeQuery:
     def first(self):
         return self.items[0] if self.items else None
 
+    def count(self):
+        return len(self.items)
+
     def all(self):
         return list(self.items)
 
@@ -129,3 +132,19 @@ def test_export_project_simulations_missing_project_raises_404() -> None:
     with pytest.raises(HTTPException) as exc:
         _call_route(session=NoProjectSession())
     assert exc.value.status_code == 404
+
+
+def test_export_simulation_count_returns_csv() -> None:
+    from app.api.v1 import projects as proj_mod
+
+    db = _FakeSession(simulations=[_Simulation(), _Simulation()])
+    resp = proj_mod.export_simulation_count(
+        project_id=10,
+        db=db,
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+    assert resp.media_type == "text/csv; charset=utf-8"
+    body = _body(resp).decode("utf-8")
+    assert "project_id,simulation_count" in body
+    assert "10,2" in body
