@@ -277,6 +277,64 @@ def test_question_clauses_are_not_evidence() -> None:
     assert out.metrics["integration_evidence_score"] == 1.0
 
 
+def test_documentation_phrases_count_as_evidence_not_intent() -> None:
+    for phrase in (
+        "Getting started with our API is easy.",
+        "A setup guide for our API is included.",
+        "How to set up the API is documented.",
+        "Step-by-step API tutorial is available.",
+        "Users can get API keys from the dashboard.",
+        "Users can obtain API keys from the dashboard.",
+    ):
+        out = _compute(description=phrase)
+        assert out.flags["api_evidence_present"] is True, phrase
+        assert out.flags["integration_topic_discussed"] is True, phrase
+        assert out.metrics["integration_gap_score"] == 0.0, phrase
+
+
+def test_planned_api_with_docs_mentions_stays_aspirational() -> None:
+    for phrase in (
+        "We plan to add an API and a setup guide.",
+        "We plan to add an API and publish a getting-started tutorial.",
+    ):
+        out = _compute(description=phrase)
+        assert out.flags["api_evidence_present"] is False, phrase
+        assert out.flags["integration_topic_discussed"] is False, phrase
+        assert out.metrics["integration_gap_score"] == 0.0, phrase
+
+
+def test_negation_wins_over_documentation_phrases() -> None:
+    out = _compute(
+        description="No API setup guide, no getting-started tutorial.",
+    )
+    assert out.flags["api_evidence_present"] is False
+    assert out.flags["integration_gap_detected"] is True
+    assert out.metrics["integration_gap_score"] >= 0.3
+
+
+def test_generic_calendar_and_meeting_words_are_not_workflow_evidence() -> None:
+    out = _compute(
+        description=(
+            "Our product includes a calendar and we interviewed "
+            "users in meetings."
+        )
+    )
+    assert out.flags["workflow_compat_evidence_present"] is False
+    assert out.flags["integration_topic_discussed"] is False
+    assert out.metrics["integration_evidence_score"] == 1.0
+
+
+def test_specific_calendar_and_meeting_workflow_claims_are_evidence() -> None:
+    out = _compute(
+        description=(
+            "Calendar sync, meeting scheduling and a home screen "
+            "widget are included."
+        )
+    )
+    assert out.flags["workflow_compat_evidence_present"] is True
+    assert out.flags["integration_topic_discussed"] is True
+
+
 # ---------------------------------------------------------------------------
 # Trait- and category-driven sensitivity
 # ---------------------------------------------------------------------------

@@ -60,6 +60,7 @@ from app.simulation.architects.base import (
     DomainReport,
 )
 from app.simulation.clusters.definitions import ClusterDefinition
+from app.simulation.clusters.registry import ClusterRegistry
 
 # ── Model constants ─────────────────────────────────────────────────────
 
@@ -149,8 +150,15 @@ _WORKFLOW_EVIDENCE_KEYWORDS: tuple[str, ...] = (
     "cross-platform", "offline mode", "offline-first", "offline first",
     "mobile and web", "web and mobile", "syncs with", "sync with",
     "syncs to", "syncs your", "fits into", "fits in", "slot into",
-    "lives in", "native app", "home screen widget", "widget",
-    "calendar", "meeting", "meetings",
+    "lives in", "native app", "home screen widget",
+    "widget on the home screen",
+    "calendar sync", "calendar integration", "sync your calendar",
+    "syncs your calendar", "calendar invite", "calendar invites",
+    "calendar access", "calendar events",
+    "meeting sync", "meeting scheduling", "schedule meetings",
+    "schedules meetings", "scheduling meetings", "meeting invite",
+    "meeting invites", "meeting scheduler", "book meetings",
+    "books meetings",
 )
 
 _EVIDENCE_GROUPS: tuple[tuple[str, ...], ...] = (
@@ -227,10 +235,22 @@ _INTENT_MARKERS: frozenset[str] = frozenset({
     "must", "should", "will", "would", "intend", "intends", "intended",
     "add", "adding", "build", "building", "aim", "aims", "hoping",
     "hope", "hopes", "want", "wants", "wanted", "scheduled", "upcoming",
-    "due", "set", "setting", "setup", "getting", "get", "obtain",
-    "obtaining", "pursue", "pursuing", "working on", "in progress",
-    "to be", "seek", "seeks", "seeking", "look for", "looking for",
+    "due", "set", "setting", "setup", "pursue", "pursuing",
+    "working on", "in progress", "to be", "seek", "seeks", "seeking",
+    "look for", "looking for",
 })
+
+# Documentation/instruction phrases prove a feature is live and usable
+# ("setup guide for our API", "how to set up the API"), so they override
+# intent-marker voids. Negation still wins ("no API setup guide"). The
+# phrase must precede the keyword so a plan that merely mentions docs
+# later in the clause ("we plan to add an API and a setup guide") stays
+# aspirational.
+_DOCUMENTATION_OVERRIDE_PATTERN = re.compile(
+    r"\b(?:setup|set[- ]up)\s+(?:guide|documentation|docs?|tutorial)\b"
+    r"|\bhow[- ]to\b",
+    re.IGNORECASE,
+)
 
 _CONTRACTION_SUFFIXES: dict[str, str] = {
     "isn": "is not", "aren": "are not", "wasn": "was not",
@@ -358,8 +378,30 @@ def _match_is_voided(
         negation_voided = False
     else:
         negation_voided = bool(set(combined) & _NEGATION_MARKERS)
-    # Intent markers only void evidence when they precede the keyword.
-    return negation_voided or (include_intent and bool(set(before) & _INTENT_MARKERS))
+    # Intent markers only void evidence when they precede the keyword,
+    # unless a documentation/instruction phrase sits just before the
+    # match ("setup guide for our API", "how to set up the API") — that
+    # proves the feature is live rather than merely planned. Negation
+    # wins over the override, so "no API setup guide" stays a gap.
+    intent_voided = bool(set(before) & _INTENT_MARKERS)
+    if intent_voided and _documentation_override_near(
+        text, start, end, clause_start, clause_end
+    ):
+        return False
+    return negation_voided or (include_intent and intent_voided)
+
+
+def _documentation_override_near(
+    text: str,
+    start: int,
+    end: int,
+    clause_start: int,
+    clause_end: int,
+) -> bool:
+    """True when a documentation phrase precedes the match in-clause."""
+    window_start = max(clause_start, start - 80)
+    window_end = min(clause_end, end)
+    return bool(_DOCUMENTATION_OVERRIDE_PATTERN.search(text[window_start:window_end]))
 
 
 def _evidence_covered(
@@ -621,8 +663,6 @@ class IntegrationFrictionArchitect(BaseArchitect):
                 ),
                 severity="INFO",
             )
-
-        from app.simulation.clusters.registry import ClusterRegistry
 
         registry = ClusterRegistry()
         total_weight = (
