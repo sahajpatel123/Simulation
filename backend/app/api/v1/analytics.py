@@ -18,6 +18,7 @@ from app.schemas.calibration import (
     WeightedDriftSummary,
 )
 from app.schemas.outcome import FounderOutcomeSubmit
+from app.schemas.pipeline_timing import PipelineTimingSummaryOut
 from app.schemas.portfolio import UserPortfolioOut
 from app.simulation.calibration_engine import ALL_ARCHITECT_NAMES
 from app.simulation.calibration_insights import (
@@ -31,6 +32,7 @@ from app.simulation.founder_outcomes_export import (
     founder_outcomes_to_csv,
     predicted_conversion_from_results,
 )
+from app.simulation.pipeline_timing_analytics import build_pipeline_timing_summary
 from app.simulation.portfolio_analytics import (
     build_conversion_distribution,
     build_failure_domain_counts,
@@ -139,6 +141,74 @@ def platform_analytics(
             "gap_pct": gap_pct,
         },
     }
+
+
+@router.get(
+    "/pipeline-timing",
+    response_model=PipelineTimingSummaryOut,
+    summary="Fleet-level per-stage simulation timing (admin only)",
+    responses=_JSON_200,
+    # Admin observability view over recent completed runs; 10/min/IP keeps
+    # a dashboard loop from repeatedly scanning the simulations table.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
+)
+def pipeline_timing_analytics(
+    limit: int = Query(
+        default=500,
+        ge=1,
+        le=5000,
+        description=(
+            "Number of most-recent completed simulations with a timing "
+            "payload to sample for stage/total statistics."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PipelineTimingSummaryOut:
+    """
+    Fleet-level view of the per-stage wall-clock timing persisted in
+    ``results_json["pipeline_timing"]``.
+
+    Returns coverage (completed runs with a timing payload), per-stage
+    mean / median / p95 / max seconds and mean share of total wall-clock,
+    fleet totals, and the slowest recent runs with their dominant stage.
+    """
+    _require_admin(current_user)
+
+    coverage = db.execute(
+        text("""
+        SELECT
+          COUNT(*)::int AS total_completed,
+          COUNT(*) FILTER (WHERE results_json ? 'pipeline_timing')::int AS with_timing
+        FROM simulations
+        WHERE UPPER(status) = 'COMPLETED'
+    """)
+    ).mappings().first()
+
+    rows = db.execute(
+        text("""
+        SELECT
+            s.id,
+            s.project_id,
+            s.created_at,
+            s.results_json->'pipeline_timing' AS pipeline_timing
+        FROM simulations s
+        WHERE UPPER(s.status) = 'COMPLETED'
+          AND s.results_json ? 'pipeline_timing'
+        ORDER BY s.created_at DESC, s.id DESC
+        LIMIT :limit
+    """),
+        {"limit": limit},
+    ).mappings().all()
+
+    payload = build_pipeline_timing_summary(
+        [dict(r) for r in rows],
+        total_completed=int(coverage["total_completed"] or 0) if coverage else 0,
+        with_timing=int(coverage["with_timing"] or 0) if coverage else 0,
+        sample_limit=limit,
+        top_slowest=10,
+    )
+    return PipelineTimingSummaryOut(**payload)
 
 
 @router.post(
