@@ -185,6 +185,24 @@ _INTENT_MARKERS: frozenset[str] = frozenset({
     "integrating",
 })
 
+# Clause separators for scoping negation/intent qualifiers. Punctuation
+# and contrastive conjunctions always end the scope of a qualifier; "and"
+# is only a hard boundary when the phrase after it is its own clause
+# ("UPI is accepted and COD is unavailable") rather than a continuation of
+# a list ("don't accept UPI and COD", "plan to add UPI and EMI").
+_CLAUSE_BOUNDARY_PATTERN = re.compile(
+    r"[.,;:!?—–\n]|\b(?:but|yet|though|although|whereas|however|while)\b",
+    re.IGNORECASE,
+)
+_AND_BOUNDARY_PATTERN = re.compile(r"\band\b", re.IGNORECASE)
+_PREDICATE_PATTERN = re.compile(
+    r"\b(?:is|are|was|were|be|been|being|has|have|had|will|would|can|"
+    r"could|should|must|may|might|do|does|did|plan|plans|planned|"
+    r"planning|need|needs|require|requires|accept|accepts|support|"
+    r"supports|offer|offers|available|unavailable)\b",
+    re.IGNORECASE,
+)
+
 # Contracted negations are expanded before matching so "don't accept UPI"
 # and "payments aren't integrated" are gaps, never evidence. The optional
 # apostrophe also covers no-apostrophe spellings ("dont", "arent").
@@ -263,16 +281,76 @@ def _is_negated(text: str, start: int, end: int) -> bool:
     """
     True when a negation/absence marker qualifies a match, ignoring a
     leading discourse negation while still catching qualifiers after it.
+    Qualifiers are scoped to the same clause so "we accept UPI, but cards
+    are not accepted" is still UPI evidence.
     """
     discourse = _discourse_marker(text, start)
-    before = re.findall(r"[a-z]+", text[max(0, start - 120):start])[-5:]
+    before = _same_clause_tokens(text, start, end, direction="before")
     for i, token in enumerate(before):
         if token == discourse and i == 0:
             continue
         if token in _NEGATION_MARKERS:
             return True
-    after = re.findall(r"[a-z]+", text[end:end + 120])[:5]
-    return bool(set(after) & _NEGATION_MARKERS)
+    after = _same_clause_tokens(text, start, end, direction="after")
+    return any(token in _NEGATION_MARKERS for token in after)
+
+
+def _same_clause_tokens(
+    text: str,
+    start: int,
+    end: int,
+    *,
+    direction: str,
+) -> list[str]:
+    """
+    Return the word tokens between the match and the nearest clause
+    boundary in the requested direction.
+
+    "and" is treated as a boundary only when what follows it is its own
+    clause ("UPI is accepted and COD is unavailable"), so a qualifier in
+    the earlier clause does not leak onto a bare list item ("don't accept
+    UPI and COD" still voids both).
+    """
+    radius = 120
+    if direction == "before":
+        lo = max(0, start - radius)
+        clause_start = lo
+        for boundary in _CLAUSE_BOUNDARY_PATTERN.finditer(text, lo, start):
+            clause_start = boundary.end()
+        anchor = start
+        for and_match in reversed(
+            list(_AND_BOUNDARY_PATTERN.finditer(text, clause_start, anchor))
+        ):
+            segment = text[and_match.end():anchor]
+            if _PREDICATE_PATTERN.search(segment):
+                clause_start = and_match.end()
+                break
+            anchor = and_match.start()
+        return re.findall(r"[a-z]+", text[clause_start:start])
+
+    hi = min(len(text), end + radius)
+    clause_end = hi
+    for boundary in _CLAUSE_BOUNDARY_PATTERN.finditer(text, end, hi):
+        clause_end = boundary.start()
+        break
+    for and_match in _AND_BOUNDARY_PATTERN.finditer(text, end, clause_end):
+        clause_end = and_match.start()
+        break
+    return re.findall(r"[a-z]+", text[end:clause_end])
+
+
+def _contains_intent_marker(tokens: list[str]) -> bool:
+    """True when an intent/aspiration marker appears in the token list."""
+    for i, token in enumerate(tokens):
+        if token == "working":
+            # "working on X" is intent; "UPI payments are working" is
+            # evidence that the flow functions.
+            if i + 1 < len(tokens) and tokens[i + 1] == "on":
+                return True
+            continue
+        if token in _INTENT_MARKERS:
+            return True
+    return False
 
 
 def _has_any_keyword(
@@ -313,13 +391,14 @@ def _has_any_keyword(
 
 
 def _is_intent_qualified(text: str, start: int, end: int) -> bool:
-    """True when an intent/aspiration marker appears near the match."""
-    before = re.findall(r"[a-z]+", text[max(0, start - 100):start])[-5:]
-    after = re.findall(r"[a-z]+", text[end:end + 100])[:5]
-    return bool(
-        set(before) & _INTENT_MARKERS
-        or set(after) & _INTENT_MARKERS
-    )
+    """
+    True when an intent/aspiration marker qualifies the match in the same
+    clause, so "we accept UPI and plan to add COD" is still UPI evidence
+    while "we plan to add UPI and EMI" is not evidence.
+    """
+    before = _same_clause_tokens(text, start, end, direction="before")
+    after = _same_clause_tokens(text, start, end, direction="after")
+    return _contains_intent_marker(before) or _contains_intent_marker(after)
 
 
 def _has_restricted_keyword(

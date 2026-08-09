@@ -326,6 +326,79 @@ def test_restricted_phrase_not_voided_by_discourse_negation() -> None:
     assert out.flags["payment_advantage"] is True
 
 
+def test_negation_in_unrelated_clause_does_not_void_evidence() -> None:
+    for text in (
+        "We accept UPI, but we don't accept credit cards",
+        "We don't accept credit cards, but we do accept UPI",
+        "Cards are not accepted but UPI is accepted",
+        "We accept UPI and cash on delivery is unavailable",
+    ):
+        out = _compute(assumptions=[{"text": text}])
+        assert out.metrics["payment_credibility"] == 1.0, text
+        assert out.flags["payment_advantage"] is True, text
+        assert out.metrics["payment_advantage_lift"] > 0.0, text
+
+
+def test_intent_in_unrelated_clause_does_not_void_evidence() -> None:
+    for text in (
+        "We accept UPI and plan to add COD later",
+        "We already accept UPI, though we plan to add EMI",
+    ):
+        out = _compute(assumptions=[{"text": text}])
+        assert out.metrics["payment_credibility"] == 1.0, text
+        assert out.flags["payment_advantage"] is True, text
+        assert out.metrics["payment_advantage_lift"] > 0.0, text
+
+
+def test_negation_governs_coordinated_payment_list() -> None:
+    out = _compute(
+        trust=0.3,
+        risk=0.7,
+        literacy=0.3,
+        income=0.2,
+        geography="tier3_rural",
+        assumptions=[
+            {"text": "We don't accept UPI and COD"}
+        ],
+    )
+    assert out.metrics["payment_credibility"] < 1.0
+    assert out.flags["payment_advantage"] is False
+    assert out.flags["cash_dependency_gap"] is True
+    assert out.severity == "CRITICAL"
+
+
+def test_intent_governs_coordinated_payment_list() -> None:
+    out = _compute(
+        trust=0.3,
+        risk=0.7,
+        literacy=0.3,
+        income=0.2,
+        geography="tier3_rural",
+        assumptions=[
+            {"text": "We plan to add UPI and COD next quarter"}
+        ],
+    )
+    assert out.metrics["payment_credibility"] < 1.0
+    assert out.flags["payment_advantage"] is False
+    assert out.flags["cash_dependency_gap"] is True
+    assert out.severity == "CRITICAL"
+
+
+def test_working_state_is_evidence_but_working_on_is_intent() -> None:
+    working = _compute(
+        assumptions=[{"text": "UPI payments are working"}]
+    )
+    assert working.metrics["payment_credibility"] == 1.0
+    assert working.flags["payment_advantage"] is True
+
+    planned = _compute(
+        assumptions=[{"text": "We are working on UPI payments"}]
+    )
+    assert planned.metrics["payment_credibility"] < 1.0
+    assert planned.flags["payment_advantage"] is False
+    assert planned.metrics["payment_advantage_lift"] == 0.0
+
+
 # ---------------------------------------------------------------------------
 # Markov overrides
 # ---------------------------------------------------------------------------
