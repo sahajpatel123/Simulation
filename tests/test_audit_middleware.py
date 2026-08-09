@@ -126,9 +126,6 @@ def test_resolve_user_id_returns_none_on_invalid_jwt() -> None:
 def test_resolve_user_id_decodes_valid_jwt() -> None:
     """A valid JWT signed with the configured secret
     decodes to the user id encoded in the ``sub`` claim."""
-    import time as _t
-
-    from app.core.config import settings
     from app.core.security import create_access_token
 
     sub = "42"
@@ -192,6 +189,20 @@ def test_resolve_request_id_falls_back_to_header() -> None:
     the raw client header is still captured."""
     request = _scope_request(headers={"X-Request-ID": "header-id"})
     assert _resolve_request_id(request) == "header-id"
+
+
+def test_resolve_request_id_fallback_rejects_unsafe_header() -> None:
+    """The fallback must apply the same normalisation as RequestIdMiddleware:
+    a header-smuggling value is never stored verbatim in the audit row."""
+    request = _scope_request(headers={"X-Request-ID": "bad\nid"})
+    assert _resolve_request_id(request) is None
+
+
+def test_resolve_request_id_fallback_rejects_overlong_header() -> None:
+    """An over-long fallback header (String(64) column) is dropped rather
+    than overflowing the audit row."""
+    request = _scope_request(headers={"X-Request-ID": "x" * 100})
+    assert _resolve_request_id(request) is None
 
 
 def test_resolve_request_id_returns_none_when_absent() -> None:

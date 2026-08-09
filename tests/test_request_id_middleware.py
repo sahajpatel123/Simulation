@@ -16,6 +16,7 @@ import re
 
 from starlette.applications import Starlette
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.testclient import TestClient
@@ -44,6 +45,31 @@ def _make_app() -> Starlette:
 
     app.add_route("/echo", echo)
     app.add_route("/missing", missing)
+    return app
+
+
+def _make_cors_app() -> Starlette:
+    """Minimal app mirroring main.py's CORS + request-ID stack.
+
+    The production app allows GET/POST and a locked header allowlist;
+    X-Request-ID must be on that list or a browser preflight asking to
+    send a correlation ID is rejected with 400 before the request ever
+    reaches the API.
+    """
+    app = Starlette()
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:3000"],
+        allow_methods=["GET", "POST"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+        expose_headers=["X-Request-ID"],
+    )
+    app.add_middleware(RequestIdMiddleware)
+
+    async def echo(request: Request) -> JSONResponse:
+        return JSONResponse({"request_id": request.state.request_id})
+
+    app.add_route("/echo", echo)
     return app
 
 
@@ -125,6 +151,43 @@ def test_middleware_stamps_http_error_responses() -> None:
     resp = client.get("/missing")
     assert resp.status_code == 404
     assert _GENERATED_ID_RE.match(resp.headers[REQUEST_ID_RESPONSE_HEADER]) is not None
+
+
+# ── CORS integration ─────────────────────────────────────────────────
+
+
+def test_cors_preflight_allows_x_request_id_and_stamps_response() -> None:
+    """A browser preflight requesting ``x-request-id`` must succeed and the
+    preflight response itself must carry the generated correlation ID."""
+    client = TestClient(_make_cors_app())
+    resp = client.options(
+        "/echo",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "x-request-id",
+        },
+    )
+    assert resp.status_code == 200
+    allowed = resp.headers.get("access-control-allow-headers", "").lower()
+    assert "x-request-id" in allowed
+    assert _GENERATED_ID_RE.match(resp.headers[REQUEST_ID_RESPONSE_HEADER]) is not None
+
+
+def test_cors_request_preserves_client_request_id() -> None:
+    """A cross-origin request with a client-supplied correlation ID keeps
+    that ID through the CORS layer and echoes it back on the response."""
+    client = TestClient(_make_cors_app())
+    resp = client.get(
+        "/echo",
+        headers={
+            "Origin": "http://localhost:3000",
+            "X-Request-ID": "web-trace-7",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["request_id"] == "web-trace-7"
+    assert resp.headers[REQUEST_ID_RESPONSE_HEADER] == "web-trace-7"
 
 
 # ── Error-handler integration ────────────────────────────────────────

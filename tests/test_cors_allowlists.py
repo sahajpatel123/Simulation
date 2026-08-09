@@ -69,5 +69,6 @@ def test_cors_allow_headers_lists_only_what_is_actually_inspected() -> None:
     # Required:
     assert "Authorization" in headers  # Bearer token
     assert "Content-Type" in headers    # JSON request bodies
+    assert "X-Request-ID" in headers    # correlation IDs (RequestIdMiddleware)
     # Should NOT be wildcarded:
     assert "*" not in headers

@@ -7,6 +7,7 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.database import SessionLocal
+from app.core.request_id_middleware import _normalise_request_id
 
 logger = logging.getLogger("thecee.audit")
 
@@ -78,13 +79,16 @@ def _resolve_request_id(request: Request) -> str | None:
     generated or client-supplied ID on ``request.state.request_id``.
     Prefer that state — it is guaranteed safe and bounded — and fall
     back to the raw header only for paths where the outer middleware
-    did not run (unit-test stubs, unusual embedded deployments).
+    did not run (unit-test stubs, unusual embedded deployments). The
+    fallback is still normalised with the same rules as the middleware
+    so an over-long or header-smuggling value can never overflow the
+    ``String(64)`` audit column or be stored verbatim.
     """
     state = request.scope.get("state") or {}
     state_id = state.get("request_id")
     if state_id:
         return str(state_id)
-    return request.headers.get("x-request-id")
+    return _normalise_request_id(request.headers.get("x-request-id"))
 
 
 class AuditLogMiddleware(BaseHTTPMiddleware):

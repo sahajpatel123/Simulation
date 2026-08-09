@@ -98,9 +98,17 @@ app.add_middleware(
     # locked to the small set the API actually inspects (Authorization
     # for Bearer tokens, Content-Type for JSON bodies, X-Forwarded-For
     # so the rate limiter can honour the reverse-proxy client IP,
-    # Origin so the CORS handshake itself can negotiate).
+    # Origin so the CORS handshake itself can negotiate, and X-Request-ID
+    # so browser clients can seed the correlation chain that
+    # RequestIdMiddleware propagates end-to-end).
     allow_methods=["GET", "POST"],
-    allow_headers=["Authorization", "Content-Type", "X-Forwarded-For", "Origin"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "X-Forwarded-For",
+        "Origin",
+        "X-Request-ID",
+    ],
     expose_headers=[
         "Content-Disposition",
         "Content-Length",
