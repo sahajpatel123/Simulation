@@ -102,10 +102,39 @@ class OutcomeTrackerForecastOut(BaseModel):
     key_signals: list[dict] = Field(default_factory=list)
 
 
+class OutcomeTrackerRevenueForecastPoint(BaseModel):
+    """One horizon in the revenue trajectory forecast."""
+
+    horizon_days: int
+    projected_revenue: float
+
+
+class OutcomeTrackerRevenueForecastOut(BaseModel):
+    """Revenue trajectory forecast payload for the revenue-forecast endpoint."""
+
+    project_id: int
+    sample_count: int = 0
+    span_days: float | None = None
+    latest_revenue: float | None = None
+    predicted_revenue: float | None = None
+    ceiling_revenue: float | None = None
+    slope_per_day: float | None = None
+    r_squared: float | None = None
+    trend_label: str = "INSUFFICIENT_DATA"
+    confidence: str = "INSUFFICIENT_DATA"
+    verdict: str = "INSUFFICIENT_DATA"
+    forecasts: list[OutcomeTrackerRevenueForecastPoint] = Field(default_factory=list)
+    days_to_target: float | None = None
+    narrative: str = ""
+    key_signals: list[dict] = Field(default_factory=list)
+
+
 __all__ = [
     "OutcomeTrackerCreate",
     "OutcomeTrackerPoint",
     "OutcomeTrackerTimelineOut",
     "OutcomeTrackerForecastPoint",
     "OutcomeTrackerForecastOut",
+    "OutcomeTrackerRevenueForecastPoint",
+    "OutcomeTrackerRevenueForecastOut",
 ]
