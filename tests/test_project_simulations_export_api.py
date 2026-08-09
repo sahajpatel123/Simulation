@@ -140,6 +140,7 @@ def test_export_simulation_count_returns_csv() -> None:
     db = _FakeSession(simulations=[_Simulation(), _Simulation()])
     resp = proj_mod.export_simulation_count(
         project_id=10,
+        format="csv",
         db=db,
         current_user=type("U", (), {"id": 42})(),
     )
@@ -148,3 +149,20 @@ def test_export_simulation_count_returns_csv() -> None:
     body = _body(resp).decode("utf-8")
     assert "project_id,simulation_count" in body
     assert "10,2" in body
+
+
+def test_export_simulation_count_format_json_returns_payload() -> None:
+    from app.api.v1 import projects as proj_mod
+
+    db = _FakeSession(simulations=[_Simulation(), _Simulation()])
+    resp = proj_mod.export_simulation_count(
+        project_id=10,
+        format="json",
+        db=db,
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+    assert resp.media_type == "application/json; charset=utf-8"
+    body = _body(resp).decode("utf-8")
+    assert '"simulation_count"' in body
+    assert '"simulation_count": 2' in body

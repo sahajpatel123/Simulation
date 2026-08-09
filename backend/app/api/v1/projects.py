@@ -7748,14 +7748,47 @@ def export_project_simulations(
 )
 def export_simulation_count(
     project_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "simulation-count row."
+        ),
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
     """Spreadsheet export of a project's simulation count."""
     get_owned_project(db, current_user.id, project_id)
     count = db.query(Simulation).filter(Simulation.project_id == project_id).count()
+    row = {"project_id": project_id, "simulation_count": count}
+
+    fmt = format.strip().lower() if format else "csv"
+    if fmt == "json":
+        json_text = json.dumps(
+            {
+                "generated_at": datetime.now(UTC).isoformat(),
+                "simulation_count": row,
+            },
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="simulation-count-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
     csv_text = simulation_count_to_csv(
-        {"project_id": project_id, "simulation_count": count},
+        row,
         metadata={
             "generated_at": datetime.now(UTC).isoformat(),
             "user_id": current_user.id,
