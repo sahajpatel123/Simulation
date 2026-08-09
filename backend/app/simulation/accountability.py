@@ -105,6 +105,10 @@ class AccountabilityEngine:
         "business_health_score": 0.80,
         "viability_risk": 0.20,
         "runway_funnel_suppressor": 1.0,
+        "messaging_clarity_score": 0.70,
+        "comprehension_risk": 0.25,
+        "vague_language_density": 0.10,
+        "clarity_funnel_suppressor": 1.0,
     }
 
     LOWER_IS_BETTER: frozenset[str] = frozenset({
@@ -135,6 +139,8 @@ class AccountabilityEngine:
         "platform_risk_score",
         "viability_exposure",
         "viability_risk",
+        "comprehension_risk",
+        "vague_language_density",
     })
 
     FINDING_TEMPLATES: dict[str, str] = {
@@ -315,6 +321,22 @@ class AccountabilityEngine:
             "Cash-runway uncertainty leaves {cluster} at {pct:.0f}% funnel "
             "strength (benchmark {bench:.0f}%)"
         ),
+        "messaging_clarity_score": (
+            "{cluster} understands only {pct:.0f}% of the value proposition "
+            "(benchmark {bench:.0f}%)"
+        ),
+        "comprehension_risk": (
+            "{cluster} faces {pct:.0f}% comprehension risk from unclear "
+            "messaging (benchmark {bench:.0f}%)"
+        ),
+        "vague_language_density": (
+            "{cluster} sees {pct:.0f}% hype language in the pitch "
+            "(benchmark {bench:.0f}%)"
+        ),
+        "clarity_funnel_suppressor": (
+            "Unclear messaging leaves {cluster} at {pct:.0f}% funnel "
+            "strength (benchmark {bench:.0f}%)"
+        ),
     }
 
     RECOMMENDED_ACTIONS: dict[str, str] = {
@@ -453,6 +475,22 @@ class AccountabilityEngine:
         "runway_funnel_suppressor": (
             "Publish concrete funding/revenue/runway evidence and a "
             "12-18 month cash plan"
+        ),
+        "messaging_clarity_score": (
+            "Rewrite the pitch in plain language: one sentence on who it "
+            "is for, what it does, and one quantified outcome"
+        ),
+        "comprehension_risk": (
+            "Test the landing page copy with low-literacy segments and "
+            "simplify jargon"
+        ),
+        "vague_language_density": (
+            "Replace hype words with concrete outcomes, numbers and a "
+            "named audience"
+        ),
+        "clarity_funnel_suppressor": (
+            "Add a plain-language one-liner and concrete proof points "
+            "above the fold"
         ),
     }
 

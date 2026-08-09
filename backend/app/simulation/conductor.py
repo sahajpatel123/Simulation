@@ -302,6 +302,14 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
     ],
 }
 
+# MessagingClarityArchitect is universal: every product type needs a
+# comprehensible value proposition. Evaluate it early (right after the
+# market-timing pair) so downstream architects see the clarity signals and
+# the BROWSE→CONSIDER override reflects comprehension, not price/trust.
+for _stack in ARCHITECT_STACKS.values():
+    if "MessagingClarityArchitect" not in _stack:
+        _stack.insert(2, "MessagingClarityArchitect")
+
 # Inter-architect dependency map
 # key = architect that needs input, value = {param_name: (source_architect, metric_key)}
 DEPENDENCY_MAP: dict[str, dict[str, tuple[str, str]]] = {
@@ -480,6 +488,9 @@ def _build_architect_registry() -> dict[str, Any]:
     from app.simulation.architects.marketplace_liquidity import (
         MarketplaceLiquidityArchitect,
     )
+    from app.simulation.architects.messaging_clarity import (
+        MessagingClarityArchitect,
+    )
     from app.simulation.architects.onboarding import OnboardingArchitect
     from app.simulation.architects.payment_friction import PaymentFrictionArchitect
     from app.simulation.architects.performance_threshold import PerformanceThresholdArchitect
@@ -519,6 +530,7 @@ def _build_architect_registry() -> dict[str, Any]:
         "ViralityArchitect":               ViralityArchitect(),
         "MacroeconomicArchitect":          MacroeconomicArchitect(),
         "DemographicInteractionArchitect": DemographicInteractionArchitect(),
+        "MessagingClarityArchitect":       MessagingClarityArchitect(),
         "AssumptionCascadeArchitect":      AssumptionCascadeArchitect(),
         "PurchaseDecisionArchitect":       PurchaseDecisionArchitect(),
         "PhysicalSensoryArchitect":        PhysicalSensoryArchitect(),

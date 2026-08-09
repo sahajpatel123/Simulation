@@ -146,6 +146,12 @@ SPECIFICITY_RULES: dict[str, dict[float, str]] = {
         0.2: "finance vocabulary only (funding, runway, burn, unit economics)",
         0.0: "no financial viability claim",
     },
+    "MessagingClarityArchitect": {
+        1.0: "quantified outcome AND named audience AND clear category anchor",
+        0.6: "named audience or clear category without a quantified outcome",
+        0.2: "generic value/hype words only (innovative, seamless, solution)",
+        0.0: "no value-proposition claim",
+    },
     "NetworkEffectArchitect": {
         1.0: "specific network effect mechanism with measured or observed data",
         0.6: "network effect described with mechanism but unmeasured",
