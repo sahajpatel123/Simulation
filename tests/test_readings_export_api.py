@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 import types
 
@@ -181,6 +182,53 @@ def test_export_readings_count_counts_normalized_readings() -> None:
 
     body = _body(resp).decode("utf-8")
     assert "12,2" in body
+
+
+def test_export_readings_count_ignores_blank_entries() -> None:
+    class MixedProject(_Project):
+        def __init__(self) -> None:
+            self.id = 14
+            self.readings_json = (
+                '{"readings": [{"label": "WHAT IT IS", "body": "Lean"},'
+                ' {"label": " ", "body": ""}, {"label": "", "body": ""},'
+                ' "junk", {"label": "HIDDEN TENSION", "body": ""}],'
+                ' "ledger": {"deck_line": "Small desk tool"}}'
+            )
+
+    csv_resp = _call_count_route(
+        project_id=14,
+        session=_FakeSession(MixedProject()),
+    )
+    json_resp = _call_count_route(
+        project_id=14,
+        format="json",
+        session=_FakeSession(MixedProject()),
+    )
+
+    csv_body = _body(csv_resp).decode("utf-8")
+    json_body = _body(json_resp).decode("utf-8")
+    assert "14,2" in csv_body
+    assert '"readings_count": 2' in json_body
+
+
+def test_export_readings_format_json_drops_blank_entries() -> None:
+    class MixedProject(_Project):
+        def __init__(self) -> None:
+            self.id = 15
+            self.readings_json = (
+                '[{"label": "WHAT IT IS", "body": "Lean"},'
+                ' {"label": " ", "body": ""}]'
+            )
+
+    resp = _call_route(
+        project_id=15,
+        format="json",
+        session=_FakeSession(MixedProject()),
+    )
+
+    body = _body(resp).decode("utf-8")
+    payload = json.loads(body)
+    assert payload["readings"] == [{"label": "WHAT IT IS", "body": "Lean"}]
 
 
 def test_export_readings_count_tolerates_malformed_json() -> None:

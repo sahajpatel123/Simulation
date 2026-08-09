@@ -6,7 +6,9 @@ row here; this module stays deterministic.
 
 ``readings_json`` may be a bare JSON array (legacy) or an object with
 ``readings`` and ``ledger`` keys. Invalid JSON is tolerated and results
-in an empty readings table rather than a failed export.
+in an empty readings table rather than a failed export. Entries whose
+label and body are both blank after trimming are dropped so counts and
+exported rows never include empty readings.
 """
 from __future__ import annotations
 
@@ -35,7 +37,8 @@ def _parse_readings_json(raw: Any) -> tuple[list[dict[str, str]], dict[str, str]
     Handles the current object shape ``{"readings": [...], "ledger": {...}}``
     and the legacy bare JSON array. Non-dict items and malformed JSON are
     ignored instead of raising, so a corrupted row still exports as an
-    empty table.
+    empty table. Entries whose label and body are both blank after
+    trimming are dropped.
     """
     if raw is None:
         return [], {}
@@ -67,10 +70,14 @@ def _parse_readings_json(raw: Any) -> tuple[list[dict[str, str]], dict[str, str]
             body = item.get("body")
             if not isinstance(label, str) and not isinstance(body, str):
                 continue
+            normalized_label = _text(label).strip()
+            normalized_body = _text(body).strip()
+            if not normalized_label and not normalized_body:
+                continue
             readings.append(
                 {
-                    "label": _text(label).strip(),
-                    "body": _text(body).strip(),
+                    "label": normalized_label,
+                    "body": normalized_body,
                 }
             )
 

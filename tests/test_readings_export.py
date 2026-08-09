@@ -111,6 +111,54 @@ def test_readings_payload_handles_none() -> None:
     assert payload["ledger"] == {}
 
 
+def test_readings_payload_drops_fully_blank_entries() -> None:
+    payload = readings_payload(
+        {
+            "readings": [
+                {"label": "WHAT IT IS", "body": "Lean"},
+                {"label": "   ", "body": ""},
+                {"label": "", "body": "\n"},
+                {"label": "HIDDEN TENSION", "body": ""},
+                {"label": "", "body": "No pricing"},
+                "not-a-dict",
+                {"label": 5, "body": 6},
+            ],
+            "ledger": {"deck_line": "Small desk tool"},
+        }
+    )
+
+    assert payload["readings"] == [
+        {"label": "WHAT IT IS", "body": "Lean"},
+        {"label": "HIDDEN TENSION", "body": ""},
+        {"label": "", "body": "No pricing"},
+    ]
+    assert payload["ledger"] == {"deck_line": "Small desk tool"}
+
+
+def test_readings_payload_drops_blank_entries_from_json_string() -> None:
+    payload = readings_payload(
+        '[{"label": " ", "body": " "}, {"label": "", "body": ""},'
+        ' {"label": "ONLY LABEL", "body": ""}]'
+    )
+
+    assert payload["readings"] == [{"label": "ONLY LABEL", "body": ""}]
+
+
+def test_readings_to_csv_skips_blank_entries() -> None:
+    csv_text = readings_to_csv(
+        {
+            "project_id": 15,
+            "readings_json": [
+                {"label": " ", "body": ""},
+                {"label": "REAL", "body": "Reading"},
+            ],
+        }
+    )
+
+    assert "1,REAL,Reading" in csv_text
+    assert "1,," not in csv_text
+
+
 def test_readings_count_to_csv_contains_header_and_row() -> None:
     csv_text = readings_count_to_csv(
         {"project_id": 10, "readings_count": 2},
