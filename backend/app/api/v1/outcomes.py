@@ -68,6 +68,7 @@ from app.schemas.outcome_tracker import (
     OutcomeTrackerForecastAccuracyOut,
     OutcomeTrackerForecastOut,
     OutcomeTrackerPoint,
+    OutcomeTrackerRevenueForecastAccuracyOut,
     OutcomeTrackerRevenueForecastOut,
     OutcomeTrackerTimelineOut,
 )
@@ -114,6 +115,9 @@ from app.simulation.outcome_tracker_read import (
 )
 from app.simulation.outcome_tracker_revenue_forecast import (
     build_outcome_tracker_revenue_forecast,
+)
+from app.simulation.outcome_tracker_revenue_forecast_accuracy import (
+    build_outcome_tracker_revenue_forecast_accuracy,
 )
 from app.simulation.outcomes_digest_v2 import (
     build_outcomes_digest,
@@ -307,6 +311,26 @@ def _latest_tracker_conversion_target(
     for row in reversed(rows):
         if row.predicted_conversion_rate and row.predicted_conversion_rate > 0.0:
             return float(row.predicted_conversion_rate)
+    return None
+
+
+def _latest_tracker_revenue_target(
+    rows: list[OutcomeTracker],
+    sim: Simulation | None,
+) -> float | None:
+    """Resolve the revenue target shared by the tracker revenue routes.
+
+    Prefers the newest completed simulation's predicted revenue; when no
+    usable simulation exists, falls back to the newest legacy checkpoint's
+    captured prediction (rows arrive in ascending ``recorded_at`` order).
+    """
+    if sim is not None and sim.results_json:
+        raw_pred = _predicted_revenue_from_results(sim.results_json)
+        if raw_pred is not None and raw_pred > 0.0:
+            return float(raw_pred)
+    for row in reversed(rows):
+        if row.predicted_revenue and row.predicted_revenue > 0.0:
+            return float(row.predicted_revenue)
     return None
 
 
@@ -859,17 +883,7 @@ def get_outcome_tracker_revenue_forecast(
         .first()
     )
 
-    predicted: float | None = None
-    if sim is not None and sim.results_json:
-        raw_pred = _predicted_revenue_from_results(sim.results_json)
-        if raw_pred is not None and raw_pred > 0.0:
-            predicted = float(raw_pred)
-    if predicted is None:
-        # Legacy rows carry the prediction captured at checkpoint time —
-        # fall back to the newest one so older projects still get a target.
-        for row in reversed(rows):
-            if row.predicted_revenue and row.predicted_revenue > 0.0:
-                predicted = float(row.predicted_revenue)
+    predicted = _latest_tracker_revenue_target(rows, sim)
 
     payload = build_outcome_tracker_revenue_forecast(
         [r.__dict__ for r in rows],
@@ -877,6 +891,52 @@ def get_outcome_tracker_revenue_forecast(
         predicted_revenue=predicted,
     )
     return OutcomeTrackerRevenueForecastOut(**payload)
+
+
+@router.get(
+    "/{project_id}/outcome-tracker/revenue-forecast-accuracy",
+    response_model=OutcomeTrackerRevenueForecastAccuracyOut,
+    summary="Verify historical revenue-forecast accuracy from tracking checkpoints",
+)
+def get_outcome_tracker_revenue_forecast_accuracy(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> OutcomeTrackerRevenueForecastAccuracyOut:
+    """Measure how reliable the revenue forecast has been over time.
+
+    Rebuilds the 30/60/90-day revenue projection the production builder
+    would have produced at each historical checkpoint and compares it with
+    what actually happened later, so a founder can see whether the revenue
+    trajectory has been accurate, and whether it systematically over- or
+    under-predicts.
+    """
+    get_owned_project(db, current_user.id, project_id)
+
+    rows = (
+        db.query(OutcomeTracker)
+        .filter(OutcomeTracker.project_id == project_id)
+        .order_by(OutcomeTracker.recorded_at.asc())
+        .all()
+    )
+    sim = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc())
+        .first()
+    )
+
+    predicted = _latest_tracker_revenue_target(rows, sim)
+
+    payload = build_outcome_tracker_revenue_forecast_accuracy(
+        [r.__dict__ for r in rows],
+        project_id=project_id,
+        predicted_revenue=predicted,
+    )
+    return OutcomeTrackerRevenueForecastAccuracyOut(**payload)
 
 
 @router.get(
