@@ -88,6 +88,12 @@ class AccountabilityEngine:
         "age_friction": 0.35,
         "accessibility_credibility": 1.0,
         "funnel_suppressor": 1.0,
+        "procurement_friction": 0.30,
+        "security_review_barrier": 0.25,
+        "vendor_list_barrier": 0.20,
+        "procurement_cycle_days": 30.0,
+        "poc_requirement": 0.30,
+        "procurement_credibility": 1.0,
     }
 
     LOWER_IS_BETTER: frozenset[str] = frozenset({
@@ -106,6 +112,11 @@ class AccountabilityEngine:
         "disability_barrier",
         "language_barrier",
         "age_friction",
+        "procurement_friction",
+        "security_review_barrier",
+        "vendor_list_barrier",
+        "procurement_cycle_days",
+        "poc_requirement",
     })
 
     FINDING_TEMPLATES: dict[str, str] = {
@@ -219,6 +230,30 @@ class AccountabilityEngine:
             "Inclusion gaps leave {cluster} at {pct:.0f}% funnel "
             "strength (benchmark {bench:.0f}%)"
         ),
+        "procurement_friction": (
+            "{cluster} procurement friction {val:.2f} "
+            "(benchmark {bench:.2f})"
+        ),
+        "security_review_barrier": (
+            "{cluster} faces security-review barrier {val:.2f} "
+            "(benchmark {bench:.2f})"
+        ),
+        "vendor_list_barrier": (
+            "{cluster} blocked by vendor-list/approval barrier {val:.2f} "
+            "(benchmark {bench:.2f})"
+        ),
+        "procurement_cycle_days": (
+            "{cluster} procurement cycle runs {val:.0f} days "
+            "(benchmark {bench:.0f})"
+        ),
+        "poc_requirement": (
+            "{pct:.0f}% of {cluster} require PoC/pilot before purchase "
+            "(benchmark {bench:.0f}%)"
+        ),
+        "procurement_credibility": (
+            "{cluster} sees weak procurement credibility "
+            "({val:.2f} vs benchmark {bench:.2f})"
+        ),
     }
 
     RECOMMENDED_ACTIONS: dict[str, str] = {
@@ -294,6 +329,25 @@ class AccountabilityEngine:
         ),
         "funnel_suppressor": (
             "Close inclusion gaps (disability, language, age) and publish evidence"
+        ),
+        "procurement_friction": (
+            "Publish SOC 2/security evidence, MSA/DPA templates, and a "
+            "PoC/pilot path"
+        ),
+        "security_review_barrier": (
+            "Publish security review evidence: SOC 2, ISO 27001, pen-test reports"
+        ),
+        "vendor_list_barrier": (
+            "Complete vendor onboarding, MSA/DPA templates, and procurement sign-off"
+        ),
+        "procurement_cycle_days": (
+            "Shorten procurement cycle with self-serve trials and pre-approved contracts"
+        ),
+        "poc_requirement": (
+            "Offer structured PoC/pilot with reference customers to clear evaluation"
+        ),
+        "procurement_credibility": (
+            "Publish procurement evidence: security reports, signed contracts, case studies"
         ),
     }
 

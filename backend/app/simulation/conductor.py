@@ -102,6 +102,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "SupportFrictionArchitect", "ViralityArchitect",
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
         "RegulatoryComplianceArchitect",
+        "EnterpriseProcurementArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.MARKETPLACE: [
@@ -135,6 +136,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "SupportFrictionArchitect", "ViralityArchitect",
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
         "RegulatoryComplianceArchitect",
+        "EnterpriseProcurementArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.ENTERPRISE_SOFTWARE: [
@@ -145,6 +147,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "FeatureAdoptionArchitect", "RetentionArchitect",
         "SupportFrictionArchitect", "MacroeconomicArchitect",
         "DemographicInteractionArchitect", "RegulatoryComplianceArchitect",
+        "EnterpriseProcurementArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.CONSUMER_HARDWARE: [
@@ -208,6 +211,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "SupportFrictionArchitect", "MacroeconomicArchitect",
         "DemographicInteractionArchitect",
         "RegulatoryComplianceArchitect",
+        "EnterpriseProcurementArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.CONSUMER_APP: [
@@ -240,6 +244,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "RetentionArchitect", "SupportFrictionArchitect", "ViralityArchitect",
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
         "RegulatoryComplianceArchitect",
+        "EnterpriseProcurementArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.PRODUCTIVITY_TOOL: [
@@ -251,6 +256,7 @@ ARCHITECT_STACKS: dict[ProductType, list[str]] = {
         "SupportFrictionArchitect", "ViralityArchitect",
         "MacroeconomicArchitect", "DemographicInteractionArchitect",
         "RegulatoryComplianceArchitect",
+        "EnterpriseProcurementArchitect",
         "AssumptionCascadeArchitect",
     ],
     ProductType.SMART_HOME: [
@@ -307,6 +313,10 @@ DEPENDENCY_MAP: dict[str, dict[str, tuple[str, str]]] = {
     },
     "EcosystemCompatibilityArchitect": {
         "brand_deficit_multiplier": ("TrustArchitect", "brand_deficit_multiplier"),
+    },
+    "EnterpriseProcurementArchitect": {
+        "brand_deficit_multiplier":    ("TrustArchitect", "brand_deficit_multiplier"),
+        "problem_urgency_intensity": ("MarketTimingArchitect", "problem_urgency_intensity"),
     },
     "HealthSafetyHardwareArchitect": {
         "day30_survival": ("RetentionArchitect", "day30_survival"),
@@ -430,6 +440,7 @@ def _build_architect_registry() -> dict[str, Any]:
     from app.simulation.architects.demographic_interaction import DemographicInteractionArchitect
     from app.simulation.architects.distribution_channel import DistributionChannelArchitect
     from app.simulation.architects.ecosystem_compatibility import EcosystemCompatibilityArchitect
+    from app.simulation.architects.enterprise_procurement import EnterpriseProcurementArchitect
     from app.simulation.architects.feature_adoption import FeatureAdoptionArchitect
     from app.simulation.architects.health_safety_hardware import HealthSafetyHardwareArchitect
     from app.simulation.architects.macroeconomic import MacroeconomicArchitect
@@ -476,6 +487,7 @@ def _build_architect_registry() -> dict[str, Any]:
         "PerformanceThresholdArchitect":   PerformanceThresholdArchitect(),
         "SetupFirstUseArchitect":          SetupFirstUseArchitect(),
         "EcosystemCompatibilityArchitect": EcosystemCompatibilityArchitect(),
+        "EnterpriseProcurementArchitect":  EnterpriseProcurementArchitect(),
         "DistributionChannelArchitect":    DistributionChannelArchitect(),
         "AftersalesLifecycleArchitect":    AftersalesLifecycleArchitect(),
         "HealthSafetyHardwareArchitect":   HealthSafetyHardwareArchitect(),
