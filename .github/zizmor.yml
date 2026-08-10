@@ -1,0 +1,7 @@
+rules:
+  # We deliberately pin first-party actions to full version tags (e.g. @v7.0.1)
+  # and enforce that in tools/validate_ci.py, rather than requiring commit
+  # hashes. zizmor's default blanket policy wants hash pinning, so disable that
+  # audit here while still catching the other workflow-security classes.
+  unpinned-uses:
+    disable: true

@@ -45,7 +45,7 @@ This repository runs automated security scans:
 - **Dependency Review**: PR-time gate on high-severity dependency changes (`dependency-review.yml`)
 - **Gitleaks**: Git history and working-tree secret scanner (`backend-ci.yml`)
 - **Gitleaks (scheduled)**: Weekly full-history secret scan to catch pre-existing leaks (`secret-scan.yml`)
-- **Actionlint + YAML/TOML validation**: GitHub Actions workflow syntax and security-policy checks; actionlint is downloaded from a pinned release and checksum-verified (`workflow-validation.yml` runs `tools/validate_ci.py`, which can also be run locally)
+- **Actionlint + YAML/TOML validation + zizmor**: GitHub Actions workflow syntax, security-policy, and workflow-security static-analysis checks; actionlint is downloaded from a pinned release and checksum-verified (`workflow-validation.yml` runs `tools/validate_ci.py` plus `zizmor`)
 
 The `workflow-validation.yml` job also enforces that every GitHub Action ref is pinned
 to a full version tag, that every workflow declares least-privilege permissions,
@@ -145,4 +145,8 @@ For security concerns, please contact the project maintainers.
 - 2026-08-09 - Re-pinned `numpy`/`scipy` to a Python 3.11-compatible set and
   raised the backend-ci pytest timeout to 30 minutes after the suite outgrew
   the old 15-minute cap.
+- 2026-08-10 - Added `zizmor` static workflow-security analysis to
+  `workflow-validation.yml`, with `.github/zizmor.yml` disabling only the
+  hash-pinning audit because this repo intentionally pins actions to full
+  version tags and enforces that separately.
 - [VERSION] - Initial security policy

@@ -46,10 +46,11 @@ The repo ships several GitHub Actions workflows in `.github/workflows/`:
 - `security-scan.yml` — Bandit, `pip-audit`, `safety`, `npm audit`, and Trivy (fs + Dockerfile config).
 - `secret-scan.yml` — weekly full-history gitleaks scan (scheduled + manual).
 - `scorecard.yml` — OpenSSF Scorecard supply-chain analysis (SARIF → Code Scanning).
-- `workflow-validation.yml` — actionlint plus `tools/validate_ci.py`, which
-  runs YAML/TOML validation, security-policy, supply-chain pinning,
-  least-privilege permissions, `persist-credentials: false` enforcement, and
-  env-file tracking guard. The same script can be run locally before pushing.
+- `workflow-validation.yml` — actionlint plus `tools/validate_ci.py` (YAML/TOML
+  validation, security-policy, supply-chain pinning, least-privilege
+  permissions, `persist-credentials: false` enforcement, env-file tracking,
+  job-timeout guard) and `zizmor` static workflow-security analysis. The local
+  validator can be run before pushing.
 
 Rules that keep CI green and secure:
 
@@ -66,6 +67,9 @@ Rules that keep CI green and secure:
 - Use `if-no-files-found: error` when uploading scanner/audit reports.
 - Set a positive `timeout-minutes` on every CI job so workflows cannot hang
   indefinitely; `tools/validate_ci.py` enforces this.
+- Workflow changes must pass `zizmor` (configured in `.github/zizmor.yml`);
+  tag-pinning is intentional and enforced separately, so zizmor focuses on the
+  other workflow-security classes.
 
 Local security scans:
 

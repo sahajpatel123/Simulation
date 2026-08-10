@@ -34,7 +34,6 @@ jobs:
           persist-credentials: false
 
       - name: Install actionlint
-        id: get_actionlint
         run: |
           set -euo pipefail
           expected_sha256="3e6e0a832dfa0b5f027e6b8956aad2632d69b7cb778b1cff847b40279950a856"
@@ -44,11 +43,10 @@ jobs:
           echo "${expected_sha256}  actionlint.tar.gz" | sha256sum -c -
           tar -xzf actionlint.tar.gz actionlint
           ./actionlint -version
-          echo "executable=$PWD/actionlint" >> "$GITHUB_OUTPUT"
 
       - name: Validate workflows
         run: |
-          "${{ steps.get_actionlint.outputs.executable }}" -verbose
+          ./actionlint -verbose
           echo "✅ All workflows are valid"
 
   validate-ci-hygiene:
@@ -72,3 +70,24 @@ jobs:
       - name: Run CI hygiene checks
         run: |
           python tools/validate_ci.py
+
+  validate-zizmor:
+    name: Validate workflows with zizmor
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.11"
+
+      - name: Install zizmor
+        run: pip install --quiet zizmor==1.28.0
+
+      - name: Run zizmor
+        run: zizmor --config .github/zizmor.yml .github/workflows
