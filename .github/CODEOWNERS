@@ -31,6 +31,7 @@ migrate_and_start.py             @sahajpatel123
 SECURITY.md                      @sahajpatel123
 SECURITY_AUDIT.md              @sahajpatel123
 .github/gitleaks.toml            @sahajpatel123
+.github/zizmor.yml               @sahajpatel123
 .github/SECURITY_ADVISORIES.yml  @sahajpatel123
 .github/ISSUE_TEMPLATE/security_report.md @sahajpatel123
 .github/workflows/codeql.yml     @sahajpatel123
@@ -39,6 +40,8 @@ SECURITY_AUDIT.md              @sahajpatel123
 .github/workflows/security-scan.yml       @sahajpatel123
 .github/workflows/secret-scan.yml         @sahajpatel123
 .github/workflows/workflow-validation.yml @sahajpatel123
+tools/validate_ci.py             @sahajpatel123
+.pre-commit-config.yaml          @sahajpatel123
 
 # Special cases
 /backend/app/api/v1/projects.py @sahajpatel123

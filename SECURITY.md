@@ -156,4 +156,7 @@ For security concerns, please contact the project maintainers.
   capability without a CI failure.
 - 2026-08-10 - Extended `tools/validate_ci.py` to verify `.github/zizmor.yml`
   keeps hash-pinning disabled, matching the repo's full-version-tag policy.
+- 2026-08-10 - Added `.github/zizmor.yml`, `tools/validate_ci.py`, and
+  `.pre-commit-config.yaml` to CODEOWNERS so security/CI config files have
+  explicit maintainer ownership.
 - [VERSION] - Initial security policy
