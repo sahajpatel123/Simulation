@@ -6,10 +6,18 @@ import io
 from typing import Any
 
 
+def _safe_csv_cell(value: str) -> str:
+    """Neutralise spreadsheet formula injection while leaving normal text intact."""
+    stripped = value.lstrip()
+    if stripped[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return f"'{value}"
+    return value
+
+
 def _text(value: Any) -> str:
     if value is None:
         return ""
-    return str(value)
+    return str(_safe_csv_cell(str(value)))
 
 
 def landing_url_to_csv(

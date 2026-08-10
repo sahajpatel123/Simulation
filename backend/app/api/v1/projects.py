@@ -164,7 +164,7 @@ from app.simulation.coverage_gaps_export import (
 )
 from app.simulation.created_at_export import created_at_to_csv
 from app.simulation.decisions_export import decision_count_to_csv
-from app.simulation.description_export import description_to_csv
+from app.simulation.description_export import description_count_to_csv, description_to_csv
 from app.simulation.dossier_axis_export import dossier_axis_to_csv
 from app.simulation.duplicate_title import find_duplicate_titles
 from app.simulation.environment_export import environment_to_csv
@@ -4242,6 +4242,73 @@ def export_description(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="description-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/description-count/export",
+    summary="Export a project's description count as CSV or JSON",
+    response_class=StreamingResponse,
+)
+def export_description_count(
+    project_id: int,
+    format: Literal["csv", "json"] = Query(
+        default="csv",
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "description-count row."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Export a project's description presence as CSV (default) or JSON."""
+    project = get_owned_project(db, current_user.id, project_id)
+    description = getattr(project, "description", None)
+    count = 1 if isinstance(description, str) and description.strip() else 0
+    row = {"project_id": project_id, "description_count": count}
+
+    if format == "json":
+        json_text = json.dumps(
+            {
+                "generated_at": datetime.now(UTC).isoformat(),
+                "project_id": project_id,
+                "description_count": count,
+            },
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="description-count-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = description_count_to_csv(
+        row,
+        metadata={
+            "generated_at": datetime.now(UTC).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="description-count-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },

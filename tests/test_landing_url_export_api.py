@@ -91,6 +91,15 @@ def test_export_landing_url_format_json_returns_payload() -> None:
     assert '"landing_page_url": "https://example.com"' in body
 
 
+def test_export_landing_url_csv_neutralizes_formula_injection() -> None:
+    project = _Project()
+    project.landing_page_url = '=HYPERLINK("http://evil.example")'
+    resp = _call_route(session=_FakeSession(project))
+
+    body = _body(resp).decode("utf-8")
+    assert "'=HYPERLINK" in body
+
+
 def test_export_landing_url_missing_project_raises_404() -> None:
     class NoProjectSession(_FakeSession):
         def query(self, model, *args, **kwargs):
