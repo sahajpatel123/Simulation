@@ -1,7 +1,10 @@
 """Tests for the pure activity-feed export helper."""
 from __future__ import annotations
 
-from app.simulation.activity_feed_export import activity_feed_to_csv
+from app.simulation.activity_feed_export import (
+    activity_feed_count_to_csv,
+    activity_feed_to_csv,
+)
 
 
 def test_activity_feed_to_csv_contains_header_and_rows() -> None:
@@ -34,6 +37,22 @@ def test_activity_feed_to_csv_contains_header_and_rows() -> None:
     assert "type,occurred_at,ref_id,title,summary,severity" in csv_text
     assert "sim_completed,2026-01-02T00:00:00Z,7" in csv_text
     assert "outcome_submitted,2026-01-03T00:00:00Z,9" in csv_text
+    assert "project_id,10" in csv_text
+    assert "user_id,42" in csv_text
+
+
+def test_activity_feed_count_to_csv_contains_header_and_row() -> None:
+    csv_text = activity_feed_count_to_csv(
+        {"project_id": 10, "activity_feed_count": 4},
+        metadata={
+            "generated_at": "now",
+            "project_id": 10,
+            "user_id": 42,
+        },
+    )
+
+    assert "project_id,activity_feed_count" in csv_text
+    assert "10,4" in csv_text
     assert "project_id,10" in csv_text
     assert "user_id,42" in csv_text
 
