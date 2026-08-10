@@ -113,6 +113,7 @@ from app.schemas.project_comparison import (
 )
 from app.schemas.prototype import FunnelEdge, FunnelGraph, FunnelNode, PrototypeOut
 from app.schemas.reweighting import ReweightingPreviewOut
+from app.schemas.risk_register import RiskRegisterOut
 from app.schemas.simulation_evolution import SimulationEvolutionOut
 from app.schemas.simulation_quality import ProjectSimulationQualityOut
 from app.schemas.simulation_trend import SimulationTrendOut
@@ -178,6 +179,7 @@ from app.simulation.existing_product_export import (
     existing_product_count_to_csv,
     existing_product_to_csv,
 )
+from app.simulation.findings_export import extract_findings
 from app.simulation.go_no_go import build_go_no_go
 from app.simulation.intake_mode_export import intake_mode_to_csv
 from app.simulation.intervention_digest import (
@@ -234,6 +236,7 @@ from app.simulation.recommendations_export import (
 from app.simulation.reweighting_preview import (
     summarise_rule_bundle as _summarise_rule_bundle,
 )
+from app.simulation.risk_register import build_risk_register
 from app.simulation.scored_assumption import score_assumptions, signal_quality_tier
 from app.simulation.similar_projects import find_similar_projects
 from app.simulation.simulation_evolution import build_simulation_evolution
@@ -7278,6 +7281,56 @@ def get_recommendations_digest(
         ttl_seconds=_RECOMMENDATIONS_DIGEST_CACHE_TTL_S,
     )
     return RecommendationsDigestOut(**payload)
+
+
+@router.get(
+    "/{project_id}/risk-register",
+    response_model=RiskRegisterOut,
+    summary=(
+        "Per-project risk register - ranked consolidation of premortem "
+        "failure modes, stress-test kill shots, competitive threats and "
+        "simulation findings"
+    ),
+    # Read-only composition of already-persisted analysis JSON.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_project_risk_register(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RiskRegisterOut:
+    """Return the project's consolidated, ranked risk register.
+
+    Merges every deterministic risk source already persisted for the
+    project - premortem failure modes, assumption stress-test rows,
+    competitive threats, and the latest simulation's domain findings -
+    into a single score-normalized list with severities, probabilities,
+    impacts and mitigations.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+
+    latest_sim = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc(), Simulation.id.desc())
+        .first()
+    )
+    findings = (
+        extract_findings(latest_sim.results_json)
+        if latest_sim is not None
+        else []
+    )
+    payload = build_risk_register(
+        project_id=project_id,
+        premortem_data=getattr(project, "premortem_json", None),
+        stress_test_data=getattr(project, "stress_test_json", None),
+        competitive_data=getattr(project, "competitive_json", None),
+        findings=findings,
+    )
+    return RiskRegisterOut(**payload)
 
 
 @router.get(
