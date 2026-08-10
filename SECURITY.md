@@ -159,4 +159,7 @@ For security concerns, please contact the project maintainers.
 - 2026-08-10 - Added `.github/zizmor.yml`, `tools/validate_ci.py`, and
   `.pre-commit-config.yaml` to CODEOWNERS so security/CI config files have
   explicit maintainer ownership.
+- 2026-08-10 - Added Dependabot ignores for `numpy>=2.5` and `scipy>=1.18`,
+  which require Python 3.12, so dependency updates can't silently break the
+  project's Python 3.11 dependency resolution again.
 - [VERSION] - Initial security policy

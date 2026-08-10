@@ -35,6 +35,13 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "sqlalchemy"
         update-types: ["version-update:semver-major"]
+      # numpy>=2.5 and scipy>=1.18 require Python 3.12, but this repo's CI
+      # and runtime target Python 3.11. Keep them out of Dependabot proposals
+      # so dependency updates don't break dependency resolution again.
+      - dependency-name: "numpy"
+        versions: [">=2.5.0"]
+      - dependency-name: "scipy"
+        versions: [">=1.18.0"]
 
   # GitHub Actions dependencies
   - package-ecosystem: "github-actions"
