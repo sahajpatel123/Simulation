@@ -55,6 +55,7 @@ from app.models.outcome_tracker import OutcomeTracker
 from app.models.project import Project
 from app.models.simulation import Simulation
 from app.models.user import User
+from app.schemas.failure_attribution import FailureAttributionOut
 from app.schemas.funnel_calibration import FunnelCalibrationDigestOut
 from app.schemas.outcome import (
     OutcomeBatchCreate,
@@ -89,6 +90,16 @@ from app.simulation.architect_leaderboard import (
 )
 from app.simulation.calibration_health import (
     build_calibration_health,
+)
+from app.simulation.failure_attribution import (
+    build_failure_attribution,
+)
+from app.simulation.failure_attribution_export import (
+    FORMAT_VERSION as FAILURE_ATTRIBUTION_FORMAT_VERSION,
+)
+from app.simulation.failure_attribution_export import (
+    failure_attribution_to_csv,
+    failure_attribution_to_json,
 )
 from app.simulation.founder_outcomes_export import (
     predicted_conversion_from_results,
@@ -150,6 +161,45 @@ def _json_default(value: Any) -> str:
     if hasattr(value, "isoformat"):
         return value.isoformat()
     return str(value)
+
+
+def _load_failure_attribution_rows(
+    db: Session,
+    project_id: int,
+) -> list[dict[str, Any]]:
+    """Load a project's founder outcomes for the failure-attribution digest.
+
+    Left-joins the owning simulation so the builder can extract the
+    predicted conversion even when the outcome predates the learning-layer
+    ``signal_quality_at_run`` column or the simulation is later deleted.
+    """
+    rows_raw = db.execute(
+        text(
+            """
+            SELECT
+                fo.id,
+                fo.simulation_id,
+                fo.project_id,
+                fo.days_since_launch,
+                fo.actual_conversion_rate,
+                fo.primary_failure_reason,
+                fo.product_changed_since_sim,
+                fo.pricing_changed,
+                fo.target_market_changed,
+                fo.data_confidence,
+                COALESCE(fo.signal_quality_at_run, s.signal_quality)
+                    AS signal_quality_at_run,
+                fo.learning_weight,
+                s.results_json
+            FROM founder_outcomes fo
+            LEFT JOIN simulations s ON s.id = fo.simulation_id
+            WHERE fo.project_id = :pid
+            ORDER BY fo.created_at DESC, fo.id DESC
+            """
+        ),
+        {"pid": project_id},
+    ).mappings().all()
+    return [dict(row) for row in rows_raw]
 
 
 # Outcomes digest cache — single source of truth so
@@ -2567,6 +2617,113 @@ def get_funnel_calibration_digest(
         ttl_seconds=120,
     )
     return FunnelCalibrationDigestOut(**payload)
+
+
+@router.get(
+    "/{project_id}/failure-attribution",
+    response_model=FailureAttributionOut,
+    summary=(
+        "Group a project's recorded outcomes by the founder-reported "
+        "primary failure reason"
+    ),
+    # Read-only aggregate over the calibration learning layer; bounded.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_failure_attribution(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FailureAttributionOut:
+    """Post-launch failure-attribution digest for one project.
+
+    Groups ``founder_outcomes`` rows by ``primary_failure_reason`` and
+    pairs each reason with the simulation's prediction error (in
+    percentage points), data-confidence mix, and change flags. This is
+    the first surface that turns the self-reported failure reason from a
+    stored string into a founder-readable insight.
+    """
+    get_owned_project(db, current_user.id, project_id)
+    rows = _load_failure_attribution_rows(db, project_id)
+    payload = build_failure_attribution(rows, project_id=project_id)
+    return FailureAttributionOut(**payload)
+
+
+@router.get(
+    "/{project_id}/failure-attribution/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export a project's failure-attribution digest as CSV "
+        "(or JSON with ?format=json)"
+    ),
+    # Same DB read cost as the JSON digest; cap polling so a dashboard
+    # loop can't drive repeated scans of the learning layer.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_failure_attribution(
+    project_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "digest payload. Unsupported values return a 400 response."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Download a project's failure-attribution digest.
+
+    Delegates to the same builder as the JSON endpoint so the exported
+    numbers can never disagree with what the API returns.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; expected 'csv' or "
+                "'json'"
+            ),
+        )
+
+    get_owned_project(db, current_user.id, project_id)
+    rows = _load_failure_attribution_rows(db, project_id)
+    payload = build_failure_attribution(rows, project_id=project_id)
+    metadata = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "user_id": current_user.id,
+        "project_id": project_id,
+        "format_version": FAILURE_ATTRIBUTION_FORMAT_VERSION,
+    }
+
+    if fmt == "json":
+        body = failure_attribution_to_json(payload, metadata=metadata).encode(
+            "utf-8"
+        )
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="failure-attribution.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    body = failure_attribution_to_csv(payload, metadata=metadata).encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="failure-attribution.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
 
 
 @router.get(
