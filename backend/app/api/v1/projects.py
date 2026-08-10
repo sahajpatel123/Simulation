@@ -114,6 +114,7 @@ from app.schemas.project_comparison import (
 from app.schemas.prototype import FunnelEdge, FunnelGraph, FunnelNode, PrototypeOut
 from app.schemas.reweighting import ReweightingPreviewOut
 from app.schemas.simulation_evolution import SimulationEvolutionOut
+from app.schemas.simulation_quality import ProjectSimulationQualityOut
 from app.schemas.simulation_trend import SimulationTrendOut
 from app.schemas.stress_test import (
     AssumptionStressResult,
@@ -240,6 +241,7 @@ from app.simulation.simulation_history import (
     build_simulation_history as _build_simulation_history,
 )
 from app.simulation.simulation_quality import build_simulation_quality
+from app.simulation.simulation_quality_summary import build_project_simulation_quality
 from app.simulation.simulation_run_projection import fetch_projected_run_rows
 from app.simulation.simulation_trend import (
     build_simulation_trend as _build_simulation_trend,
@@ -6848,6 +6850,52 @@ def get_convergence_check(
         ttl_seconds=_CONVERGENCE_CHECK_CACHE_TTL_S,
     )
     return ConvergenceCheckOut(**payload)
+
+
+@router.get(
+    "/{project_id}/simulation-quality",
+    response_model=ProjectSimulationQualityOut,
+    summary=(
+        "Per-project simulation quality digest — trust scores across "
+        "the project's simulation history"
+    ),
+    # Read-only aggregation; bounded.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60))],
+)
+def get_project_simulation_quality(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProjectSimulationQualityOut:
+    """Per-project simulation quality digest.
+
+    Runs the deterministic per-run quality gate over every completed
+    simulation in the project and rolls the results into a single view:
+    PASS / REVIEW / FAIL counts, mean / min / max trust scores, an overall
+    verdict, and one quality row per run. Pending / failed runs are listed
+    without a trust score so the digest reflects the full history instead
+    of silently hiding non-completed work.
+    """
+    get_owned_project(db, current_user.id, project_id)
+
+    rows = (
+        db.query(
+            Simulation.id,
+            Simulation.status,
+            Simulation.created_at,
+            Simulation.signal_quality,
+            Simulation.results_json,
+        )
+        .filter(Simulation.project_id == project_id)
+        .order_by(Simulation.created_at.desc())
+        .all()
+    )
+    payload = build_project_simulation_quality(
+        [dict(r) for r in rows],
+        project_id=project_id,
+        generated_at=datetime.now(UTC).isoformat(),
+    )
+    return ProjectSimulationQualityOut(**payload)
 
 
 @router.get(
