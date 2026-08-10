@@ -155,6 +155,33 @@ class OutcomeBatchOut(BaseModel):
     outcomes: list[OutcomeRecord] = Field(default_factory=list)
 
 
+class OutcomeCsvRowError(BaseModel):
+    """One rejected row from a CSV outcome import.
+
+    ``row`` is the 1-based spreadsheet row (header = row 1, first data
+    row = row 2). ``column`` is the offending column name when the problem
+    is cell-level, otherwise ``None`` (e.g. too many columns, row cap).
+    """
+
+    row: int = Field(..., ge=1)
+    column: str | None = None
+    error: str = ""
+
+
+class OutcomeCsvImportOut(OutcomeBatchOut):
+    """Response from ``POST /projects/{id}/outcomes/batch/csv``.
+
+    Extends the JSON batch response with CSV-specific accounting so the
+    client can show "N rows scanned, M rejected" without re-counting the
+    outcome list. ``errors`` is populated only when the import is rejected;
+    successful imports return an empty list.
+    """
+
+    rows_scanned: int = Field(..., ge=0)
+    rows_rejected: int = Field(..., ge=0)
+    errors: list[OutcomeCsvRowError] = Field(default_factory=list)
+
+
 class VarianceReport(BaseModel):
     conversion: float | None
     mrr: float | None

@@ -6,8 +6,9 @@ import math
 from datetime import UTC, date, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
+from pydantic import ValidationError
 from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -60,6 +61,7 @@ from app.schemas.outcome import (
     OutcomeBatchItem,
     OutcomeBatchOut,
     OutcomeCreate,
+    OutcomeCsvImportOut,
     OutcomeDigestOut,
     OutcomeFeedbackRequest,
     OutcomeHistoryOut,
@@ -129,6 +131,7 @@ from app.simulation.outcome_tracker_revenue_forecast import (
 from app.simulation.outcome_tracker_revenue_forecast_accuracy import (
     build_outcome_tracker_revenue_forecast_accuracy,
 )
+from app.simulation.outcomes_csv_import import parse_outcomes_csv
 from app.simulation.outcomes_digest_v2 import (
     build_outcomes_digest,
 )
@@ -156,6 +159,10 @@ _OUTCOMES_DIGEST_CACHE_NAMESPACE: str = "project-outcomes-digest"
 _FUNNEL_CALIBRATION_CACHE_NAMESPACE: str = "project-funnel-calibration"
 
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
+
+# Max accepted CSV upload size (1 MiB). 100 outcome rows fit comfortably in
+# a fraction of this; the cap exists to keep the multipart body bounded.
+MAX_CSV_BYTES: int = 1_048_576
 
 PENALTY_RATES = {
     "conversion": 1.8,
@@ -501,6 +508,34 @@ def _batch_replay_response(
         replayed_count=len(replayed),
         outcomes=[_hydrate_record(outcome) for outcome in replayed],
     )
+
+
+def _csv_validation_errors(exc: ValidationError) -> list[dict[str, Any]]:
+    """Map a Pydantic batch-validation failure onto CSV row numbers.
+
+    ``OutcomeBatchCreate`` reports errors with ``loc`` tuples like
+    ``("outcomes", 0, "actual_conversion_rate")``; the integer segment is
+    the batch index, which corresponds to CSV data row ``2 + index``
+    because the header is row 1.
+    """
+    rows: list[dict[str, Any]] = []
+    for err in exc.errors():
+        loc = err.get("loc") or ()
+        row = 2
+        column: str | None = None
+        for part in loc:
+            if isinstance(part, int) and part >= 0:
+                row = 2 + part
+            elif isinstance(part, str):
+                column = part
+        rows.append(
+            {
+                "row": row,
+                "column": column,
+                "error": err.get("msg", "invalid value"),
+            }
+        )
+    return rows
 
 
 def _latest_tracker_conversion_target(
@@ -1846,6 +1881,99 @@ def record_outcomes_batch(
         created_count=len(rows),
         replayed_count=len(replayed),
         outcomes=outcome_records,
+    )
+
+
+@router.post(
+    "/{project_id}/outcomes/batch/csv",
+    response_model=OutcomeCsvImportOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Backfill launch outcomes from a CSV file",
+    # DB write — same per-actor cap as the JSON batch route.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def import_outcomes_csv(
+    project_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> OutcomeCsvImportOut:
+    """All-or-nothing CSV backfill of structured launch outcomes.
+
+    The CSV uses the same columns as the JSON batch endpoint: the four
+    required actual metrics plus optional ``days_since_launch``,
+    ``actual_dau``, ``actual_nps``, ``notes``, ``client_request_id`` and
+    ``simulation_id``. Rate columns accept spreadsheet percentages
+    (``5%`` -> ``0.05``); read-only export columns are rejected with a
+    clear error instead of being silently ignored.
+
+    The file is validated row-by-row first; any problem rejects the whole
+    import with a 422 and per-row errors, so a partially-fixed spreadsheet
+    can never silently half-write. Clean rows are handed to the exact same
+    batch recorder as ``POST /projects/{id}/outcomes/batch``, so
+    idempotency keys, simulation binding, and cache invalidation behave
+    identically.
+    """
+    get_owned_project(db, current_user.id, project_id)
+
+    raw = file.file.read(MAX_CSV_BYTES + 1)
+    if len(raw) > MAX_CSV_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail="CSV file exceeds 1 MiB — split the file into smaller batches",
+        )
+    try:
+        text_payload = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail="CSV file must be UTF-8 encoded",
+        )
+
+    parsed = parse_outcomes_csv(text_payload)
+    rejected_rows = len({error.row for error in parsed.errors})
+    if parsed.errors:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "rows_scanned": parsed.data_row_count,
+                "rows_rejected": rejected_rows,
+                "errors": [
+                    {"row": error.row, "column": error.column, "error": error.error}
+                    for error in parsed.errors
+                ],
+            },
+        )
+
+    try:
+        payload = OutcomeBatchCreate(
+            outcomes=[OutcomeBatchItem(**row) for row in parsed.items]
+        )
+    except ValidationError as exc:
+        errors = _csv_validation_errors(exc)
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "rows_scanned": parsed.data_row_count,
+                "rows_rejected": len({error["row"] for error in errors}),
+                "errors": errors,
+            },
+        )
+
+    batch = record_outcomes_batch(
+        project_id=project_id,
+        payload=payload,
+        db=db,
+        current_user=current_user,
+    )
+    return OutcomeCsvImportOut(
+        project_id=batch.project_id,
+        created_count=batch.created_count,
+        replayed_count=batch.replayed_count,
+        outcomes=batch.outcomes,
+        rows_scanned=parsed.data_row_count,
+        rows_rejected=0,
+        errors=[],
     )
 
 
