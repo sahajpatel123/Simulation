@@ -165,4 +165,6 @@ For security concerns, please contact the project maintainers.
 - 2026-08-10 - Extended `tools/validate_ci.py` to require every
   `upload-artifact` step to set `if-no-files-found: error`, preventing silent
   scanner report gaps.
+- 2026-08-10 - Added a `zizmor` pre-commit hook so workflow-security analysis
+  runs locally before commit, alongside the CI hygiene validator.
 - [VERSION] - Initial security policy

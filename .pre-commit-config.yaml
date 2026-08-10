@@ -71,3 +71,11 @@ repos:
         language: system
         pass_filenames: false
         files: ^\.github/workflows/|^\.github/zizmor\.yml$|^tools/validate_ci\.py$|^SECURITY\.md$|^AGENTS\.md$
+
+      - id: zizmor
+        name: zizmor workflow security
+        entry: zizmor --config .github/zizmor.yml .github/workflows
+        language: python
+        additional_dependencies: [zizmor==1.28.0]
+        pass_filenames: false
+        files: ^\.github/workflows/|^\.github/zizmor\.yml$
