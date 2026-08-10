@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import asdict
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,8 +16,11 @@ from app.core.rate_limiter import rate_limit
 from app.models.project import Project
 from app.models.simulation import Simulation
 from app.models.user import User
+from app.schemas.cluster_calibration_evidence import ClusterCalibrationDigestOut
 from app.simulation.calibration import CalibrationEngine as PlatformCalibrationEngine
 from app.simulation.calibration_engine import CalibrationEngine as LayerCalibrationEngine
+from app.simulation.cluster_calibration_evidence import build_cluster_calibration_digest
+from app.simulation.clusters.registry import ClusterRegistry
 
 logger = logging.getLogger(__name__)
 from app.schemas.outcome import FounderOutcomeSubmit
@@ -64,6 +68,19 @@ def _cluster_param_table() -> str:
     # param can't silently turn this into an injection
     # vector.
     return "cluster_parameters"
+
+
+def _cluster_evidence_tables_ready(db: Session) -> bool:
+    """True when every table the cluster-evidence digest reads exists."""
+    return all(
+        _table_exists(db, name)
+        for name in (
+            "cluster_run_summaries",
+            "founder_outcomes",
+            "cluster_trait_calibration_state",
+            "cluster_parameters",
+        )
+    )
 
 
 # ── existing platform endpoints ──
@@ -531,3 +548,83 @@ def admin_calibration_status(
         "quarantine_queue": quarantine_queue,
         "quarantine_count": len(quarantine_queue),
     }
+
+
+@router.get(
+    "/cluster-evidence",
+    summary="Admin-only per-cluster calibration evidence digest",
+    responses=_JSON_200,
+    response_model=ClusterCalibrationDigestOut,
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
+)
+def get_cluster_calibration_evidence(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Return which consumer clusters carry real-world calibration evidence.
+
+    Layer 5 (cluster-trait calibration) only moves a cluster's traits once
+    its validated, learning-weighted founder outcomes reach the effective
+    sample gate. This digest makes that state visible per cluster:
+
+      * validated-outcome count and summed learning weight,
+      * how many outcomes Layer 5 has already consumed (watermark) vs
+        still pending,
+      * which traits have been calibrated and how many updates happened,
+      * a status tier: ``CALIBRATED`` (gate met), ``UNDER_EVIDENCED``
+        (some evidence, below gate), or ``NO_EVIDENCE``.
+
+    Clusters with no rows in the underlying tables still appear as
+    ``NO_EVIDENCE`` so the digest always covers the full 52-cluster
+    registry. Admin-only: the payload exposes internal learning-loop state.
+    """
+    _require_admin(current_user)
+
+    if not _cluster_evidence_tables_ready(db):
+        return build_cluster_calibration_digest(
+            clusters=ClusterRegistry().all_clusters(),
+            generated_at=datetime.now(UTC).isoformat(),
+        )
+
+    evidence_rows = db.execute(
+        text(
+            """
+            SELECT crs.cluster_id AS cluster_id,
+                   COUNT(DISTINCT fo.id)::int AS validated_outcomes,
+                   COALESCE(SUM(fo.learning_weight), 0.0)::float AS learning_weight,
+                   COUNT(DISTINCT fo.id) FILTER (
+                       WHERE fo.id <= COALESCE(st.last_processed_outcome_id, 0)
+                   )::int AS consumed_outcomes,
+                   COUNT(DISTINCT fo.id) FILTER (
+                       WHERE fo.id > COALESCE(st.last_processed_outcome_id, 0)
+                   )::int AS pending_outcomes,
+                   MAX(fo.id) FILTER (
+                       WHERE fo.id <= COALESCE(st.last_processed_outcome_id, 0)
+                   )::int AS last_processed_outcome_id
+            FROM cluster_run_summaries crs
+            JOIN founder_outcomes fo ON fo.simulation_id = crs.simulation_id
+            LEFT JOIN cluster_trait_calibration_state st
+                   ON st.cluster_id = crs.cluster_id
+            WHERE fo.validated = true AND fo.learning_weight > 0
+            GROUP BY crs.cluster_id
+            """
+        )
+    ).fetchall()
+
+    trait_rows = db.execute(
+        text(
+            """
+            SELECT cluster_id, trait_name, calibration_count
+            FROM cluster_parameters
+            WHERE calibration_count > 0
+            ORDER BY cluster_id, trait_name
+            """
+        )
+    ).fetchall()
+
+    return build_cluster_calibration_digest(
+        evidence_rows=[dict(r._mapping) for r in evidence_rows],
+        trait_rows=[dict(r._mapping) for r in trait_rows],
+        clusters=ClusterRegistry().all_clusters(),
+        generated_at=datetime.now(UTC).isoformat(),
+    )
