@@ -27,6 +27,11 @@ import threading
 import time
 from typing import Iterable
 
+# Histogram name for successful LLM call latency. Shared with the LLM
+# health digest (``app.core.llm_health``) so the recorded metric and the
+# digest read the same key.
+LLM_DURATION_HISTOGRAM: str = "thecee_llm_duration_seconds"
+
 
 class _Metrics:
     """Thread-safe in-process metrics store.
@@ -151,6 +156,28 @@ class _Metrics:
         self.inc_counter(
             "thecee_llm_failures_total",
             {"model": model, "task": task, "reason": reason},
+        )
+
+    def claude_call_duration(
+        self,
+        model: str,
+        task: str,
+        duration_seconds: float,
+    ) -> None:
+        """Observe one successful LLM call's latency.
+
+        Failures are deliberately excluded — timeouts would otherwise skew
+        the digest's latency percentiles to the timeout ceiling. Use the
+        failure counters for outage detection instead.
+        """
+        try:
+            duration = float(duration_seconds)
+        except (TypeError, ValueError):
+            duration = 0.0
+        self.observe(
+            LLM_DURATION_HISTOGRAM,
+            max(0.0, duration),
+            labels={"model": model, "task": task},
         )
 
     def http_request(

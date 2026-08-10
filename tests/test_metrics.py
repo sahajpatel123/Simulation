@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.core.metrics import metrics
+from app.core.metrics import LLM_DURATION_HISTOGRAM, metrics
 
 
 @pytest.fixture(autouse=True)
@@ -112,3 +112,26 @@ def test_claude_call_failure_label_does_not_leak_exception_message() -> None:
         reason="api_error_500",
     )
     assert len(metrics._counters) == 2  # one per coarse reason
+
+
+def test_claude_call_duration_observes_latency_histogram() -> None:
+    """Successful LLM calls must record a per-model/per-task latency
+    histogram so the llm-health digest can report percentiles — without
+    this, /metrics only shows call counts and outage detection has no
+    latency signal."""
+    metrics.claude_call_duration(
+        model="grok-3-mini",
+        task="assumption_extraction",
+        duration_seconds=1.2,
+    )
+
+    key = ("thecee_llm_duration_seconds",
+           (("model", "grok-3-mini"),
+            ("task", "assumption_extraction")))
+    assert key in metrics._histograms
+    buckets, counts, total = metrics._histograms[key]
+    assert total == 1.2
+    # 1.2s falls in the 2s bucket; the 1s bucket stays empty.
+    assert counts[buckets.index(1.0)] == 0
+    assert counts[buckets.index(2.0)] == 1
+    assert LLM_DURATION_HISTOGRAM == "thecee_llm_duration_seconds"

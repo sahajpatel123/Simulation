@@ -14,11 +14,13 @@ Environment:
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from openai import APIError, APITimeoutError, OpenAI
 
 from app.core.config import settings
+from app.core.metrics import metrics
 
 logger = logging.getLogger("thecee.llm")
 
@@ -144,6 +146,7 @@ def claude_call_with_fallback(
     grok_model = _resolve_model(model)
     chat_messages = _build_messages(messages, system)
 
+    started = time.perf_counter()
     try:
         resp = client.chat.completions.create(
             model=grok_model,
@@ -151,6 +154,7 @@ def claude_call_with_fallback(
             max_tokens=max_tokens,
             timeout=float(timeout),
         )
+        duration_seconds = max(0.0, time.perf_counter() - started)
         text = ""
         if resp.choices:
             text = (resp.choices[0].message.content or "").strip()
@@ -162,16 +166,19 @@ def claude_call_with_fallback(
         # metrics.claude_call counter would be indistinguishable from
         # "no one is using the endpoint" — the failure counter
         # makes API outages visible.
-        from app.core.metrics import metrics
-
         metrics.claude_call(model=grok_model, task=fallback_key)
+        metrics.claude_call_duration(
+            model=grok_model,
+            task=fallback_key,
+            duration_seconds=duration_seconds,
+        )
         return {"content": text, "error": None}
     except APITimeoutError:
         logger.warning("Grok timeout on %s (model=%s)", fallback_key, grok_model)
         try:
-            from app.core.metrics import metrics
             metrics.claude_call_failure(
-                model=grok_model, task=fallback_key,
+                model=grok_model,
+                task=fallback_key,
                 reason="timeout",
             )
         except Exception:
@@ -182,9 +189,9 @@ def claude_call_with_fallback(
         logger.error("Grok API error on %s: status=%s err=%s", fallback_key, sc, e)
         error_msg = f"API error {sc}: {e}" if sc is not None else str(e)
         try:
-            from app.core.metrics import metrics
             metrics.claude_call_failure(
-                model=grok_model, task=fallback_key,
+                model=grok_model,
+                task=fallback_key,
                 reason=f"api_error_{sc or 'unknown'}",
             )
         except Exception:
@@ -193,9 +200,9 @@ def claude_call_with_fallback(
     except Exception as e:  # noqa: BLE001 — last-resort: never let the LLM crash a request.
         logger.exception("Grok unexpected error on %s: %s", fallback_key, e)
         try:
-            from app.core.metrics import metrics
             metrics.claude_call_failure(
-                model=grok_model, task=fallback_key,
+                model=grok_model,
+                task=fallback_key,
                 reason="unexpected",
             )
         except Exception:

@@ -90,7 +90,67 @@ class QueryHealthOut(BaseModel):
     recent_slow_queries: list[SlowQueryOut] = Field(default_factory=list)
 
 
+class LLMModelStats(BaseModel):
+    """Per-model LLM call stats from ``/system/llm-health``."""
+
+    model: str = ""
+    success_count: int = Field(default=0, ge=0)
+    failure_count: int = Field(default=0, ge=0)
+    attempt_count: int = Field(default=0, ge=0)
+    success_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    failure_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    mean_latency_ms: float | None = Field(default=None, ge=0.0)
+    p50_latency_ms: float | None = Field(default=None, ge=0.0)
+    p95_latency_ms: float | None = Field(default=None, ge=0.0)
+    p99_latency_ms: float | None = Field(default=None, ge=0.0)
+
+
+class LLMTaskStats(BaseModel):
+    """Per-task LLM call stats from ``/system/llm-health``."""
+
+    task: str = ""
+    success_count: int = Field(default=0, ge=0)
+    failure_count: int = Field(default=0, ge=0)
+    attempt_count: int = Field(default=0, ge=0)
+    success_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    failure_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    mean_latency_ms: float | None = Field(default=None, ge=0.0)
+    p50_latency_ms: float | None = Field(default=None, ge=0.0)
+    p95_latency_ms: float | None = Field(default=None, ge=0.0)
+    p99_latency_ms: float | None = Field(default=None, ge=0.0)
+
+
+class LLMFailureReason(BaseModel):
+    """One failure-reason bucket from ``/system/llm-health``."""
+
+    reason: str = ""
+    failure_count: int = Field(default=0, ge=0)
+
+
+class LLMHealthOut(BaseModel):
+    """Response from ``GET /api/v1/system/llm-health``."""
+
+    generated_at: str = ""
+    total_attempts: int = Field(default=0, ge=0)
+    success_count: int = Field(default=0, ge=0)
+    failure_count: int = Field(default=0, ge=0)
+    success_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    failure_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    mean_latency_ms: float | None = Field(default=None, ge=0.0)
+    p50_latency_ms: float | None = Field(default=None, ge=0.0)
+    p95_latency_ms: float | None = Field(default=None, ge=0.0)
+    p99_latency_ms: float | None = Field(default=None, ge=0.0)
+    verdict: str = "NO_DATA"
+    models: list[LLMModelStats] = Field(default_factory=list)
+    tasks: list[LLMTaskStats] = Field(default_factory=list)
+    failure_reasons: list[LLMFailureReason] = Field(default_factory=list)
+
+
 __all__ = [
+    "LLMFailureReason",
+    "LLMHealthOut",
+    "LLMModelStats",
+    "LLMTaskStats",
     "QueryHealthOut",
     "QueryKindStats",
     "RequestHealthOut",

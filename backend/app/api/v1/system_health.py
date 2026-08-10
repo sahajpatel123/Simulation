@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.core import llm_health as llm_health_module
 from app.core import query_health as query_health_module
 from app.core.deps import get_db
 from app.core.metrics import metrics
@@ -22,6 +23,7 @@ from app.core.request_health import (
     build_request_health,
 )
 from app.schemas.system_health import (
+    LLMHealthOut,
     QueryHealthOut,
     RequestHealthOut,
     SystemHealthOut,
@@ -167,6 +169,36 @@ def query_health(
     return query_health_module.build_query_health(
         metrics.snapshot(),
         slow_queries=slow_queries_snapshot(limit=limit),
+        limit=limit,
+        generated_at=datetime.now(UTC).isoformat(),
+    )
+
+
+@router.get(
+    "/llm-health",
+    summary="In-process LLM call health (success rates, failure reasons, latency percentiles)",
+    responses=_JSON_200,
+    response_model=LLMHealthOut,
+)
+def llm_health(
+    limit: int = Query(
+        default=llm_health_module.DEFAULT_LIMIT,
+        ge=1,
+        le=llm_health_module.MAX_LIMIT,
+        description="Maximum number of models and tasks to return (most attempted first).",
+    ),
+) -> dict[str, Any]:
+    """Return a digest of this process's LLM (Grok) call performance.
+
+    Reads the in-process metrics registry filled by
+    ``app.core.claude_client``: successful call counts and latency
+    histograms per model / task, plus the failure counter with coarse
+    reasons (timeout / api_error_* / unexpected). Attempts are successes
+    plus failures, so a total outage shows up as a 100% failure rate rather
+    than a silent zero.
+    """
+    return llm_health_module.build_llm_health(
+        metrics.snapshot(),
         limit=limit,
         generated_at=datetime.now(UTC).isoformat(),
     )
