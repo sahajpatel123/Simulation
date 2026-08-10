@@ -146,7 +146,60 @@ class LLMHealthOut(BaseModel):
     failure_reasons: list[LLMFailureReason] = Field(default_factory=list)
 
 
+class CacheNamespaceStats(BaseModel):
+    """Per-namespace response-cache stats from ``/system/cache-health``."""
+
+    namespace: str = ""
+    reads: int = Field(default=0, ge=0)
+    hits: int = Field(default=0, ge=0)
+    misses: int = Field(default=0, ge=0)
+    read_error_count: int = Field(default=0, ge=0)
+    unconfigured_read_count: int = Field(default=0, ge=0)
+    hit_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    read_error_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    writes: int = Field(default=0, ge=0)
+    write_error_count: int = Field(default=0, ge=0)
+    unconfigured_write_count: int = Field(default=0, ge=0)
+    write_error_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    invalidations: int = Field(default=0, ge=0)
+    invalidation_error_count: int = Field(default=0, ge=0)
+    unconfigured_invalidation_count: int = Field(default=0, ge=0)
+    invalidation_error_rate: float | None = Field(
+        default=None, ge=0.0, le=1.0
+    )
+    current_keys: int | None = Field(default=None, ge=0)
+
+
+class CacheHealthOut(BaseModel):
+    """Response from ``GET /api/v1/system/cache-health``."""
+
+    generated_at: str = ""
+    redis_configured: bool = False
+    verdict: str = "NO_DATA"
+    total_reads: int = Field(default=0, ge=0)
+    total_hits: int = Field(default=0, ge=0)
+    total_misses: int = Field(default=0, ge=0)
+    read_error_count: int = Field(default=0, ge=0)
+    unconfigured_read_count: int = Field(default=0, ge=0)
+    hit_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    read_error_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    total_writes: int = Field(default=0, ge=0)
+    write_error_count: int = Field(default=0, ge=0)
+    unconfigured_write_count: int = Field(default=0, ge=0)
+    write_error_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    total_invalidations: int = Field(default=0, ge=0)
+    invalidation_error_count: int = Field(default=0, ge=0)
+    unconfigured_invalidation_count: int = Field(default=0, ge=0)
+    invalidation_error_rate: float | None = Field(
+        default=None, ge=0.0, le=1.0
+    )
+    current_keys: int | None = Field(default=None, ge=0)
+    namespaces: list[CacheNamespaceStats] = Field(default_factory=list)
+
+
 __all__ = [
+    "CacheHealthOut",
+    "CacheNamespaceStats",
     "LLMFailureReason",
     "LLMHealthOut",
     "LLMModelStats",

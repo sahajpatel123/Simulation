@@ -12,9 +12,12 @@ from sqlalchemy.orm import Session
 
 from app.core import llm_health as llm_health_module
 from app.core import query_health as query_health_module
+from app.core import response_cache as response_cache_module
+from app.core.cache_health import build_cache_health
 from app.core.deps import get_db
 from app.core.metrics import metrics
 from app.core.query_metrics import slow_queries_snapshot
+from app.core.rate_limiter import rate_limit
 from app.core.redis_client import get_redis_client
 from app.core.request_health import (
     DEFAULT_LIMIT,
@@ -23,6 +26,7 @@ from app.core.request_health import (
     build_request_health,
 )
 from app.schemas.system_health import (
+    CacheHealthOut,
     LLMHealthOut,
     QueryHealthOut,
     RequestHealthOut,
@@ -200,5 +204,33 @@ def llm_health(
     return llm_health_module.build_llm_health(
         metrics.snapshot(),
         limit=limit,
+        generated_at=datetime.now(UTC).isoformat(),
+    )
+
+
+@router.get(
+    "/cache-health",
+    summary="Response-cache health (hit/miss/error rates + live key counts)",
+    responses=_JSON_200,
+    response_model=CacheHealthOut,
+    # Scans the Redis key space (non-blocking SCAN), so bound dashboard
+    # polling the way the other observability digests are bounded.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
+)
+def cache_health() -> dict[str, Any]:
+    """Return a digest of the response cache's in-process activity.
+
+    Reads the metrics recorded by ``app.core.response_cache``: per-namespace
+    hit / miss / error counts, write and invalidation error counts, hit and
+    error rates, plus the number of live ``rcache:*`` keys currently held in
+    Redis (sampled with SCAN, never returned). When Redis is unconfigured
+    the digest reports ``UNCONFIGURED``; when the process has not exercised
+    the cache it reports ``NO_DATA``.
+    """
+    key_counts, redis_configured = response_cache_module.current_key_counts()
+    return build_cache_health(
+        metrics.snapshot(),
+        key_counts=key_counts,
+        redis_configured=redis_configured,
         generated_at=datetime.now(UTC).isoformat(),
     )

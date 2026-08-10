@@ -32,6 +32,14 @@ from typing import Iterable
 # digest read the same key.
 LLM_DURATION_HISTOGRAM: str = "thecee_llm_duration_seconds"
 
+# Response-cache counters. Recorded by ``app.core.response_cache`` and
+# summarised by ``app.core.cache_health`` into the /system/cache-health
+# digest. Keeping the names here centralises metric naming so a rename
+# cannot drift between the recorder and the reader.
+CACHE_READ_COUNTER: str = "thecee_response_cache_reads_total"
+CACHE_WRITE_COUNTER: str = "thecee_response_cache_writes_total"
+CACHE_INVALIDATION_COUNTER: str = "thecee_response_cache_invalidations_total"
+
 
 class _Metrics:
     """Thread-safe in-process metrics store.
@@ -200,6 +208,38 @@ class _Metrics:
             "thecee_http_request_duration_seconds",
             duration_seconds,
             labels={"method": method, "path": path},
+        )
+
+    def response_cache_read(self, namespace: str, result: str) -> None:
+        """Record one cache read attempt (``hit`` / ``miss`` / ``error`` /
+        ``unconfigured``) for the digest builder."""
+        self.inc_counter(
+            CACHE_READ_COUNTER,
+            {"namespace": namespace, "result": result},
+        )
+
+    def response_cache_write(self, namespace: str, result: str) -> None:
+        """Record one cache write attempt (``success`` / ``error`` /
+        ``unconfigured``)."""
+        self.inc_counter(
+            CACHE_WRITE_COUNTER,
+            {"namespace": namespace, "result": result},
+        )
+
+    def response_cache_invalidation(
+        self,
+        namespace: str,
+        scope: str,
+        result: str,
+    ) -> None:
+        """Record one cache invalidation (scope ``user`` or ``all``)."""
+        self.inc_counter(
+            CACHE_INVALIDATION_COUNTER,
+            {
+                "namespace": namespace,
+                "scope": scope,
+                "result": result,
+            },
         )
 
     def snapshot(self) -> dict[str, object]:

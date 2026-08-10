@@ -47,8 +47,17 @@ import logging
 from typing import Any
 
 from app.core import redis_client
+from app.core.metrics import metrics
 
 logger = logging.getLogger(__name__)
+
+# Result labels recorded on the cache counters. The cache-health digest
+# reads these same values, so keep them centralised here.
+RESULT_HIT: str = "hit"
+RESULT_MISS: str = "miss"
+RESULT_ERROR: str = "error"
+RESULT_UNCONFIGURED: str = "unconfigured"
+RESULT_SUCCESS: str = "success"
 
 
 def _normalise(value: Any) -> Any:
@@ -103,22 +112,28 @@ def cache_get_json(
     or on any Redis error (logged at warning level)."""
     client = redis_client.get_redis_client()
     if client is None:
+        metrics.response_cache_read(namespace, RESULT_UNCONFIGURED)
         return None
     key = _build_key(namespace, params, user_id)
     try:
         raw = client.get(key)
     except Exception as exc:
         logger.warning("response_cache get failed: %s", exc)
+        metrics.response_cache_read(namespace, RESULT_ERROR)
         return None
     if raw is None:
+        metrics.response_cache_read(namespace, RESULT_MISS)
         return None
     try:
-        return json.loads(raw)
+        payload = json.loads(raw)
     except (TypeError, ValueError) as exc:
         logger.warning(
             "response_cache: corrupt payload at %s — %s", key, exc
         )
+        metrics.response_cache_read(namespace, RESULT_ERROR)
         return None
+    metrics.response_cache_read(namespace, RESULT_HIT)
+    return payload
 
 
 def cache_set_json(
@@ -132,6 +147,7 @@ def cache_set_json(
     Redis failure so callers don't need to wrap."""
     client = redis_client.get_redis_client()
     if client is None:
+        metrics.response_cache_write(namespace, RESULT_UNCONFIGURED)
         return
     key = _build_key(namespace, params, user_id)
     try:
@@ -142,6 +158,9 @@ def cache_set_json(
         )
     except Exception as exc:
         logger.warning("response_cache set failed: %s", exc)
+        metrics.response_cache_write(namespace, RESULT_ERROR)
+        return
+    metrics.response_cache_write(namespace, RESULT_SUCCESS)
 
 
 def cache_invalidate(
@@ -157,32 +176,85 @@ def cache_invalidate(
     """
     client = redis_client.get_redis_client()
     if client is None:
+        metrics.response_cache_invalidation(
+            namespace,
+            scope="user" if user_id is not None else "all",
+            result=RESULT_UNCONFIGURED,
+        )
         return 0
-    if user_id is None:
-        pattern = f"rcache:{namespace}:*"
-        try:
-            keys = list(client.scan_iter(match=pattern))
-            if not keys:
-                return 0
-            return int(client.delete(*keys))
-        except Exception as exc:
-            logger.warning(
-                "response_cache invalidate(pattern) failed: %s", exc
-            )
-            return 0
-    pattern = f"rcache:{namespace}:{user_id}:*"
+    pattern = (
+        f"rcache:{namespace}:*"
+        if user_id is None
+        else f"rcache:{namespace}:{user_id}:*"
+    )
     try:
         keys = list(client.scan_iter(match=pattern))
         if not keys:
+            metrics.response_cache_invalidation(
+                namespace,
+                scope="user" if user_id is not None else "all",
+                result=RESULT_SUCCESS,
+            )
             return 0
-        return int(client.delete(*keys))
+        removed = int(client.delete(*keys))
+        metrics.response_cache_invalidation(
+            namespace,
+            scope="user" if user_id is not None else "all",
+            result=RESULT_SUCCESS,
+        )
+        return removed
     except Exception as exc:
-        logger.warning("response_cache invalidate failed: %s", exc)
+        logger.warning(
+            "response_cache invalidate failed (namespace=%s): %s",
+            namespace,
+            exc,
+        )
+        metrics.response_cache_invalidation(
+            namespace,
+            scope="user" if user_id is not None else "all",
+            result=RESULT_ERROR,
+        )
         return 0
 
 
+def current_key_counts() -> tuple[dict[str, int] | None, bool]:
+    """Count live response-cache keys grouped by namespace.
+
+    Returns ``(counts, redis_configured)``. ``counts`` is ``None`` when
+    Redis is not configured or the scan fails (the cache may still be
+    working; the digest should not 500 on an observability read). Keys are
+    counted by scanning ``rcache:*`` — non-blocking SCAN, never KEYS — and
+    are not returned, so no tenant data leaks into the digest.
+    """
+    client = redis_client.get_redis_client()
+    if client is None:
+        return None, False
+    counts: dict[str, int] = {}
+    try:
+        for raw_key in client.scan_iter(match="rcache:*", count=1000):
+            key = raw_key.decode("utf-8", errors="replace") if isinstance(
+                raw_key, bytes
+            ) else str(raw_key)
+            if not key.startswith("rcache:"):
+                continue
+            namespace = key[len("rcache:"):].split(":", 1)[0]
+            counts[namespace] = counts.get(namespace, 0) + 1
+    except Exception as exc:
+        logger.warning(
+            "response_cache current_key_counts failed: %s", exc
+        )
+        return None, True
+    return counts, True
+
+
 __all__ = [
+    "RESULT_ERROR",
+    "RESULT_HIT",
+    "RESULT_MISS",
+    "RESULT_SUCCESS",
+    "RESULT_UNCONFIGURED",
     "cache_get_json",
-    "cache_set_json",
     "cache_invalidate",
+    "cache_set_json",
+    "current_key_counts",
 ]
