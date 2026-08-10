@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import sys
 import types
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from fastapi import HTTPException
 
 from app.schemas.assumption_evidence import EvidenceCreate
-
 
 if "razorpay" not in sys.modules:
     stub = types.ModuleType("razorpay")
@@ -90,7 +89,7 @@ class _FakeEvidence:
         self.result = result
         self.observed_metric = 0.42 if result == "PASS" else 0.02
         self.notes = "35 responses"
-        self.created_at = datetime(2026, 1, day, tzinfo=timezone.utc)
+        self.created_at = datetime(2026, 1, day, tzinfo=UTC)
 
 
 class _FakeProject:
@@ -168,6 +167,16 @@ class _FakeSession:
         return None
 
 
+class _MissingProjectSession(_FakeSession):
+    """Fake session whose Project query returns no rows."""
+
+    def query(self, model, *args, **kwargs):
+        name = getattr(model, "__name__", "")
+        if name == "Project":
+            return _FakeQuery([])
+        return super().query(model, *args, **kwargs)
+
+
 def _call_create(
     *,
     project_id: int = 10,
@@ -200,6 +209,21 @@ def _call_scorecard(
     return ev_mod.get_assumption_evidence_scorecard(
         project_id=project_id,
         assumption_id=assumption_id,
+        db=db,
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+
+def _call_digest(
+    *,
+    project_id: int = 10,
+    session: _FakeSession | None = None,
+):
+    from app.api.v1 import assumption_evidence as ev_mod
+
+    db = session or _FakeSession()
+    return ev_mod.get_assumption_evidence_digest(
+        project_id=project_id,
         db=db,
         current_user=type("U", (), {"id": 42})(),
     )
@@ -258,6 +282,55 @@ class TestScorecard:
         assert out.validation_roi_after < out.validation_roi_before
         assert [e.id for e in out.history] == [2, 1]
         assert out.meta["model"] == "evidence_scorecard_v1"
+
+
+class TestEvidenceDigest:
+    def test_project_level_summary(self) -> None:
+        session = _FakeSession(
+            assumptions=[
+                _FakeAssumption(100),
+                _FakeAssumption(101),
+                _FakeAssumption(102),
+            ],
+            evidence=[
+                _FakeEvidence(1, result="PASS", day=3),
+                _FakeEvidence(2, result="INCONCLUSIVE", day=4),
+            ],
+        )
+        out = _call_digest(session=session)
+        assert out.project_id == 10
+        assert out.total_assumptions == 3
+        assert out.total_evidence_rows == 2
+        assert out.assumptions_with_evidence == 1
+        assert out.de_risked_count == 1
+        assert out.inconclusive_count == 0
+        assert out.pending_count == 2
+        assert out.result_counts == {
+            "PASS": 1,
+            "FAIL": 0,
+            "INCONCLUSIVE": 1,
+        }
+        assert {row.assumption_id for row in out.assumptions} == {
+            100,
+            101,
+            102,
+        }
+
+    def test_digest_does_not_require_simulation(self) -> None:
+        session = _FakeSession(
+            assumptions=[_FakeAssumption(100)],
+            evidence=[],
+            sim=None,
+        )
+        out = _call_digest(session=session)
+        assert out.total_assumptions == 1
+        assert out.pending_count == 1
+
+    def test_digest_project_not_owned_raises_404(self) -> None:
+        session = _MissingProjectSession()
+        with pytest.raises(HTTPException) as exc:
+            _call_digest(session=session)
+        assert exc.value.status_code == 404
 
     def test_no_evidence_returns_zero_state(self) -> None:
         out = _call_scorecard(session=_FakeSession(sim=_FakeSimulation()))

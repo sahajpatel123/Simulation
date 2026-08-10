@@ -97,9 +97,61 @@ class AssumptionEvidenceScorecardOut(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class AssumptionEvidenceDigestAssumption(BaseModel):
+    """One assumption row in the project-level evidence digest."""
+
+    assumption_id: int
+    assumption_text: str = ""
+    category: str | None = None
+    sensitivity: str = "MEDIUM"
+    evidence_count: int = Field(default=0, ge=0)
+    latest_result: str | None = None
+    derived_confidence: CONFIDENCE_TIER_LITERAL | None = None
+    # DE_RISKED | CHALLENGED | INCONCLUSIVE | PENDING
+    status: str = "PENDING"
+
+
+class AssumptionEvidenceDigestOut(BaseModel):
+    """Project-level rollup of every logged validation experiment.
+
+    The per-assumption scorecard answers "did this claim get tested?"; this
+    digest answers "how much of the project's risk has actually been
+    validated?" — coverage, de-risked vs challenged vs pending counts,
+    result/method histograms, and the next highest-leverage experiments to
+    run. It is deliberately simulation-independent: a founder can see
+    evidence progress even before the first simulation completes.
+    """
+
+    project_id: int
+    total_assumptions: int = Field(default=0, ge=0)
+    total_evidence_rows: int = Field(default=0, ge=0)
+    assumptions_with_evidence: int = Field(default=0, ge=0)
+    evidence_coverage_pct: float | None = Field(default=None, ge=0.0, le=1.0)
+    de_risked_count: int = Field(default=0, ge=0)
+    challenged_count: int = Field(default=0, ge=0)
+    inconclusive_count: int = Field(default=0, ge=0)
+    pending_count: int = Field(default=0, ge=0)
+    validation_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    result_counts: dict[str, int] = Field(default_factory=dict)
+    method_counts: dict[str, int] = Field(default_factory=dict)
+    top_pending: list[AssumptionEvidenceDigestAssumption] = Field(
+        default_factory=list
+    )
+    top_challenged: list[AssumptionEvidenceDigestAssumption] = Field(
+        default_factory=list
+    )
+    assumptions: list[AssumptionEvidenceDigestAssumption] = Field(
+        default_factory=list
+    )
+    next_action: str = ""
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 __all__ = [
     "EVIDENCE_RESULT_LITERAL",
     "EvidenceCreate",
     "EvidenceOut",
     "AssumptionEvidenceScorecardOut",
+    "AssumptionEvidenceDigestAssumption",
+    "AssumptionEvidenceDigestOut",
 ]

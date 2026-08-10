@@ -9,6 +9,8 @@ founder record *what happened* and see the consequence:
 * ``GET /projects/{project_id}/assumptions/{assumption_id}/evidence-scorecard``
   returns the evidence history plus the before/after validation-ROI shift
   implied by the derived confidence tier.
+* ``GET /projects/{project_id}/evidence-digest`` rolls every logged
+  experiment up into a project-level de-risking summary.
 
 Pure post-hoc analysis — no Celery dispatch, no LLM calls.
 """
@@ -26,9 +28,13 @@ from app.models.environment import Environment
 from app.models.simulation import Simulation
 from app.models.user import User
 from app.schemas.assumption_evidence import (
+    AssumptionEvidenceDigestOut,
     AssumptionEvidenceScorecardOut,
     EvidenceCreate,
     EvidenceOut,
+)
+from app.simulation.assumption_evidence_digest import (
+    build_assumption_evidence_digest,
 )
 from app.simulation.evidence_scorecard import (
     build_assumption_scorecard,
@@ -201,4 +207,51 @@ def get_assumption_evidence_scorecard(
         signal_quality=float(sim.signal_quality)
         if sim.signal_quality is not None
         else None,
+    )
+
+
+@router.get(
+    "/{project_id}/evidence-digest",
+    response_model=AssumptionEvidenceDigestOut,
+    summary="Project-level validation-evidence digest",
+    responses=_JSON_200,
+)
+def get_assumption_evidence_digest(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AssumptionEvidenceDigestOut:
+    """
+    Roll every logged validation experiment for the project up into one
+    de-risking digest: evidence coverage, de-risked / challenged /
+    pending counts, result and method histograms, and the top
+    experiments still worth running. Unlike the per-assumption scorecard,
+    this endpoint does not require a completed simulation — a founder can
+    track validation progress as soon as experiments are logged.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+    assumptions = (
+        db.query(Assumption)
+        .filter(
+            Assumption.project_id == project.id,
+            Assumption.is_hidden.is_(False),
+        )
+        .order_by(Assumption.id.asc())
+        .all()
+    )
+    evidence = (
+        db.query(AssumptionEvidence)
+        .filter(AssumptionEvidence.project_id == project.id)
+        .order_by(
+            AssumptionEvidence.created_at.desc(),
+            AssumptionEvidence.id.desc(),
+        )
+        .all()
+    )
+    return AssumptionEvidenceDigestOut(
+        **build_assumption_evidence_digest(
+            assumptions=assumptions,
+            evidence=evidence,
+            project_id=project.id,
+        )
     )
