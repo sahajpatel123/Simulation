@@ -75,6 +75,9 @@ npm audit --json
 # Container/filesystem and Dockerfile config scan
 trivy fs --ignore-unfixed --severity CRITICAL,HIGH .
 trivy config ./Dockerfile
+
+# Workflow-security static analysis
+uvx zizmor@1.28.0 --config .github/zizmor.yml .github/workflows
 ```
 
 ### Dependency Management

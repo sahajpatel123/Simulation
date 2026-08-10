@@ -86,6 +86,9 @@ gitleaks detect --config .github/gitleaks.toml
 
 # CI hygiene parity (action pinning, permissions, YAML/TOML, security policy)
 python3 tools/validate_ci.py
+
+# Workflow-security static analysis
+uvx zizmor@1.28.0 --config .github/zizmor.yml .github/workflows
 ```
 
 The `.pre-commit-config.yaml` repo includes a `validate-ci-hygiene` local hook
