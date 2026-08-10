@@ -71,6 +71,19 @@ def test_parse_empty_csv_reports_header_required() -> None:
     ]
 
 
+def test_parse_header_only_reports_no_data_rows() -> None:
+    result = parse_outcomes_csv(CSV_HEADER + "\n")
+    assert result.items == []
+    assert result.data_row_count == 0
+    assert result.errors == [
+        CsvRowError(
+            row=1,
+            column=None,
+            error="CSV contains a header but no data rows",
+        )
+    ]
+
+
 def test_parse_header_accepts_case_insensitive_and_bom() -> None:
     text = (
         "\ufeffACTUAL_CONVERSION_RATE,Actual_MRR,actual_cac,actual_churn_rate\n"
@@ -281,6 +294,21 @@ def test_parse_caps_rows_at_100() -> None:
     assert "exceeds 100" in result.errors[0].error
 
 
+def test_parse_reports_oversized_field_as_row_error() -> None:
+    huge_notes = "x" * 200_000
+    text = (
+        "actual_conversion_rate,actual_mrr,actual_cac,actual_churn_rate,notes\n"
+        f'0.05,1000,50,0.03,"{huge_notes}"\n'
+    )
+    result = parse_outcomes_csv(text)
+    assert result.items == []
+    assert result.data_row_count == 0
+    assert len(result.errors) == 1
+    assert result.errors[0].row == 2
+    assert result.errors[0].column is None
+    assert "too large to parse safely" in result.errors[0].error
+
+
 # ---------------------------------------------------------------------------
 # Route layer
 # ---------------------------------------------------------------------------
@@ -463,6 +491,43 @@ def test_csv_import_rejects_whole_file_on_row_error() -> None:
     assert detail["errors"][0]["column"] == "actual_mrr"
     assert session.added == []
     assert session.committed is False
+
+
+def test_csv_import_rejects_header_only_file() -> None:
+    session = _FakeSession(simulations=[_Simulation(7)])
+
+    with pytest.raises(HTTPException) as exc:
+        _call_csv_import(CSV_HEADER.encode("utf-8"), session=session)
+
+    assert exc.value.status_code == 422
+    detail = exc.value.detail
+    assert detail["rows_scanned"] == 0
+    assert detail["rows_rejected"] == 1
+    assert detail["errors"][0]["row"] == 1
+    assert "no data rows" in detail["errors"][0]["error"]
+    assert session.added == []
+
+
+def test_csv_import_rejects_oversized_field_without_500() -> None:
+    session = _FakeSession(simulations=[_Simulation(7)])
+    huge_notes = "x" * 200_000
+    body = (
+        CSV_HEADER.encode("utf-8")
+        + b"\n0.05,1000,50,0.03,\""
+        + huge_notes.encode("utf-8")
+        + b"\"\n"
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        _call_csv_import(body, session=session)
+
+    assert exc.value.status_code == 422
+    detail = exc.value.detail
+    assert detail["rows_scanned"] == 0
+    assert detail["rows_rejected"] == 1
+    assert detail["errors"][0]["row"] == 2
+    assert "too large to parse safely" in detail["errors"][0]["error"]
+    assert session.added == []
 
 
 def test_csv_import_rejects_read_only_export_column() -> None:

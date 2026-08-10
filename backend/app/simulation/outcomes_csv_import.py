@@ -183,10 +183,32 @@ def parse_outcomes_csv(text: str) -> CsvParseResult:
     Returns:
         :class:`CsvParseResult` with rows that parsed cleanly and every
         problem found. Row numbers are 1-based and match spreadsheet row
-        numbers (header = row 1, first data row = row 2).
+        numbers (header = row 1, first data row = row 2). Malformed CSV
+        (for example a single field larger than the parser's field limit)
+        is reported as a row error instead of raising, so callers can
+        always surface a structured 4xx-style response.
     """
     reader = csv.reader(io.StringIO(text))
-    rows = [list(row) for row in reader]
+    try:
+        rows = [list(row) for row in reader]
+    except csv.Error as exc:
+        message = str(exc)
+        if "field larger than field limit" in message:
+            message = (
+                "a single CSV field is too large to parse safely — "
+                "shorten long cells or split the file into smaller batches"
+            )
+        return CsvParseResult(
+            items=[],
+            errors=[
+                CsvRowError(
+                    row=max(reader.line_num, 1),
+                    column=None,
+                    error=f"malformed CSV: {message}",
+                )
+            ],
+            data_row_count=0,
+        )
 
     header_index: int | None = None
     for index, row in enumerate(rows):
@@ -274,6 +296,19 @@ def parse_outcomes_csv(text: str) -> CsvParseResult:
         # Header problems make row-to-column mapping ambiguous; report the
         # header errors and stop so the caller writes nothing.
         return CsvParseResult(items=[], errors=errors, data_row_count=data_row_count)
+
+    if data_row_count == 0:
+        return CsvParseResult(
+            items=[],
+            errors=[
+                CsvRowError(
+                    row=header_index + 1,
+                    column=None,
+                    error="CSV contains a header but no data rows",
+                )
+            ],
+            data_row_count=0,
+        )
 
     items: list[dict[str, Any]] = []
     seen_keys: set[str] = set()
