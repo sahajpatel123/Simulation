@@ -312,6 +312,11 @@ from app.simulation.prediction_range import (
 )
 from app.simulation.premortem_digest import build_premortem_digest
 from app.simulation.pricing_optimization import build_pricing_optimization
+from app.simulation.pricing_optimization_export import (
+    pricing_optimization_to_csv,
+    pricing_optimization_to_json,
+    pricing_optimization_to_markdown,
+)
 from app.simulation.product_type import ProductType
 from app.simulation.project_rollup import (
     build_project_portfolio_rollup,
@@ -5782,6 +5787,120 @@ def get_pricing_optimization(
         conductor_results=conductor_results,
         cluster_registry=registry,
         average_order_value=aov,
+    )
+
+
+@router.get(
+    "/{simulation_id}/pricing-optimization/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export pricing optimization as CSV, JSON, or Markdown"
+    ),
+    # Same DB read + conductor recompute cost as the JSON pricing
+    # optimization endpoint; cap polling so a dashboard loop can't
+    # drive repeated scenario recomputes.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_pricing_optimization(
+    simulation_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns a multi-section "
+            "spreadsheet; ``json`` returns the raw pricing-optimization "
+            "payload; ``md`` returns a founder-facing Markdown brief. "
+            "Unsupported values return a 400 response."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Download the pricing-optimization read for a completed simulation."""
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json", "md"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; "
+                "expected 'csv', 'json', or 'md'"
+            ),
+        )
+
+    payload = get_pricing_optimization(
+        simulation_id=simulation_id,
+        db=db,
+        current_user=current_user,
+    )
+
+    project = (
+        db.query(Project)
+        .filter(Project.id == payload.project_id)
+        .first()
+    )
+    project_name = project.title if project else None
+
+    metadata = {
+        "generated_at": datetime.now(tz=UTC).isoformat(),
+        "user_id": current_user.id,
+        "format_version": "1",
+        "simulation_id": simulation_id,
+        "project_id": payload.project_id,
+    }
+
+    if fmt == "json":
+        body = pricing_optimization_to_json(
+            payload,
+            metadata=metadata,
+        ).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="pricing-optimization-'
+                    f'{simulation_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    if fmt == "md":
+        md_text = pricing_optimization_to_markdown(
+            payload,
+            simulation_id=simulation_id,
+            project_id=payload.project_id,
+            project_name=project_name,
+            metadata=metadata,
+        )
+        body = md_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="pricing-optimization-'
+                    f'{simulation_id}.md"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = pricing_optimization_to_csv(
+        payload,
+        metadata=metadata,
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="pricing-optimization-'
+                f'{simulation_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
     )
 
 
