@@ -58,6 +58,27 @@ def _error_fallback(fallback_key: str, error_msg: str) -> dict[str, Any]:
     return base or {"error": error_msg}
 
 
+def _api_error_reason(status_code: Any) -> str:
+    """Map an API status code to the coarse failure-reason bucket.
+
+    ``app.core.metrics.claude_call_failure`` promises bounded reason
+    labels (``api_error_4xx`` / ``api_error_5xx`` /
+    ``api_error_unknown``); recording the exact status as the label
+    (``api_error_500``) would create a new Prometheus series per code for
+    little diagnostic gain in the ``/system/llm-health`` digest. The exact
+    status is still preserved in the log line for diagnosis.
+    """
+    try:
+        status = int(status_code)
+    except (TypeError, ValueError, OverflowError):
+        return "api_error_unknown"
+    if 400 <= status <= 499:
+        return "api_error_4xx"
+    if status >= 500:
+        return "api_error_5xx"
+    return "api_error_unknown"
+
+
 _client: OpenAI | None = None
 
 
@@ -192,7 +213,7 @@ def claude_call_with_fallback(
             metrics.claude_call_failure(
                 model=grok_model,
                 task=fallback_key,
-                reason=f"api_error_{sc or 'unknown'}",
+                reason=_api_error_reason(sc),
             )
         except Exception:
             pass

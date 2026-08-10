@@ -17,6 +17,7 @@ import types
 from typing import Any
 
 import pytest
+from openai import APIError, APITimeoutError
 
 from app.core import claude_client
 from app.core.llm_health import (
@@ -369,6 +370,17 @@ class _FakeClient:
     chat = _FakeChat()
 
 
+class _FakeTimeoutError(APITimeoutError):
+    def __init__(self) -> None:
+        super().__init__("request timed out")
+
+
+class _FakeAPIError(APIError):
+    def __init__(self, status_code: int | None) -> None:
+        super().__init__("api boom", None, body=None)
+        self.status_code = status_code
+
+
 def test_claude_client_records_success_counter_and_duration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -395,3 +407,97 @@ def test_claude_client_records_success_counter_and_duration(
     buckets, counts, total = metrics._histograms[hist_key]
     assert counts[buckets.index(1.0)] == 1
     assert total >= 0.0
+
+
+def _failure_key(reason: str) -> tuple[str, tuple[tuple[str, str], ...]]:
+    """Registry key for the fake client's failure counter."""
+    return _counter_key(
+        LLM_FAILURES_COUNTER,
+        {
+            "model": "grok-test-model",
+            "task": "assumption_extraction",
+            "reason": reason,
+        },
+    )
+
+
+def _assert_no_success_or_duration_recorded() -> None:
+    """Failures must not inflate the success counter or latency histogram."""
+    assert LLM_CALLS_COUNTER not in metrics._counters
+    assert not any(name == LLM_DURATION_HISTOGRAM for name, _ in metrics._histograms)
+
+
+def _monkeypatch_failing_client(
+    monkeypatch: pytest.MonkeyPatch,
+    exc: Exception,
+) -> None:
+    class _FailingCompletions:
+        def create(self, **kwargs: Any) -> Any:
+            raise exc
+
+    class _FailingChat:
+        completions = _FailingCompletions()
+
+    class _FailingClient:
+        chat = _FailingChat()
+
+    monkeypatch.setattr(claude_client, "_client", _FailingClient())
+
+
+def test_claude_client_records_timeout_failure_not_success_or_duration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _monkeypatch_failing_client(monkeypatch, _FakeTimeoutError())
+
+    result = claude_client.claude_call_with_fallback(
+        messages=[{"role": "user", "content": "hi"}],
+        model="grok-test-model",
+        fallback_key="assumption_extraction",
+    )
+
+    assert result["error"] == "LLM timeout — try again"
+    assert metrics._counters[_failure_key("timeout")] == 1.0
+    _assert_no_success_or_duration_recorded()
+
+
+@pytest.mark.parametrize(
+    ("status_code", "expected_reason", "expected_error"),
+    [
+        (429, "api_error_4xx", "API error 429: api boom"),
+        (500, "api_error_5xx", "API error 500: api boom"),
+        (None, "api_error_unknown", "api boom"),
+    ],
+)
+def test_claude_client_maps_api_error_status_to_coarse_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    status_code: int | None,
+    expected_reason: str,
+    expected_error: str,
+) -> None:
+    _monkeypatch_failing_client(monkeypatch, _FakeAPIError(status_code))
+
+    result = claude_client.claude_call_with_fallback(
+        messages=[{"role": "user", "content": "hi"}],
+        model="grok-test-model",
+        fallback_key="assumption_extraction",
+    )
+
+    assert result["error"] == expected_error
+    assert metrics._counters[_failure_key(expected_reason)] == 1.0
+    _assert_no_success_or_duration_recorded()
+
+
+def test_claude_client_records_unexpected_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _monkeypatch_failing_client(monkeypatch, RuntimeError("boom"))
+
+    result = claude_client.claude_call_with_fallback(
+        messages=[{"role": "user", "content": "hi"}],
+        model="grok-test-model",
+        fallback_key="assumption_extraction",
+    )
+
+    assert result["error"] == "boom"
+    assert metrics._counters[_failure_key("unexpected")] == 1.0
+    _assert_no_success_or_duration_recorded()
