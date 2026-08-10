@@ -438,3 +438,97 @@ class TestDelete:
         with pytest.raises(HTTPException) as exc:
             _call_delete(experiment_id=6, session=session)
         assert exc.value.status_code == 404
+
+
+class TestSnapshotResilience:
+    """List/detail reads must survive missing or corrupted analysis_json."""
+
+    def test_get_recomputes_when_snapshot_missing(self) -> None:
+        row = _FakeExperiment(11)
+        row.analysis_json = None
+        out = _call_get(
+            experiment_id=11,
+            session=_FakeSession(experiments=[row]),
+        )
+
+        assert out.verdict == "SIGNIFICANT"
+        assert out.significant is True
+        assert out.winner == "New"
+        assert out.analysis.verdict == "SIGNIFICANT"
+        assert out.analysis.variant_a.conversion_rate == pytest.approx(0.1)
+
+    def test_get_recomputes_when_snapshot_corrupt(self) -> None:
+        row = _FakeExperiment(12)
+        row.analysis_json = {"verdict": "SIGNIFICANT", "variant_a": {"label": "X"}}
+        out = _call_get(
+            experiment_id=12,
+            session=_FakeSession(experiments=[row]),
+        )
+
+        assert out.verdict == "SIGNIFICANT"
+        assert out.analysis.verdict == "SIGNIFICANT"
+        assert out.analysis.variant_b.label == "New"
+        assert out.analysis.variant_b.conversion_rate == pytest.approx(0.16)
+
+    def test_list_survives_one_corrupt_row(self) -> None:
+        good = _FakeExperiment(1)
+        bad = _FakeExperiment(2, name="Legacy row")
+        bad.analysis_json = None
+        out = _call_list(session=_FakeSession(experiments=[good, bad]))
+
+        assert out[0].verdict == "SIGNIFICANT"
+        assert out[0].analysis.verdict == "SIGNIFICANT"
+        assert out[1].name == "Legacy row"
+        assert out[1].verdict == "SIGNIFICANT"
+        assert out[1].analysis.verdict == "SIGNIFICANT"
+
+    def test_fallback_uses_stored_labels_and_parameters(self) -> None:
+        row = _FakeExperiment(13)
+        row.analysis_json = None
+        row.variant_a_label = "Current"
+        row.variant_b_label = "New CTA"
+        row.alpha = 0.01
+        row.power = 0.9
+        row.mde = 0.03
+        out = _call_get(
+            experiment_id=13,
+            session=_FakeSession(experiments=[row]),
+        )
+
+        assert out.analysis.variant_a.label == "Current"
+        assert out.analysis.variant_b.label == "New CTA"
+        assert out.analysis.meta["alpha"] == pytest.approx(0.01)
+        assert out.analysis.meta["power"] == pytest.approx(0.9)
+        assert out.analysis.meta["mde"] == pytest.approx(0.03)
+
+
+class TestIntegerBounds:
+    """Counts must fit a PostgreSQL INTEGER column (signed 32-bit)."""
+
+    def test_visitors_above_db_integer_max_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            AbTestVariantIn(label="A", visitors=2_147_483_648, conversions=1)
+
+    def test_conversions_above_db_integer_max_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            AbTestVariantIn(
+                label="A",
+                visitors=2_147_483_647,
+                conversions=2_147_483_648,
+            )
+
+    def test_db_integer_max_boundary_accepted(self) -> None:
+        variant = AbTestVariantIn(
+            label="A",
+            visitors=2_147_483_647,
+            conversions=2_147_483_647,
+        )
+        assert variant.visitors == 2_147_483_647
+        assert variant.conversions == 2_147_483_647
+
+    def test_create_rejects_huge_counts(self) -> None:
+        with pytest.raises(ValidationError):
+            AbTestExperimentCreate(
+                name="Bad",
+                analysis=_analysis(a_visitors=2_147_483_648),
+            )

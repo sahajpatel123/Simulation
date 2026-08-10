@@ -23,6 +23,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.api.v1.common import get_owned_project
@@ -95,16 +96,52 @@ def _owned_experiment(
     return row
 
 
+def _analysis_out(row: AbTestExperiment) -> AbTestAnalysisOut:
+    """Hydrate the full analysis payload for a stored experiment.
+
+    Prefers the denormalised ``analysis_json`` snapshot so responses stay
+    byte-stable, but falls back to recomputing from the NOT NULL
+    denormalised columns when the snapshot is missing or corrupted (a row
+    written by another writer, a partial migration, manual DB edit) so one
+    bad JSONB blob can never 500 a list or detail read.
+    """
+    if row.analysis_json:
+        try:
+            return AbTestAnalysisOut(**row.analysis_json)
+        except (TypeError, ValidationError):
+            pass
+    return AbTestAnalysisOut(
+        **ab_engine.analyze_ab_test(
+            {
+                "label": row.variant_a_label,
+                "visitors": row.visitors_a,
+                "conversions": row.conversions_a,
+            },
+            {
+                "label": row.variant_b_label,
+                "visitors": row.visitors_b,
+                "conversions": row.conversions_b,
+            },
+            alpha=row.alpha,
+            power=row.power,
+            mde=row.mde,
+        )
+    )
+
+
 def _hydrate_experiment(row: AbTestExperiment) -> AbTestExperimentOut:
+    """Render one experiment; top-level snapshot fields always match the
+    nested analysis payload even when a stored snapshot needed a fallback."""
+    analysis = _analysis_out(row)
     return AbTestExperimentOut(
         id=row.id,
         project_id=row.project_id,
         name=row.name,
         hypothesis=row.hypothesis,
-        analysis=AbTestAnalysisOut(**(row.analysis_json or {})),
-        verdict=row.verdict,
-        significant=row.significant,
-        winner=row.winner,
+        analysis=analysis,
+        verdict=analysis.verdict,
+        significant=analysis.significant,
+        winner=analysis.winner,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )

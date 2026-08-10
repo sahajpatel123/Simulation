@@ -17,6 +17,12 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from app.simulation.ab_test_analysis import VERDICT_INSUFFICIENT_DATA
 
 
+# PostgreSQL INTEGER is a signed 32-bit column; cap observed counts at the DB
+# limit so a mis-pasted number fails schema validation (HTTP 422) instead of
+# surfacing as a server error when the row is written.
+DB_INTEGER_MAX: int = 2_147_483_647
+
+
 class AbTestVariantIn(BaseModel):
     """One observed test arm."""
 
@@ -29,10 +35,12 @@ class AbTestVariantIn(BaseModel):
     )
     visitors: int = Field(
         ge=1,
+        le=DB_INTEGER_MAX,
         description="Unique visitors / sessions observed on this arm.",
     )
     conversions: int = Field(
         ge=0,
+        le=DB_INTEGER_MAX,
         description="Conversions (purchases, signups, etc.) on this arm.",
     )
 
@@ -216,4 +224,5 @@ __all__ = [
     "AbTestExperimentUpdate",
     "AbTestVariantIn",
     "AbTestVariantOut",
+    "DB_INTEGER_MAX",
 ]
