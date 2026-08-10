@@ -14,7 +14,9 @@ tool. This module renders a project's logged experiments for download:
 
 The module is pure and defensive: malformed rows, missing snapshot fields,
 and scalar values in list positions degrade to safe defaults without
-raising, and CSV cells are guarded against spreadsheet formula injection.
+raising, and CSV cells are guarded against spreadsheet formula injection
+— including formulas hidden behind leading whitespace or control
+characters.
 """
 
 from __future__ import annotations
@@ -77,9 +79,23 @@ def _safe_int(value: Any) -> int:
     return max(0, parsed)
 
 
+_FORMULA_STARTERS: tuple[str, ...] = ("=", "+", "-", "@")
+_CONTROL_STARTERS: tuple[str, ...] = ("\t", "\r", "\n")
+
+
 def _safe_csv_cell(value: object) -> object:
-    """Neutralise spreadsheet formula injection while leaving data intact."""
-    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
+    """Neutralise spreadsheet formula injection while leaving data intact.
+
+    Cells that begin with a formula starter (``=``, ``+``, ``-``, ``@``) or
+    with a tab / carriage return / newline are prefixed with a single quote
+    so Excel, LibreOffice, and Google Sheets treat them as literal text.
+    Formula starters hidden behind leading whitespace are also caught,
+    because spreadsheet parsers trim whitespace before evaluating a cell.
+    """
+    if not isinstance(value, str):
+        return value
+    stripped = value.lstrip()
+    if stripped[:1] in _FORMULA_STARTERS or value[:1] in _CONTROL_STARTERS:
         return f"'{value}"
     return value
 
@@ -128,8 +144,26 @@ def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
         ("experiment_count", ""),
     ):
         value = metadata.get(key, default)
+        if value is None:
+            value = default
         rows.append((key, "" if value is None else str(value)))
     return rows
+
+
+def _safe_bool(value: Any) -> bool:
+    """Coerce a defensive boolean from a stored value.
+
+    Real booleans pass through unchanged; numeric and string spellings are
+    coerced explicitly so a malformed ``"False"`` / ``"0"`` row can never
+    silently flip into ``True``.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return False
 
 
 def _summary_dict(experiments: Sequence[Any], project_id: int) -> dict[str, Any]:
@@ -155,7 +189,7 @@ def _summary_dict(experiments: Sequence[Any], project_id: int) -> dict[str, Any]
                 id=_safe_int(data.get("id")),
                 name=_safe_text(data.get("name")),
                 verdict=_safe_text(data.get("verdict")),
-                significant=bool(data.get("significant")),
+                significant=_safe_bool(data.get("significant")),
                 winner=data.get("winner"),
                 absolute_uplift=absolute_uplift,
                 relative_uplift_pct=relative_uplift_pct,

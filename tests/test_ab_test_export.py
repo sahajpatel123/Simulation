@@ -153,7 +153,18 @@ def test_csv_empty_portfolio_still_renders_sections() -> None:
 
 @pytest.mark.parametrize(
     "malicious",
-    ["=HYPERLINK('http://evil')", "+cmd", "-cmd", "@cmd", "\tcmd", "\rcmd"],
+    [
+        "=HYPERLINK('http://evil')",
+        "+cmd",
+        "-cmd",
+        "@cmd",
+        "\tcmd",
+        "\rcmd",
+        " =HYPERLINK('http://evil')",
+        " \t=cmd",
+        "\n=cmd",
+        " \n@cmd",
+    ],
 )
 def test_csv_neutralises_formula_injection(malicious: str) -> None:
     csv_text = ab_test_experiments_to_csv(
@@ -168,6 +179,25 @@ def test_csv_neutralises_formula_injection(malicious: str) -> None:
 
     assert f"'{malicious}" in csv_text
     assert "'=SUM(A1:A2)" in csv_text
+
+
+def test_csv_neutralises_formula_hidden_behind_newline_in_hypothesis() -> None:
+    csv_text = ab_test_experiments_to_csv(
+        [_experiment(hypothesis="\n=HYPERLINK('http://evil')")],
+        project_id=10,
+    )
+
+    assert "'\n=HYPERLINK('http://evil')" in csv_text
+
+
+def test_csv_metadata_none_format_version_falls_back_to_contract() -> None:
+    csv_text = ab_test_experiments_to_csv(
+        [],
+        project_id=10,
+        metadata={"format_version": None, "user_id": 42},
+    )
+
+    assert f"format_version,{FORMAT_VERSION}" in csv_text
 
 
 def test_json_round_trips_portfolio() -> None:
@@ -195,6 +225,42 @@ def test_json_empty_portfolio_is_valid() -> None:
 
     assert parsed["summary"]["total_experiments"] == 0
     assert parsed["experiments"] == []
+
+
+def test_json_summary_coerces_string_bools_defensively() -> None:
+    json_text = ab_test_experiments_to_json(
+        [
+            {
+                "id": 1,
+                "name": "Stored as string",
+                "verdict": "SIGNIFICANT",
+                "significant": "False",
+                "winner": "New",
+                "created_at": "2026-08-01T00:00:00Z",
+                "analysis": {
+                    "variant_a": {
+                        "label": "Control",
+                        "visitors": 1000,
+                        "conversions": 100,
+                    },
+                    "variant_b": {
+                        "label": "New",
+                        "visitors": 1000,
+                        "conversions": 160,
+                    },
+                    "absolute_uplift": 0.06,
+                    "relative_uplift_pct": 60.0,
+                },
+            }
+        ],
+        project_id=10,
+    )
+    parsed = json.loads(json_text)
+
+    # The verdict still drives the significant count; the defensive bool
+    # coercion keeps the winner-row flag false instead of flipping it.
+    assert parsed["summary"]["significant_count"] == 1
+    assert parsed["summary"]["top_winners"][0]["significant"] is False
 
 
 def test_markdown_includes_summary_experiments_and_next_action() -> None:
