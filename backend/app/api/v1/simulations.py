@@ -81,6 +81,7 @@ from app.schemas.agent_routing import (
 from app.schemas.architect_stack import ArchitectStackRegistryOut
 from app.schemas.assumption_cascade import AssumptionCascadeOut
 from app.schemas.assumption_postmortem import AssumptionPostmortemOut
+from app.schemas.buyer_personas import BuyerPersonasOut
 from app.schemas.channel_attribution import ChannelAttributionOut
 from app.schemas.cluster_opportunity import ClusterOpportunityMatrixOut
 from app.schemas.cohort_retention import CohortRetentionOut
@@ -176,6 +177,7 @@ from app.simulation.architect_leaderboard import (
 from app.simulation.architect_stack import build_architect_stack_registry
 from app.simulation.assumption_cascade_read import build_assumption_cascade
 from app.simulation.assumption_postmortem import build_assumption_postmortem
+from app.simulation.buyer_personas import build_buyer_personas
 from app.simulation.calibration_health import (
     build_calibration_health,
 )
@@ -5374,6 +5376,105 @@ def get_cluster_opportunities(
     }
 
     return build_cluster_opportunity_matrix(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        signal_quality=float(sim.signal_quality)
+        if sim.signal_quality is not None
+        else None,
+        cluster_summaries=summaries or None,
+        cluster_registry=registry,
+        benchmark=effective_benchmark,
+        limit=effective_limit,
+    )
+
+
+@router.get(
+    "/{simulation_id}/buyer-personas",
+    response_model=BuyerPersonasOut,
+    summary="Rank buyer personas from cluster profiles + simulation conversion",
+    responses=_JSON_200,
+)
+def get_buyer_personas(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    limit: int = 10,
+    benchmark: float = 0.05,
+) -> BuyerPersonasOut:
+    """
+    Build ranked buyer-persona briefs from completed results:
+
+      * Full registry profile (description, 8 traits, behavior pattern,
+        affinities, demographics, known failure modes).
+      * Deterministic messaging angle per persona.
+      * Risk watchlist + segment-aware recommended focus.
+
+    Ranking and segments reuse the cluster-opportunity matrix so GTM
+    analytics and persona cards can never disagree. Pure analytics — no
+    Celery, no LLM.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — buyer personas require "
+                "completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    effective_limit = limit if isinstance(limit, int) else 10
+    effective_limit = max(1, min(effective_limit, 52))
+    effective_benchmark = (
+        float(benchmark) if isinstance(benchmark, (int, float)) else 0.05
+    )
+    effective_benchmark = max(0.01, min(effective_benchmark, 0.5))
+
+    summary_rows = (
+        db.query(ClusterRunSummary)
+        .filter(ClusterRunSummary.simulation_id == sim.id)
+        .all()
+    )
+    summaries = [
+        {
+            "cluster_id": row.cluster_id,
+            "agents_assigned": row.agents_assigned,
+            "agents_converted": row.agents_converted,
+            "conversion_rate": row.conversion_rate,
+            "primary_drop_trigger": row.primary_drop_trigger,
+            "mean_drop_state": row.mean_drop_state,
+        }
+        for row in summary_rows
+    ]
+    registry = {
+        cid: {
+            "name": cluster.name,
+            "description": cluster.description,
+            "population_weight": cluster.population_weight,
+            "base_traits": dict(cluster.base_traits),
+            "trait_variance": dict(cluster.trait_variance),
+            "dominant_behavior_pattern": cluster.dominant_behavior_pattern,
+            "known_failure_modes": list(cluster.known_failure_modes),
+            "product_affinities": list(cluster.product_affinities),
+            "demographic_profile": dict(cluster.demographic_profile),
+        }
+        for cid, cluster in _clusters_map.items()
+    }
+
+    return build_buyer_personas(
         sim.results_json,
         simulation_id=sim.id,
         project_id=sim.project_id,
