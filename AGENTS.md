@@ -67,6 +67,8 @@ Rules that keep CI green and secure:
 - Use `if-no-files-found: error` when uploading scanner/audit reports.
 - Set a positive `timeout-minutes` on every CI job so workflows cannot hang
   indefinitely; `tools/validate_ci.py` enforces this.
+- Include a `workflow_dispatch` trigger on every workflow so it can be run
+  manually; `tools/validate_ci.py` enforces this.
 - Workflow changes must pass `zizmor` (configured in `.github/zizmor.yml`);
   tag-pinning is intentional and enforced separately, so zizmor focuses on the
   other workflow-security classes.

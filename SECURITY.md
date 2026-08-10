@@ -151,4 +151,7 @@ For security concerns, please contact the project maintainers.
   version tags and enforces that separately.
 - 2026-08-10 - Added a `validate-ci-hygiene` pre-commit hook so the same
   workflow/security-policy checks run locally before commit.
+- 2026-08-10 - Extended `tools/validate_ci.py` to require a
+  `workflow_dispatch` trigger on every workflow so none can lose manual-run
+  capability without a CI failure.
 - [VERSION] - Initial security policy

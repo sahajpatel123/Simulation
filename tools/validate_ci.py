@@ -12,6 +12,7 @@ can catch issues locally before pushing:
   - Every workflow declares least-privilege permissions; no actions: write;
     id-token: write only in scorecard.yml.
   - Every job declares a positive timeout-minutes so CI cannot hang indefinitely.
+  - Every workflow includes a workflow_dispatch trigger for manual runs.
 
 Usage:
     python3 tools/validate_ci.py
@@ -30,7 +31,6 @@ import tomllib
 from pathlib import Path
 
 import yaml
-
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -187,6 +187,19 @@ def validate_timeouts() -> list[str]:
     return errors
 
 
+def validate_workflow_dispatch() -> list[str]:
+    errors: list[str] = []
+    for path in sorted(glob.glob(str(ROOT / ".github" / "workflows" / "*.yml"))):
+        with open(path) as fh:
+            data = yaml.safe_load(fh) or {}
+        rel = Path(path).relative_to(ROOT)
+        # PyYAML parses the `on:` key as the boolean True.
+        on = data.get(True) or data.get("on") or {}
+        if not isinstance(on, dict) or "workflow_dispatch" not in on:
+            errors.append(f"{rel}: missing workflow_dispatch trigger")
+    return errors
+
+
 def main() -> int:
     checks = [
         ("YAML", validate_yaml),
@@ -196,6 +209,7 @@ def main() -> int:
         ("supply-chain pinning", validate_supply_chain),
         ("least-privilege permissions", validate_permissions),
         ("job timeouts", validate_timeouts),
+        ("workflow dispatch", validate_workflow_dispatch),
     ]
     errors: list[str] = []
     for label, func in checks:
