@@ -783,6 +783,91 @@ def test_update_webhook_status() -> None:
     assert session.commits == 1
 
 
+def test_update_webhook_settings_retargets_url_and_event_type_without_history_loss() -> None:
+    from app.api.v1 import simulation_webhooks as mod
+
+    sub = _Subscription(
+        url="https://staging.example.com/hooks/cee",
+        event_type="simulation.completed",
+        secret="keep-me",
+    )
+    session = _FakeSession(subscriptions=[sub], deliveries=[_Delivery()])
+    out = mod.update_simulation_webhook(
+        project_id=10,
+        webhook_id=1,
+        payload=mod.SimulationWebhookUpdate(
+            url="https://production.example.com/hooks/cee",
+            event_type="simulation.*",
+        ),
+        db=session,
+        current_user=_current_user(),
+    )
+    assert out.url == "https://production.example.com/hooks/cee"
+    assert out.event_type == "simulation.*"
+    assert out.status == "ACTIVE"
+    # The audit trail survives retargeting and the signing secret is untouched.
+    assert len(session.deliveries) == 1
+    assert sub.secret == "keep-me"
+    assert out.secret == ""
+    assert session.commits == 1
+
+
+def test_update_webhook_settings_omitted_fields_are_preserved() -> None:
+    from app.api.v1 import simulation_webhooks as mod
+
+    sub = _Subscription(
+        url="https://example.com/hooks/original",
+        event_type="simulation.failed",
+    )
+    session = _FakeSession(subscriptions=[sub])
+    out = mod.update_simulation_webhook(
+        project_id=10,
+        webhook_id=1,
+        payload=mod.SimulationWebhookUpdate(status="DISABLED"),
+        db=session,
+        current_user=_current_user(),
+    )
+    assert out.status == "DISABLED"
+    assert out.url == "https://example.com/hooks/original"
+    assert out.event_type == "simulation.failed"
+
+
+def test_update_webhook_settings_rejects_invalid_url() -> None:
+    from app.schemas.simulation_webhooks import SimulationWebhookUpdate
+
+    for url in (
+        "http://insecure.example.com/hook",
+        "https://",
+        "https:///path-only",
+        "https://user:pass@example.com/hook",
+    ):
+        with pytest.raises(Exception):
+            SimulationWebhookUpdate(
+                status="ACTIVE",
+                url=url,
+            )
+
+
+def test_update_webhook_settings_rejects_invalid_event_type() -> None:
+    from app.schemas.simulation_webhooks import SimulationWebhookUpdate
+
+    with pytest.raises(Exception):
+        SimulationWebhookUpdate(
+            status="ACTIVE",
+            event_type="simulation.deleted",
+        )
+
+
+def test_update_webhook_settings_keeps_status_default_active() -> None:
+    from app.schemas.simulation_webhooks import SimulationWebhookUpdate
+
+    payload = SimulationWebhookUpdate(
+        url="https://new.example.com/hook",
+    )
+    assert payload.status == "ACTIVE"
+    assert payload.event_type is None
+
+
 def test_delete_webhook_returns_ok() -> None:
     from app.api.v1 import simulation_webhooks as mod
 
