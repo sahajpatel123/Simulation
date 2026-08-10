@@ -1,4 +1,5 @@
 """Pydantic schemas for the combined system health summary."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -52,9 +53,49 @@ class RequestHealthOut(BaseModel):
     routes: list[RequestHealthRoute] = Field(default_factory=list)
 
 
+class QueryKindStats(BaseModel):
+    """Per-statement-kind DB query stats from ``/system/query-health``."""
+
+    kind: str = ""
+    query_count: int = Field(default=0, ge=0)
+    error_count: int = Field(default=0, ge=0)
+    error_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    mean_latency_ms: float | None = Field(default=None, ge=0.0)
+    p95_latency_ms: float | None = Field(default=None, ge=0.0)
+
+
+class SlowQueryOut(BaseModel):
+    """One captured slow statement from the bounded query-health ring."""
+
+    kind: str = ""
+    statement: str = ""
+    duration_ms: float = Field(default=0.0, ge=0.0)
+    at: str = ""
+
+
+class QueryHealthOut(BaseModel):
+    """Response from ``GET /api/v1/system/query-health``."""
+
+    generated_at: str = ""
+    total_queries: int = Field(default=0, ge=0)
+    error_count: int = Field(default=0, ge=0)
+    error_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    slow_query_count: int = Field(default=0, ge=0)
+    mean_latency_ms: float | None = Field(default=None, ge=0.0)
+    p50_latency_ms: float | None = Field(default=None, ge=0.0)
+    p95_latency_ms: float | None = Field(default=None, ge=0.0)
+    p99_latency_ms: float | None = Field(default=None, ge=0.0)
+    verdict: str = "NO_DATA"
+    kinds: list[QueryKindStats] = Field(default_factory=list)
+    recent_slow_queries: list[SlowQueryOut] = Field(default_factory=list)
+
+
 __all__ = [
+    "QueryHealthOut",
+    "QueryKindStats",
     "RequestHealthOut",
     "RequestHealthRoute",
+    "SlowQueryOut",
     "SystemHealthCheck",
     "SystemHealthOut",
 ]

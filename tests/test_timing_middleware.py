@@ -24,20 +24,22 @@ from app.core.timing_middleware import (
 
 
 def test_metrics_exempt_paths_includes_probes() -> None:
-    """``/metrics``, ``/health``, ``/readyz`` and request-health are exempt.
+    """``/metrics``, ``/health``, ``/readyz`` and the observability digests are exempt.
 
     Including /metrics in the histogram would create a
     feedback loop: scraping creates observations which
     show up as 'slow requests' on dashboards which
     trigger more scraping. /health and /readyz are cheap
     probes that don't represent real application load, and the
-    request-health digest is the same — every dashboard poll of it would
-    otherwise add a self-observation to the histogram it reports on.
+    request-health / query-health digests are the same — every dashboard
+    poll of them would otherwise add a self-observation to the histogram
+    they report on.
     """
     assert "/metrics" in _METRICS_EXEMPT_PATHS
     assert "/health" in _METRICS_EXEMPT_PATHS
     assert "/readyz" in _METRICS_EXEMPT_PATHS
     assert "/api/v1/system/request-health" in _METRICS_EXEMPT_PATHS
+    assert "/api/v1/system/query-health" in _METRICS_EXEMPT_PATHS
 
 
 def test_normalise_path_returns_template_when_route_matches() -> None:

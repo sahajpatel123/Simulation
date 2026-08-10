@@ -17,14 +17,18 @@ logger = logging.getLogger("thecee.timing")
 # creates a feedback loop where scraping creates more work for the scraper.
 # ``/health`` / ``/readyz`` are cheap probes that don't represent real
 # application load, so we exclude them too. ``/api/v1/system/request-health``
-# is the same class of ops probe: every dashboard poll would otherwise add a
-# self-observation to the exact histogram the digest reports on.
-_METRICS_EXEMPT_PATHS = frozenset({
-    "/metrics",
-    "/health",
-    "/readyz",
-    "/api/v1/system/request-health",
-})
+# and ``/api/v1/system/query-health`` are the same class of ops probe: every
+# dashboard poll would otherwise add a self-observation to the exact
+# histogram the digest reports on.
+_METRICS_EXEMPT_PATHS = frozenset(
+    {
+        "/metrics",
+        "/health",
+        "/readyz",
+        "/api/v1/system/request-health",
+        "/api/v1/system/query-health",
+    }
+)
 
 
 def _normalise_path(request: Request) -> str:
@@ -83,8 +87,7 @@ class TimingMiddleware(BaseHTTPMiddleware):
         level = logging.WARNING if elapsed_ms > 500 else logging.DEBUG
         logger.log(
             level,
-            f"{request.method} {request.url.path} → {elapsed_ms:.1f}ms "
-            f"request_id={request_id}",
+            f"{request.method} {request.url.path} → {elapsed_ms:.1f}ms request_id={request_id}",
         )
 
         # Feed the metrics registry only for real application routes.

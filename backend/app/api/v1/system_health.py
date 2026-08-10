@@ -1,4 +1,5 @@
 """System health summary endpoint."""
+
 from __future__ import annotations
 
 import time
@@ -9,8 +10,10 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.core import query_health as query_health_module
 from app.core.deps import get_db
 from app.core.metrics import metrics
+from app.core.query_metrics import slow_queries_snapshot
 from app.core.redis_client import get_redis_client
 from app.core.request_health import (
     DEFAULT_LIMIT,
@@ -18,7 +21,11 @@ from app.core.request_health import (
     MAX_LIMIT,
     build_request_health,
 )
-from app.schemas.system_health import RequestHealthOut, SystemHealthOut
+from app.schemas.system_health import (
+    QueryHealthOut,
+    RequestHealthOut,
+    SystemHealthOut,
+)
 from app.worker import celery_app
 
 router = APIRouter(prefix="/system", tags=["system"])
@@ -130,5 +137,36 @@ def request_health(
         metrics.snapshot(),
         limit=limit,
         min_requests=min_requests,
+        generated_at=datetime.now(UTC).isoformat(),
+    )
+
+
+@router.get(
+    "/query-health",
+    summary="In-process database query health (latency percentiles, error rates, slow statements)",
+    responses=_JSON_200,
+    response_model=QueryHealthOut,
+)
+def query_health(
+    limit: int = Query(
+        default=query_health_module.DEFAULT_LIMIT,
+        ge=1,
+        le=query_health_module.MAX_LIMIT,
+        description="Maximum number of recent slow statements to return.",
+    ),
+) -> dict[str, Any]:
+    """Return a digest of the process's SQL query performance.
+
+    Reads the in-process metrics registry filled by the engine-level query
+    listener (``app.core.query_metrics``): per-kind SELECT / INSERT /
+    UPDATE / DELETE / OTHER counts and latency percentiles, error counts
+    and rate, a slow-query counter, and the bounded ring of the slowest
+    statements observed by this process. Statement text is the parameterised
+    SQL template only — bound values are never captured.
+    """
+    return query_health_module.build_query_health(
+        metrics.snapshot(),
+        slow_queries=slow_queries_snapshot(limit=limit),
+        limit=limit,
         generated_at=datetime.now(UTC).isoformat(),
     )
