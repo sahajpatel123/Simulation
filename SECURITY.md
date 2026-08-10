@@ -56,6 +56,19 @@ Run `python3 tools/validate_ci.py` locally to check the same supply-chain,
 permissions, YAML/TOML, security-policy, env-file tracking, and job-timeout
 rules before pushing.
 
+#### GitHub Actions hardening checklist
+
+- Every action ref is pinned to a full version tag or commit SHA.
+- Every workflow declares a top-level least-privilege `permissions` block.
+- No workflow grants `actions: write`; `id-token: write` is only allowed in
+  `scorecard.yml`.
+- Every checkout sets `persist-credentials: false`.
+- Every job sets a positive `timeout-minutes`.
+- Every workflow has a `workflow_dispatch` trigger.
+- Artifact uploads fail with `if-no-files-found: error`.
+- Workflows pass `zizmor` with `.github/zizmor.yml` (hash-pinning disabled
+  because tag pinning is enforced separately).
+
 ### Running Security Checks Locally
 
 ```bash
@@ -174,4 +187,6 @@ For security concerns, please contact the project maintainers.
   least-privilege scopes are declared at the workflow boundary.
 - 2026-08-10 - Extended `tools/validate_ci.py` to require a top-level
   `permissions` block on every workflow, matching the repo's current layout.
+- 2026-08-10 - Added a GitHub Actions hardening checklist to `SECURITY.md`
+  summarizing the enforced CI invariants.
 - [VERSION] - Initial security policy
