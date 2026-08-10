@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Literal
 
@@ -66,6 +68,47 @@ class OutcomeCreate(BaseModel):
     @classmethod
     def reasonable_rate(cls, value: float) -> float:
         return round(value, 6)
+
+
+class OutcomeBatchItem(OutcomeCreate):
+    """One row in ``POST /projects/{id}/outcomes/batch``.
+
+    Extends :class:`OutcomeCreate` with an optional ``simulation_id`` so a
+    backfill row can bind to the simulation that was live when the real
+    numbers were measured. When omitted, the endpoint uses the project's
+    latest completed simulation (the same default as the single-record
+    endpoint), which keeps the two routes' semantics consistent.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    simulation_id: int | None = Field(default=None, ge=1)
+
+
+class OutcomeBatchCreate(BaseModel):
+    """Body for ``POST /projects/{id}/outcomes/batch``.
+
+    ``outcomes`` is capped at 100 rows so a single request cannot grow the
+    outcomes table unboundedly; founders backfilling more history should
+    paginate their upload in chunks. The endpoint is all-or-nothing: every
+    row must validate, otherwise nothing is written.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    outcomes: list[OutcomeBatchItem] = Field(..., min_length=1, max_length=100)
+
+
+class OutcomeBatchOut(BaseModel):
+    """Response from ``POST /projects/{id}/outcomes/batch``.
+
+    Echoes the hydrated records so the client can render calibration
+    variance immediately without a follow-up history GET.
+    """
+
+    project_id: int
+    created_count: int = Field(..., ge=0)
+    outcomes: list[OutcomeRecord] = Field(default_factory=list)
 
 
 class VarianceReport(BaseModel):
@@ -170,5 +213,3 @@ class OutcomesDigestOut(BaseModel):
 
 
 OutcomeDigestOut = OutcomesDigestOut
-
-

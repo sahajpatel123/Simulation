@@ -54,6 +54,8 @@ from app.models.simulation import Simulation
 from app.models.user import User
 from app.schemas.funnel_calibration import FunnelCalibrationDigestOut
 from app.schemas.outcome import (
+    OutcomeBatchCreate,
+    OutcomeBatchOut,
     OutcomeCreate,
     OutcomeDigestOut,
     OutcomeFeedbackRequest,
@@ -296,6 +298,66 @@ def _predicted_revenue_from_results(results: dict) -> float | None:
         if value > 0:
             return value
     return None
+
+
+def _prediction_columns(
+    sim: Simulation | None,
+) -> tuple[float | None, float | None, int | None]:
+    """Extract ``(predicted_conversion, predicted_mrr, simulation_id)``.
+
+    Mirrors the single-record endpoint's extraction exactly: a simulation
+    only contributes predictions when it is completed and carries a
+    ``results_json`` payload; otherwise the row is recorded without
+    predictions (variance stays ``None``) rather than fabricating zeros.
+    """
+    if sim is None or not sim.results_json:
+        return None, None, None
+    results = sim.results_json
+    maybe_conv = results.get("mean_conversion_rate") or results.get("conversion_rate")
+    maybe_mrr = results.get("mean_revenue") or results.get("revenue_projection")
+    pred_conv = float(maybe_conv) if maybe_conv is not None else None
+    pred_mrr = float(maybe_mrr) if maybe_mrr is not None else None
+    return pred_conv, pred_mrr, sim.id
+
+
+def _build_outcome_row(
+    project_id: int,
+    payload: OutcomeCreate,
+    pred_conv: float | None,
+    pred_mrr: float | None,
+    sim_id: int | None,
+) -> Outcome:
+    """Build a hydrated ``Outcome`` row from validated input + predictions."""
+    var_conv = _variance_pct(payload.actual_conversion_rate, pred_conv)
+    var_mrr = _variance_pct(payload.actual_mrr, pred_mrr)
+    cal_score = _calibration_score(
+        actual_conv=payload.actual_conversion_rate,
+        actual_mrr=payload.actual_mrr,
+        actual_cac=payload.actual_cac,
+        actual_churn=payload.actual_churn_rate,
+        pred_conv=pred_conv,
+        pred_mrr=pred_mrr,
+    )
+    return Outcome(
+        project_id=project_id,
+        actual_conversion_rate=payload.actual_conversion_rate,
+        actual_mrr=payload.actual_mrr,
+        actual_cac=payload.actual_cac,
+        actual_churn_rate=payload.actual_churn_rate,
+        days_since_launch=payload.days_since_launch,
+        actual_dau=payload.actual_dau,
+        actual_nps=payload.actual_nps,
+        notes=payload.notes,
+        predicted_conversion_rate=pred_conv,
+        predicted_mrr=pred_mrr,
+        predicted_revenue=pred_mrr,
+        simulation_id=sim_id,
+        variance_conversion=var_conv,
+        variance_mrr=var_mrr,
+        variance_cac=None,
+        variance_churn=None,
+        calibration_score=cal_score,
+    )
 
 
 def _latest_tracker_conversion_target(
@@ -1362,6 +1424,45 @@ def export_outcome_tracker(
     )
 
 
+def _invalidate_outcome_caches(user_id: int) -> None:
+    """Bust every cached dashboard tile that derives from outcome state.
+
+    Single outcome records and batch imports mutate the same surfaces, so
+    both routes share one invalidation pass. Namespaces are deduplicated —
+    invalidating a Redis key twice is idempotent, so the net effect matches
+    the original single-record route exactly with fewer round-trips.
+    """
+    for namespace in (
+        _NEXT_ACTION_CACHE_NAMESPACE,
+        _ACTIVITY_FEED_CACHE_NAMESPACE,
+        _OUTCOMES_DIGEST_CACHE_NAMESPACE,
+        _USER_DASHBOARD_CACHE_NAMESPACE,
+        _USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
+        _PROJECT_HEALTH_CACHE_NAMESPACE,
+        _LATEST_SNAPSHOT_CACHE_NAMESPACE,
+        _USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
+        _STALE_CHECK_CACHE_NAMESPACE,
+        _USER_PROJECTS_SUMMARY_CACHE_NAMESPACE,
+        _USER_USAGE_BY_WEEK_CACHE_NAMESPACE,
+        _USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
+        _USER_QUICK_STATS_CACHE_NAMESPACE,
+        _USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
+        _USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
+        _CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
+        _USER_OUTCOME_VELOCITY_CACHE_NAMESPACE,
+        _USER_RUNS_PER_WEEK_CACHE_NAMESPACE,
+        _USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
+        _USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
+        _USER_RECENT_OUTCOMES_CACHE_NAMESPACE,
+        _USER_OUTCOME_RATE_CACHE_NAMESPACE,
+        _USER_DECISION_TO_OUTCOME_DELAY_CACHE_NAMESPACE,
+        _USER_INSIGHTS_CACHE_NAMESPACE,
+        _USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
+        _USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
+    ):
+        cache_invalidate(namespace=namespace, user_id=user_id)
+
+
 @router.post(
     "/{project_id}/outcomes",
     response_model=OutcomeRecord,
@@ -1390,51 +1491,14 @@ def record_outcome(
         .first()
     )
 
-    pred_conv: float | None = None
-    pred_mrr: float | None = None
-    sim_id: int | None = None
+    pred_conv, pred_mrr, sim_id = _prediction_columns(latest_sim)
 
-    if latest_sim and latest_sim.results_json:
-        results = latest_sim.results_json
-        maybe_conv = results.get("mean_conversion_rate") or results.get("conversion_rate")
-        maybe_mrr = results.get("mean_revenue") or results.get("revenue_projection")
-        pred_conv = float(maybe_conv) if maybe_conv is not None else None
-        pred_mrr = float(maybe_mrr) if maybe_mrr is not None else None
-        sim_id = latest_sim.id
-
-    var_conv = _variance_pct(payload.actual_conversion_rate, pred_conv)
-    var_mrr = _variance_pct(payload.actual_mrr, pred_mrr)
-    var_cac = None
-    var_churn = None
-
-    cal_score = _calibration_score(
-        actual_conv=payload.actual_conversion_rate,
-        actual_mrr=payload.actual_mrr,
-        actual_cac=payload.actual_cac,
-        actual_churn=payload.actual_churn_rate,
+    outcome = _build_outcome_row(
+        project_id=project_id,
+        payload=payload,
         pred_conv=pred_conv,
         pred_mrr=pred_mrr,
-    )
-
-    outcome = Outcome(
-        project_id=project_id,
-        actual_conversion_rate=payload.actual_conversion_rate,
-        actual_mrr=payload.actual_mrr,
-        actual_cac=payload.actual_cac,
-        actual_churn_rate=payload.actual_churn_rate,
-        days_since_launch=payload.days_since_launch,
-        actual_dau=payload.actual_dau,
-        actual_nps=payload.actual_nps,
-        notes=payload.notes,
-        predicted_conversion_rate=pred_conv,
-        predicted_mrr=pred_mrr,
-        predicted_revenue=pred_mrr,
-        simulation_id=sim_id,
-        variance_conversion=var_conv,
-        variance_mrr=var_mrr,
-        variance_cac=var_cac,
-        variance_churn=var_churn,
-        calibration_score=cal_score,
+        sim_id=sim_id,
     )
     db.add(outcome)
 
@@ -1447,160 +1511,115 @@ def record_outcome(
         project_id,
         payload.actual_conversion_rate,
         pred_conv,
-        cal_score,
+        outcome.calibration_score or 0.0,
     )
-    # Bust the cached per-project next-action + the
-    # activity feed + the outcomes digest so the
-    # dashboard reflects the new outcome immediately.
-    cache_invalidate(
-        namespace=_NEXT_ACTION_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_ACTIVITY_FEED_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_OUTCOMES_DIGEST_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_DASHBOARD_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_PROJECT_HEALTH_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_LATEST_SNAPSHOT_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_STALE_CHECK_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_PROJECTS_SUMMARY_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_USAGE_BY_WEEK_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_QUICK_STATS_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_OUTCOME_VELOCITY_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_RUNS_PER_WEEK_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_RECENT_OUTCOMES_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_OUTCOME_RATE_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_DECISION_TO_OUTCOME_DELAY_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_INSIGHTS_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_OUTCOME_VELOCITY_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_RUNS_PER_WEEK_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_MOST_ACTIVE_WEEKDAY_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_RECENT_OUTCOMES_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_OUTCOME_RATE_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_DECISION_TO_OUTCOME_DELAY_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_INSIGHTS_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_LAST_WEEK_STATS_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
-    cache_invalidate(
-        namespace=_USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
-        user_id=current_user.id,
-    )
+    _invalidate_outcome_caches(current_user.id)
     return _hydrate_record(outcome)
+
+
+@router.post(
+    "/{project_id}/outcomes/batch",
+    response_model=OutcomeBatchOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Record multiple launch outcomes in one transaction",
+    # DB write — same per-actor cap as the single-outcome route.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def record_outcomes_batch(
+    project_id: int,
+    payload: OutcomeBatchCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> OutcomeBatchOut:
+    """All-or-nothing backfill of structured launch outcomes.
+
+    Each row may bind to an explicit completed simulation owned by this
+    project; rows without a ``simulation_id`` fall back to the project's
+    latest completed simulation (the same default as the single-record
+    endpoint). Every row is validated before any write, rows are added in
+    one ``add_all``, and the commit happens once — then the same cache
+    surfaces as the single-record route are busted.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+
+    requested_ids = sorted({
+        item.simulation_id
+        for item in payload.outcomes
+        if item.simulation_id is not None
+    })
+    sim_by_id: dict[int, Simulation] = {}
+    if requested_ids:
+        sims = (
+            db.query(Simulation)
+            .filter(
+                Simulation.id.in_(requested_ids),
+                Simulation.project_id == project_id,
+            )
+            .all()
+        )
+        sim_by_id = {sim.id: sim for sim in sims}
+        missing = [sim_id for sim_id in requested_ids if sim_id not in sim_by_id]
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "simulation_ids not found for this project: "
+                    f"{missing}"
+                ),
+            )
+
+    latest_sim = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc())
+        .first()
+    )
+
+    rows: list[Outcome] = []
+    for item in payload.outcomes:
+        if item.simulation_id is not None:
+            sim = sim_by_id[item.simulation_id]
+            if sim.status != "COMPLETED" or not sim.results_json:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"simulation_id {item.simulation_id} is not "
+                        "completed with results."
+                    ),
+                )
+            pred_conv, pred_mrr, sim_id = _prediction_columns(sim)
+        else:
+            pred_conv, pred_mrr, sim_id = _prediction_columns(latest_sim)
+        rows.append(
+            _build_outcome_row(
+                project_id=project_id,
+                payload=item,
+                pred_conv=pred_conv,
+                pred_mrr=pred_mrr,
+                sim_id=sim_id,
+            )
+        )
+
+    db.add_all(rows)
+    project.status = "OUTCOME_RECORDED"
+    db.commit()
+    for outcome in rows:
+        db.refresh(outcome)
+
+    logger.info(
+        "[Outcome] Batch recorded — project_id=%s rows=%d",
+        project_id,
+        len(rows),
+    )
+    _invalidate_outcome_caches(current_user.id)
+    return OutcomeBatchOut(
+        project_id=project_id,
+        created_count=len(rows),
+        outcomes=[_hydrate_record(outcome) for outcome in rows],
+    )
 
 
 @router.get(
