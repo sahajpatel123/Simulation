@@ -53,6 +53,7 @@ import app.tasks.retention_email_tasks  # noqa: E402, F401
 @celery_app.on_after_configure.connect
 def setup_periodic_tasks(sender, **kwargs) -> None:
     from app.tasks.calibration_tasks import (
+        run_cluster_trait_calibration,
         run_structural_pattern_update,
         run_systematic_bias_update,
     )
@@ -66,4 +67,9 @@ def setup_periodic_tasks(sender, **kwargs) -> None:
         crontab(day_of_month=1, hour=4),
         run_structural_pattern_update.s(),
         name="monthly-pattern-correction",
+    )
+    sender.add_periodic_task(
+        crontab(day_of_week=1, hour=5),
+        run_cluster_trait_calibration.s(),
+        name="weekly-cluster-trait-calibration",
     )

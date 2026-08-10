@@ -35,3 +35,16 @@ def run_structural_pattern_update() -> None:
         logger.exception("Pattern update error: %s", e)
     finally:
         db.close()
+
+
+@celery_app.task(name="calibration.run_cluster_trait_calibration")
+def run_cluster_trait_calibration() -> None:
+    db = SessionLocal()
+    eng = CalibrationEngine()
+    try:
+        eng.update_cluster_trait_calibration(db)
+        logger.info("Cluster trait calibration complete")
+    except Exception as e:
+        logger.exception("Cluster trait calibration error: %s", e)
+    finally:
+        db.close()

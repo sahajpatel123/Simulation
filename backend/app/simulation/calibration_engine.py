@@ -49,6 +49,12 @@ ALL_ARCHITECT_NAMES = [
     "IntegrationFrictionArchitect",
 ]
 
+# Layer 5 gate: a cluster must accumulate at least this many validated,
+# learning-weighted outcomes before the Bayesian trait update may move its
+# ``cluster_parameters.calibrated_value``. Kept as a module constant so the
+# API trigger and the engine itself share one threshold.
+CLUSTER_TRAIT_CALIBRATION_MIN_EFF_COUNT: float = 5.0
+
 
 def _predicted_conversion(results: dict) -> float:
     return float(
@@ -340,6 +346,31 @@ class CalibrationEngine:
 
     # ── LAYER 5: CLUSTER TRAIT CALIBRATION (Bayesian, eff_count >= 5) ──
 
+    def clusters_ready_for_trait_calibration(self, db) -> bool:
+        """Return True when at least one cluster crossed the Layer 5 gate.
+
+        Mirrors the exact join / grouping used by
+        :meth:`update_cluster_trait_calibration` so the API only enqueues
+        the Celery task once there is enough validated, learning-weighted
+        ground truth to learn from.
+        """
+        row = db.execute(
+            text("""
+                SELECT COUNT(*)::int AS ready
+                FROM (
+                    SELECT crs.cluster_id
+                    FROM cluster_run_summaries crs
+                    JOIN founder_outcomes fo ON fo.simulation_id = crs.simulation_id
+                    WHERE fo.validated = true
+                      AND fo.learning_weight > 0
+                    GROUP BY crs.cluster_id
+                    HAVING SUM(fo.learning_weight) >= :min_eff
+                ) ready_clusters
+            """),
+            {"min_eff": CLUSTER_TRAIT_CALIBRATION_MIN_EFF_COUNT},
+        ).fetchone()
+        return bool(row and int(row.ready or 0) > 0)
+
     def update_cluster_trait_calibration(self, db) -> None:
         rows = db.execute(
             text("""
@@ -359,7 +390,7 @@ class CalibrationEngine:
 
         for cluster_id, group in groups.items():
             eff_count = sum(float(r.learning_weight) for r in group)
-            if eff_count < 5:
+            if eff_count < CLUSTER_TRAIT_CALIBRATION_MIN_EFF_COUNT:
                 continue
 
             errors = [
@@ -382,7 +413,7 @@ class CalibrationEngine:
             if not param:
                 continue
 
-            count = int(param.calibration_count)
+            count = int(param.calibration_count or 0)
             prior = float(param.calibrated_value)
 
             alpha = 1.0 / (count + 2.0)

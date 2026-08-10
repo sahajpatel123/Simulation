@@ -15,6 +15,7 @@ import pytest
 
 from app.simulation.calibration_engine import (
     ALL_ARCHITECT_NAMES,
+    CLUSTER_TRAIT_CALIBRATION_MIN_EFF_COUNT,
     CalibrationEngine,
     _calibration_scalar,
 )
@@ -30,6 +31,9 @@ class _FakeResult:
 
     def fetchall(self) -> list[object]:
         return self._rows
+
+    def fetchone(self) -> object | None:
+        return self._rows[0] if self._rows else None
 
 
 class _FakeDb:
@@ -48,8 +52,59 @@ class _FakeDb:
         self.commits += 1
 
 
+class _SequenceDb:
+    """Returns queued rows per execute() call (in order); writes recorded."""
+
+    def __init__(self, responses: list[list[object]]) -> None:
+        self._responses = responses
+        self.calls: list[dict | None] = []
+        self.commits = 0
+
+    def execute(self, statement: object, params: dict | None = None) -> _FakeResult:
+        self.calls.append(params)
+        rows = self._responses.pop(0) if self._responses else []
+        return _FakeResult(rows)
+
+    def commit(self) -> None:
+        self.commits += 1
+
+
 def _upsert_params(db: _FakeDb) -> list[dict]:
     return [p for p in db.calls if p and "cs" in p]
+
+
+def _summary_row(
+    cluster_id: str = "c1",
+    conversion: float = 0.20,
+    actual: float = 0.30,
+    weight: float = 1.0,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        cluster_id=cluster_id,
+        conversion_rate=conversion,
+        signal_quality=0.8,
+        actual_conversion_rate=actual,
+        learning_weight=weight,
+        architect_scores={},
+    )
+
+
+def _param_row(
+    pid: int = 7,
+    base: float = 0.5,
+    calibrated: float = 0.5,
+    count: int | None = 0,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        id=pid,
+        base_value=base,
+        calibrated_value=calibrated,
+        calibration_count=count,
+    )
+
+
+def _trait_update_params(db: _SequenceDb) -> list[dict]:
+    return [p for p in db.calls if p and "val" in p and "cnt" in p]
 
 
 # ── layer 2: systematic bias ────────────────────────────────────────────
@@ -156,6 +211,87 @@ def test_structural_patterns_lowers_scalar_when_model_over_predicts() -> None:
     params = _upsert_params(db)
     assert len(params) == 1
     assert float(params[0]["cs"]) == pytest.approx(1.0 / 1.1)
+
+
+# ── layer 5: cluster trait calibration ──────────────────────────────────
+
+
+def test_cluster_trait_calibration_updates_trait_when_eff_count_met() -> None:
+    rows = [_summary_row() for _ in range(5)]
+    db = _SequenceDb([rows, [_param_row()], []])
+
+    CalibrationEngine().update_cluster_trait_calibration(db)
+
+    updates = _trait_update_params(db)
+    assert len(updates) == 1
+    params = updates[0]
+    assert params["pid"] == 7
+    assert params["cnt"] == 1
+    # wmean = +0.10 -> digital_literacy; prior 0.5 -> signal 0.47;
+    # alpha = 1 / (0 + 2) -> 0.485.
+    assert params["val"] == pytest.approx(0.485)
+
+
+def test_cluster_trait_calibration_skips_cluster_below_threshold() -> None:
+    rows = [_summary_row() for _ in range(4)]
+    db = _SequenceDb([rows])
+
+    CalibrationEngine().update_cluster_trait_calibration(db)
+
+    assert _trait_update_params(db) == []
+    assert db.commits == 1  # engine always commits once after the loop
+
+
+@pytest.mark.parametrize(
+    ("prior", "error", "expected"),
+    [
+        (0.99, -1.0, 0.99),  # over-prediction -> price_sensitivity, upper clamp
+        (0.01, 1.0, 0.01),  # under-prediction -> digital_literacy, lower clamp
+    ],
+)
+def test_cluster_trait_calibration_clamps_to_safe_bounds(
+    prior: float,
+    error: float,
+    expected: float,
+) -> None:
+    rows = [
+        _summary_row(conversion=0.20, actual=round(0.20 + error, 4))
+        for _ in range(5)
+    ]
+    db = _SequenceDb([rows, [_param_row(calibrated=prior)], []])
+
+    CalibrationEngine().update_cluster_trait_calibration(db)
+
+    updates = _trait_update_params(db)
+    assert len(updates) == 1
+    assert float(updates[0]["val"]) == pytest.approx(expected)
+
+
+def test_cluster_trait_calibration_handles_null_calibration_count() -> None:
+    rows = [_summary_row() for _ in range(5)]
+    db = _SequenceDb([rows, [_param_row(calibrated=0.5, count=None)], []])
+
+    CalibrationEngine().update_cluster_trait_calibration(db)
+
+    updates = _trait_update_params(db)
+    assert len(updates) == 1
+    assert updates[0]["cnt"] == 1
+
+
+def test_clusters_ready_returns_true_when_a_cluster_crossed_gate() -> None:
+    db = _SequenceDb([[SimpleNamespace(ready=1)]])
+    engine = CalibrationEngine()
+
+    assert engine.clusters_ready_for_trait_calibration(db) is True
+    assert db.calls[0] == {
+        "min_eff": CLUSTER_TRAIT_CALIBRATION_MIN_EFF_COUNT
+    }
+
+
+def test_clusters_ready_returns_false_when_no_cluster_crossed_gate() -> None:
+    db = _SequenceDb([[SimpleNamespace(ready=0)]])
+
+    assert CalibrationEngine().clusters_ready_for_trait_calibration(db) is False
 
 
 # ── helper bounds ───────────────────────────────────────────────────────

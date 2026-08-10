@@ -1,6 +1,6 @@
 """Tests for backend/app/tasks/calibration_tasks.py.
 
-These guard the contract of the two calibration Celery tasks:
+These guard the contract of the three calibration Celery tasks:
 
   run_systematic_bias_update
     - On success: iterates over every ProductType, calls
@@ -12,6 +12,10 @@ These guard the contract of the two calibration Celery tasks:
   run_structural_pattern_update
     - Same shape, but a single CalibrationEngine.update_structural_patterns
       call per invocation.
+
+  run_cluster_trait_calibration
+    - Same shape, but a single CalibrationEngine.update_cluster_trait_calibration
+      call per invocation (Layer 5 of the learning loop).
 
 Celery is NOT configured with task_always_eager in this project, so calling
 the decorated task object would try to publish to the broker. We invoke the
@@ -40,13 +44,14 @@ def mock_engine() -> MagicMock:
     return MagicMock(name="mock_calibration_engine")
 
 
-def _import_tasks() -> tuple[object, object]:
+def _import_tasks() -> tuple[object, object, object]:
     """Import the task module fresh; must be inside test so DATABASE_URL is set."""
     from app.tasks import calibration_tasks
 
     return (
         calibration_tasks.run_systematic_bias_update,
         calibration_tasks.run_structural_pattern_update,
+        calibration_tasks.run_cluster_trait_calibration,
     )
 
 
@@ -55,7 +60,7 @@ def test_systematic_bias_update_happy_path(
     mock_engine: MagicMock,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    bias_task, _ = _import_tasks()
+    bias_task, _, _ = _import_tasks()
 
     with (
         patch(
@@ -90,7 +95,7 @@ def test_systematic_bias_update_logs_exception_and_closes_db(
     mock_engine: MagicMock,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    bias_task, _ = _import_tasks()
+    bias_task, _, _ = _import_tasks()
     boom = RuntimeError("simulated engine failure")
     mock_engine.update_systematic_bias.side_effect = boom
 
@@ -121,7 +126,7 @@ def test_structural_pattern_update_happy_path(
     mock_engine: MagicMock,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    _, pattern_task = _import_tasks()
+    _, pattern_task, _ = _import_tasks()
 
     with (
         patch("app.tasks.calibration_tasks.SessionLocal", return_value=mock_session),
@@ -150,7 +155,7 @@ def test_structural_pattern_update_logs_exception_and_closes_db(
     mock_engine: MagicMock,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    _, pattern_task = _import_tasks()
+    _, pattern_task, _ = _import_tasks()
     boom = ValueError("bad config payload")
     mock_engine.update_structural_patterns.side_effect = boom
 
@@ -173,6 +178,71 @@ def test_structural_pattern_update_logs_exception_and_closes_db(
         "logger.exception must attach traceback info"
     )
     assert error_records[0].exc_info[0] is ValueError
+    mock_session.close.assert_called_once()
+
+
+def test_cluster_trait_calibration_happy_path(
+    mock_session: MagicMock,
+    mock_engine: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _, _, trait_task = _import_tasks()
+
+    with (
+        patch("app.tasks.calibration_tasks.SessionLocal", return_value=mock_session),
+        patch(
+            "app.tasks.calibration_tasks.CalibrationEngine", return_value=mock_engine
+        ),
+    ):
+        with caplog.at_level(logging.INFO, logger="app.tasks.calibration_tasks"):
+            trait_task.run()
+
+    mock_engine.update_cluster_trait_calibration.assert_called_once_with(mock_session)
+    mock_session.close.assert_called_once()
+
+    info_records = [
+        r
+        for r in caplog.records
+        if r.levelno == logging.INFO
+        and "Cluster trait calibration complete" in r.getMessage()
+    ]
+    assert info_records, (
+        "expected an INFO log with 'Cluster trait calibration complete'"
+    )
+    assert not any(r.levelno >= logging.ERROR for r in caplog.records)
+
+
+def test_cluster_trait_calibration_logs_exception_and_closes_db(
+    mock_session: MagicMock,
+    mock_engine: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _, _, trait_task = _import_tasks()
+    boom = RuntimeError("simulated trait calibration failure")
+    mock_engine.update_cluster_trait_calibration.side_effect = boom
+
+    with (
+        patch("app.tasks.calibration_tasks.SessionLocal", return_value=mock_session),
+        patch(
+            "app.tasks.calibration_tasks.CalibrationEngine", return_value=mock_engine
+        ),
+    ):
+        with caplog.at_level(logging.ERROR, logger="app.tasks.calibration_tasks"):
+            trait_task.run()
+
+    error_records = [
+        r
+        for r in caplog.records
+        if r.levelno >= logging.ERROR
+        and "Cluster trait calibration error" in r.getMessage()
+    ]
+    assert error_records, (
+        "expected an ERROR log containing 'Cluster trait calibration error'"
+    )
+    assert error_records[0].exc_info is not None, (
+        "logger.exception must attach traceback info"
+    )
+    assert error_records[0].exc_info[0] is RuntimeError
     mock_session.close.assert_called_once()
 
 

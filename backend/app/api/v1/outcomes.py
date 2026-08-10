@@ -373,10 +373,15 @@ def submit_outcome_feedback(
     """
     Submit real-world launch outcomes to improve future simulation accuracy.
     Runs CalibrationEngine Layer 1 + 4 synchronously; schedules Layer 2 via
-    Celery if new effective_sample_count crosses the activation threshold (10).
+    Celery if new effective_sample_count crosses the activation threshold (10),
+    and Layer 5 via Celery once any cluster crosses its trait-calibration
+    effective-sample threshold (5).
     """
     from app.simulation.calibration_engine import CalibrationEngine
-    from app.tasks.calibration_tasks import run_systematic_bias_update
+    from app.tasks.calibration_tasks import (
+        run_cluster_trait_calibration,
+        run_systematic_bias_update,
+    )
 
     simulation_id = body.simulation_id
     actual_cr = body.actual_conversion_rate
@@ -515,6 +520,20 @@ def submit_outcome_feedback(
     except Exception as exc:
         logger.warning("[OutcomeFeedback] Could not trigger bias update: %s", exc)
 
+    # ── Check whether Layer 5 threshold is crossed → fire Celery task ──
+    try:
+        if eng.clusters_ready_for_trait_calibration(db):
+            run_cluster_trait_calibration.delay()
+            logger.info(
+                "[OutcomeFeedback] Triggered cluster trait calibration "
+                "(a cluster crossed the effective-sample threshold)"
+            )
+    except Exception as exc:
+        logger.warning(
+            "[OutcomeFeedback] Could not trigger cluster trait calibration: %s",
+            exc,
+        )
+
     # ── Latest accuracy trend ──
     trend_row = db.execute(
         text("""
@@ -547,7 +566,6 @@ def submit_outcome_feedback(
     )
     cache_invalidate(
         namespace=_FUNNEL_CALIBRATION_CACHE_NAMESPACE,
-        params={"project_id": project_id},
         user_id=current_user.id,
     )
     cache_invalidate(
