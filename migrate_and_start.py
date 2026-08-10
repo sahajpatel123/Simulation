@@ -98,6 +98,7 @@ def run_migrations():
             ("outcomes", "variance_cac", "FLOAT"),
             ("outcomes", "variance_churn", "FLOAT"),
             ("outcomes", "calibration_score", "FLOAT"),
+            ("outcomes", "client_request_id", "VARCHAR(128)"),
             ("prototypes", "html_content", "TEXT"),
             ("prototypes", "funnel_graph_json", "TEXT"),
             ("environments", "consumer_volume", "INTEGER DEFAULT 10000"),
@@ -171,6 +172,28 @@ def run_migrations():
             except Exception as e:
                 conn.rollback()
                 raise RuntimeError(f"failed to add simulations.{column}: {e}") from e
+
+        # Idempotent outcome recording: one client_request_id per project.
+        # The partial predicate keeps legacy NULL rows unconstrained while
+        # making retried outcome submissions return the original row.
+        try:
+            conn.execute(
+                text(
+                    """
+                    CREATE UNIQUE INDEX IF NOT EXISTS
+                        uq_outcomes_project_client_request
+                    ON outcomes (project_id, client_request_id)
+                    WHERE client_request_id IS NOT NULL;
+                    """
+                )
+            )
+            conn.commit()
+            print("✅ uq_outcomes_project_client_request ready")
+        except Exception as e:
+            conn.rollback()
+            raise RuntimeError(
+                f"failed to create outcomes.client_request_id unique index: {e}"
+            ) from e
 
     # Step 36a: learning system tables
     with engine.connect() as conn:

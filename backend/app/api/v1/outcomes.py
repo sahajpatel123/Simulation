@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.v1.cache_namespaces import _CONFIDENCE_EXPLAINER_CACHE_NAMESPACE
@@ -56,6 +57,7 @@ from app.models.user import User
 from app.schemas.funnel_calibration import FunnelCalibrationDigestOut
 from app.schemas.outcome import (
     OutcomeBatchCreate,
+    OutcomeBatchItem,
     OutcomeBatchOut,
     OutcomeCreate,
     OutcomeDigestOut,
@@ -250,6 +252,7 @@ def _hydrate_record(outcome: Outcome) -> OutcomeRecord:
     return OutcomeRecord(
         id=outcome.id,
         project_id=outcome.project_id,
+        client_request_id=getattr(outcome, "client_request_id", None),
         actual_conversion_rate=outcome.actual_conversion_rate,
         actual_mrr=outcome.actual_mrr,
         actual_cac=outcome.actual_cac,
@@ -359,6 +362,7 @@ def _build_outcome_row(
     pred_conv: float | None,
     pred_mrr: float | None,
     sim_id: int | None,
+    client_request_id: str | None = None,
 ) -> Outcome:
     """Build a hydrated ``Outcome`` row from validated input + predictions."""
     var_conv = _variance_pct(payload.actual_conversion_rate, pred_conv)
@@ -390,7 +394,100 @@ def _build_outcome_row(
         variance_cac=None,
         variance_churn=None,
         calibration_score=cal_score,
+        client_request_id=client_request_id,
     )
+
+
+def _existing_outcome_by_client_key(
+    db: Session,
+    project_id: int,
+    client_request_id: str | None,
+) -> Outcome | None:
+    """Return the previously recorded outcome for an idempotency key."""
+    if client_request_id is None:
+        return None
+    return (
+        db.query(Outcome)
+        .filter(
+            Outcome.project_id == project_id,
+            Outcome.client_request_id == client_request_id,
+        )
+        .first()
+    )
+
+
+def _existing_outcomes_by_client_key(
+    db: Session,
+    project_id: int,
+    client_request_id: set[str],
+) -> dict[str, Outcome]:
+    """Map previously recorded outcomes by idempotency key."""
+    if not client_request_id:
+        return {}
+    rows = (
+        db.query(Outcome)
+        .filter(
+            Outcome.project_id == project_id,
+            Outcome.client_request_id.in_(sorted(client_request_id)),
+        )
+        .all()
+    )
+    return {
+        str(row.client_request_id): row
+        for row in rows
+        if row.client_request_id is not None
+    }
+
+
+def _resolve_batch_rows(
+    project_id: int,
+    items: list[OutcomeBatchItem],
+    sim_by_id: dict[int, Simulation],
+    latest_sim: Simulation | None,
+    existing_by_key: dict[str, Outcome],
+) -> tuple[list[Outcome], list[Outcome]]:
+    """Split batch items into rows to create and already-recorded replays.
+
+    Every item whose ``client_request_id`` already exists is a replay: the
+    original record wins and is echoed back unchanged. New rows are built
+    with the same prediction binding as before (explicit simulation when
+    supplied, otherwise the project's latest completed simulation).
+    """
+    new_rows: list[Outcome] = []
+    replayed: list[Outcome] = []
+    for item in items:
+        existing = (
+            existing_by_key.get(item.client_request_id)
+            if item.client_request_id is not None
+            else None
+        )
+        if existing is not None:
+            replayed.append(existing)
+            continue
+        if item.simulation_id is not None:
+            sim = sim_by_id[item.simulation_id]
+            if sim.status != "COMPLETED" or not sim.results_json:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"simulation_id {item.simulation_id} is not "
+                        "completed with results."
+                    ),
+                )
+            pred_conv, pred_mrr, sim_id = _prediction_columns(sim)
+        else:
+            pred_conv, pred_mrr, sim_id = _prediction_columns(latest_sim)
+        new_rows.append(
+            _build_outcome_row(
+                project_id=project_id,
+                payload=item,
+                pred_conv=pred_conv,
+                pred_mrr=pred_mrr,
+                sim_id=sim_id,
+                client_request_id=item.client_request_id,
+            )
+        )
+    return new_rows, replayed
 
 
 def _latest_tracker_conversion_target(
@@ -1509,10 +1606,29 @@ def _invalidate_outcome_caches(user_id: int) -> None:
 def record_outcome(
     project_id: int,
     payload: OutcomeCreate,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """Record a structured launch outcome, idempotently when keyed.
+
+    Callers may supply ``client_request_id`` to make the submission safe to
+    retry (e.g. after a network timeout): a repeat submission with the same
+    key returns the originally recorded outcome with ``200`` instead of
+    creating a duplicate row. Without a key the endpoint behaves exactly as
+    before (always creates a row and returns ``201``).
+    """
     project = get_owned_project(db, current_user.id, project_id)
+    response.status_code = status.HTTP_201_CREATED
+
+    existing = _existing_outcome_by_client_key(
+        db,
+        project_id,
+        payload.client_request_id,
+    )
+    if existing is not None:
+        response.status_code = status.HTTP_200_OK
+        return _hydrate_record(existing)
 
     latest_sim = (
         db.query(Simulation)
@@ -1532,11 +1648,26 @@ def record_outcome(
         pred_conv=pred_conv,
         pred_mrr=pred_mrr,
         sim_id=sim_id,
+        client_request_id=payload.client_request_id,
     )
     db.add(outcome)
 
     project.status = "OUTCOME_RECORDED"
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # A concurrent request with the same key won the unique-index race.
+        # First write wins: roll back, return the winner as a 200 replay.
+        db.rollback()
+        existing = _existing_outcome_by_client_key(
+            db,
+            project_id,
+            payload.client_request_id,
+        )
+        if existing is None:
+            raise
+        response.status_code = status.HTTP_200_OK
+        return _hydrate_record(existing)
     db.refresh(outcome)
 
     logger.info(
@@ -1611,36 +1742,89 @@ def record_outcomes_batch(
         .first()
     )
 
-    rows: list[Outcome] = []
-    for item in payload.outcomes:
-        if item.simulation_id is not None:
-            sim = sim_by_id[item.simulation_id]
-            if sim.status != "COMPLETED" or not sim.results_json:
-                raise HTTPException(
-                    status_code=422,
-                    detail=(
-                        f"simulation_id {item.simulation_id} is not "
-                        "completed with results."
-                    ),
-                )
-            pred_conv, pred_mrr, sim_id = _prediction_columns(sim)
-        else:
-            pred_conv, pred_mrr, sim_id = _prediction_columns(latest_sim)
-        rows.append(
-            _build_outcome_row(
-                project_id=project_id,
-                payload=item,
-                pred_conv=pred_conv,
-                pred_mrr=pred_mrr,
-                sim_id=sim_id,
+    keys = [
+        item.client_request_id
+        for item in payload.outcomes
+        if item.client_request_id is not None
+    ]
+    seen_keys: set[str] = set()
+    for key in keys:
+        if key in seen_keys:
+            raise HTTPException(
+                status_code=422,
+                detail=f"duplicate client_request_id in batch: {key!r}",
             )
+        seen_keys.add(key)
+
+    existing_by_key = _existing_outcomes_by_client_key(
+        db,
+        project_id,
+        set(keys),
+    )
+    rows, replayed = _resolve_batch_rows(
+        project_id=project_id,
+        items=payload.outcomes,
+        sim_by_id=sim_by_id,
+        latest_sim=latest_sim,
+        existing_by_key=existing_by_key,
+    )
+
+    if not rows:
+        # Every key already existed — pure replay, nothing new to persist.
+        return OutcomeBatchOut(
+            project_id=project_id,
+            created_count=0,
+            replayed_count=len(replayed),
+            outcomes=[_hydrate_record(outcome) for outcome in replayed],
         )
 
     db.add_all(rows)
     project.status = "OUTCOME_RECORDED"
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # A concurrent request inserted one of our keys between the
+        # pre-query and the commit. The whole transaction rolled back, so
+        # re-resolve: conflicting keys become replays, the rest are retried.
+        db.rollback()
+        existing_by_key = _existing_outcomes_by_client_key(
+            db,
+            project_id,
+            set(keys),
+        )
+        rows, replayed = _resolve_batch_rows(
+            project_id=project_id,
+            items=payload.outcomes,
+            sim_by_id=sim_by_id,
+            latest_sim=latest_sim,
+            existing_by_key=existing_by_key,
+        )
+        if not rows:
+            return OutcomeBatchOut(
+                project_id=project_id,
+                created_count=0,
+                replayed_count=len(replayed),
+                outcomes=[_hydrate_record(outcome) for outcome in replayed],
+            )
+        db.add_all(rows)
+        db.commit()
     for outcome in rows:
         db.refresh(outcome)
+
+    # Echo records back in the caller's request order so clients can map
+    # the response 1:1 onto their submitted rows (replays first-write-wins).
+    outcome_records: list[OutcomeRecord] = []
+    remaining_new = list(rows)
+    for item in payload.outcomes:
+        if (
+            item.client_request_id is not None
+            and item.client_request_id in existing_by_key
+        ):
+            outcome_records.append(
+                _hydrate_record(existing_by_key[item.client_request_id])
+            )
+        else:
+            outcome_records.append(_hydrate_record(remaining_new.pop(0)))
 
     logger.info(
         "[Outcome] Batch recorded — project_id=%s rows=%d",
@@ -1651,7 +1835,8 @@ def record_outcomes_batch(
     return OutcomeBatchOut(
         project_id=project_id,
         created_count=len(rows),
-        outcomes=[_hydrate_record(outcome) for outcome in rows],
+        replayed_count=len(replayed),
+        outcomes=outcome_records,
     )
 
 

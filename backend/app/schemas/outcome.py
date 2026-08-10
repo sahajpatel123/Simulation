@@ -63,11 +63,41 @@ class OutcomeCreate(BaseModel):
     actual_dau: float | None = Field(default=None, ge=0.0)
     actual_nps: float | None = Field(default=None, ge=-100.0, le=100.0)
     notes: str | None = Field(default=None, max_length=2000)
+    client_request_id: str | None = Field(
+        default=None,
+        max_length=128,
+        description=(
+            "Optional opaque idempotency key. Re-submitting the same key "
+            "for the same project returns the original outcome instead of "
+            "creating a duplicate — safe to retry after network timeouts."
+        ),
+    )
 
     @field_validator("actual_conversion_rate", "actual_churn_rate")
     @classmethod
     def reasonable_rate(cls, value: float) -> float:
         return round(value, 6)
+
+    @field_validator("client_request_id")
+    @classmethod
+    def clean_client_request_id(cls, value: str | None) -> str | None:
+        """Normalise and guard the idempotency key before it reaches the DB.
+
+        Keys are matched exactly (first write wins), so leading/trailing
+        whitespace is stripped to keep copy-paste retries reliable, and
+        whitespace/control characters are rejected to keep the key a
+        stable, printable opaque token.
+        """
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("client_request_id must not be blank")
+        if any(ch.isspace() or ord(ch) < 32 or ch == "\x7f" for ch in cleaned):
+            raise ValueError(
+                "client_request_id must not contain whitespace or control characters"
+            )
+        return cleaned
 
 
 class OutcomeBatchItem(OutcomeCreate):
@@ -91,7 +121,9 @@ class OutcomeBatchCreate(BaseModel):
     ``outcomes`` is capped at 100 rows so a single request cannot grow the
     outcomes table unboundedly; founders backfilling more history should
     paginate their upload in chunks. The endpoint is all-or-nothing: every
-    row must validate, otherwise nothing is written.
+    row must validate, otherwise nothing is written. Rows whose
+    ``client_request_id`` already exists for this project are replayed
+    (echoed back with ``replayed_count``) instead of being written again.
     """
 
     model_config = {"extra": "forbid"}
@@ -104,10 +136,22 @@ class OutcomeBatchOut(BaseModel):
 
     Echoes the hydrated records so the client can render calibration
     variance immediately without a follow-up history GET.
+    ``created_count`` counts rows written by this request; rows that
+    replayed an existing ``client_request_id`` are counted in
+    ``replayed_count`` instead.
     """
 
     project_id: int
     created_count: int = Field(..., ge=0)
+    replayed_count: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Rows whose client_request_id already existed; their original "
+            "records are echoed back unchanged instead of creating "
+            "duplicates."
+        ),
+    )
     outcomes: list[OutcomeRecord] = Field(default_factory=list)
 
 
@@ -141,6 +185,7 @@ class OutcomeRecord(BaseModel):
     simulation_id: int | None
     variance: VarianceReport
     calibration_score: float
+    client_request_id: str | None = None
     recorded_at: datetime
 
     model_config = {"from_attributes": True}
