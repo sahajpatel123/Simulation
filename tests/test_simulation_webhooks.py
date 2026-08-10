@@ -94,7 +94,7 @@ class _Delivery:
 class _FakeQuery:
     def __init__(self, items: list | None = None) -> None:
         self.items = items if items is not None else []
-        self._filters: list[tuple] = []
+        self._filters: list[tuple[object, str, object]] = []
         self._limit: int | None = None
 
     def filter(self, *args, **kwargs):
@@ -104,7 +104,9 @@ class _FakeQuery:
             if left is not None and right is not None:
                 if isinstance(right, BindParameter):
                     right = right.value
-                self._filters.append((left, right))
+                operator = getattr(arg, "operator", None)
+                op_name = getattr(operator, "__name__", "eq")
+                self._filters.append((left, op_name, right))
         return self
 
     def order_by(self, *args, **kwargs):
@@ -115,11 +117,24 @@ class _FakeQuery:
         return self
 
     def _matches(self, item: object) -> bool:
-        for left, right in self._filters:
+        for left, op_name, right in self._filters:
             attr = getattr(left, "key", None)
             if attr is None:
                 continue
-            if getattr(item, attr, None) != right:
+            actual = getattr(item, attr, None)
+            if op_name == "ne":
+                matches = actual != right
+            elif op_name == "gt":
+                matches = actual > right
+            elif op_name == "ge":
+                matches = actual >= right
+            elif op_name == "lt":
+                matches = actual < right
+            elif op_name == "le":
+                matches = actual <= right
+            else:
+                matches = actual == right
+            if not matches:
                 return False
         return True
 
@@ -792,6 +807,7 @@ def test_retry_failed_route_returns_batch_summary() -> None:
     summary = {
         "requested": 1,
         "retried": 1,
+        "skipped": 0,
         "succeeded": 1,
         "failed": 0,
         "failed_delivery_ids": [],
@@ -814,6 +830,7 @@ def test_retry_failed_route_returns_batch_summary() -> None:
     assert mock_retry.call_args.kwargs["limit"] == 50
     assert out.requested == 1
     assert out.retried == 1
+    assert out.skipped == 0
     assert out.succeeded == 1
     assert out.failed == 0
     assert out.failed_delivery_ids == []
@@ -973,9 +990,24 @@ def test_retry_failed_deliveries_retries_only_failed_newest_first() -> None:
 
     sub = _Subscription(id=1, status="ACTIVE")
     deliveries = [
-        _Delivery(id=1, webhook_subscription_id=1, status="SUCCESS"),
-        _Delivery(id=2, webhook_subscription_id=1, status="FAILED"),
-        _Delivery(id=3, webhook_subscription_id=1, status="FAILED"),
+        _Delivery(
+            id=1,
+            webhook_subscription_id=1,
+            simulation_id=10,
+            status="SUCCESS",
+        ),
+        _Delivery(
+            id=2,
+            webhook_subscription_id=1,
+            simulation_id=11,
+            status="FAILED",
+        ),
+        _Delivery(
+            id=3,
+            webhook_subscription_id=1,
+            simulation_id=12,
+            status="FAILED",
+        ),
     ]
     session = _FakeSession(subscriptions=[sub], deliveries=deliveries)
     retried_ids: list[int] = []
@@ -1051,9 +1083,24 @@ def test_retry_failed_deliveries_respects_limit() -> None:
 
     sub = _Subscription(id=1, status="ACTIVE")
     deliveries = [
-        _Delivery(id=1, webhook_subscription_id=1, status="FAILED"),
-        _Delivery(id=2, webhook_subscription_id=1, status="FAILED"),
-        _Delivery(id=3, webhook_subscription_id=1, status="FAILED"),
+        _Delivery(
+            id=1,
+            webhook_subscription_id=1,
+            simulation_id=10,
+            status="FAILED",
+        ),
+        _Delivery(
+            id=2,
+            webhook_subscription_id=1,
+            simulation_id=11,
+            status="FAILED",
+        ),
+        _Delivery(
+            id=3,
+            webhook_subscription_id=1,
+            simulation_id=12,
+            status="FAILED",
+        ),
     ]
     session = _FakeSession(subscriptions=[sub], deliveries=deliveries)
     retried_ids: list[int] = []
@@ -1111,11 +1158,220 @@ def test_retry_failed_deliveries_empty_backlog_returns_zeros() -> None:
     assert result == {
         "requested": 0,
         "retried": 0,
+        "skipped": 0,
         "succeeded": 0,
         "failed": 0,
         "failed_delivery_ids": [],
         "deliveries": [],
     }
+
+
+def test_retry_failed_deliveries_skips_rows_with_later_success() -> None:
+    from app.simulation import webhook_delivery_history as history
+
+    sub = _Subscription(id=1, status="ACTIVE")
+    deliveries = [
+        _Delivery(
+            id=2,
+            webhook_subscription_id=1,
+            simulation_id=11,
+            event_type="simulation.completed",
+            status="FAILED",
+        ),
+        _Delivery(
+            id=3,
+            webhook_subscription_id=1,
+            simulation_id=11,
+            event_type="simulation.completed",
+            status="FAILED",
+        ),
+        _Delivery(
+            id=102,
+            webhook_subscription_id=1,
+            simulation_id=11,
+            event_type="simulation.completed",
+            status="SUCCESS",
+        ),
+    ]
+    session = _FakeSession(subscriptions=[sub], deliveries=deliveries)
+
+    def _should_not_be_called(*args, **kwargs):
+        raise AssertionError("recovered delivery must not be retried again")
+
+    with patch.object(
+        history,
+        "retry_failed_delivery",
+        side_effect=_should_not_be_called,
+    ):
+        result = history.retry_failed_deliveries(
+            session,
+            subscription=sub,
+            limit=10,
+        )
+
+    assert result["requested"] == 2
+    assert result["retried"] == 0
+    assert result["skipped"] == 2
+    assert result["succeeded"] == 0
+    assert result["failed"] == 0
+
+
+def test_retry_failed_deliveries_skips_older_rows_after_inline_success() -> None:
+    from app.simulation import webhook_delivery_history as history
+
+    sub = _Subscription(id=1, status="ACTIVE")
+    deliveries = [
+        _Delivery(
+            id=2,
+            webhook_subscription_id=1,
+            simulation_id=11,
+            event_type="simulation.completed",
+            status="FAILED",
+        ),
+        _Delivery(
+            id=3,
+            webhook_subscription_id=1,
+            simulation_id=11,
+            event_type="simulation.completed",
+            status="FAILED",
+        ),
+    ]
+    session = _FakeSession(subscriptions=[sub], deliveries=deliveries)
+    retried_ids: list[int] = []
+
+    def _fake_retry(db, *, delivery):
+        retried_ids.append(delivery.id)
+        return _Delivery(
+            id=delivery.id + 100,
+            webhook_subscription_id=1,
+            simulation_id=11,
+            event_type="simulation.completed",
+            status="SUCCESS",
+            subscription=sub,
+        )
+
+    with patch.object(
+        history,
+        "retry_failed_delivery",
+        side_effect=_fake_retry,
+    ):
+        result = history.retry_failed_deliveries(
+            session,
+            subscription=sub,
+            limit=10,
+        )
+
+    assert retried_ids == [3]
+    assert result["requested"] == 2
+    assert result["retried"] == 1
+    assert result["skipped"] == 1
+    assert result["succeeded"] == 1
+
+
+def test_retry_failed_deliveries_continues_after_inline_failure() -> None:
+    from app.simulation import webhook_delivery_history as history
+
+    sub = _Subscription(id=1, status="ACTIVE")
+    deliveries = [
+        _Delivery(
+            id=2,
+            webhook_subscription_id=1,
+            simulation_id=11,
+            event_type="simulation.completed",
+            status="FAILED",
+        ),
+        _Delivery(
+            id=3,
+            webhook_subscription_id=1,
+            simulation_id=11,
+            event_type="simulation.completed",
+            status="FAILED",
+        ),
+    ]
+    session = _FakeSession(subscriptions=[sub], deliveries=deliveries)
+    retried_ids: list[int] = []
+
+    def _fake_retry(db, *, delivery):
+        retried_ids.append(delivery.id)
+        ok = delivery.id == 2
+        return _Delivery(
+            id=delivery.id + 100,
+            webhook_subscription_id=1,
+            simulation_id=11,
+            event_type="simulation.completed",
+            status="SUCCESS" if ok else "FAILED",
+            subscription=sub,
+        )
+
+    with patch.object(
+        history,
+        "retry_failed_delivery",
+        side_effect=_fake_retry,
+    ):
+        result = history.retry_failed_deliveries(
+            session,
+            subscription=sub,
+            limit=10,
+        )
+
+    assert retried_ids == [3, 2]
+    assert result["requested"] == 2
+    assert result["retried"] == 2
+    assert result["skipped"] == 0
+    assert result["succeeded"] == 1
+    assert result["failed"] == 1
+
+
+def test_retry_failed_deliveries_retries_failure_that_follows_success() -> None:
+    from app.simulation import webhook_delivery_history as history
+
+    sub = _Subscription(id=1, status="ACTIVE")
+    deliveries = [
+        _Delivery(
+            id=2,
+            webhook_subscription_id=1,
+            simulation_id=11,
+            event_type="simulation.completed",
+            status="SUCCESS",
+        ),
+        _Delivery(
+            id=3,
+            webhook_subscription_id=1,
+            simulation_id=11,
+            event_type="simulation.completed",
+            status="FAILED",
+        ),
+    ]
+    session = _FakeSession(subscriptions=[sub], deliveries=deliveries)
+    retried_ids: list[int] = []
+
+    def _fake_retry(db, *, delivery):
+        retried_ids.append(delivery.id)
+        return _Delivery(
+            id=delivery.id + 100,
+            webhook_subscription_id=1,
+            simulation_id=11,
+            event_type="simulation.completed",
+            status="SUCCESS",
+            subscription=sub,
+        )
+
+    with patch.object(
+        history,
+        "retry_failed_delivery",
+        side_effect=_fake_retry,
+    ):
+        result = history.retry_failed_deliveries(
+            session,
+            subscription=sub,
+            limit=10,
+        )
+
+    assert retried_ids == [3]
+    assert result["requested"] == 1
+    assert result["retried"] == 1
+    assert result["skipped"] == 0
+    assert result["succeeded"] == 1
 
 
 def test_retry_failed_deliveries_rejects_disabled_webhook() -> None:

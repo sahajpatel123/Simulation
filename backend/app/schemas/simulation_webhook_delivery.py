@@ -35,10 +35,17 @@ class SimulationWebhookRetryOut(BaseModel):
 
 
 class SimulationWebhookBatchRetryOut(BaseModel):
-    """Summary of a bulk retry over a webhook's failed delivery backlog."""
+    """Summary of a bulk retry over a webhook's failed delivery backlog.
+
+    ``requested`` is the number of failed rows considered from the backlog;
+    ``retried`` is how many new delivery attempts were actually made, and
+    ``skipped`` counts rows that were not re-sent because they already had a
+    later successful delivery or were deduplicated during this run.
+    """
 
     requested: int
     retried: int
+    skipped: int = 0
     succeeded: int
     failed: int
     failed_delivery_ids: list[int] = Field(default_factory=list)

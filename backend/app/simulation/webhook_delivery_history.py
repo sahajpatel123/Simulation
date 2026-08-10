@@ -24,6 +24,11 @@ def _default_attempt_status(event_type: str) -> str:
     return "COMPLETED" if event_type.endswith("completed") else "FAILED"
 
 
+def _event_key(delivery: SimulationWebhookDelivery) -> tuple[int | None, str]:
+    """Identity of the logical event a delivery row represents."""
+    return (delivery.simulation_id, delivery.event_type)
+
+
 def record_webhook_delivery(
     db: Session,
     *,
@@ -136,13 +141,17 @@ def retry_failed_deliveries(
     subscription: SimulationWebhookSubscription,
     limit: int = 25,
 ) -> dict[str, Any]:
-    """Re-deliver up to ``limit`` failed deliveries, newest first.
+    """Re-deliver up to ``limit`` still-outstanding failed deliveries.
 
     One call replays the whole backlog after an endpoint outage instead of
-    forcing one retry request per delivery. Every attempt is persisted as a
-    new delivery row (each with its own commit so a later failure never
-    loses earlier attempts), and the returned summary reports how many
-    retries succeeded and which attempts still failed.
+    forcing one retry request per delivery. Failed rows that already have a
+    later successful delivery for the same event are skipped, and once a
+    retry succeeds for an event the older failed rows for that event are not
+    replayed, so repeated calls cannot duplicate notifications. Every attempt
+    is persisted as a new delivery row (each with its own commit so a later
+    failure never loses earlier attempts), and the returned summary reports
+    how many retries succeeded, how many rows were skipped, and which
+    attempts still failed.
     """
     if subscription.status != "ACTIVE":
         raise ValueError(
@@ -162,15 +171,57 @@ def retry_failed_deliveries(
         .limit(limit)
         .all()
     )
+    if not failed_deliveries:
+        return {
+            "requested": 0,
+            "retried": 0,
+            "skipped": 0,
+            "succeeded": 0,
+            "failed": 0,
+            "failed_delivery_ids": [],
+            "deliveries": [],
+        }
+
+    # Original FAILED rows are kept as audit history, so a successful manual
+    # retry leaves them behind. Skip any failed row that already has a later
+    # SUCCESS for the same logical event, otherwise a second bulk-retry call
+    # would replay the same notifications.
+    min_failed_id = min(delivery.id for delivery in failed_deliveries)
+    later_successes = (
+        db.query(SimulationWebhookDelivery)
+        .filter(
+            SimulationWebhookDelivery.webhook_subscription_id == subscription.id,
+            SimulationWebhookDelivery.status == "SUCCESS",
+            SimulationWebhookDelivery.id > min_failed_id,
+        )
+        .all()
+    )
+    latest_success_id: dict[tuple[int | None, str], int] = {}
+    for success in later_successes:
+        key = _event_key(success)
+        latest_success_id[key] = max(
+            latest_success_id.get(key, success.id),
+            success.id,
+        )
 
     retried: list[SimulationWebhookDelivery] = []
+    succeeded_this_run: set[tuple[int | None, str]] = set()
     for delivery in failed_deliveries:
-        retried.append(retry_failed_delivery(db, delivery=delivery))
+        key = _event_key(delivery)
+        if key in succeeded_this_run:
+            continue
+        if latest_success_id.get(key, -1) > delivery.id:
+            continue
+        new_delivery = retry_failed_delivery(db, delivery=delivery)
+        retried.append(new_delivery)
+        if new_delivery.status == "SUCCESS":
+            succeeded_this_run.add(key)
 
     succeeded = sum(1 for item in retried if item.status == "SUCCESS")
     return {
         "requested": len(failed_deliveries),
         "retried": len(retried),
+        "skipped": len(failed_deliveries) - len(retried),
         "succeeded": succeeded,
         "failed": len(retried) - succeeded,
         "failed_delivery_ids": [

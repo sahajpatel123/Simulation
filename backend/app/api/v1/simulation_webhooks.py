@@ -401,12 +401,14 @@ def retry_failed_simulation_webhook_deliveries(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> SimulationWebhookBatchRetryOut:
-    """Re-deliver every recorded failed event for one webhook, newest first.
+    """Re-deliver every outstanding failed event for one webhook, newest first.
 
     Useful after an endpoint outage: one call replays the backlog instead of
-    one retry request per delivery. Each attempt is recorded as a new
-    delivery row; the summary reports how many attempts succeeded and which
-    deliveries still failed.
+    one retry request per delivery. Failed rows that already have a later
+    successful delivery for the same event are skipped, so repeated calls do
+    not duplicate notifications. Each attempt is recorded as a new delivery
+    row; the summary reports how many attempts succeeded, how many rows were
+    skipped, and which deliveries still failed.
     """
     webhook = _get_owned_webhook(db, current_user.id, project_id, webhook_id)
     if webhook.status != "ACTIVE":
@@ -418,6 +420,7 @@ def retry_failed_simulation_webhook_deliveries(
     return SimulationWebhookBatchRetryOut(
         requested=result["requested"],
         retried=result["retried"],
+        skipped=result["skipped"],
         succeeded=result["succeeded"],
         failed=result["failed"],
         failed_delivery_ids=result["failed_delivery_ids"],
