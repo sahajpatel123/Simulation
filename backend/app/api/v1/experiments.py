@@ -37,9 +37,11 @@ from app.schemas.ab_test import (
     AbTestAnalysisOut,
     AbTestExperimentCreate,
     AbTestExperimentOut,
+    AbTestExperimentSummaryOut,
     AbTestExperimentUpdate,
 )
 from app.simulation import ab_test_analysis as ab_engine
+from app.simulation.ab_test_summary import build_ab_test_summary
 
 router = APIRouter(tags=["experiments"])
 
@@ -245,6 +247,36 @@ def list_ab_test_experiments(
         .all()
     )
     return [_hydrate_experiment(row) for row in rows]
+
+
+@router.get(
+    "/projects/{project_id}/experiments/summary",
+    response_model=AbTestExperimentSummaryOut,
+    summary="A/B experiment portfolio summary for a project",
+    responses=_JSON_200,
+)
+def get_ab_test_experiments_summary(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AbTestExperimentSummaryOut:
+    """
+    Roll every logged A/B experiment for the project up into one digest:
+    verdict counts, significant-win rate, control-vs-challenger record,
+    aggregate traffic / conversions, median uplift, the top statistically
+    significant winners, and tests still trending. Read-only and cheap —
+    the digest is computed from the denormalised verdict columns, so no
+    statistics are re-run on the dashboard read.
+    """
+    get_owned_project(db, current_user.id, project_id)
+    rows = (
+        db.query(AbTestExperiment)
+        .filter(AbTestExperiment.project_id == project_id)
+        .all()
+    )
+    return AbTestExperimentSummaryOut(
+        **build_ab_test_summary(rows, project_id)
+    )
 
 
 @router.get(

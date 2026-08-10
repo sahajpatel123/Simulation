@@ -16,7 +16,6 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.simulation.ab_test_analysis import VERDICT_INSUFFICIENT_DATA
 
-
 # PostgreSQL INTEGER is a signed 32-bit column; cap observed counts at the DB
 # limit so a mis-pasted number fails schema validation (HTTP 422) instead of
 # surfacing as a server error when the row is written.
@@ -216,11 +215,53 @@ class AbTestExperimentOut(BaseModel):
     updated_at: datetime
 
 
+class AbTestSummaryExperiment(BaseModel):
+    """One experiment row surfaced in the project A/B digest."""
+
+    id: int
+    name: str
+    verdict: str
+    significant: bool
+    winner: str | None = None
+    absolute_uplift: float | None = None
+    relative_uplift_pct: float | None = None
+    created_at: datetime | None = None
+
+
+class AbTestExperimentSummaryOut(BaseModel):
+    """Project-level rollup of every logged A/B experiment."""
+
+    project_id: int
+    total_experiments: int = 0
+    verdict_counts: dict[str, int] = Field(default_factory=dict)
+    significant_count: int = 0
+    trending_count: int = 0
+    inconclusive_count: int = 0
+    insufficient_data_count: int = 0
+    unclassified_count: int = 0
+    significant_win_rate: float | None = None
+    control_won_count: int = 0
+    challenger_won_count: int = 0
+    total_visitors: int = 0
+    total_conversions: int = 0
+    overall_conversion_rate: float | None = None
+    mean_absolute_uplift: float | None = None
+    median_absolute_uplift: float | None = None
+    median_relative_uplift_pct: float | None = None
+    next_action: str = ""
+    top_winners: list[AbTestSummaryExperiment] = Field(default_factory=list)
+    trending_experiments: list[AbTestSummaryExperiment] = Field(
+        default_factory=list
+    )
+
+
 __all__ = [
     "AbTestAnalysisIn",
     "AbTestAnalysisOut",
     "AbTestExperimentCreate",
     "AbTestExperimentOut",
+    "AbTestExperimentSummaryOut",
+    "AbTestSummaryExperiment",
     "AbTestExperimentUpdate",
     "AbTestVariantIn",
     "AbTestVariantOut",
