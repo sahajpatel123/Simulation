@@ -6,7 +6,8 @@ import sys
 import types
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
 if "razorpay" not in sys.modules:
     stub = types.ModuleType("razorpay")
@@ -94,6 +95,23 @@ def _call_route(
     )
 
 
+def _call_count_route(
+    *,
+    simulation_id: int = 1,
+    format: str = "csv",
+    session: _FakeSession | None = None,
+):
+    from app.api.v1 import simulations as sim_mod
+
+    db = session if session is not None else _FakeSession(_FakeSimulation())
+    return sim_mod.get_findings_count_export(
+        simulation_id=simulation_id,
+        format=format,
+        db=db,
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+
 async def _collect(resp) -> bytes:
     chunks = []
     async for chunk in resp.body_iterator:
@@ -155,3 +173,62 @@ def test_empty_results_raises_422() -> None:
     with pytest.raises(HTTPException) as exc:
         _call_route(session=session)
     assert exc.value.status_code == 422
+
+
+def test_findings_count_returns_csv() -> None:
+    resp = _call_count_route()
+
+    assert resp.media_type == "text/csv; charset=utf-8"
+    assert 'filename="findings-count-1.csv"' in resp.headers["Content-Disposition"]
+    body = _body(resp).decode("utf-8")
+    assert "simulation_id,findings_count" in body
+    assert "1,1" in body
+
+
+def test_findings_count_format_json_returns_payload() -> None:
+    resp = _call_count_route(format="json")
+
+    assert resp.media_type == "application/json; charset=utf-8"
+    body = _body(resp).decode("utf-8")
+    assert '"simulation_id": 1' in body
+    assert '"findings_count": 1' in body
+
+
+def test_findings_count_invalid_format_rejected_with_422() -> None:
+    from app.api.v1 import simulations as sim_mod
+    from app.core.deps import get_current_user, get_db
+
+    mini_app = FastAPI()
+    mini_app.include_router(sim_mod.router)
+    mini_app.dependency_overrides[get_db] = lambda: _FakeSession(_FakeSimulation())
+    mini_app.dependency_overrides[get_current_user] = lambda: type(
+        "U", (), {"id": 42}
+    )()
+
+    with TestClient(mini_app) as client:
+        resp = client.get(
+            "/simulations/1/findings-count/export",
+            params={"format": "xlsx"},
+        )
+
+    assert resp.status_code == 422
+
+
+def test_findings_count_missing_simulation_raises_404() -> None:
+    with pytest.raises(HTTPException) as exc:
+        _call_count_route(session=_FakeSession(sim=None))
+    assert exc.value.status_code == 404
+
+
+def test_findings_count_failed_simulation_raises_422() -> None:
+    session = _FakeSession(_FakeSimulation(status="FAILED", error_message="boom"))
+    with pytest.raises(HTTPException) as exc:
+        _call_count_route(session=session)
+    assert exc.value.status_code == 422
+
+
+def test_findings_count_pending_simulation_raises_409() -> None:
+    session = _FakeSession(_FakeSimulation(status="PENDING"))
+    with pytest.raises(HTTPException) as exc:
+        _call_count_route(session=session)
+    assert exc.value.status_code == 409

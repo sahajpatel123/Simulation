@@ -220,6 +220,7 @@ from app.simulation.feature_prioritization_export import (
 )
 from app.simulation.findings_export import (
     extract_findings,
+    findings_count_to_csv,
     findings_to_csv,
     findings_to_markdown,
 )
@@ -11042,6 +11043,92 @@ def get_findings_export(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="findings-{simulation_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{simulation_id}/findings-count/export",
+    summary="Export one simulation's findings count as CSV or JSON",
+    response_class=StreamingResponse,
+)
+def get_findings_count_export(
+    simulation_id: int,
+    format: Literal["csv", "json"] = Query(
+        default="csv",
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "findings-count row."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Export a single simulation's domain-findings count as CSV or JSON."""
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — findings-count export requires "
+                "completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    findings = extract_findings(sim.results_json)
+    count = len(findings)
+    row = {"simulation_id": simulation_id, "findings_count": count}
+    metadata = {
+        "generated_at": datetime.now(tz=UTC).isoformat(),
+        "user_id": current_user.id,
+        "format_version": "1",
+    }
+
+    if format == "json":
+        json_text = json.dumps(
+            {
+                "metadata": metadata,
+                "simulation_id": simulation_id,
+                "project_id": sim.project_id,
+                "findings_count": count,
+            },
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="findings-count-{simulation_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = findings_count_to_csv(row, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="findings-count-{simulation_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },

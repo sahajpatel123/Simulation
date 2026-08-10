@@ -292,8 +292,33 @@ def _escape_md_cell(value: str) -> str:
     return re.sub(r"[\r\n]+", " ", value).replace("|", "\\|")
 
 
+def findings_count_to_csv(
+    row: dict[str, Any],
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    """Render a findings-count row as a single-row CSV table."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+
+    if metadata:
+        writer.writerow(["generated_at", _safe_text(metadata.get("generated_at"))])
+        writer.writerow(["user_id", _safe_text(metadata.get("user_id"))])
+        writer.writerow(["format_version", _safe_text(metadata.get("format_version", "1"))])
+        writer.writerow([])
+
+    writer.writerow(["simulation_id", "findings_count"])
+    writer.writerow(
+        [
+            _safe_text(row.get("simulation_id")),
+            _safe_text(row.get("findings_count")),
+        ]
+    )
+    return buffer.getvalue()
+
+
 __all__ = [
     "extract_findings",
+    "findings_count_to_csv",
     "findings_to_csv",
     "findings_to_markdown",
 ]
