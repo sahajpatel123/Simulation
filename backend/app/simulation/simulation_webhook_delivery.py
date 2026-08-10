@@ -12,6 +12,7 @@ import hashlib
 import hmac
 import json
 import logging
+import secrets
 import time
 from typing import Any
 from urllib.parse import urlparse
@@ -21,6 +22,15 @@ import httpx
 from app.core.ssrf_guard import UnsafeOutboundURLError, assert_safe_outbound_url
 
 logger = logging.getLogger(__name__)
+
+
+def generate_webhook_secret() -> str:
+    """Generate a fresh HMAC-SHA256 signing secret for a webhook subscription.
+
+    Uses ``secrets.token_urlsafe(32)`` (43 URL-safe characters, ~256 bits of
+    entropy) so create and rotate paths share the same secret format.
+    """
+    return secrets.token_urlsafe(32)
 
 
 def _serialise_webhook_payload(payload: dict[str, Any]) -> str:

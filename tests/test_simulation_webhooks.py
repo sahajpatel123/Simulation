@@ -463,7 +463,7 @@ def test_create_webhook_route_generates_secret() -> None:
     from app.api.v1 import simulation_webhooks as mod
 
     session = _FakeSession()
-    with patch.object(mod.secrets, "token_urlsafe", return_value="gen-secret"):
+    with patch.object(mod, "generate_webhook_secret", return_value="gen-secret"):
         out = mod.create_simulation_webhook(
             project_id=10,
             payload=mod.SimulationWebhookCreate(
@@ -478,6 +478,79 @@ def test_create_webhook_route_generates_secret() -> None:
     assert out.url == "https://example.com/hook"
     assert out.id == 1
     assert out.created_at is not None
+
+
+def test_generate_webhook_secret_uses_urlsafe_token() -> None:
+    from app.simulation import simulation_webhook_delivery as delivery
+
+    with patch.object(
+        delivery.secrets,
+        "token_urlsafe",
+        return_value="rotated-secret",
+    ):
+        assert delivery.generate_webhook_secret() == "rotated-secret"
+
+
+def test_rotate_webhook_secret_returns_new_secret_and_commits() -> None:
+    from app.api.v1 import simulation_webhooks as mod
+
+    sub = _Subscription(secret="old-secret")
+    session = _FakeSession(subscriptions=[sub])
+    with patch.object(
+        mod,
+        "generate_webhook_secret",
+        return_value="new-secret",
+    ):
+        out = mod.rotate_simulation_webhook_secret(
+            project_id=10,
+            webhook_id=1,
+            db=session,
+            current_user=_current_user(),
+        )
+    assert session.commits == 1
+    assert out.id == 1
+    assert out.secret == "new-secret"
+    assert sub.secret == "new-secret"
+
+
+def test_rotate_webhook_secret_preserves_subscription_settings() -> None:
+    from app.api.v1 import simulation_webhooks as mod
+
+    sub = _Subscription(
+        url="https://example.com/hooks/cee",
+        secret="old-secret",
+        status="ACTIVE",
+        event_type="simulation.*",
+    )
+    session = _FakeSession(subscriptions=[sub])
+    with patch.object(
+        mod,
+        "generate_webhook_secret",
+        return_value="new-secret",
+    ):
+        out = mod.rotate_simulation_webhook_secret(
+            project_id=10,
+            webhook_id=1,
+            db=session,
+            current_user=_current_user(),
+        )
+    assert out.url == "https://example.com/hooks/cee"
+    assert out.status == "ACTIVE"
+    assert out.event_type == "simulation.*"
+
+
+def test_rotate_webhook_secret_404_when_webhook_not_owned() -> None:
+    from app.api.v1 import simulation_webhooks as mod
+
+    session = _FakeSession(subscriptions=[])
+    with pytest.raises(HTTPException) as exc:
+        mod.rotate_simulation_webhook_secret(
+            project_id=10,
+            webhook_id=99,
+            db=session,
+            current_user=_current_user(),
+        )
+    assert exc.value.status_code == 404
 
 
 def test_create_webhook_rejects_http() -> None:
@@ -625,6 +698,7 @@ def test_routes_registered() -> None:
     assert "/projects/{project_id}/webhooks" in paths
     assert "/projects/{project_id}/webhooks/{webhook_id}" in paths
     assert "/projects/{project_id}/webhooks/{webhook_id}/ping" in paths
+    assert "/projects/{project_id}/webhooks/{webhook_id}/rotate-secret" in paths
     assert "/projects/{project_id}/webhooks/{webhook_id}/retry-failed" in paths
 
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import secrets
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -30,6 +29,7 @@ from app.schemas.simulation_webhooks import (
 from app.simulation.simulation_webhook_delivery import (
     build_webhook_payload,
     deliver_webhook_event,
+    generate_webhook_secret,
 )
 from app.simulation.webhook_delivery_history import (
     record_webhook_delivery,
@@ -121,7 +121,7 @@ def create_simulation_webhook(
     webhook = SimulationWebhookSubscription(
         project_id=project_id,
         url=url_str,
-        secret=secrets.token_urlsafe(32),
+        secret=generate_webhook_secret(),
         status="ACTIVE",
         event_type=payload.event_type,
     )
@@ -170,6 +170,35 @@ def update_simulation_webhook(
     db.commit()
     db.refresh(webhook)
     return _without_secret(webhook)
+
+
+@router.post(
+    "/{project_id}/webhooks/{webhook_id}/rotate-secret",
+    response_model=SimulationWebhookOut,
+    summary="Rotate the signing secret for a simulation webhook",
+    # Rotation invalidates the receiver's current key, so cap automated
+    # callers from churning secrets (and deliveries) in a tight loop.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
+)
+def rotate_simulation_webhook_secret(
+    project_id: int,
+    webhook_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SimulationWebhookOut:
+    """Generate a new HMAC signing secret for a webhook subscription.
+
+    The new secret is returned exactly once; list and update responses hide
+    it, so the receiving endpoint must store it immediately. Delivery
+    history and subscription settings (URL, event type, status) are
+    preserved, which makes rotation the safe way to invalidate a leaked or
+    compromised secret.
+    """
+    webhook = _get_owned_webhook(db, current_user.id, project_id, webhook_id)
+    webhook.secret = generate_webhook_secret()
+    db.commit()
+    db.refresh(webhook)
+    return SimulationWebhookOut.model_validate(webhook)
 
 
 @router.delete(
@@ -435,6 +464,7 @@ __all__ = [
     "create_simulation_webhook",
     "list_simulation_webhooks",
     "update_simulation_webhook",
+    "rotate_simulation_webhook_secret",
     "delete_simulation_webhook",
     "ping_simulation_webhook",
     "list_simulation_webhook_deliveries",
