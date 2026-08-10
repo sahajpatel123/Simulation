@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from app.simulation.findings_export import (
     extract_findings,
+    findings_count_to_csv,
     findings_to_csv,
     findings_to_markdown,
 )
@@ -31,6 +32,17 @@ def test_extract_findings_from_legacy_findings_and_list() -> None:
     assert extract_findings({"findings": [_finding()]}) == [_finding()]
     assert extract_findings([_finding()]) == [_finding()]
     assert extract_findings(None) == []
+
+
+def test_findings_count_to_csv_contains_header_and_row() -> None:
+    csv_text = findings_count_to_csv(
+        {"simulation_id": 7, "findings_count": 3},
+        metadata={"generated_at": "now", "user_id": 42},
+    )
+
+    assert "simulation_id,findings_count" in csv_text
+    assert "7,3" in csv_text
+    assert "generated_at,now" in csv_text
 
 
 def test_findings_to_csv_contains_header_and_row() -> None:
