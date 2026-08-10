@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -309,15 +310,47 @@ def _prediction_columns(
     only contributes predictions when it is completed and carries a
     ``results_json`` payload; otherwise the row is recorded without
     predictions (variance stays ``None``) rather than fabricating zeros.
+
+    Canonical keys are preferred and only fall back to legacy keys when
+    they are absent — a genuine ``0.0`` prediction is kept so a zero
+    forecast is not silently treated as "no prediction". Malformed or
+    non-finite values are treated as missing instead of crashing the
+    route or persisting NaN/Infinity into the outcomes table.
     """
     if sim is None or not sim.results_json:
         return None, None, None
     results = sim.results_json
-    maybe_conv = results.get("mean_conversion_rate") or results.get("conversion_rate")
-    maybe_mrr = results.get("mean_revenue") or results.get("revenue_projection")
-    pred_conv = float(maybe_conv) if maybe_conv is not None else None
-    pred_mrr = float(maybe_mrr) if maybe_mrr is not None else None
-    return pred_conv, pred_mrr, sim.id
+    if not isinstance(results, dict):
+        return None, None, None
+    raw_conv = results.get("mean_conversion_rate")
+    if raw_conv is None:
+        raw_conv = results.get("conversion_rate")
+    raw_mrr = results.get("mean_revenue")
+    if raw_mrr is None:
+        raw_mrr = results.get("revenue_projection")
+    return (
+        _safe_prediction_float(raw_conv),
+        _safe_prediction_float(raw_mrr),
+        sim.id,
+    )
+
+
+def _safe_prediction_float(value: Any) -> float | None:
+    """Coerce a ``results_json`` value to a finite float, or ``None``.
+
+    ``None``, booleans, non-numeric strings and non-finite values (NaN /
+    Infinity) are treated as missing so a malformed legacy payload can
+    neither crash outcome recording nor persist a non-serializable
+    prediction. Zero is a legitimate prediction and is preserved; callers
+    that cannot divide by zero already guard with ``predicted == 0.0``.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def _build_outcome_row(

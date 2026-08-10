@@ -289,6 +289,115 @@ def test_record_outcomes_batch_invalidates_caches(monkeypatch) -> None:
     assert out_mod._USER_RECENT_OUTCOMES_CACHE_NAMESPACE in namespaces
 
 
+def test_record_outcomes_batch_keeps_zero_valued_predictions() -> None:
+    session = _FakeSession(
+        simulations=[
+            _Simulation(
+                7,
+                results={"mean_conversion_rate": 0.0, "mean_revenue": 0.0},
+            )
+        ]
+    )
+
+    resp = _call_batch(
+        {"outcomes": [_valid_row(conversion=0.05, mrr=1000.0)]},
+        session=session,
+    )
+
+    outcome = resp.outcomes[0]
+    assert outcome.simulation_id == 7
+    assert outcome.predicted_conversion_rate == 0.0
+    assert outcome.predicted_mrr == 0.0
+    assert outcome.variance.conversion is None
+    assert outcome.variance.mrr is None
+    assert outcome.calibration_score == 50.0
+
+
+def test_record_outcomes_batch_explicit_sim_keeps_zero_predictions() -> None:
+    session = _FakeSession(
+        simulations=[
+            _Simulation(
+                7,
+                results={"mean_conversion_rate": 0.0, "mean_revenue": 0.0},
+            )
+        ]
+    )
+
+    resp = _call_batch(
+        {"outcomes": [_valid_row(simulation_id=7)]},
+        session=session,
+    )
+
+    outcome = resp.outcomes[0]
+    assert outcome.simulation_id == 7
+    assert outcome.predicted_conversion_rate == 0.0
+    assert outcome.variance.conversion is None
+
+
+def test_record_outcomes_batch_tolerates_malformed_legacy_results() -> None:
+    session = _FakeSession(
+        simulations=[
+            _Simulation(
+                7,
+                results={
+                    "mean_conversion_rate": "4%",
+                    "mean_revenue": "not-a-number",
+                },
+            )
+        ]
+    )
+
+    resp = _call_batch({"outcomes": [_valid_row()]}, session=session)
+
+    outcome = resp.outcomes[0]
+    assert outcome.simulation_id == 7
+    assert outcome.predicted_conversion_rate is None
+    assert outcome.predicted_mrr is None
+    assert outcome.variance.conversion is None
+
+
+def test_record_outcomes_batch_drops_non_finite_predictions() -> None:
+    session = _FakeSession(
+        simulations=[
+            _Simulation(
+                7,
+                results={
+                    "mean_conversion_rate": float("nan"),
+                    "mean_revenue": float("inf"),
+                },
+            )
+        ]
+    )
+
+    resp = _call_batch({"outcomes": [_valid_row()]}, session=session)
+
+    outcome = resp.outcomes[0]
+    assert outcome.simulation_id == 7
+    assert outcome.predicted_conversion_rate is None
+    assert outcome.predicted_mrr is None
+
+
+def test_prediction_columns_falls_back_to_legacy_keys() -> None:
+    from app.api.v1 import outcomes as out_mod
+
+    class _Sim:
+        id = 11
+        results_json = {"conversion_rate": 0.02, "revenue_projection": 300.0}
+
+    assert out_mod._prediction_columns(_Sim()) == (0.02, 300.0, 11)
+    assert out_mod._prediction_columns(None) == (None, None, None)
+
+
+def test_prediction_columns_coerces_numeric_strings() -> None:
+    from app.api.v1 import outcomes as out_mod
+
+    class _Sim:
+        id = 12
+        results_json = {"mean_conversion_rate": "0.04", "mean_revenue": "900"}
+
+    assert out_mod._prediction_columns(_Sim()) == (0.04, 900.0, 12)
+
+
 def test_outcome_batch_schema_rejects_empty_list() -> None:
     with pytest.raises(ValidationError) as exc:
         OutcomeBatchCreate(outcomes=[])
