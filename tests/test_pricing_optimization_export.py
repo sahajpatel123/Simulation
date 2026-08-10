@@ -133,6 +133,18 @@ def test_csv_has_summary_curve_profiles_and_recommendations() -> None:
     assert "elasticity_measurement,arc_0.8x_to_1.2x" in csv_text
 
 
+def test_csv_metadata_defaults_format_version_to_contract() -> None:
+    csv_text = pricing_optimization_to_csv(
+        _payload(),
+        metadata={
+            "generated_at": "2026-08-10T00:00:00Z",
+            "user_id": 42,
+        },
+    )
+
+    assert f"format_version,{FORMAT_VERSION}" in csv_text
+
+
 def test_csv_empty_payload_still_renders_sections() -> None:
     csv_text = pricing_optimization_to_csv(
         PricingOptimizationOut(
@@ -391,6 +403,19 @@ def test_export_route_returns_json(monkeypatch: pytest.MonkeyPatch) -> None:
     assert '"metadata"' in body
     assert '"pricing_optimization"' in body
     assert '"verdict": "OVERPRICED"' in body
+
+
+def test_export_route_metadata_uses_format_version_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sim_mod = _import_simulations_module()
+    monkeypatch.setattr(sim_mod, "FORMAT_VERSION", "9")
+
+    resp = _call_route(monkeypatch, format="json")
+    body = _body(resp).decode("utf-8")
+    parsed = json.loads(body)
+
+    assert parsed["metadata"]["format_version"] == "9"
 
 
 def test_export_route_returns_markdown(monkeypatch: pytest.MonkeyPatch) -> None:

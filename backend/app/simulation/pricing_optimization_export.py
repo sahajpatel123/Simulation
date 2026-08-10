@@ -78,14 +78,14 @@ def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
     if not metadata:
         return []
     rows: list[tuple[str, str]] = []
-    for key in (
-        "generated_at",
-        "user_id",
-        "format_version",
-        "simulation_id",
-        "project_id",
+    for key, default in (
+        ("generated_at", ""),
+        ("user_id", ""),
+        ("format_version", FORMAT_VERSION),
+        ("simulation_id", ""),
+        ("project_id", ""),
     ):
-        value = metadata.get(key, "")
+        value = metadata.get(key, default)
         rows.append((key, "" if value is None else str(value)))
     return rows
 
