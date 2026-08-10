@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -18,6 +18,7 @@ from app.schemas.simulation_webhook_delivery import (
     SimulationWebhookBatchRetryOut,
     SimulationWebhookDeliveryListOut,
     SimulationWebhookDeliveryOut,
+    SimulationWebhookDeliveryStatsOut,
     SimulationWebhookRetryOut,
 )
 from app.schemas.simulation_webhooks import (
@@ -41,6 +42,7 @@ from app.simulation.webhook_delivery_history_export import (
     webhook_deliveries_to_csv,
     webhook_deliveries_to_json,
 )
+from app.simulation.webhook_delivery_stats import build_webhook_delivery_stats
 
 router = APIRouter(prefix="/projects", tags=["simulation-webhooks"])
 
@@ -390,6 +392,55 @@ def export_simulation_webhook_deliveries(
     )
 
 
+@router.get(
+    "/{project_id}/webhooks/{webhook_id}/deliveries/stats",
+    response_model=SimulationWebhookDeliveryStatsOut,
+    summary="Show delivery health statistics for a simulation webhook",
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_simulation_webhook_delivery_stats(
+    project_id: int,
+    webhook_id: int,
+    days: int = Query(default=30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SimulationWebhookDeliveryStatsOut:
+    """Return a windowed health summary for one webhook subscription.
+
+    Aggregates delivery attempts in the last ``days`` days (default 30):
+    success/failure counts and rate, HTTP status and event-type breakdowns,
+    retry pressure, the most frequent delivery errors, and a
+    HEALTHY/DEGRADED/DOWN verdict so operators can spot an endpoint outage
+    without scanning the raw delivery list.
+    """
+    webhook = _get_owned_webhook(db, current_user.id, project_id, webhook_id)
+    now = datetime.now(UTC)
+    cutoff = now - timedelta(days=days)
+    rows = (
+        db.query(SimulationWebhookDelivery)
+        .filter(
+            SimulationWebhookDelivery.webhook_subscription_id == webhook.id,
+            SimulationWebhookDelivery.created_at >= cutoff,
+        )
+        .order_by(
+            SimulationWebhookDelivery.created_at.desc(),
+            SimulationWebhookDelivery.id.desc(),
+        )
+        .all()
+    )
+    items = [
+        SimulationWebhookDeliveryOut.model_validate(row).model_dump(mode="json")
+        for row in rows
+    ]
+    stats = build_webhook_delivery_stats(
+        items,
+        webhook_id=webhook.id,
+        days=days,
+        now=now,
+    )
+    return SimulationWebhookDeliveryStatsOut(**stats)
+
+
 @router.post(
     "/{project_id}/webhooks/{webhook_id}/deliveries/{delivery_id}/retry",
     response_model=SimulationWebhookRetryOut,
@@ -480,6 +531,7 @@ __all__ = [
     "ping_simulation_webhook",
     "list_simulation_webhook_deliveries",
     "export_simulation_webhook_deliveries",
+    "get_simulation_webhook_delivery_stats",
     "retry_simulation_webhook_delivery",
     "retry_failed_simulation_webhook_deliveries",
 ]
