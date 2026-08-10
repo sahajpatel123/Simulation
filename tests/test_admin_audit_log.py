@@ -381,6 +381,32 @@ def test_list_rejects_inverted_time_window() -> None:
     assert exc.value.status_code == 400
 
 
+def test_list_accepts_mixed_naive_and_aware_window() -> None:
+    session = _FakeSession([])
+    resp = _call_list(
+        session,
+        since=datetime(2026, 1, 1),  # naive is treated as UTC
+        until=datetime(2026, 1, 2, tzinfo=UTC),
+    )
+    assert resp.items == []
+    assert len(session.fake_query.filters) == 1
+    assert len(session.fake_query.filters[0]) == 2
+    since_value = session.fake_query.filters[0][0].right.value
+    until_value = session.fake_query.filters[0][1].right.value
+    assert since_value == datetime(2026, 1, 1, tzinfo=UTC)
+    assert until_value == datetime(2026, 1, 2, tzinfo=UTC)
+
+
+def test_list_rejects_inverted_mixed_naive_and_aware_window() -> None:
+    with pytest.raises(HTTPException) as exc:
+        _call_list(
+            _FakeSession([]),
+            since=datetime(2026, 1, 2),  # naive is treated as UTC
+            until=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    assert exc.value.status_code == 400
+
+
 def test_export_csv_matches_list_filters_and_metadata() -> None:
     session = _FakeSession([_Row(**_audit_dict(id=1, user_id=7, status=404))])
     resp = _call_export(

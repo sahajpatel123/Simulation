@@ -23,6 +23,7 @@ from app.schemas.outcome import FounderOutcomeSubmit
 from app.schemas.pipeline_timing import PipelineTimingSummaryOut
 from app.schemas.portfolio import UserPortfolioOut
 from app.simulation.admin_audit_log import (
+    _utc,
     admin_audit_log_to_csv,
     admin_audit_log_to_json,
     apply_admin_audit_filters,
@@ -86,7 +87,9 @@ def _audit_filter_metadata(
 
 def _validate_audit_window(since: datetime | None, until: datetime | None) -> None:
     """Reject inverted since/until windows before they hit the DB."""
-    if since is not None and until is not None and since > until:
+    since_utc = _utc(since)
+    until_utc = _utc(until)
+    if since_utc is not None and until_utc is not None and since_utc > until_utc:
         raise HTTPException(
             status_code=400,
             detail="since must be earlier than or equal to until",
