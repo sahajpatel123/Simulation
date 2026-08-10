@@ -178,7 +178,7 @@ from app.simulation.intervention_digest import (
 from app.simulation.interventions_export import intervention_count_to_csv, interventions_to_csv
 from app.simulation.is_archived_export import is_archived_to_csv
 from app.simulation.landing_export import landing_to_csv
-from app.simulation.landing_url_export import landing_url_to_csv
+from app.simulation.landing_url_export import landing_url_count_to_csv, landing_url_to_csv
 from app.simulation.latest_snapshot import build_latest_snapshot
 from app.simulation.launch_checklist import build_launch_checklist
 from app.simulation.mvp_features_export import features_to_csv, mvp_feature_count_to_csv
@@ -4799,6 +4799,73 @@ def export_landing_url(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="landing-page-url-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/landing-url-count/export",
+    summary="Export a project's landing URL count as CSV or JSON",
+    response_class=StreamingResponse,
+)
+def export_landing_url_count(
+    project_id: int,
+    format: Literal["csv", "json"] = Query(
+        default="csv",
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "landing-url-count row."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Export a project's landing URL presence as CSV (default) or JSON."""
+    project = get_owned_project(db, current_user.id, project_id)
+    landing_url = getattr(project, "landing_page_url", None)
+    count = 1 if isinstance(landing_url, str) and landing_url.strip() else 0
+    row = {"project_id": project_id, "landing_url_count": count}
+
+    if format == "json":
+        json_text = json.dumps(
+            {
+                "generated_at": datetime.now(UTC).isoformat(),
+                "project_id": project_id,
+                "landing_url_count": count,
+            },
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="landing-url-count-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = landing_url_count_to_csv(
+        row,
+        metadata={
+            "generated_at": datetime.now(UTC).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="landing-url-count-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },
