@@ -16,6 +16,7 @@ from app.models.simulation_webhook_delivery import SimulationWebhookDelivery
 from app.models.simulation_webhook_subscription import SimulationWebhookSubscription
 from app.models.user import User
 from app.schemas.simulation_webhook_delivery import (
+    SimulationWebhookBatchRetryOut,
     SimulationWebhookDeliveryListOut,
     SimulationWebhookDeliveryOut,
     SimulationWebhookRetryOut,
@@ -32,6 +33,7 @@ from app.simulation.simulation_webhook_delivery import (
 )
 from app.simulation.webhook_delivery_history import (
     record_webhook_delivery,
+    retry_failed_deliveries,
     retry_failed_delivery,
 )
 from app.simulation.webhook_delivery_history_export import (
@@ -384,6 +386,48 @@ def retry_simulation_webhook_delivery(
     )
 
 
+@router.post(
+    "/{project_id}/webhooks/{webhook_id}/retry-failed",
+    response_model=SimulationWebhookBatchRetryOut,
+    summary="Retry all failed deliveries for a webhook subscription",
+    # Bulk retry fans out real HTTP requests per delivery; cap polling so a
+    # stray dashboard loop cannot drive repeated backlog replays.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
+)
+def retry_failed_simulation_webhook_deliveries(
+    project_id: int,
+    webhook_id: int,
+    limit: int = Query(default=25, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SimulationWebhookBatchRetryOut:
+    """Re-deliver every recorded failed event for one webhook, newest first.
+
+    Useful after an endpoint outage: one call replays the backlog instead of
+    one retry request per delivery. Each attempt is recorded as a new
+    delivery row; the summary reports how many attempts succeeded and which
+    deliveries still failed.
+    """
+    webhook = _get_owned_webhook(db, current_user.id, project_id, webhook_id)
+    if webhook.status != "ACTIVE":
+        raise HTTPException(
+            status_code=409,
+            detail="Webhook subscription must be ACTIVE to retry",
+        )
+    result = retry_failed_deliveries(db, subscription=webhook, limit=limit)
+    return SimulationWebhookBatchRetryOut(
+        requested=result["requested"],
+        retried=result["retried"],
+        succeeded=result["succeeded"],
+        failed=result["failed"],
+        failed_delivery_ids=result["failed_delivery_ids"],
+        deliveries=[
+            SimulationWebhookDeliveryOut.model_validate(item)
+            for item in result["deliveries"]
+        ],
+    )
+
+
 __all__ = [
     "create_simulation_webhook",
     "list_simulation_webhooks",
@@ -393,4 +437,5 @@ __all__ = [
     "list_simulation_webhook_deliveries",
     "export_simulation_webhook_deliveries",
     "retry_simulation_webhook_delivery",
+    "retry_failed_simulation_webhook_deliveries",
 ]

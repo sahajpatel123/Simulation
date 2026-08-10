@@ -130,7 +130,58 @@ def retry_failed_delivery(
     )
 
 
+def retry_failed_deliveries(
+    db: Session,
+    *,
+    subscription: SimulationWebhookSubscription,
+    limit: int = 25,
+) -> dict[str, Any]:
+    """Re-deliver up to ``limit`` failed deliveries, newest first.
+
+    One call replays the whole backlog after an endpoint outage instead of
+    forcing one retry request per delivery. Every attempt is persisted as a
+    new delivery row (each with its own commit so a later failure never
+    loses earlier attempts), and the returned summary reports how many
+    retries succeeded and which attempts still failed.
+    """
+    if subscription.status != "ACTIVE":
+        raise ValueError(
+            "cannot retry failed deliveries on a disabled webhook subscription"
+        )
+
+    failed_deliveries = (
+        db.query(SimulationWebhookDelivery)
+        .filter(
+            SimulationWebhookDelivery.webhook_subscription_id == subscription.id,
+            SimulationWebhookDelivery.status == "FAILED",
+        )
+        .order_by(
+            SimulationWebhookDelivery.created_at.desc(),
+            SimulationWebhookDelivery.id.desc(),
+        )
+        .limit(limit)
+        .all()
+    )
+
+    retried: list[SimulationWebhookDelivery] = []
+    for delivery in failed_deliveries:
+        retried.append(retry_failed_delivery(db, delivery=delivery))
+
+    succeeded = sum(1 for item in retried if item.status == "SUCCESS")
+    return {
+        "requested": len(failed_deliveries),
+        "retried": len(retried),
+        "succeeded": succeeded,
+        "failed": len(retried) - succeeded,
+        "failed_delivery_ids": [
+            item.id for item in retried if item.status != "SUCCESS"
+        ],
+        "deliveries": retried,
+    }
+
+
 __all__ = [
     "record_webhook_delivery",
     "retry_failed_delivery",
+    "retry_failed_deliveries",
 ]

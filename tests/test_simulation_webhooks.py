@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 import types
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import MethodType
 from unittest.mock import patch
 
@@ -50,8 +50,8 @@ class _Subscription:
         self.last_delivery_at = None
         self.last_delivery_status = None
         self.last_delivery_error = None
-        self.created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
-        self.updated_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        self.created_at = datetime(2026, 1, 1, tzinfo=UTC)
+        self.updated_at = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 class _Delivery:
@@ -84,7 +84,7 @@ class _Delivery:
         self.request_body = request_body
         self.retry_count = retry_count
         self.delivered_at = delivered_at or datetime(
-            2026, 1, 2, tzinfo=timezone.utc
+            2026, 1, 2, tzinfo=UTC
         )
         self.created_at = self.delivered_at
         self.updated_at = self.delivered_at
@@ -125,7 +125,7 @@ class _FakeQuery:
 
     def all(self):
         items = [item for item in self.items if self._matches(item)]
-        return sorted(
+        items = sorted(
             items,
             key=lambda item: (
                 getattr(item, "created_at", None),
@@ -133,6 +133,9 @@ class _FakeQuery:
             ),
             reverse=True,
         )
+        if self._limit is not None:
+            items = items[: self._limit]
+        return items
 
     def first(self):
         return next((item for item in self.items if self._matches(item)), None)
@@ -179,9 +182,9 @@ class _FakeSession:
                     default=0,
                 ) + 1
         if getattr(obj, "created_at", None) is None:
-            obj.created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+            obj.created_at = datetime(2026, 1, 1, tzinfo=UTC)
         if getattr(obj, "updated_at", None) is None:
-            obj.updated_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+            obj.updated_at = datetime(2026, 1, 1, tzinfo=UTC)
         self.added.append(obj)
 
     def delete(self, obj) -> None:
@@ -193,7 +196,7 @@ class _FakeSession:
     def refresh(self, obj) -> None:
         if isinstance(obj, _Delivery):
             obj.created_at = getattr(obj, "created_at", None) or datetime(
-                2026, 1, 3, tzinfo=timezone.utc
+                2026, 1, 3, tzinfo=UTC
             )
         return None
 
@@ -607,6 +610,7 @@ def test_routes_registered() -> None:
     assert "/projects/{project_id}/webhooks" in paths
     assert "/projects/{project_id}/webhooks/{webhook_id}" in paths
     assert "/projects/{project_id}/webhooks/{webhook_id}/ping" in paths
+    assert "/projects/{project_id}/webhooks/{webhook_id}/retry-failed" in paths
 
 
 def test_deliver_simulation_webhook_task_success() -> None:
@@ -774,6 +778,69 @@ def test_retry_delivery_route_404_when_not_owned() -> None:
     assert exc.value.status_code == 404
 
 
+def test_retry_failed_route_returns_batch_summary() -> None:
+    from app.api.v1 import simulation_webhooks as mod
+
+    sub = _Subscription(id=1, status="ACTIVE")
+    retried = _Delivery(
+        id=102,
+        webhook_subscription_id=1,
+        status="SUCCESS",
+        retry_count=1,
+        subscription=sub,
+    )
+    summary = {
+        "requested": 1,
+        "retried": 1,
+        "succeeded": 1,
+        "failed": 0,
+        "failed_delivery_ids": [],
+        "deliveries": [retried],
+    }
+    session = _FakeSession(subscriptions=[sub])
+    with patch.object(mod, "_get_owned_webhook", return_value=sub), patch.object(
+        mod,
+        "retry_failed_deliveries",
+        return_value=summary,
+    ) as mock_retry:
+        out = mod.retry_failed_simulation_webhook_deliveries(
+            project_id=10,
+            webhook_id=1,
+            limit=50,
+            db=session,
+            current_user=_current_user(),
+        )
+    assert mock_retry.call_args.kwargs["subscription"] is sub
+    assert mock_retry.call_args.kwargs["limit"] == 50
+    assert out.requested == 1
+    assert out.retried == 1
+    assert out.succeeded == 1
+    assert out.failed == 0
+    assert out.failed_delivery_ids == []
+    assert out.deliveries[0].id == 102
+
+
+def test_retry_failed_route_rejects_disabled_webhook() -> None:
+    from app.api.v1 import simulation_webhooks as mod
+
+    sub = _Subscription(id=1, status="DISABLED")
+    session = _FakeSession(subscriptions=[sub])
+    with patch.object(mod, "_get_owned_webhook", return_value=sub), patch.object(
+        mod,
+        "retry_failed_deliveries",
+        side_effect=AssertionError("must not retry a disabled webhook"),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            mod.retry_failed_simulation_webhook_deliveries(
+                project_id=10,
+                webhook_id=1,
+                limit=25,
+                db=session,
+                current_user=_current_user(),
+            )
+    assert exc.value.status_code == 409
+
+
 def test_retry_failed_delivery_uses_stored_event_and_increments_retry() -> None:
     from app.simulation import webhook_delivery_history as history
 
@@ -899,6 +966,168 @@ def test_retry_failed_delivery_rejects_success_and_disabled() -> None:
     )
     with pytest.raises(ValueError, match="disabled webhook subscription"):
         history.retry_failed_delivery(_FakeSession(), delivery=disabled)
+
+
+def test_retry_failed_deliveries_retries_only_failed_newest_first() -> None:
+    from app.simulation import webhook_delivery_history as history
+
+    sub = _Subscription(id=1, status="ACTIVE")
+    deliveries = [
+        _Delivery(id=1, webhook_subscription_id=1, status="SUCCESS"),
+        _Delivery(id=2, webhook_subscription_id=1, status="FAILED"),
+        _Delivery(id=3, webhook_subscription_id=1, status="FAILED"),
+    ]
+    session = _FakeSession(subscriptions=[sub], deliveries=deliveries)
+    retried_ids: list[int] = []
+
+    def _fake_retry(db, *, delivery):
+        retried_ids.append(delivery.id)
+        return _Delivery(
+            id=delivery.id + 100,
+            webhook_subscription_id=1,
+            status="SUCCESS",
+            subscription=sub,
+        )
+
+    with patch.object(
+        history,
+        "retry_failed_delivery",
+        side_effect=_fake_retry,
+    ):
+        result = history.retry_failed_deliveries(
+            session,
+            subscription=sub,
+            limit=10,
+        )
+
+    assert retried_ids == [3, 2]
+    assert result["requested"] == 2
+    assert result["retried"] == 2
+    assert result["succeeded"] == 2
+    assert result["failed"] == 0
+    assert result["failed_delivery_ids"] == []
+    assert [item.id for item in result["deliveries"]] == [103, 102]
+
+
+def test_retry_failed_deliveries_reports_partial_failures() -> None:
+    from app.simulation import webhook_delivery_history as history
+
+    sub = _Subscription(id=1, status="ACTIVE")
+    deliveries = [
+        _Delivery(id=2, webhook_subscription_id=1, status="FAILED"),
+        _Delivery(id=3, webhook_subscription_id=1, status="FAILED"),
+    ]
+    session = _FakeSession(subscriptions=[sub], deliveries=deliveries)
+
+    def _fake_retry(db, *, delivery):
+        ok = delivery.id == 2
+        return _Delivery(
+            id=delivery.id + 100,
+            webhook_subscription_id=1,
+            status="SUCCESS" if ok else "FAILED",
+            subscription=sub,
+        )
+
+    with patch.object(
+        history,
+        "retry_failed_delivery",
+        side_effect=_fake_retry,
+    ):
+        result = history.retry_failed_deliveries(
+            session,
+            subscription=sub,
+            limit=10,
+        )
+
+    assert result["requested"] == 2
+    assert result["retried"] == 2
+    assert result["succeeded"] == 1
+    assert result["failed"] == 1
+    assert result["failed_delivery_ids"] == [103]
+
+
+def test_retry_failed_deliveries_respects_limit() -> None:
+    from app.simulation import webhook_delivery_history as history
+
+    sub = _Subscription(id=1, status="ACTIVE")
+    deliveries = [
+        _Delivery(id=1, webhook_subscription_id=1, status="FAILED"),
+        _Delivery(id=2, webhook_subscription_id=1, status="FAILED"),
+        _Delivery(id=3, webhook_subscription_id=1, status="FAILED"),
+    ]
+    session = _FakeSession(subscriptions=[sub], deliveries=deliveries)
+    retried_ids: list[int] = []
+
+    def _fake_retry(db, *, delivery):
+        retried_ids.append(delivery.id)
+        return _Delivery(
+            id=delivery.id + 100,
+            webhook_subscription_id=1,
+            status="SUCCESS",
+            subscription=sub,
+        )
+
+    with patch.object(
+        history,
+        "retry_failed_delivery",
+        side_effect=_fake_retry,
+    ):
+        result = history.retry_failed_deliveries(
+            session,
+            subscription=sub,
+            limit=2,
+        )
+
+    assert retried_ids == [3, 2]
+    assert result["requested"] == 2
+    assert result["retried"] == 2
+    assert result["succeeded"] == 2
+
+
+def test_retry_failed_deliveries_empty_backlog_returns_zeros() -> None:
+    from app.simulation import webhook_delivery_history as history
+
+    sub = _Subscription(id=1, status="ACTIVE")
+    deliveries = [
+        _Delivery(id=1, webhook_subscription_id=1, status="SUCCESS"),
+        _Delivery(id=2, webhook_subscription_id=1, status="SUCCESS"),
+    ]
+    session = _FakeSession(subscriptions=[sub], deliveries=deliveries)
+
+    def _should_not_be_called(*args, **kwargs):
+        raise AssertionError("retry_failed_delivery must not be called")
+
+    with patch.object(
+        history,
+        "retry_failed_delivery",
+        side_effect=_should_not_be_called,
+    ):
+        result = history.retry_failed_deliveries(
+            session,
+            subscription=sub,
+            limit=10,
+        )
+
+    assert result == {
+        "requested": 0,
+        "retried": 0,
+        "succeeded": 0,
+        "failed": 0,
+        "failed_delivery_ids": [],
+        "deliveries": [],
+    }
+
+
+def test_retry_failed_deliveries_rejects_disabled_webhook() -> None:
+    from app.simulation import webhook_delivery_history as history
+
+    sub = _Subscription(id=1, status="DISABLED")
+    with pytest.raises(ValueError, match="disabled webhook subscription"):
+        history.retry_failed_deliveries(
+            _FakeSession(),
+            subscription=sub,
+            limit=10,
+        )
 
 
 def test_enqueue_simulation_webhooks_filters_active() -> None:

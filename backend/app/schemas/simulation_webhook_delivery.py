@@ -34,8 +34,20 @@ class SimulationWebhookRetryOut(BaseModel):
     delivery: SimulationWebhookDeliveryOut
 
 
+class SimulationWebhookBatchRetryOut(BaseModel):
+    """Summary of a bulk retry over a webhook's failed delivery backlog."""
+
+    requested: int
+    retried: int
+    succeeded: int
+    failed: int
+    failed_delivery_ids: list[int] = Field(default_factory=list)
+    deliveries: list[SimulationWebhookDeliveryOut] = Field(default_factory=list)
+
+
 __all__ = [
     "SimulationWebhookDeliveryOut",
     "SimulationWebhookDeliveryListOut",
     "SimulationWebhookRetryOut",
+    "SimulationWebhookBatchRetryOut",
 ]
