@@ -13,6 +13,7 @@ can catch issues locally before pushing:
     id-token: write only in scorecard.yml.
   - Every job declares a positive timeout-minutes so CI cannot hang indefinitely.
   - Every workflow includes a workflow_dispatch trigger for manual runs.
+  - The zizmor config disables hash-pinning (this repo pins to full tags instead).
 
 Usage:
     python3 tools/validate_ci.py
@@ -200,6 +201,23 @@ def validate_workflow_dispatch() -> list[str]:
     return errors
 
 
+def validate_zizmor_config() -> list[str]:
+    errors: list[str] = []
+    path = ROOT / ".github" / "zizmor.yml"
+    if not path.exists():
+        return [".github/zizmor.yml: missing"]
+    with open(path) as fh:
+        data = yaml.safe_load(fh) or {}
+    rules = data.get("rules") or {}
+    unpinned = rules.get("unpinned-uses") or {}
+    if unpinned.get("disable") is not True:
+        errors.append(
+            ".github/zizmor.yml: unpinned-uses must be disabled because this "
+            "repo pins actions to full version tags"
+        )
+    return errors
+
+
 def main() -> int:
     checks = [
         ("YAML", validate_yaml),
@@ -210,6 +228,7 @@ def main() -> int:
         ("least-privilege permissions", validate_permissions),
         ("job timeouts", validate_timeouts),
         ("workflow dispatch", validate_workflow_dispatch),
+        ("zizmor config", validate_zizmor_config),
     ]
     errors: list[str] = []
     for label, func in checks:

@@ -154,4 +154,6 @@ For security concerns, please contact the project maintainers.
 - 2026-08-10 - Extended `tools/validate_ci.py` to require a
   `workflow_dispatch` trigger on every workflow so none can lose manual-run
   capability without a CI failure.
+- 2026-08-10 - Extended `tools/validate_ci.py` to verify `.github/zizmor.yml`
+  keeps hash-pinning disabled, matching the repo's full-version-tag policy.
 - [VERSION] - Initial security policy
