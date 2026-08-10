@@ -2,6 +2,8 @@
 """
 from __future__ import annotations
 
+import json
+import math
 import sys
 import types
 
@@ -98,6 +100,7 @@ def _call_route(
     current_user_id: int = 42,
     session: _FakeSession | None = None,
     limit: int = 10,
+    benchmark: float = 0.05,
 ):
     from app.api.v1 import simulations as sim_mod
 
@@ -107,6 +110,7 @@ def _call_route(
         db=db,
         current_user=type("U", (), {"id": current_user_id})(),
         limit=limit,
+        benchmark=benchmark,
     )
 
 
@@ -180,3 +184,43 @@ def test_cluster_summaries_are_forwarded_to_engine() -> None:
     out = _call_route(session=session)
     assert out.meta["cluster_summaries_used"] is True
     assert out.personas[0].population_weight == 0.8
+
+
+def test_limit_and_benchmark_are_clamped() -> None:
+    out = _call_route(limit=-5, benchmark=9.0)
+    assert len(out.personas) == 1
+    assert out.persona_count == 1
+    assert out.meta["benchmark"] == 0.5
+
+    out_high = _call_route(limit=100, benchmark=0.001)
+    assert out_high.persona_count == 3
+    assert out_high.meta["benchmark"] == 0.01
+
+
+def test_non_finite_results_yield_finite_payload() -> None:
+    session = _FakeSession(
+        sim=_FakeSimulation(
+            results={
+                "population_weighted_conversion": float("nan"),
+                "total_agents": float("inf"),
+                "cluster_breakdown": {
+                    "metro_power_professional": float("inf")
+                },
+            }
+        )
+    )
+    out = _call_route(session=session)
+    assert out.overall_conversion == 0.0
+    assert out.total_agents == 0
+    assert out.personas
+    persona = out.personas[0]
+    for value in (
+        persona.population_weight,
+        persona.conversion_rate,
+        persona.conversion_gap,
+        persona.opportunity_score,
+        persona.estimated_lift,
+    ):
+        assert math.isfinite(value)
+    # Strict JSON serialisation must never emit NaN / Infinity literals.
+    assert json.dumps(out.model_dump(), allow_nan=False)

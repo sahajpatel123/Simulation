@@ -25,6 +25,7 @@ with plain dicts.
 from __future__ import annotations
 
 import json
+import math
 from typing import Any
 
 from app.schemas.buyer_personas import BuyerPersona, BuyerPersonasOut
@@ -63,9 +64,10 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
     if value is None or isinstance(value, bool):
         return default
     try:
-        return float(value)
+        parsed = float(value)
     except (TypeError, ValueError):
         return default
+    return parsed if math.isfinite(parsed) else default
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
@@ -108,11 +110,21 @@ def _traits(raw: Any) -> dict[str, float]:
     """Extract the 8 canonical traits in stable order, skipping garbage."""
     if not isinstance(raw, dict):
         return {}
-    return {
-        key: round(_safe_float(raw.get(key)), 4)
-        for key in TRAIT_ORDER
-        if key in raw
-    }
+    traits: dict[str, float] = {}
+    for key in TRAIT_ORDER:
+        if key not in raw:
+            continue
+        value = raw.get(key)
+        if value is None or isinstance(value, bool):
+            continue
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(parsed):
+            continue
+        traits[key] = round(parsed, 4)
+    return traits
 
 
 def _string_list(raw: Any, limit: int | None = None) -> list[str]:
@@ -128,9 +140,9 @@ def _string_map(raw: Any) -> dict[str, str]:
     if not isinstance(raw, dict):
         return {}
     return {
-        str(key): str(value)
+        str(key): str(value).strip()
         for key, value in raw.items()
-        if value is not None
+        if value is not None and str(value).strip()
     }
 
 
@@ -261,7 +273,11 @@ def build_buyer_personas(
     payload rather than raising.
     """
     data = _coerce_results(results)
-    effective_limit = max(1, min(int(limit) if isinstance(limit, int) else 10, 52))
+    try:
+        effective_limit = int(limit)
+    except (TypeError, ValueError, OverflowError):
+        effective_limit = 10
+    effective_limit = max(1, min(effective_limit, 52))
 
     matrix = build_cluster_opportunity_matrix(
         data,

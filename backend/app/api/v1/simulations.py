@@ -5400,8 +5400,20 @@ def get_buyer_personas(
     simulation_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    limit: int = 10,
-    benchmark: float = 0.05,
+    limit: int = Query(
+        default=10,
+        description=(
+            "Maximum number of ranked persona cards to return "
+            "(clamped to 1–52)."
+        ),
+    ),
+    benchmark: float = Query(
+        default=0.05,
+        description=(
+            "Conversion-rate benchmark used to score gaps "
+            "(clamped to 0.01–0.5)."
+        ),
+    ),
 ) -> BuyerPersonasOut:
     """
     Build ranked buyer-persona briefs from completed results:

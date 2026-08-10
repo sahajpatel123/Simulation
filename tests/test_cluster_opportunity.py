@@ -4,6 +4,8 @@ Tests for cluster opportunity matrix helpers
 """
 from __future__ import annotations
 
+import json
+import math
 from typing import Any
 
 import pytest
@@ -243,3 +245,39 @@ def test_schema_round_trip() -> None:
     assert dumped["meta"]["benchmark"] == DEFAULT_BENCHMARK
     assert isinstance(dumped["opportunities"], list)
     assert isinstance(dumped["focus_recommendations"], list)
+
+
+def test_non_finite_inputs_never_raise_or_emit_nan() -> None:
+    out = build_cluster_opportunity_matrix(
+        {
+            "population_weighted_conversion": float("nan"),
+            "conversion_rate": float("inf"),
+            "total_agents": float("inf"),
+            "cluster_breakdown": {
+                "a": float("nan"),
+                "b": float("inf"),
+                "c": -float("inf"),
+            },
+        },
+        simulation_id=30,
+        project_id=4,
+        cluster_registry={
+            "a": {"name": "A", "population_weight": float("inf")},
+            "b": {"name": "B", "population_weight": float("nan")},
+            "c": {"name": "C", "population_weight": True},
+        },
+    )
+    assert out.total_agents == 0
+    assert out.overall_conversion == 0.0
+    assert out.opportunities
+    for op in out.opportunities:
+        for value in (
+            op.population_weight,
+            op.conversion_rate,
+            op.conversion_gap,
+            op.opportunity_score,
+            op.estimated_lift,
+        ):
+            assert math.isfinite(value)
+    # Strict JSON serialisation must never emit NaN / Infinity literals.
+    assert json.dumps(out.model_dump(), allow_nan=False)

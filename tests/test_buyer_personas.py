@@ -5,6 +5,7 @@ Tests for the buyer-persona brief builder
 from __future__ import annotations
 
 import json
+import math
 from typing import Any
 
 from app.simulation.buyer_personas import (
@@ -238,6 +239,89 @@ def test_cluster_without_registry_profile_is_skipped() -> None:
         cluster_registry=registry,
     )
     assert [p.cluster_id for p in out.personas] == ["known"]
+
+
+def test_non_finite_numbers_never_reach_persona_payload() -> None:
+    results = {
+        "population_weighted_conversion": float("nan"),
+        "conversion_rate": float("inf"),
+        "total_agents": float("inf"),
+        "cluster_breakdown": {"big_mid": float("nan")},
+    }
+    registry = {
+        "big_mid": _profile(
+            "big_mid",
+            "Big Mid",
+            weight=float("inf"),
+            traits={
+                "income_level": float("nan"),
+                "digital_literacy": float("inf"),
+                "motivation": 0.5,
+                "trust": 0.5,
+                "price_sensitivity": 0.5,
+                "risk_aversion": 0.5,
+                "patience_score": 0.5,
+                "social_orientation": 0.5,
+            },
+        )
+    }
+    out = build_buyer_personas(
+        results,
+        simulation_id=1,
+        project_id=1,
+        cluster_registry=registry,
+    )
+    assert out.total_agents == 0
+    assert out.overall_conversion == 0.0
+    assert out.personas
+    persona = out.personas[0]
+    for value in (
+        persona.population_weight,
+        persona.conversion_rate,
+        persona.conversion_gap,
+        persona.opportunity_score,
+        persona.estimated_lift,
+    ):
+        assert math.isfinite(value)
+    assert "income_level" not in persona.traits
+    assert "digital_literacy" not in persona.traits
+    assert persona.traits["motivation"] == 0.5
+    assert all(math.isfinite(v) for v in persona.traits.values())
+    # Strict JSON serialisation must never emit NaN / Infinity literals.
+    assert json.dumps(out.model_dump(), allow_nan=False)
+
+
+def test_blank_demographic_values_are_dropped() -> None:
+    registry = {"x": _profile("x", "X", weight=0.05)}
+    registry["x"]["demographic_profile"] = {
+        "geography": "metro",
+        "age_bracket": "  ",
+        "device_primary": None,
+    }
+    out = build_buyer_personas(
+        _results(breakdown={"x": 0.03}),
+        simulation_id=1,
+        project_id=1,
+        cluster_registry=registry,
+    )
+    assert out.personas[0].demographic_profile == {"geography": "metro"}
+
+
+def test_float_limit_is_truncated_not_ignored() -> None:
+    breakdown = {f"c{i}": 0.01 + (i * 0.001) for i in range(20)}
+    registry = {
+        f"c{i}": _profile(f"c{i}", f"Cluster {i}", weight=0.03)
+        for i in range(20)
+    }
+    out = build_buyer_personas(
+        _results(breakdown=breakdown),
+        simulation_id=16,
+        project_id=6,
+        cluster_registry=registry,
+        limit=5.7,
+    )
+    assert len(out.personas) == 5
+    assert out.persona_count == 5
 
 
 def test_summaries_are_forwarded_and_flagged_in_meta() -> None:

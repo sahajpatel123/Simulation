@@ -19,6 +19,7 @@ No DB / I/O — verifiable without FastAPI or PostgreSQL.
 """
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Any
@@ -43,20 +44,21 @@ LARGE_GAP: float = 0.035
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
-    if value is None:
+    if value is None or isinstance(value, bool):
         return default
     try:
-        return float(value)
+        parsed = float(value)
     except (TypeError, ValueError):
         return default
+    return parsed if math.isfinite(parsed) else default
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
-    if value is None:
+    if value is None or isinstance(value, bool):
         return default
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
