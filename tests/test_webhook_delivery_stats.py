@@ -35,6 +35,7 @@ def _row(
     delivered_at: str | None = None,
     http_status: int | None = 200,
     event_type: str = "simulation.completed",
+    attempt_status: str | None = None,
     error: str | None = None,
     retry_count: int = 0,
 ) -> dict:
@@ -44,7 +45,7 @@ def _row(
         "simulation_id": 11,
         "event_type": event_type,
         "status": status,
-        "attempt_status": None,
+        "attempt_status": attempt_status,
         "http_status": http_status,
         "error": error,
         "conversion_rate": 0.01,
@@ -201,6 +202,74 @@ def test_success_rows_with_simulation_errors_are_not_delivery_failures() -> None
     assert out["top_errors"] == []
     assert out["last_delivery_error"] is None
     assert out["health_label"] == HEALTH_HEALTHY
+
+
+def test_failed_simulation_events_do_not_count_as_delivery_errors() -> None:
+    rows = [
+        _row(
+            1,
+            status="FAILED",
+            event_type="simulation.failed",
+            attempt_status="FAILED",
+            error="product market fit is weak",
+            http_status=500,
+        ),
+        _row(
+            2,
+            status="FAILED",
+            event_type="simulation.completed",
+            attempt_status="COMPLETED",
+            error="timeout",
+            http_status=502,
+        ),
+    ]
+    out = _build(rows)
+    assert out["failed_count"] == 2
+    assert out["top_errors"] == [{"error": "timeout", "count": 1}]
+    assert out["last_delivery_error"] == "timeout"
+
+
+def test_failed_simulation_event_as_latest_delivery_hides_simulation_error() -> None:
+    rows = [
+        _row(
+            1,
+            status="FAILED",
+            event_type="simulation.completed",
+            attempt_status="COMPLETED",
+            error="timeout",
+            http_status=502,
+        ),
+        _row(
+            2,
+            status="FAILED",
+            event_type="simulation.failed",
+            attempt_status="FAILED",
+            error="product market fit is weak",
+            http_status=500,
+        ),
+    ]
+    out = _build(rows)
+    assert out["top_errors"] == [{"error": "timeout", "count": 1}]
+    assert out["last_delivery_status"] == "FAILED"
+    assert out["last_delivery_error"] is None
+
+
+def test_legacy_failed_rows_without_attempt_status_keep_transport_errors() -> None:
+    rows = [
+        _row(
+            1,
+            status="FAILED",
+            event_type="simulation.failed",
+            attempt_status=None,
+            error="connection refused",
+            http_status=None,
+        ),
+    ]
+    out = _build(rows)
+    assert out["top_errors"] == [
+        {"error": "connection refused", "count": 1}
+    ]
+    assert out["last_delivery_error"] == "connection refused"
 
 
 def test_malformed_rows_are_skipped() -> None:

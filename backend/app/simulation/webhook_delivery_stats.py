@@ -71,6 +71,19 @@ def _http_status_key(raw: Any) -> str | None:
     return None
 
 
+def _carries_simulation_error(row: dict[str, Any]) -> bool:
+    """Return whether a delivery's ``error`` is a simulation error, not a transport error.
+
+    ``record_webhook_delivery`` deliberately stores the simulation's own
+    error for failed simulation events (``attempt_status`` other than
+    COMPLETED/PING/None) so manual retries can rebuild the original payload.
+    Such rows must not be counted as webhook endpoint failures: the endpoint
+    may have accepted the event perfectly and the simulation still failed.
+    """
+    attempt_status = _safe_str(row.get("attempt_status")).upper()
+    return attempt_status not in ("", "COMPLETED", "PING")
+
+
 def _sorted_counts(counter: Counter[str]) -> dict[str, int]:
     """Render a counter with deterministic ordering (count desc, key asc)."""
     return {
@@ -128,7 +141,10 @@ def build_webhook_delivery_stats(
     Rows are expected to be JSON-friendly dicts (as produced by
     ``SimulationWebhookDeliveryOut.model_dump(mode="json")``). Rows without a
     parseable ``created_at`` (falling back to ``delivered_at``) are skipped
-    because their position in the window cannot be established.
+    because their position in the window cannot be established. Failed
+    simulation events carry the simulation's own error rather than a
+    transport error, so those rows contribute to the delivery failure counts
+    but never to ``top_errors`` or ``last_delivery_error``.
     """
     window_days = max(1, _safe_int(days))
     reference = now if isinstance(now, datetime) else datetime.now(UTC)
@@ -179,10 +195,16 @@ def build_webhook_delivery_stats(
         retry_total += retry_count
         max_retry_count = max(max_retry_count, retry_count)
 
-        # A SUCCESS delivery may still carry a simulation error for
-        # ``simulation.failed`` events; only FAILED deliveries count as
-        # delivery errors so a healthy endpoint never looks broken.
-        error = _safe_str(row.get("error")) if status == "FAILED" else ""
+        # The ``error`` column holds a transport error for ordinary
+        # deliveries, but for failed simulation events it stores the
+        # simulation error the event carries. Counting that here would
+        # blame a healthy endpoint for a failed simulation, so only FAILED
+        # deliveries whose error is a transport error contribute here.
+        error = (
+            _safe_str(row.get("error"))
+            if status == "FAILED" and not _carries_simulation_error(row)
+            else ""
+        )
         if error:
             error_counts[error] += 1
 
@@ -197,7 +219,10 @@ def build_webhook_delivery_stats(
     last_delivery_error: str | None = None
     if last is not None:
         last_delivery_status = _safe_str(last[1].get("status")) or None
-        if last_delivery_status == "FAILED":
+        if (
+            last_delivery_status == "FAILED"
+            and not _carries_simulation_error(last[1])
+        ):
             last_delivery_error = _safe_str(last[1].get("error")) or None
 
     return {
