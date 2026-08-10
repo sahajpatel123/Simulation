@@ -169,11 +169,16 @@ def build_cluster_calibration_digest(
             continue
         known[cluster_id.strip()] = defn
 
-    cluster_rows: list[dict[str, Any]] = []
+    cluster_rows: list[tuple[float, dict[str, Any]]] = []
     for cluster_id in sorted(set(known) | set(evidence)):
         ev = evidence.get(cluster_id, {})
         validated = int(ev.get("validated_outcomes", 0))
-        weight = round(float(ev.get("learning_weight", 0.0)), 4)
+        # Keep the raw sum for the status tier and ordering: display
+        # rounding must never flip the engine gate (>= 5.0), so a raw
+        # 4.99996 cannot be shown as CALIBRATED merely because it rounds
+        # to 5.0 at 4 decimal places.
+        raw_weight = float(ev.get("learning_weight", 0.0))
+        weight = round(raw_weight, 4)
         consumed_raw = ev.get("consumed_outcomes")
         pending_raw = ev.get("pending_outcomes")
         if consumed_raw is None and pending_raw is None:
@@ -189,26 +194,32 @@ def build_cluster_calibration_digest(
         defn = known.get(cluster_id)
         trait_bucket = traits.get(cluster_id, {"count": 0, "traits": []})
         cluster_rows.append(
-            {
-                "cluster_id": cluster_id,
-                "cluster_name": getattr(defn, "name", "") or "",
-                "population_weight": round(
-                    _safe_float(getattr(defn, "population_weight", 0.0)), 4
-                ),
-                "validated_outcomes": validated,
-                "learning_weight": weight,
-                "consumed_outcomes": consumed,
-                "pending_outcomes": pending,
-                "last_processed_outcome_id": ev.get("last_processed_outcome_id"),
-                "calibration_count": int(trait_bucket["count"]),
-                "calibrated_traits": list(trait_bucket["traits"]),
-                "status": _status(weight),
-            }
+            (
+                raw_weight,
+                {
+                    "cluster_id": cluster_id,
+                    "cluster_name": getattr(defn, "name", "") or "",
+                    "population_weight": round(
+                        _safe_float(getattr(defn, "population_weight", 0.0)), 4
+                    ),
+                    "validated_outcomes": validated,
+                    "learning_weight": weight,
+                    "consumed_outcomes": consumed,
+                    "pending_outcomes": pending,
+                    "last_processed_outcome_id": ev.get("last_processed_outcome_id"),
+                    "calibration_count": int(trait_bucket["count"]),
+                    "calibrated_traits": list(trait_bucket["traits"]),
+                    "status": _status(raw_weight),
+                },
+            )
         )
 
     # Evidence-ranked, then alphabetically stable: the clusters with the
     # most real-world feedback come first, zero-evidence clusters last.
-    cluster_rows.sort(key=lambda row: (-row["learning_weight"], row["cluster_id"]))
+    # Ordering uses the unrounded weight so rows that display identically
+    # after rounding still rank by their true evidence sum.
+    cluster_rows.sort(key=lambda pair: (-pair[0], pair[1]["cluster_id"]))
+    cluster_rows = [row for _, row in cluster_rows]
 
     overall = {
         "total_clusters": len(known),

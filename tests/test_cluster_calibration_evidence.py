@@ -292,6 +292,48 @@ def test_sorts_by_evidence_weight_then_cluster_id() -> None:
     assert [row["cluster_id"] for row in out["clusters"]] == ["a", "b", "c"]
 
 
+def test_status_uses_unrounded_learning_weight() -> None:
+    """Display rounding must not flip the engine's calibration gate."""
+    from app.simulation.cluster_calibration_evidence import (
+        CALIBRATED,
+        UNDER_EVIDENCED,
+        build_cluster_calibration_digest,
+    )
+
+    below = build_cluster_calibration_digest(
+        evidence_rows=[_ev("below", validated=6, weight=4.99996)],
+        clusters=[_def("below")],
+    )["clusters"][0]
+    above = build_cluster_calibration_digest(
+        evidence_rows=[_ev("above", validated=6, weight=5.00004)],
+        clusters=[_def("above")],
+    )["clusters"][0]
+
+    # Both display values round to the gate at 4 decimals, but only the
+    # raw sum above 5.0 may claim CALIBRATED.
+    assert below["learning_weight"] == 5.0
+    assert below["status"] == UNDER_EVIDENCED
+    assert above["learning_weight"] == 5.0
+    assert above["status"] == CALIBRATED
+
+
+def test_sort_uses_unrounded_learning_weight() -> None:
+    """Rows that display identically still rank by their true evidence sum."""
+    from app.simulation.cluster_calibration_evidence import (
+        build_cluster_calibration_digest,
+    )
+
+    out = build_cluster_calibration_digest(
+        evidence_rows=[
+            _ev("low", validated=6, weight=4.99996),
+            _ev("high", validated=6, weight=5.00004),
+        ],
+        clusters=[_def("low"), _def("high")],
+    )
+    assert [row["cluster_id"] for row in out["clusters"]] == ["high", "low"]
+    assert [row["learning_weight"] for row in out["clusters"]] == [5.0, 5.0]
+
+
 # ---------------------------------------------------------------------------
 # Route
 # ---------------------------------------------------------------------------
