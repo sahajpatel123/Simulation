@@ -207,6 +207,7 @@ def _load_failure_attribution_rows(
 # 120s TTL matches the digest's internal cache.
 _OUTCOMES_DIGEST_CACHE_NAMESPACE: str = "project-outcomes-digest"
 _FUNNEL_CALIBRATION_CACHE_NAMESPACE: str = "project-funnel-calibration"
+_FAILURE_ATTRIBUTION_CACHE_NAMESPACE: str = "project-failure-attribution"
 
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
@@ -856,6 +857,10 @@ def submit_outcome_feedback(
     )
     cache_invalidate(
         namespace=_FUNNEL_CALIBRATION_CACHE_NAMESPACE,
+        user_id=current_user.id,
+    )
+    cache_invalidate(
+        namespace=_FAILURE_ATTRIBUTION_CACHE_NAMESPACE,
         user_id=current_user.id,
     )
     cache_invalidate(
@@ -2643,8 +2648,27 @@ def get_failure_attribution(
     stored string into a founder-readable insight.
     """
     get_owned_project(db, current_user.id, project_id)
+
+    # Cache hit → short-circuit the founder_outcomes scan; the digest is
+    # a dashboard tile and is re-polled within a short window. 120s TTL
+    # matches the sibling outcomes-digest / funnel-calibration tiles.
+    cached = cache_get_json(
+        namespace=_FAILURE_ATTRIBUTION_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+    )
+    if cached is not None:
+        return FailureAttributionOut(**cached)
+
     rows = _load_failure_attribution_rows(db, project_id)
     payload = build_failure_attribution(rows, project_id=project_id)
+    cache_set_json(
+        namespace=_FAILURE_ATTRIBUTION_CACHE_NAMESPACE,
+        params={"project_id": project_id},
+        user_id=current_user.id,
+        value=payload,
+        ttl_seconds=120,
+    )
     return FailureAttributionOut(**payload)
 
 
@@ -2675,7 +2699,7 @@ def export_failure_attribution(
 ) -> StreamingResponse:
     """Download a project's failure-attribution digest.
 
-    Delegates to the same builder as the JSON endpoint so the exported
+    Delegates to the JSON endpoint (and shares its cache) so the exported
     numbers can never disagree with what the API returns.
     """
     fmt = (format or "csv").strip().lower()
@@ -2688,9 +2712,11 @@ def export_failure_attribution(
             ),
         )
 
-    get_owned_project(db, current_user.id, project_id)
-    rows = _load_failure_attribution_rows(db, project_id)
-    payload = build_failure_attribution(rows, project_id=project_id)
+    payload = get_failure_attribution(
+        project_id=project_id,
+        db=db,
+        current_user=current_user,
+    ).model_dump()
     metadata = {
         "generated_at": datetime.now(UTC).isoformat(),
         "user_id": current_user.id,

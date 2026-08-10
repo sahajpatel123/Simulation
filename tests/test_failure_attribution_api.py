@@ -19,6 +19,19 @@ from app.schemas.failure_attribution import FailureAttributionOut  # noqa: E402
 _MISSING = object()
 
 
+@pytest.fixture(autouse=True)
+def _no_redis(monkeypatch) -> None:
+    """Keep route tests hermetic when a local Redis is reachable.
+
+    The digest now caches through ``app.core.redis_client``; without this
+    fixture, tests sharing user 42 / project 10 could hit a real Redis
+    key written by an earlier test and never exercise the SQL path.
+    """
+    from app.core import redis_client
+
+    monkeypatch.setattr(redis_client, "get_redis_client", lambda: None)
+
+
 def _row(**overrides) -> dict:
     row = {
         "id": 1,
@@ -217,3 +230,143 @@ def test_failure_attribution_routes_registered_as_get() -> None:
     for route in out_mod.router.routes:
         if route.path in expected:
             assert "GET" in (route.methods or set())
+
+
+class _FakeRedis:
+    def __init__(self) -> None:
+        self.store: dict[str, str] = {}
+        self.setex_calls: list[tuple[str, int, str]] = []
+
+    def get(self, key: str) -> str | None:
+        return self.store.get(key)
+
+    def setex(self, key: str, ttl_seconds: int, value: str) -> None:
+        self.setex_calls.append((key, ttl_seconds, value))
+        self.store[key] = value
+
+    def scan_iter(self, match: str):
+        prefix = match.rstrip("*")
+        return [k for k in self.store if k.startswith(prefix)]
+
+    def delete(self, *keys: str) -> int:
+        n = 0
+        for key in keys:
+            if key in self.store:
+                del self.store[key]
+                n += 1
+        return n
+
+
+def _patch_redis(monkeypatch, fake) -> None:
+    from app.core import redis_client
+
+    monkeypatch.setattr(redis_client, "get_redis_client", lambda: fake)
+
+
+def test_failure_attribution_caches_payload_and_skips_db(monkeypatch) -> None:
+    fake = _FakeRedis()
+    _patch_redis(monkeypatch, fake)
+    sql_calls: list[str] = []
+
+    first = _call_get(
+        db=_FakeSession(rows=[_row()], sql_calls=sql_calls),
+    )
+    second = _call_get(
+        db=_FakeSession(rows=[_row()], sql_calls=sql_calls),
+    )
+
+    assert first.top_reason == "PRICING"
+    assert second.top_reason == "PRICING"
+    assert len(fake.setex_calls) == 1
+    assert fake.setex_calls[0][1] == 120
+    # One SQL scan on the miss; the cache hit must not touch the DB.
+    assert len(sql_calls) == 1
+
+
+def test_failure_attribution_cache_isolated_per_user(monkeypatch) -> None:
+    fake = _FakeRedis()
+    _patch_redis(monkeypatch, fake)
+
+    _call_get(current_user=_user())
+    _call_get(current_user=type("U", (), {"id": 99})())
+
+    assert len(fake.setex_calls) == 2
+    keys = {call[0] for call in fake.setex_calls}
+    assert len(keys) == 2
+
+
+def test_failure_attribution_cache_isolated_per_project(monkeypatch) -> None:
+    fake = _FakeRedis()
+    _patch_redis(monkeypatch, fake)
+
+    _call_get(project_id=10)
+    _call_get(project_id=11)
+
+    assert len(fake.setex_calls) == 2
+    keys = {call[0] for call in fake.setex_calls}
+    assert len(keys) == 2
+
+
+def test_failure_attribution_cache_noop_when_redis_down(monkeypatch) -> None:
+    from app.core import redis_client
+
+    monkeypatch.setattr(redis_client, "get_redis_client", lambda: None)
+
+    first = _call_get(db=_FakeSession(rows=[_row()]))
+    second = _call_get(db=_FakeSession(rows=[_row()]))
+
+    assert first.top_reason == "PRICING"
+    assert second.top_reason == "PRICING"
+
+
+def test_failure_attribution_export_shares_digest_cache(monkeypatch) -> None:
+    from app.api.v1 import outcomes as out_mod
+
+    fake = _FakeRedis()
+    _patch_redis(monkeypatch, fake)
+
+    first = out_mod.export_failure_attribution(
+        project_id=10,
+        format="csv",
+        db=_FakeSession(rows=[_row()]),
+        current_user=_user(),
+    )
+    first_body = asyncio.run(_body_bytes(first)).decode()
+    second = out_mod.export_failure_attribution(
+        project_id=10,
+        format="csv",
+        db=_FakeSession(rows=[_row()]),
+        current_user=_user(),
+    )
+    second_body = asyncio.run(_body_bytes(second)).decode()
+
+    assert "PRICING" in first_body
+    # Metadata timestamps are regenerated per export; the digest section
+    # must be byte-identical because the second export hits the cache.
+    def digest_section(text: str) -> str:
+        return text.split("section,Summary", 1)[1]
+
+    assert digest_section(first_body) == digest_section(second_body)
+    # One miss + one hit — no third write when the JSON route reuses it.
+    assert len(fake.setex_calls) == 1
+    json_payload = _call_get(
+        db=_FakeSession(rows=[_row()]),
+    )
+    assert json_payload.top_reason == "PRICING"
+    assert len(fake.setex_calls) == 1
+
+
+def test_failure_attribution_namespace_consistency() -> None:
+    """Pin the cache namespace constant and every use site."""
+    import inspect
+
+    from app.api.v1 import outcomes as out_mod
+
+    namespace = out_mod._FAILURE_ATTRIBUTION_CACHE_NAMESPACE
+    assert namespace == "project-failure-attribution"
+
+    src = inspect.getsource(out_mod)
+    # Read path (get + set) and the outcome-feedback invalidation site
+    # must all use the constant, never a hardcoded literal.
+    assert src.count("namespace=_FAILURE_ATTRIBUTION_CACHE_NAMESPACE") >= 3
+    assert f'namespace="{namespace}"' not in src
