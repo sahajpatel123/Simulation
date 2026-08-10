@@ -106,8 +106,15 @@ def _install_fake_helpers(
 # ---------------------------------------------------------------------------
 
 
-def _sim(results_json: dict | None) -> _FakeRow:
-    return _FakeRow(results_json=results_json)
+def _sim(
+    results_json: dict | None,
+    *,
+    env_snapshot_json: dict | None = None,
+) -> _FakeRow:
+    return _FakeRow(
+        results_json=results_json,
+        env_snapshot_json=env_snapshot_json,
+    )
 
 
 def test_seen_in_history_returns_false_when_empty() -> None:
@@ -278,6 +285,76 @@ def test_detect_missing_dimensions_skips_corrupt_env_params() -> None:
     assert "geography:TIER3_EXPLORATION" in out
 
 
+def test_detect_missing_dimensions_reads_env_snapshot_for_history() -> None:
+    """Real runs persist env params in env_snapshot_json, not results_json."""
+    from app.simulation.blindspot_detector import BlindspotDetector
+
+    history = [
+        _sim(
+            {},
+            env_snapshot_json={
+                "base_env": {"geography": "METRO", "target_segment": "B2C"},
+            },
+        ),
+        _sim(
+            {},
+            env_snapshot_json={
+                "base_env": {"geography": "METRO", "target_segment": "B2C"},
+            },
+        ),
+    ]
+    bd = BlindspotDetector()
+    out = bd._detect_missing_dimensions(history, None)
+    assert "geography:TIER3_EXPLORATION" in out
+    assert "segment:B2B_VS_B2C" in out
+
+
+def test_detect_missing_dimensions_snapshot_variation_prevents_flags() -> None:
+    """A current run's env snapshot counts toward both geography and segment."""
+    from app.simulation.blindspot_detector import BlindspotDetector
+
+    history = [
+        _sim(
+            {},
+            env_snapshot_json={
+                "base_env": {"geography": "METRO", "target_segment": "B2C"},
+            },
+        ),
+    ]
+    current = _sim(
+        {},
+        env_snapshot_json={
+            "base_env": {"geography": "TIER3", "target_segment": "B2B"},
+        },
+    )
+    bd = BlindspotDetector()
+    out = bd._detect_missing_dimensions(history, current)
+    assert "geography:TIER3_EXPLORATION" not in out
+    assert "segment:B2B_VS_B2C" not in out
+
+
+def test_detect_missing_dimensions_current_env_params_count() -> None:
+    """The in-flight env_params passed by Conductor.run prevent false flags."""
+    from app.simulation.blindspot_detector import BlindspotDetector
+
+    history = [
+        _sim(
+            {},
+            env_snapshot_json={
+                "base_env": {"geography": "METRO", "target_segment": "B2C"},
+            },
+        ),
+    ]
+    bd = BlindspotDetector()
+    out = bd._detect_missing_dimensions(
+        history,
+        None,
+        {"geography": "TIER3", "target_segment": "B2B"},
+    )
+    assert "geography:TIER3_EXPLORATION" not in out
+    assert "segment:B2B_VS_B2C" not in out
+
+
 # ---------------------------------------------------------------------------
 # _detect_unchallenged_architects
 # ---------------------------------------------------------------------------
@@ -380,9 +457,83 @@ def test_detect_unchallenged_architects_case_insensitive_and_sorted() -> None:
     assert bd._detect_unchallenged_architects(history) == ["PricingArchitect"]
 
 
+def test_detect_unchallenged_architects_normalizes_whitespace() -> None:
+    from app.simulation.blindspot_detector import BlindspotDetector
+
+    history = [
+        _run_with_findings(
+            _finding("PricingArchitect", "  Price   is too   high \n"),
+        ),
+        _run_with_findings(
+            _finding("PricingArchitect", "price is too high"),
+        ),
+    ]
+    bd = BlindspotDetector()
+    assert bd._detect_unchallenged_architects(history) == ["PricingArchitect"]
+
+
+def test_detect_unchallenged_architects_falls_back_when_top_finding_empty() -> None:
+    """An empty top-finding entry must not hide a real repeated finding."""
+    from app.simulation.blindspot_detector import BlindspotDetector
+
+    history = [
+        _run_with_findings(
+            _finding("PricingArchitect", "   "),
+            _finding("PricingArchitect", "Price is too high"),
+        ),
+        _run_with_findings(
+            _finding("PricingArchitect", "price is too high"),
+        ),
+    ]
+    bd = BlindspotDetector()
+    assert bd._detect_unchallenged_architects(history) == ["PricingArchitect"]
+
+
 # ---------------------------------------------------------------------------
 # _detect_ignored_competitive_context
 # ---------------------------------------------------------------------------
+
+
+def test_has_competitive_data_requires_non_empty_competitors() -> None:
+    from app.simulation.blindspot_detector import _has_competitive_data
+
+    assert _has_competitive_data(
+        {"competitors": [{"name": "Rival"}]}
+    ) is True
+    assert _has_competitive_data({"competitors": []}) is False
+    assert _has_competitive_data({}) is False
+    assert _has_competitive_data([]) is False
+    assert _has_competitive_data(None) is False
+
+
+def test_get_project_ids_with_competitive_analysis_filters_empty_data() -> None:
+    """Empty or malformed competitive_json must not count as coverage."""
+    from app.simulation.blindspot_detector import (
+        get_project_ids_with_competitive_analysis,
+    )
+
+    class _RowsResult:
+        def __init__(self, rows: list[Any]) -> None:
+            self._rows = rows
+
+        def all(self) -> list[Any]:
+            return self._rows
+
+    class _RowsDB:
+        def __init__(self, rows: list[Any]) -> None:
+            self._rows = rows
+
+        def execute(self, stmt: Any) -> _RowsResult:
+            return _RowsResult(self._rows)
+
+    db = _RowsDB(
+        [
+            (1, {"competitors": [{"name": "Rival"}]}),
+            (2, {"competitors": []}),
+            (3, {}),
+        ]
+    )
+    assert get_project_ids_with_competitive_analysis(db, {1, 2, 3}) == {1}
 
 
 def test_detect_ignored_competitive_context_flags_when_no_project_has_data(
@@ -651,6 +802,29 @@ def test_scan_flags_missing_dimensions(monkeypatch: Any) -> None:
     types = {(a.blindspot_type, a.blindspot_value) for a in db.added}
     assert ("DIMENSION_MISSING", "geography:TIER3_EXPLORATION") in types
     assert ("DIMENSION_MISSING", "segment:B2B_VS_B2C") in types
+
+
+def test_scan_uses_current_env_params_for_dimension_variation(monkeypatch: Any) -> None:
+    from app.simulation.blindspot_detector import BlindspotDetector
+
+    history = [
+        _sim({"env_params": {"geography": "METRO", "target_segment": "B2C"}}),
+        _sim({"env_params": {"geography": "METRO", "target_segment": "B2C"}}),
+    ]
+    db = _install_fake_helpers(monkeypatch, history=history)
+    bd = BlindspotDetector()
+    bd.scan(
+        user_id=1,
+        simulation=None,
+        cluster_weights={},
+        conductor_result=_FakeConductorResult({}, {}),
+        db=db,
+        env_params={"geography": "TIER3", "target_segment": "B2B"},
+    )
+    dimension_rows = [
+        r for r in db.added if getattr(r, "blindspot_type", "") == "DIMENSION_MISSING"
+    ]
+    assert dimension_rows == []
 
 
 def test_scan_flags_unchallenged_architect_and_ignored_competitors(

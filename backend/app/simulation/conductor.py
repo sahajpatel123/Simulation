@@ -935,6 +935,7 @@ class Conductor:
                 cluster_weights=cluster_weights,
                 conductor_result=result,
                 db=db,
+                env_params=env_params,
             )
 
         return result

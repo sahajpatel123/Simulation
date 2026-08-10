@@ -10,6 +10,36 @@ from typing import Any
 from sqlalchemy import select
 
 
+def _sim_env_params(sim: Any) -> dict | None:
+    """Best-effort env params for a simulation row.
+
+    Priority order: an env dict embedded in ``results_json`` (legacy
+    payloads), then the frozen ``env_snapshot_json`` captured at enqueue
+    time. The snapshot is the authoritative source for real runs because
+    ``results_json`` does not persist env params.
+    """
+    rj = getattr(sim, "results_json", None)
+    if isinstance(rj, dict):
+        env = rj.get("env_params") or rj.get("environment_params")
+        if isinstance(env, dict):
+            return env
+    snapshot = getattr(sim, "env_snapshot_json", None)
+    if isinstance(snapshot, dict):
+        env = snapshot.get("base_env")
+        if isinstance(env, dict):
+            return env
+        if snapshot:
+            return snapshot
+    return None
+
+
+def _geo_and_segment(env: dict) -> tuple[str, str]:
+    """Return ``(geography, segment)`` using the env key aliases in use."""
+    geography = str(env.get("geography", "") or env.get("target_geography", "") or "").upper()
+    segment = str(env.get("target_segment", "") or env.get("segment", "") or "").upper()
+    return geography, segment
+
+
 def get_user_simulation_history(db: Any, user_id: int, limit: int = 25) -> list[Any]:
     """Prior simulations for this user (newest first), via project ownership."""
     from app.models.project import Project
@@ -42,16 +72,28 @@ def get_blindspot(
 
 
 def get_project_ids_with_competitive_analysis(db: Any, project_ids: set[int]) -> set[int]:
-    """Return the subset of ``project_ids`` that have competitive data stored."""
+    """Return the subset of ``project_ids`` with real competitive data stored."""
     if not project_ids:
         return set()
     from app.models.project import Project
 
-    stmt = select(Project.id).where(
+    stmt = select(Project.id, Project.competitive_json).where(
         Project.id.in_(sorted(project_ids)),
         Project.competitive_json.is_not(None),
     )
-    return {int(row) for row in db.execute(stmt).scalars().all()}
+    return {
+        int(row[0])
+        for row in db.execute(stmt).all()
+        if _has_competitive_data(row[1])
+    }
+
+
+def _has_competitive_data(value: Any) -> bool:
+    """True when ``value`` looks like a completed competitive analysis."""
+    return (
+        isinstance(value, dict)
+        and bool(value.get("competitors"))
+    )
 
 
 class BlindspotDetector:
@@ -62,6 +104,7 @@ class BlindspotDetector:
         cluster_weights: dict[str, float],
         conductor_result: Any,
         db: Any | None,
+        env_params: dict[str, Any] | None = None,
     ) -> None:
         if db is None or user_id is None:
             return
@@ -87,7 +130,7 @@ class BlindspotDetector:
                         blindspot_value=cluster_id,
                     )
 
-        missing = self._detect_missing_dimensions(history, simulation)
+        missing = self._detect_missing_dimensions(history, simulation, env_params)
         for dim in missing:
             self._upsert_blindspot(
                 db,
@@ -129,31 +172,35 @@ class BlindspotDetector:
         self,
         history: list[Any],
         simulation: Any | None,
+        env_params: dict[str, Any] | None = None,
     ) -> list[str]:
         """Flag geography / segment dimensions never varied across prior runs."""
         missing: list[str] = []
         geos: set[str] = set()
         segments: set[str] = set()
         for sim in history:
-            rj = sim.results_json or {}
-            if not isinstance(rj, dict):
+            env = _sim_env_params(sim)
+            if env is None:
                 continue
-            env = rj.get("env_params") or rj.get("environment_params")
-            if isinstance(env, dict):
-                g = str(env.get("geography", "") or env.get("target_geography", "")).upper()
-                s = str(env.get("target_segment", "") or env.get("segment", "")).upper()
+            g, s = _geo_and_segment(env)
+            if g:
+                geos.add(g)
+            if s:
+                segments.add(s)
+        if simulation is not None:
+            env = _sim_env_params(simulation)
+            if env is not None:
+                g, s = _geo_and_segment(env)
                 if g:
                     geos.add(g)
                 if s:
                     segments.add(s)
-        if simulation and getattr(simulation, "results_json", None):
-            rj = simulation.results_json or {}
-            if isinstance(rj, dict):
-                env = rj.get("env_params")
-                if isinstance(env, dict):
-                    g = str(env.get("geography", "") or "").upper()
-                    if g:
-                        geos.add(g)
+        if isinstance(env_params, dict):
+            g, s = _geo_and_segment(env_params)
+            if g:
+                geos.add(g)
+            if s:
+                segments.add(s)
 
         if len(geos) <= 1 and "TIER3" not in "".join(geos):
             missing.append("geography:TIER3_EXPLORATION")
@@ -185,12 +232,14 @@ class BlindspotDetector:
                 if not isinstance(finding, dict):
                     continue
                 architect = str(finding.get("architect_name") or "").strip()
-                if not architect or architect in seen_in_run:
+                if not architect:
                     continue
-                seen_in_run.add(architect)
-                text = str(finding.get("finding") or "").strip().lower()
+                text = " ".join(str(finding.get("finding") or "").strip().lower().split())
                 if not text:
                     continue
+                if architect in seen_in_run:
+                    continue
+                seen_in_run.add(architect)
                 previous = top_finding_by_architect.get(architect)
                 if previous is None:
                     top_finding_by_architect[architect] = text
