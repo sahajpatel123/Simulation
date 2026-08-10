@@ -105,9 +105,9 @@ def _coerce_results(value: Any) -> dict[str, Any]:
 def _cluster_rate(raw: Any) -> float:
     """Extract a clamped conversion rate from a cluster entry."""
     if isinstance(raw, dict):
-        rate = _safe_float(
-            raw.get("conversion_rate", raw.get("conversion")),
-        )
+        rate = _safe_float(raw.get("conversion_rate"))
+        if rate <= 0:
+            rate = _safe_float(raw.get("conversion"))
     else:
         rate = _safe_float(raw)
     return max(0.0, min(1.0, rate))

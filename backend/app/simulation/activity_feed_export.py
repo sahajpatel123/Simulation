@@ -73,4 +73,33 @@ def activity_feed_to_csv(
     return buffer.getvalue()
 
 
-__all__ = ["activity_feed_to_csv"]
+def activity_feed_count_to_csv(
+    row: dict[str, Any],
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    """Render an activity-feed count row as a single-row CSV table."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+
+    if metadata:
+        _write_row(writer, ["generated_at", _text(metadata.get("generated_at"))])
+        _write_row(writer, ["project_id", _text(metadata.get("project_id"))])
+        _write_row(writer, ["user_id", _text(metadata.get("user_id"))])
+        _write_row(
+            writer,
+            ["format_version", _text(metadata.get("format_version", "1"))],
+        )
+        _write_row(writer, [])
+
+    _write_row(writer, ["project_id", "activity_feed_count"])
+    _write_row(
+        writer,
+        [
+            _text(row.get("project_id")),
+            _text(row.get("activity_feed_count")),
+        ],
+    )
+    return buffer.getvalue()
+
+
+__all__ = ["activity_feed_count_to_csv", "activity_feed_to_csv"]

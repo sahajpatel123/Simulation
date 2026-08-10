@@ -6,7 +6,8 @@ import sys
 import types
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
 if "razorpay" not in sys.modules:
     stub = types.ModuleType("razorpay")
@@ -41,6 +42,9 @@ class _FakeQuery:
 
     def first(self):
         return self.items[0] if self.items else None
+
+    def count(self):
+        return len(self.items)
 
     def all(self):
         return self.items
@@ -107,6 +111,23 @@ def _call_route(
 
     db = session if session is not None else _FakeSession()
     return proj_mod.export_activity_feed(
+        project_id=project_id,
+        format=format,
+        db=db,
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+
+def _call_count_route(
+    *,
+    project_id: int = 10,
+    format: str = "csv",
+    session: _FakeSession | None = None,
+):
+    from app.api.v1 import projects as proj_mod
+
+    db = session if session is not None else _FakeSession()
+    return proj_mod.export_activity_feed_count(
         project_id=project_id,
         format=format,
         db=db,
@@ -199,3 +220,59 @@ def test_export_activity_feed_route_registered() -> None:
     for r in proj_mod.router.routes:
         methods_by_path.setdefault(r.path, set()).update(r.methods or set())
     assert "GET" in methods_by_path["/projects/{project_id}/activity-feed/export"]
+
+
+def test_export_activity_feed_count_returns_csv() -> None:
+    resp = _call_count_route()
+
+    assert resp.media_type == "text/csv; charset=utf-8"
+    assert 'filename="activity-feed-count-10.csv"' in resp.headers[
+        "Content-Disposition"
+    ]
+    body = _body(resp).decode("utf-8")
+    assert "project_id,activity_feed_count" in body
+    assert "10,3" in body
+
+
+def test_export_activity_feed_count_format_json_returns_payload() -> None:
+    resp = _call_count_route(format="json")
+
+    assert resp.media_type == "application/json; charset=utf-8"
+    body = _body(resp).decode("utf-8")
+    assert '"project_id": 10' in body
+    assert '"activity_feed_count": 3' in body
+    assert '"sim_count": 1' in body
+    assert '"decision_count": 1' in body
+    assert '"outcome_count": 1' in body
+
+
+def test_export_activity_feed_count_invalid_format_rejected_with_422() -> None:
+    from app.api.v1 import projects as proj_mod
+    from app.core.deps import get_current_user, get_db
+
+    mini_app = FastAPI()
+    mini_app.include_router(proj_mod.router)
+    mini_app.dependency_overrides[get_db] = lambda: _FakeSession()
+    mini_app.dependency_overrides[get_current_user] = lambda: type(
+        "U", (), {"id": 42}
+    )()
+
+    with TestClient(mini_app) as client:
+        resp = client.get(
+            "/projects/10/activity-feed-count/export",
+            params={"format": "xlsx"},
+        )
+
+    assert resp.status_code == 422
+
+
+def test_export_activity_feed_count_missing_project_raises_404() -> None:
+    class NoProjectSession(_FakeSession):
+        def query(self, model, *args, **kwargs):
+            if getattr(model, "__name__", "") == "Project":
+                return _FakeQuery([])
+            return super().query(model, *args, **kwargs)
+
+    with pytest.raises(HTTPException) as exc:
+        _call_count_route(session=NoProjectSession())
+    assert exc.value.status_code == 404

@@ -133,7 +133,10 @@ from app.simulation.accountability_summary import (
     filter_findings as _filter_findings,
 )
 from app.simulation.activity_feed import build_activity_feed
-from app.simulation.activity_feed_export import activity_feed_to_csv
+from app.simulation.activity_feed_export import (
+    activity_feed_count_to_csv,
+    activity_feed_to_csv,
+)
 from app.simulation.adoption_milestones import (
     build_adoption_milestones,
 )
@@ -6364,6 +6367,87 @@ def export_activity_feed(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="activity-feed-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/activity-feed-count/export",
+    summary="Export a project's activity-feed count as CSV or JSON",
+    response_class=StreamingResponse,
+)
+def export_activity_feed_count(
+    project_id: int,
+    format: Literal["csv", "json"] = Query(
+        default="csv",
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "activity-feed-count row."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Export a project's recent activity-feed event count as CSV or JSON."""
+    get_owned_project(db, current_user.id, project_id)
+
+    sim_count = min(
+        db.query(Simulation).filter(Simulation.project_id == project_id).count(),
+        50,
+    )
+    decision_count = min(
+        db.query(Decision).filter(Decision.project_id == project_id).count(),
+        50,
+    )
+    outcome_count = min(
+        db.query(Outcome).filter(Outcome.project_id == project_id).count(),
+        50,
+    )
+    total_count = sim_count + decision_count + outcome_count
+    row = {"project_id": project_id, "activity_feed_count": total_count}
+    metadata = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "project_id": project_id,
+        "user_id": current_user.id,
+        "format_version": "1",
+    }
+
+    if format == "json":
+        json_text = json.dumps(
+            {
+                "generated_at": metadata["generated_at"],
+                "project_id": project_id,
+                "activity_feed_count": total_count,
+                "sim_count": sim_count,
+                "decision_count": decision_count,
+                "outcome_count": outcome_count,
+            },
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="activity-feed-count-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = activity_feed_count_to_csv(row, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="activity-feed-count-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },

@@ -215,6 +215,22 @@ def test_segments_skip_zero_conversion_clusters() -> None:
     assert [s["cluster_id"] for s in out["top_segments"]] == ["alive"]
 
 
+def test_segment_rate_falls_back_when_conversion_rate_key_is_null() -> None:
+    out = build_first_customers(
+        _results(
+            cr=0.05,
+            breakdown={
+                "fallback": {"conversion_rate": None, "conversion": 0.10},
+                "direct": {"conversion_rate": 0.02},
+            },
+        ),
+    )
+
+    top = out["top_segments"]
+    assert [s["cluster_id"] for s in top] == ["fallback", "direct"]
+    assert top[0]["conversion_rate"] == pytest.approx(0.10)
+
+
 def test_uniform_weight_fallback_without_registry() -> None:
     out = build_first_customers(
         _results(cr=0.05, breakdown={"a": 0.05, "b": 0.05}),
