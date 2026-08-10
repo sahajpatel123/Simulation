@@ -83,10 +83,19 @@ _memory_limiter = InMemoryRateLimiter()
 _redis_limiter = RedisRateLimiter()
 
 
-def rate_limit(limit: int = 30, window_s: int = 60):
+def rate_limit(
+    limit: int = 30,
+    window_s: int = 60,
+    fail_open: bool = False,
+):
     """
     FastAPI dependency. Raises 429 if rate exceeded.
-    Keyed by IP address + path.
+
+    ``fail_open`` makes the limiter allow the request through when the
+    Redis-backed limiter is unavailable, instead of failing closed with a
+    503. Use it only for observability endpoints that diagnose Redis /
+    cache health themselves — blocking those when Redis is down would hide
+    the very outage they exist to report. Keyed by IP address + path.
     """
 
     async def _check(request: Request) -> None:
@@ -104,6 +113,8 @@ def rate_limit(limit: int = 30, window_s: int = 60):
         key = f"rate-limit:{request.url.path}:{ip}"
         allowed = _redis_limiter.is_allowed(key, limit, window_s)
         if allowed is None:
+            if fail_open:
+                return
             if settings.ENVIRONMENT.lower() == "production":
                 # Fail closed but signal retryability to the client instead of
                 # relying on the generic 500 handler.

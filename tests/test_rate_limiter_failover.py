@@ -56,3 +56,27 @@ def test_development_redis_outage_falls_back_to_in_memory(monkeypatch):
     # In development we silently fall through to the in-memory limiter, which
     # always allows the request. No 503/429 should be raised on the first call.
     assert raised is None
+
+
+def test_production_fail_open_allows_observability_probes(monkeypatch):
+    """Observability endpoints that diagnose Redis itself must stay
+    reachable during a Redis outage; fail_open skips the limit instead of
+    raising the production 503."""
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+    monkeypatch.setattr(
+        rate_limiter._redis_limiter, "is_allowed", lambda *a, **kw: None
+    )
+
+    async def _invoke_fail_open() -> HTTPException | None:
+        dep = rate_limiter.rate_limit(
+            limit=10, window_s=30, fail_open=True
+        )
+        try:
+            await dep(_StubRequest())
+        except HTTPException as exc:
+            return exc
+        return None
+
+    raised = asyncio.run(_invoke_fail_open())
+
+    assert raised is None

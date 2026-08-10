@@ -214,8 +214,13 @@ def llm_health(
     responses=_JSON_200,
     response_model=CacheHealthOut,
     # Scans the Redis key space (non-blocking SCAN), so bound dashboard
-    # polling the way the other observability digests are bounded.
-    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
+    # polling the way the other observability digests are bounded. The
+    # limiter fails open because this endpoint diagnoses the cache: when
+    # Redis is down, the Redis-backed limiter must not 503 the one probe
+    # that would report the outage.
+    dependencies=[
+        Depends(rate_limit(limit=10, window_s=60, fail_open=True))
+    ],
 )
 def cache_health() -> dict[str, Any]:
     """Return a digest of the response cache's in-process activity.

@@ -9,7 +9,8 @@ template from ``request.scope[\"route\"]``.
 
 These tests pin:
 * ``_METRICS_EXEMPT_PATHS`` excludes /metrics, /health, /readyz and the
-  request-health digest so probe traffic doesn't pollute its own histogram
+  request-health / query-health / cache-health digests so probe traffic
+  doesn't pollute its own histogram
 * ``_normalise_path`` returns the matched template, or
   ``\"unmatched\"`` for routes Starlette didn't match
 """
@@ -31,15 +32,16 @@ def test_metrics_exempt_paths_includes_probes() -> None:
     show up as 'slow requests' on dashboards which
     trigger more scraping. /health and /readyz are cheap
     probes that don't represent real application load, and the
-    request-health / query-health digests are the same — every dashboard
-    poll of them would otherwise add a self-observation to the histogram
-    they report on.
+    request-health / query-health / cache-health digests are the same —
+    every dashboard poll of them would otherwise add a self-observation to
+    the histogram they report on, and cache-health also scans Redis.
     """
     assert "/metrics" in _METRICS_EXEMPT_PATHS
     assert "/health" in _METRICS_EXEMPT_PATHS
     assert "/readyz" in _METRICS_EXEMPT_PATHS
     assert "/api/v1/system/request-health" in _METRICS_EXEMPT_PATHS
     assert "/api/v1/system/query-health" in _METRICS_EXEMPT_PATHS
+    assert "/api/v1/system/cache-health" in _METRICS_EXEMPT_PATHS
 
 
 def test_normalise_path_returns_template_when_route_matches() -> None:

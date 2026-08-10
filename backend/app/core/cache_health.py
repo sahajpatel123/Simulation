@@ -246,7 +246,7 @@ def build_cache_health(
                     invalidation_errors, configured_invalidations
                 ),
                 "current_keys": (
-                    int(key_counts.get(namespace, 0))
+                    _safe_count(key_counts.get(namespace))
                     if key_counts is not None
                     else None
                 ),
@@ -328,7 +328,7 @@ def build_cache_health(
             configured_invalidations,
         ),
         "current_keys": (
-            int(sum(key_counts.values()))
+            sum(_safe_count(value) for value in key_counts.values())
             if key_counts is not None
             else None
         ),
