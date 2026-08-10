@@ -63,6 +63,8 @@ Rules that keep CI green and secure:
 - When adding a new workflow, declare explicit least-privilege `permissions`.
 - Every workflow must declare a top-level `permissions` block;
   `tools/validate_ci.py` enforces this.
+- Every workflow must declare a `concurrency` block so superseded runs are
+  canceled; `tools/validate_ci.py` enforces this.
 - Do not grant `actions: write`; use `actions: read` or omit the scope.
 - Do not grant `id-token: write` outside `scorecard.yml`.
 - Set `persist-credentials: false` on every checkout step.

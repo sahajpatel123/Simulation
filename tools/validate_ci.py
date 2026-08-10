@@ -15,6 +15,7 @@ can catch issues locally before pushing:
   - Every workflow includes a workflow_dispatch trigger for manual runs.
   - The zizmor config disables hash-pinning (this repo pins to full tags instead).
   - Artifact uploads fail when no files are found instead of passing silently.
+  - Every workflow declares a concurrency block to cancel superseded runs.
 
 Usage:
     python3 tools/validate_ci.py
@@ -240,6 +241,17 @@ def validate_artifacts() -> list[str]:
     return errors
 
 
+def validate_concurrency() -> list[str]:
+    errors: list[str] = []
+    for path in sorted(glob.glob(str(ROOT / ".github" / "workflows" / "*.yml"))):
+        with open(path) as fh:
+            data = yaml.safe_load(fh) or {}
+        rel = Path(path).relative_to(ROOT)
+        if not data.get("concurrency"):
+            errors.append(f"{rel}: missing concurrency block")
+    return errors
+
+
 def main() -> int:
     checks = [
         ("YAML", validate_yaml),
@@ -252,6 +264,7 @@ def main() -> int:
         ("workflow dispatch", validate_workflow_dispatch),
         ("zizmor config", validate_zizmor_config),
         ("artifact uploads", validate_artifacts),
+        ("concurrency", validate_concurrency),
     ]
     errors: list[str] = []
     for label, func in checks:

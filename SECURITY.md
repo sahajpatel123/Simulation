@@ -189,4 +189,6 @@ For security concerns, please contact the project maintainers.
   `permissions` block on every workflow, matching the repo's current layout.
 - 2026-08-10 - Added a GitHub Actions hardening checklist to `SECURITY.md`
   summarizing the enforced CI invariants.
+- 2026-08-10 - Extended `tools/validate_ci.py` to require a `concurrency`
+  block on every workflow so overlapping runs are canceled promptly.
 - [VERSION] - Initial security policy
