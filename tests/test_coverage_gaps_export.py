@@ -11,6 +11,7 @@ from fastapi import HTTPException
 
 from app.schemas.project import ProjectCoverageGapsOut
 from app.simulation.coverage_gaps_export import (
+    coverage_gaps_count_to_csv,
     coverage_gaps_to_csv,
     coverage_gaps_to_json,
 )
@@ -168,6 +169,23 @@ def test_csv_summary_breakdown_formula_key_is_guarded() -> None:
     assert "'=cmd=1" in csv_text
 
 
+def test_count_csv_contains_header_and_row() -> None:
+    csv_text = coverage_gaps_count_to_csv(
+        {"project_id": 7, "coverage_gaps_count": 2},
+        metadata={
+            "generated_at": "now",
+            "user_id": 42,
+            "format_version": "1",
+            "project_id": 7,
+        },
+    )
+
+    assert "project_id,coverage_gaps_count" in csv_text
+    assert "7,2" in csv_text
+    assert "generated_at,now" in csv_text
+    assert "user_id,42" in csv_text
+
+
 # ---------------------------------------------------------------------------
 # JSON helper
 # ---------------------------------------------------------------------------
@@ -268,6 +286,32 @@ def _call_route(
     )
 
 
+def _call_count_route(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    project_id: int = 1,
+    format: str = "csv",
+    payload: ProjectCoverageGapsOut | None = None,
+):
+    proj_mod = _import_projects_module()
+    fake_payload = payload if payload is not None else _payload()
+
+    def _fake_get_coverage_gaps(**kwargs: object) -> ProjectCoverageGapsOut:
+        return fake_payload
+
+    monkeypatch.setattr(
+        proj_mod,
+        "get_project_coverage_gaps",
+        _fake_get_coverage_gaps,
+    )
+    return proj_mod.export_project_coverage_gaps_count(
+        project_id=project_id,
+        format=format,
+        db=object(),  # type: ignore[arg-type]
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+
 def test_export_route_registered() -> None:
     proj_mod = _import_projects_module()
 
@@ -351,3 +395,37 @@ def test_export_route_unknown_format_fails_before_payload_build(
 
     assert exc_info.value.status_code == 400
     assert calls == []
+
+
+def test_count_route_registered() -> None:
+    proj_mod = _import_projects_module()
+
+    paths = {r.path for r in proj_mod.router.routes}
+    assert "/projects/{project_id}/coverage-gaps-count/export" in paths
+
+
+def test_count_route_returns_csv(monkeypatch: pytest.MonkeyPatch) -> None:
+    resp = _call_count_route(monkeypatch)
+
+    assert resp.media_type == "text/csv; charset=utf-8"
+    assert 'filename="coverage-gaps-count-1.csv"' in resp.headers[
+        "Content-Disposition"
+    ]
+    body = _body(resp).decode("utf-8")
+    assert "project_id,coverage_gaps_count" in body
+    assert "1,2" in body
+
+
+def test_count_route_returns_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    resp = _call_count_route(monkeypatch, format="json")
+
+    assert resp.media_type == "application/json; charset=utf-8"
+    assert 'filename="coverage-gaps-count-1.json"' in resp.headers[
+        "Content-Disposition"
+    ]
+    body = _body(resp).decode("utf-8")
+    assert '"coverage_gaps_count": 2' in body
+    assert '"covered_categories_count": 2' in body
+    assert '"covered_cluster_count": 3' in body
+    assert '"missing_architect_count": 2' in body
+    assert '"total_assumption_count": 3' in body

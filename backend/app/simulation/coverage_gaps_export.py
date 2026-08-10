@@ -166,4 +166,28 @@ def coverage_gaps_to_json(
     )
 
 
-__all__ = ["coverage_gaps_to_csv", "coverage_gaps_to_json"]
+def coverage_gaps_count_to_csv(
+    row: dict[str, Any],
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    """Render a coverage-gaps count row as a single-row CSV table."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+
+    for key, value in _metadata_rows(metadata):
+        _write_row(writer, [key, value])
+    if metadata:
+        _write_row(writer, [])
+
+    _write_row(writer, ["project_id", "coverage_gaps_count"])
+    _write_row(
+        writer,
+        [
+            _value(row.get("project_id")),
+            _value(row.get("coverage_gaps_count")),
+        ],
+    )
+    return buffer.getvalue()
+
+
+__all__ = ["coverage_gaps_count_to_csv", "coverage_gaps_to_csv", "coverage_gaps_to_json"]

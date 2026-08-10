@@ -162,6 +162,7 @@ from app.simulation.confidence_explainer import (
 from app.simulation.convergence_check import build_convergence_check
 from app.simulation.coverage_gaps import build_coverage_gaps
 from app.simulation.coverage_gaps_export import (
+    coverage_gaps_count_to_csv,
     coverage_gaps_to_csv,
     coverage_gaps_to_json,
 )
@@ -6683,6 +6684,86 @@ def export_project_coverage_gaps(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="coverage-gaps-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/coverage-gaps-count/export",
+    response_class=StreamingResponse,
+    summary="Export a project's coverage-gaps count as CSV or JSON",
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_project_coverage_gaps_count(
+    project_id: int,
+    format: Literal["csv", "json"] = Query(
+        default="csv",
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "coverage-gaps-count row."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Export a project's missing-coverage category count as CSV or JSON."""
+    payload = get_project_coverage_gaps(
+        project_id=project_id,
+        db=db,
+        current_user=current_user,
+    )
+
+    missing_categories = list(getattr(payload, "missing_categories", None) or [])
+    covered_categories = list(getattr(payload, "covered_categories", None) or [])
+    covered_cluster_count = getattr(payload, "covered_cluster_count", 0) or 0
+    missing_architect_count = getattr(payload, "missing_architect_count", 0) or 0
+    total_assumption_count = getattr(payload, "total_assumption_count", 0) or 0
+    coverage_gaps_count = len(missing_categories)
+    row = {"project_id": project_id, "coverage_gaps_count": coverage_gaps_count}
+    metadata = {
+        "generated_at": datetime.now(tz=UTC).isoformat(),
+        "user_id": current_user.id,
+        "format_version": "1",
+        "project_id": project_id,
+    }
+
+    if format == "json":
+        json_text = json.dumps(
+            {
+                "metadata": metadata,
+                "project_id": project_id,
+                "coverage_gaps_count": coverage_gaps_count,
+                "covered_categories_count": len(covered_categories),
+                "covered_cluster_count": covered_cluster_count,
+                "missing_architect_count": missing_architect_count,
+                "total_assumption_count": total_assumption_count,
+            },
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="coverage-gaps-count-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = coverage_gaps_count_to_csv(row, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="coverage-gaps-count-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },
