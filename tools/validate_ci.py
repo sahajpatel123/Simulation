@@ -14,6 +14,7 @@ can catch issues locally before pushing:
   - Every job declares a positive timeout-minutes so CI cannot hang indefinitely.
   - Every workflow includes a workflow_dispatch trigger for manual runs.
   - The zizmor config disables hash-pinning (this repo pins to full tags instead).
+  - Artifact uploads fail when no files are found instead of passing silently.
 
 Usage:
     python3 tools/validate_ci.py
@@ -218,6 +219,25 @@ def validate_zizmor_config() -> list[str]:
     return errors
 
 
+def validate_artifacts() -> list[str]:
+    errors: list[str] = []
+    for path in sorted(glob.glob(str(ROOT / ".github" / "workflows" / "*.yml"))):
+        with open(path) as fh:
+            data = yaml.safe_load(fh) or {}
+        rel = Path(path).relative_to(ROOT)
+        for job_name, job in (data.get("jobs") or {}).items():
+            for i, step in enumerate((job.get("steps") or []), 1):
+                ref = step.get("uses") or ""
+                if not ref.startswith("actions/upload-artifact@"):
+                    continue
+                if step.get("with", {}).get("if-no-files-found") != "error":
+                    errors.append(
+                        f"{rel} job {job_name} step {i}: upload-artifact must set "
+                        "if-no-files-found: error"
+                    )
+    return errors
+
+
 def main() -> int:
     checks = [
         ("YAML", validate_yaml),
@@ -229,6 +249,7 @@ def main() -> int:
         ("job timeouts", validate_timeouts),
         ("workflow dispatch", validate_workflow_dispatch),
         ("zizmor config", validate_zizmor_config),
+        ("artifact uploads", validate_artifacts),
     ]
     errors: list[str] = []
     for label, func in checks:

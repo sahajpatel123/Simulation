@@ -162,4 +162,7 @@ For security concerns, please contact the project maintainers.
 - 2026-08-10 - Added Dependabot ignores for `numpy>=2.5` and `scipy>=1.18`,
   which require Python 3.12, so dependency updates can't silently break the
   project's Python 3.11 dependency resolution again.
+- 2026-08-10 - Extended `tools/validate_ci.py` to require every
+  `upload-artifact` step to set `if-no-files-found: error`, preventing silent
+  scanner report gaps.
 - [VERSION] - Initial security policy
