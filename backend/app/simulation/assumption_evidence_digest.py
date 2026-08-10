@@ -11,6 +11,12 @@ The digest is deliberately simulation-independent — a founder can track
 validation progress before the first simulation finishes, and a corrupt or
 missing ``results_json`` can never break the summary.
 
+Legacy rows are normalised before they hit the summary: result casing is
+canonicalised (``" pass "`` counts as ``PASS``), known method IDs are
+canonicalised to their schema spelling, and unrecognised result values are
+surfaced under an ``OTHER`` bucket so ``result_counts`` always reconciles
+with ``total_evidence_rows``.
+
 Pure module (no DB, no I/O): the route passes already-loaded assumption and
 evidence rows, so the digest is deterministic and easy to test.
 """
@@ -28,12 +34,17 @@ from app.simulation.evidence_scorecard import (
     EVIDENCE_RESULT_PASS,
     derive_confidence,
 )
+from app.simulation.validation_experiment_planner import METHOD_SPECS
 
 # Per-assumption status labels surfaced to the founder.
 STATUS_DE_RISKED: str = "DE_RISKED"
 STATUS_CHALLENGED: str = "CHALLENGED"
 STATUS_INCONCLUSIVE: str = "INCONCLUSIVE"
 STATUS_PENDING: str = "PENDING"
+
+# Bucket for legacy/unrecognised result values so the histogram stays
+# reconciled with total_evidence_rows.
+RESULT_OTHER: str = "OTHER"
 
 # Cap for the top-pending / top-challenged sub-lists.
 TOP_N: int = 5
@@ -109,6 +120,13 @@ def _row_value(row: Any, name: str, default: Any = None) -> Any:
 
 def _normalise_result(value: Any) -> str:
     return _safe_text(value).strip().upper()
+
+
+def _normalise_method(value: Any) -> str:
+    """Trim a method and canonicalise known IDs to their schema spelling."""
+    method = _safe_text(value).strip()
+    upper = method.upper()
+    return upper if upper in METHOD_SPECS else method
 
 
 def _timestamp_key(value: Any) -> datetime:
@@ -241,7 +259,9 @@ def build_assumption_evidence_digest(
                 **definition,
                 "evidence_count": len(history),
                 "latest_result": (
-                    _row_value(history[0], "result") if history else None
+                    _normalise_result(_row_value(history[0], "result"))
+                    if history
+                    else None
                 ),
                 "derived_confidence": (
                     derived.value if derived is not None else None
@@ -255,7 +275,9 @@ def build_assumption_evidence_digest(
             result = _normalise_result(_row_value(row, "result"))
             if result in result_counts:
                 result_counts[result] += 1
-            method = _safe_text(_row_value(row, "method"))
+            else:
+                result_counts[RESULT_OTHER] = result_counts.get(RESULT_OTHER, 0) + 1
+            method = _normalise_method(_row_value(row, "method"))
             if method:
                 method_counter[method] += 1
 
@@ -352,6 +374,10 @@ def build_assumption_evidence_digest(
             "decisive_result_policy": (
                 "most recent PASS/FAIL wins; INCONCLUSIVE is ignored"
             ),
+            "result_counting_policy": (
+                "PASS/FAIL/INCONCLUSIVE counted under canonical keys; "
+                "unrecognised legacy results aggregate under OTHER"
+            ),
         },
     }
 
@@ -361,6 +387,7 @@ __all__ = [
     "STATUS_CHALLENGED",
     "STATUS_INCONCLUSIVE",
     "STATUS_PENDING",
+    "RESULT_OTHER",
     "TOP_N",
     "DIGEST_MODEL",
     "build_assumption_evidence_digest",

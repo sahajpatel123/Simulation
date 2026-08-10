@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from app.simulation.assumption_evidence_digest import (
+    RESULT_OTHER,
     STATUS_CHALLENGED,
     STATUS_DE_RISKED,
     STATUS_INCONCLUSIVE,
@@ -302,3 +303,59 @@ class TestDefensiveRows:
         assert out["result_counts"][EVIDENCE_RESULT_PASS] == 0
         assert out["result_counts"][EVIDENCE_RESULT_INCONCLUSIVE] == 1
         assert out["assumptions"][0]["status"] == STATUS_INCONCLUSIVE
+
+
+class TestCanonicalisation:
+    def test_legacy_result_and_method_casing_are_canonicalised(self) -> None:
+        out = build_assumption_evidence_digest(
+            assumptions=[_assumption(1)],
+            evidence=[
+                _evidence(
+                    1,
+                    1,
+                    method=" willingness_to_pay_survey ",
+                    result=" pass ",
+                    day=2,
+                ),
+            ],
+            project_id=9,
+        )
+        row = out["assumptions"][0]
+        assert row["latest_result"] == EVIDENCE_RESULT_PASS
+        assert row["status"] == STATUS_DE_RISKED
+        assert out["result_counts"][EVIDENCE_RESULT_PASS] == 1
+        assert out["method_counts"] == {"WILLINGNESS_TO_PAY_SURVEY": 1}
+
+    def test_unknown_result_buckets_into_other(self) -> None:
+        out = build_assumption_evidence_digest(
+            assumptions=[_assumption(1)],
+            evidence=[
+                _evidence(1, 1, result="MAYBE", day=2),
+                _evidence(
+                    2,
+                    1,
+                    result=EVIDENCE_RESULT_INCONCLUSIVE,
+                    day=3,
+                ),
+            ],
+            project_id=9,
+        )
+        assert out["total_evidence_rows"] == 2
+        assert out["result_counts"][RESULT_OTHER] == 1
+        assert sum(out["result_counts"].values()) == out["total_evidence_rows"]
+
+    def test_unknown_method_is_trimmed_but_not_renamed(self) -> None:
+        out = build_assumption_evidence_digest(
+            assumptions=[_assumption(1)],
+            evidence=[
+                _evidence(
+                    1,
+                    1,
+                    method=" Mystery-method ",
+                    result=EVIDENCE_RESULT_FAIL,
+                    day=2,
+                ),
+            ],
+            project_id=9,
+        )
+        assert out["method_counts"] == {"Mystery-method": 1}

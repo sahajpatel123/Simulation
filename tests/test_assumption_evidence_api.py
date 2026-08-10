@@ -332,6 +332,17 @@ class TestEvidenceDigest:
             _call_digest(session=session)
         assert exc.value.status_code == 404
 
+    def test_digest_buckets_legacy_result_values(self) -> None:
+        session = _FakeSession(
+            assumptions=[_FakeAssumption(100)],
+            evidence=[_FakeEvidence(1, result="MAYBE", day=3)],
+            sim=None,
+        )
+        out = _call_digest(session=session)
+        assert out.total_evidence_rows == 1
+        assert out.result_counts["OTHER"] == 1
+        assert sum(out.result_counts.values()) == out.total_evidence_rows
+
     def test_no_evidence_returns_zero_state(self) -> None:
         out = _call_scorecard(session=_FakeSession(sim=_FakeSimulation()))
         assert out.evidence_count == 0

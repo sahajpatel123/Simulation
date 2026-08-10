@@ -132,8 +132,20 @@ class AssumptionEvidenceDigestOut(BaseModel):
     inconclusive_count: int = Field(default=0, ge=0)
     pending_count: int = Field(default=0, ge=0)
     validation_score: float | None = Field(default=None, ge=0.0, le=1.0)
-    result_counts: dict[str, int] = Field(default_factory=dict)
-    method_counts: dict[str, int] = Field(default_factory=dict)
+    result_counts: dict[str, int] = Field(
+        default_factory=dict,
+        description=(
+            "Histogram of logged results: PASS/FAIL/INCONCLUSIVE, plus OTHER "
+            "for unrecognised legacy result values."
+        ),
+    )
+    method_counts: dict[str, int] = Field(
+        default_factory=dict,
+        description=(
+            "Histogram of experiment methods; known methods are canonicalised "
+            "to their schema spelling."
+        ),
+    )
     top_pending: list[AssumptionEvidenceDigestAssumption] = Field(
         default_factory=list
     )
