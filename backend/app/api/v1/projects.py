@@ -6887,11 +6887,25 @@ def get_project_simulation_quality(
             Simulation.results_json,
         )
         .filter(Simulation.project_id == project_id)
-        .order_by(Simulation.created_at.desc())
+        .order_by(Simulation.created_at.desc(), Simulation.id.desc())
         .all()
     )
+    simulation_rows: list[dict[str, Any]] = []
+    for row in rows:
+        if isinstance(row, dict):
+            simulation_rows.append(row)
+            continue
+        simulation_rows.append(
+            {
+                "id": row.id,
+                "status": row.status,
+                "created_at": row.created_at,
+                "signal_quality": row.signal_quality,
+                "results_json": row.results_json,
+            }
+        )
     payload = build_project_simulation_quality(
-        [dict(r) for r in rows],
+        simulation_rows,
         project_id=project_id,
         generated_at=datetime.now(UTC).isoformat(),
     )

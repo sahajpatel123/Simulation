@@ -272,10 +272,18 @@ class _FakeQuery:
         return self.rows
 
 
+class _FakeRow:
+    """Mimic a SQLAlchemy ``Row``: attribute access, not dict-iterable."""
+
+    def __init__(self, **attrs: object) -> None:
+        for key, value in attrs.items():
+            setattr(self, key, value)
+
+
 class _FakeSession:
     def __init__(
         self,
-        sim_rows: list[dict] | None = None,
+        sim_rows: list[object] | None = None,
         project: object = _MISSING,
     ) -> None:
         self.sim_rows = sim_rows or []
@@ -377,6 +385,30 @@ def test_project_simulation_quality_route_builds_digest() -> None:
     assert out.mean_trust_score == 1.0
     assert out.runs[0].simulation_id == 1
     assert out.runs[0].trust_score == 1.0
+    assert out.runs[1].trust_score is None
+
+
+def test_project_simulation_quality_route_handles_row_objects() -> None:
+    pytest.importorskip("scipy", reason="Route registration requires scipy")
+    import sys
+    import types
+
+    if "razorpay" not in sys.modules:
+        stub = types.ModuleType("razorpay")
+        stub.Client = object  # type: ignore[attr-defined]
+        sys.modules["razorpay"] = stub
+
+    rows = [
+        _FakeRow(**_row(1, results=_healthy_results())),
+        _FakeRow(**_row(2, status="RUNNING", results=None)),
+    ]
+    out = _call_route(session=_FakeSession(sim_rows=rows))
+    assert out.total_runs == 2
+    assert out.completed_runs == 1
+    assert out.pass_count == 1
+    assert out.runs[0].simulation_id == 1
+    assert out.runs[0].trust_score == 1.0
+    assert out.runs[1].status == "RUNNING"
     assert out.runs[1].trust_score is None
 
 
