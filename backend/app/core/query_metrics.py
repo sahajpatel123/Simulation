@@ -15,6 +15,13 @@ SQLAlchemy event listeners to the shared engine once per process:
   statements (never the bound parameters, so secrets cannot leak);
 * ``handle_error`` counts failed executions per kind and clears any
   pending timing entry so failed statements do not leak memory.
+  Transaction / session-control failures (BEGIN, COMMIT, ROLLBACK,
+  SAVEPOINT, RELEASE, SET) are deliberately excluded from the query
+  error counter — those statements never appear in ``QUERY_COUNTER``, so
+  counting their failures there would inflate the digest's error rate
+  (one failed COMMIT could turn a healthy process into a false
+  DEGRADED verdict). They land in their own ``thecee_db_control_errors_total``
+  counter so ops still see connection / commit failures on ``/metrics``.
 
 The digest built on top (``app.core.query_health.build_query_health``)
 is process-local, matching the existing request-health observability:
@@ -40,6 +47,7 @@ from app.core.metrics import metrics
 
 QUERY_COUNTER: str = "thecee_db_queries_total"
 QUERY_ERROR_COUNTER: str = "thecee_db_query_errors_total"
+CONTROL_ERROR_COUNTER: str = "thecee_db_control_errors_total"
 SLOW_QUERY_COUNTER: str = "thecee_db_slow_queries_total"
 QUERY_DURATION_HISTOGRAM: str = "thecee_db_query_duration_seconds"
 
@@ -223,8 +231,14 @@ def install_query_metrics(
             )
 
     def _handle_error(context: Any) -> None:
-        kind = classify_query_kind(getattr(context, "statement", None)) or KIND_OTHER
-        metrics.inc_counter(QUERY_ERROR_COUNTER, {"kind": kind})
+        statement = getattr(context, "statement", None)
+        kind = classify_query_kind(statement)
+        if kind is not None:
+            metrics.inc_counter(QUERY_ERROR_COUNTER, {"kind": kind})
+        elif statement and statement.strip():
+            # Transaction / session-control failures are visible but kept
+            # out of the query error rate (see module docstring).
+            metrics.inc_counter(CONTROL_ERROR_COUNTER)
         # after_cursor_execute never fires for a failed execution; clear the
         # pending start so failed statements cannot leak timing entries.
         cursor = getattr(context, "cursor", None)
@@ -259,6 +273,7 @@ def clear_slow_queries() -> None:
 
 
 __all__ = [
+    "CONTROL_ERROR_COUNTER",
     "DEFAULT_SLOW_QUERY_LIMIT",
     "KIND_DELETE",
     "KIND_INSERT",

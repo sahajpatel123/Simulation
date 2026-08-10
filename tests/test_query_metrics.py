@@ -15,7 +15,9 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from app.core.metrics import metrics
+from app.core.query_health import VERDICT_NO_DATA, build_query_health
 from app.core.query_metrics import (
+    CONTROL_ERROR_COUNTER,
     KIND_DELETE,
     KIND_INSERT,
     KIND_OTHER,
@@ -147,6 +149,33 @@ def test_failed_statements_count_errors_and_do_not_break_later_timing() -> None:
     # The failed statement must not have recorded a duration or a success.
     assert _counter_value(QUERY_COUNTER, KIND_SELECT) == 0.0
 
+    with engine.begin() as conn:
+        conn.execute(text("SELECT 1"))
+    assert _counter_value(QUERY_COUNTER, KIND_SELECT) == 1.0
+
+
+def test_failed_control_statements_do_not_inflate_query_error_rate() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    install_query_metrics(engine)
+    with pytest.raises(Exception):
+        with engine.connect() as conn:
+            conn.execute(text("SET x = 1"))
+
+    # BEGIN/COMMIT/ROLLBACK/SET failures are real signals, but they are
+    # intentionally absent from the query counter; counting them as OTHER
+    # query errors would make one failed COMMIT look like a 100% error rate.
+    assert _counter_value(QUERY_ERROR_COUNTER, KIND_SELECT) == 0.0
+    assert _counter_value(QUERY_ERROR_COUNTER, KIND_OTHER) == 0.0
+    assert metrics._counters.get((CONTROL_ERROR_COUNTER, ()), 0.0) == 1.0
+
+    payload = build_query_health(metrics.snapshot(), generated_at="now")
+    assert payload["total_queries"] == 0
+    assert payload["error_count"] == 0
+    assert payload["error_rate"] is None
+    assert payload["verdict"] == VERDICT_NO_DATA
+
+    # The failed control statement must not leave a stale timing entry
+    # that would misattribute a later query's duration.
     with engine.begin() as conn:
         conn.execute(text("SELECT 1"))
     assert _counter_value(QUERY_COUNTER, KIND_SELECT) == 1.0
