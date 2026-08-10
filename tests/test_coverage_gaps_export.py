@@ -7,7 +7,8 @@ import sys
 import types
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
 from app.schemas.project import ProjectCoverageGapsOut
 from app.simulation.coverage_gaps_export import (
@@ -429,3 +430,35 @@ def test_count_route_returns_json(monkeypatch: pytest.MonkeyPatch) -> None:
     assert '"covered_cluster_count": 3' in body
     assert '"missing_architect_count": 2' in body
     assert '"total_assumption_count": 3' in body
+
+
+def test_count_route_invalid_format_rejected_with_422(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.core.deps import get_current_user, get_db
+
+    proj_mod = _import_projects_module()
+
+    def _fake_get_coverage_gaps(**kwargs: object) -> ProjectCoverageGapsOut:
+        return _payload()
+
+    monkeypatch.setattr(
+        proj_mod,
+        "get_project_coverage_gaps",
+        _fake_get_coverage_gaps,
+    )
+
+    mini_app = FastAPI()
+    mini_app.include_router(proj_mod.router)
+    mini_app.dependency_overrides[get_db] = lambda: object()
+    mini_app.dependency_overrides[get_current_user] = lambda: type(
+        "U", (), {"id": 42}
+    )()
+
+    with TestClient(mini_app) as client:
+        resp = client.get(
+            "/projects/1/coverage-gaps-count/export",
+            params={"format": "xlsx"},
+        )
+
+    assert resp.status_code == 422
