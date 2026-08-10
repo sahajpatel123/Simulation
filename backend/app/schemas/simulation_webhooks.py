@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 VALID_EVENT_TYPES: frozenset[str] = frozenset(
     {"simulation.completed", "simulation.failed", "simulation.*"}
@@ -51,21 +51,30 @@ class SimulationWebhookCreate(BaseModel):
 class SimulationWebhookUpdate(BaseModel):
     """Partial update for a simulation webhook subscription.
 
-    ``status`` keeps its existing default of ``ACTIVE`` so an empty or
-    status-only body behaves exactly as before. ``url`` and ``event_type``
-    are optional and only applied when explicitly provided, so a founder
-    can retarget an existing subscription (staging URL to production, or
-    narrow ``simulation.completed`` to ``simulation.*``) without deleting
-    it, losing its delivery history, or rotating the signing secret.
+    Every field is optional and only applied when explicitly provided, so
+    a founder can retarget an existing subscription (staging URL to
+    production, or narrow ``simulation.completed`` to ``simulation.*``)
+    without deleting it, losing its delivery history, or rotating the
+    signing secret. Omitted fields are preserved exactly — in particular,
+    retargeting a disabled webhook does not silently re-enable it. At
+    least one field must be provided.
     """
 
-    status: str = Field(default="ACTIVE")
+    status: str | None = None
     url: str | None = None
     event_type: str | None = None
 
+    @model_validator(mode="after")
+    def _require_at_least_one_field(self) -> SimulationWebhookUpdate:
+        if self.status is None and self.url is None and self.event_type is None:
+            raise ValueError("Provide at least one of status, url, or event_type")
+        return self
+
     @field_validator("status")
     @classmethod
-    def validate_status(cls, value: str) -> str:
+    def validate_status(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         if value not in VALID_STATUSES:
             raise ValueError("status must be ACTIVE or DISABLED")
         return value

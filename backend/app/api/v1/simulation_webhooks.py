@@ -170,21 +170,22 @@ def update_simulation_webhook(
 ) -> SimulationWebhookOut:
     """Update a simulation webhook subscription without losing its history.
 
-    ``status`` is always applied (defaults to ``ACTIVE`` for backward
-    compatibility with the original update contract). ``url`` and
-    ``event_type`` are applied only when provided, which lets a founder
-    retarget an existing subscription — for example moving from a staging
-    endpoint to production — while preserving the delivery audit trail and
-    keeping the same HMAC signing secret. The secret is never returned here
-    (same as list), so receivers must already hold it; rotation remains a
-    separate, explicit endpoint.
+    Each field is applied only when provided, which lets a founder retarget
+    an existing subscription — for example moving from a staging endpoint
+    to production — while preserving the delivery audit trail and keeping
+    the same HMAC signing secret. Omitted fields are preserved exactly:
+    updating the URL or event type of a disabled webhook does not silently
+    re-enable it. The secret is never returned here (same as list), so
+    receivers must already hold it; rotation remains a separate, explicit
+    endpoint.
     """
     webhook = _get_owned_webhook(db, current_user.id, project_id, webhook_id)
+    if payload.status is not None:
+        webhook.status = payload.status
     if payload.url is not None:
         webhook.url = payload.url
     if payload.event_type is not None:
         webhook.event_type = payload.event_type
-    webhook.status = payload.status
     db.commit()
     db.refresh(webhook)
     return _without_secret(webhook)

@@ -789,6 +789,7 @@ def test_update_webhook_settings_retargets_url_and_event_type_without_history_lo
     sub = _Subscription(
         url="https://staging.example.com/hooks/cee",
         event_type="simulation.completed",
+        status="DISABLED",
         secret="keep-me",
     )
     session = _FakeSession(subscriptions=[sub], deliveries=[_Delivery()])
@@ -804,7 +805,8 @@ def test_update_webhook_settings_retargets_url_and_event_type_without_history_lo
     )
     assert out.url == "https://production.example.com/hooks/cee"
     assert out.event_type == "simulation.*"
-    assert out.status == "ACTIVE"
+    # Retargeting must not silently re-enable a disabled subscription.
+    assert out.status == "DISABLED"
     # The audit trail survives retargeting and the signing secret is untouched.
     assert len(session.deliveries) == 1
     assert sub.secret == "keep-me"
@@ -858,14 +860,21 @@ def test_update_webhook_settings_rejects_invalid_event_type() -> None:
         )
 
 
-def test_update_webhook_settings_keeps_status_default_active() -> None:
+def test_update_webhook_settings_status_is_optional() -> None:
     from app.schemas.simulation_webhooks import SimulationWebhookUpdate
 
     payload = SimulationWebhookUpdate(
         url="https://new.example.com/hook",
     )
-    assert payload.status == "ACTIVE"
+    assert payload.status is None
     assert payload.event_type is None
+
+
+def test_update_webhook_settings_requires_at_least_one_field() -> None:
+    from app.schemas.simulation_webhooks import SimulationWebhookUpdate
+
+    with pytest.raises(Exception):
+        SimulationWebhookUpdate()
 
 
 def test_delete_webhook_returns_ok() -> None:
