@@ -126,6 +126,7 @@ class _FakeSession:
         race_key: str | None = None,
     ) -> None:
         self.project = project or _Project()
+        self._initial_project_status = self.project.status
         self.simulations = simulations if simulations is not None else []
         self.outcomes = outcomes if outcomes is not None else []
         self.added: list = []
@@ -172,6 +173,9 @@ class _FakeSession:
 
     def rollback(self) -> None:
         self.added = []
+        # Mirror SQLAlchemy's rollback behaviour: in-flight changes to the
+        # project row (e.g. ``project.status``) are discarded.
+        self.project.status = self._initial_project_status
 
     def refresh(self, obj) -> None:
         if getattr(obj, "id", None) is None:
@@ -179,6 +183,31 @@ class _FakeSession:
             self._next_id += 1
         if getattr(obj, "created_at", None) is None:
             obj.created_at = datetime(2026, 8, 10, tzinfo=UTC)
+
+
+class _RepeatedRaceSession(_FakeSession):
+    """Fake session that races on every commit until each key is inserted."""
+
+    def __init__(
+        self,
+        *,
+        project: _Project | None = None,
+        simulations: list[_Simulation] | None = None,
+        race_keys: list[str],
+    ) -> None:
+        super().__init__(project=project, simulations=simulations)
+        self.race_keys = list(race_keys)
+        self._race_index = 0
+
+    def commit(self) -> None:
+        if self._race_index < len(self.race_keys):
+            key = self.race_keys[self._race_index]
+            self._race_index += 1
+            self.outcomes.append(
+                _Outcome(800 + self._race_index, client_request_id=key)
+            )
+            raise IntegrityError("INSERT", {}, Exception("duplicate key"))
+        super().commit()
 
 
 def _valid_row(*, key: str | None = None, conversion: float = 0.05) -> dict:
@@ -320,6 +349,7 @@ def test_single_race_returns_winner_as_replay() -> None:
     assert result.id == 999
     assert result.client_request_id == "launch-1"
     assert session.committed == 0
+    assert session.project.status == "ACTIVE"
 
 
 def test_single_race_without_winner_re_raises() -> None:
@@ -448,3 +478,56 @@ def test_batch_race_resolves_to_replay_and_retries_rest() -> None:
     assert resp.outcomes[0].id == 999
     assert resp.outcomes[1].id >= 100
     assert session.committed == 1
+    assert session.project.status == "OUTCOME_RECORDED"
+
+
+def test_batch_multiple_races_retry_until_all_replays_resolved() -> None:
+    session = _RepeatedRaceSession(
+        simulations=[_Simulation(9)],
+        race_keys=["k1", "k2"],
+    )
+
+    resp = _call_batch(
+        {
+            "outcomes": [
+                _valid_row(key="k1"),
+                _valid_row(key="k2"),
+                _valid_row(key="k3"),
+            ]
+        },
+        session=session,
+    )
+
+    assert resp.created_count == 1
+    assert resp.replayed_count == 2
+    assert [o.client_request_id for o in resp.outcomes] == ["k1", "k2", "k3"]
+    assert resp.outcomes[0].id == 801
+    assert resp.outcomes[1].id == 802
+    assert resp.outcomes[2].id >= 100
+    assert session.committed == 1
+    assert session.project.status == "OUTCOME_RECORDED"
+
+
+def test_batch_multiple_races_resolving_all_keys_is_pure_replay() -> None:
+    session = _RepeatedRaceSession(
+        simulations=[_Simulation(9)],
+        race_keys=["k1", "k2"],
+    )
+
+    resp = _call_batch(
+        {
+            "outcomes": [
+                _valid_row(key="k1"),
+                _valid_row(key="k2"),
+            ]
+        },
+        session=session,
+    )
+
+    assert resp.created_count == 0
+    assert resp.replayed_count == 2
+    assert [o.client_request_id for o in resp.outcomes] == ["k1", "k2"]
+    assert resp.outcomes[0].id == 801
+    assert resp.outcomes[1].id == 802
+    assert session.committed == 0
+    assert session.project.status == "ACTIVE"

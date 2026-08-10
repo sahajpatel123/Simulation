@@ -490,6 +490,19 @@ def _resolve_batch_rows(
     return new_rows, replayed
 
 
+def _batch_replay_response(
+    project_id: int,
+    replayed: list[Outcome],
+) -> OutcomeBatchOut:
+    """Build a pure-replay batch response when nothing new was written."""
+    return OutcomeBatchOut(
+        project_id=project_id,
+        created_count=0,
+        replayed_count=len(replayed),
+        outcomes=[_hydrate_record(outcome) for outcome in replayed],
+    )
+
+
 def _latest_tracker_conversion_target(
     rows: list[OutcomeTracker],
     sim: Simulation | None,
@@ -1769,45 +1782,41 @@ def record_outcomes_batch(
         existing_by_key=existing_by_key,
     )
 
-    if not rows:
-        # Every key already existed — pure replay, nothing new to persist.
-        return OutcomeBatchOut(
-            project_id=project_id,
-            created_count=0,
-            replayed_count=len(replayed),
-            outcomes=[_hydrate_record(outcome) for outcome in replayed],
-        )
-
-    db.add_all(rows)
-    project.status = "OUTCOME_RECORDED"
-    try:
-        db.commit()
-    except IntegrityError:
-        # A concurrent request inserted one of our keys between the
-        # pre-query and the commit. The whole transaction rolled back, so
-        # re-resolve: conflicting keys become replays, the rest are retried.
-        db.rollback()
-        existing_by_key = _existing_outcomes_by_client_key(
-            db,
-            project_id,
-            set(keys),
-        )
-        rows, replayed = _resolve_batch_rows(
-            project_id=project_id,
-            items=payload.outcomes,
-            sim_by_id=sim_by_id,
-            latest_sim=latest_sim,
-            existing_by_key=existing_by_key,
-        )
+    # A concurrent request can insert one of our keys between the pre-query
+    # and the commit. The whole transaction rolls back, so re-resolve on
+    # every race: conflicting keys become replays, the rest are retried.
+    # The loop is bounded so pathological contention still surfaces as a
+    # 500 instead of looping forever.
+    for attempt in range(3):
         if not rows:
-            return OutcomeBatchOut(
-                project_id=project_id,
-                created_count=0,
-                replayed_count=len(replayed),
-                outcomes=[_hydrate_record(outcome) for outcome in replayed],
-            )
+            # Every key already existed — pure replay, nothing new to persist.
+            return _batch_replay_response(project_id, replayed)
+
         db.add_all(rows)
-        db.commit()
+        project.status = "OUTCOME_RECORDED"
+        try:
+            db.commit()
+            break
+        except IntegrityError:
+            db.rollback()
+            if attempt == 2:
+                raise
+            logger.warning(
+                "[Outcome] Batch idempotency race on attempt %d — retrying",
+                attempt + 1,
+            )
+            existing_by_key = _existing_outcomes_by_client_key(
+                db,
+                project_id,
+                set(keys),
+            )
+            rows, replayed = _resolve_batch_rows(
+                project_id=project_id,
+                items=payload.outcomes,
+                sim_by_id=sim_by_id,
+                latest_sim=latest_sim,
+                existing_by_key=existing_by_key,
+            )
     for outcome in rows:
         db.refresh(outcome)
 
