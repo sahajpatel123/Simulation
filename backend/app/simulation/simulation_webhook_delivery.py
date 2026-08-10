@@ -23,6 +23,8 @@ from app.core.ssrf_guard import UnsafeOutboundURLError, assert_safe_outbound_url
 
 logger = logging.getLogger(__name__)
 
+_MAX_WEBHOOK_SECRET_ROTATION_ATTEMPTS = 3
+
 
 def generate_webhook_secret() -> str:
     """Generate a fresh HMAC-SHA256 signing secret for a webhook subscription.
@@ -31,6 +33,24 @@ def generate_webhook_secret() -> str:
     entropy) so create and rotate paths share the same secret format.
     """
     return secrets.token_urlsafe(32)
+
+
+def rotate_webhook_secret(current_secret: str) -> str:
+    """Generate a fresh signing secret guaranteed to differ from ``current_secret``.
+
+    ``generate_webhook_secret`` is cryptographically random, so a collision
+    is not expected; the bounded retry is a hard guard so rotation can never
+    silently keep the old key (for example if the generator is misconfigured
+    or monkey-patched). Raises ``RuntimeError`` if a distinct secret cannot be
+    produced, so callers can fail loudly instead of committing a no-op.
+    """
+    for _ in range(_MAX_WEBHOOK_SECRET_ROTATION_ATTEMPTS):
+        candidate = generate_webhook_secret()
+        if candidate != current_secret:
+            return candidate
+    raise RuntimeError(
+        "could not generate a webhook secret distinct from the current one"
+    )
 
 
 def _serialise_webhook_payload(payload: dict[str, Any]) -> str:

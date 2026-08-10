@@ -30,6 +30,7 @@ from app.simulation.simulation_webhook_delivery import (
     build_webhook_payload,
     deliver_webhook_event,
     generate_webhook_secret,
+    rotate_webhook_secret,
 )
 from app.simulation.webhook_delivery_history import (
     record_webhook_delivery,
@@ -192,10 +193,20 @@ def rotate_simulation_webhook_secret(
     it, so the receiving endpoint must store it immediately. Delivery
     history and subscription settings (URL, event type, status) are
     preserved, which makes rotation the safe way to invalidate a leaked or
-    compromised secret.
+    compromised secret. The endpoint guarantees the new secret differs from
+    the current one; if a distinct secret cannot be generated it fails
+    without committing a no-op rotation.
     """
     webhook = _get_owned_webhook(db, current_user.id, project_id, webhook_id)
-    webhook.secret = generate_webhook_secret()
+    try:
+        webhook.secret = rotate_webhook_secret(webhook.secret)
+    except RuntimeError as exc:
+        # Never commit a "rotation" that kept the old key: the receiver
+        # would believe the leaked secret was invalidated when it was not.
+        raise HTTPException(
+            status_code=500,
+            detail="Could not rotate webhook secret; please try again",
+        ) from exc
     db.commit()
     db.refresh(webhook)
     return SimulationWebhookOut.model_validate(webhook)

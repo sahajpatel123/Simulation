@@ -498,7 +498,7 @@ def test_rotate_webhook_secret_returns_new_secret_and_commits() -> None:
     session = _FakeSession(subscriptions=[sub])
     with patch.object(
         mod,
-        "generate_webhook_secret",
+        "rotate_webhook_secret",
         return_value="new-secret",
     ):
         out = mod.rotate_simulation_webhook_secret(
@@ -525,7 +525,7 @@ def test_rotate_webhook_secret_preserves_subscription_settings() -> None:
     session = _FakeSession(subscriptions=[sub])
     with patch.object(
         mod,
-        "generate_webhook_secret",
+        "rotate_webhook_secret",
         return_value="new-secret",
     ):
         out = mod.rotate_simulation_webhook_secret(
@@ -551,6 +551,167 @@ def test_rotate_webhook_secret_404_when_webhook_not_owned() -> None:
             current_user=_current_user(),
         )
     assert exc.value.status_code == 404
+
+
+def test_rotate_webhook_secret_helper_retries_until_distinct() -> None:
+    from app.simulation import simulation_webhook_delivery as delivery
+
+    with patch.object(
+        delivery,
+        "generate_webhook_secret",
+        side_effect=["same-secret", "fresh-secret"],
+    ):
+        assert delivery.rotate_webhook_secret("same-secret") == "fresh-secret"
+
+
+def test_rotate_webhook_secret_helper_raises_when_generator_is_stuck() -> None:
+    from app.simulation import simulation_webhook_delivery as delivery
+
+    with patch.object(
+        delivery,
+        "generate_webhook_secret",
+        return_value="stuck-secret",
+    ):
+        with pytest.raises(RuntimeError, match="distinct"):
+            delivery.rotate_webhook_secret("stuck-secret")
+
+
+def test_rotate_webhook_secret_route_passes_current_secret_to_helper() -> None:
+    from app.api.v1 import simulation_webhooks as mod
+
+    sub = _Subscription(secret="old-secret")
+    session = _FakeSession(subscriptions=[sub])
+    with patch.object(
+        mod,
+        "rotate_webhook_secret",
+        return_value="new-secret",
+    ) as mock_rotate:
+        out = mod.rotate_simulation_webhook_secret(
+            project_id=10,
+            webhook_id=1,
+            db=session,
+            current_user=_current_user(),
+        )
+    mock_rotate.assert_called_once_with("old-secret")
+    assert session.commits == 1
+    assert out.secret == "new-secret"
+    assert sub.secret == "new-secret"
+
+
+def test_rotate_webhook_secret_500_and_no_commit_when_rotation_fails() -> None:
+    from app.api.v1 import simulation_webhooks as mod
+
+    sub = _Subscription(secret="stuck-secret")
+    session = _FakeSession(subscriptions=[sub])
+    with patch.object(
+        mod,
+        "rotate_webhook_secret",
+        side_effect=RuntimeError("could not generate a distinct secret"),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            mod.rotate_simulation_webhook_secret(
+                project_id=10,
+                webhook_id=1,
+                db=session,
+                current_user=_current_user(),
+            )
+    assert exc.value.status_code == 500
+    assert session.commits == 0
+    assert sub.secret == "stuck-secret"
+
+
+def test_rotated_secret_signs_new_deliveries_and_old_secret_no_longer_verifies() -> None:
+    import hashlib
+    import hmac
+
+    from app.api.v1 import simulation_webhooks as mod
+    from app.simulation import simulation_webhook_delivery as delivery
+
+    sub = _Subscription(secret="old-secret")
+    session = _FakeSession(subscriptions=[sub])
+
+    class _Response:
+        status_code = 200
+
+    class _Client:
+        def __init__(self) -> None:
+            self.posts: list[dict] = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def post(self, *args, **kwargs):
+            self.posts.append(kwargs)
+            return _Response()
+
+    client = _Client()
+    payload = {
+        "event": "simulation.completed",
+        "simulation_id": 7,
+        "project_id": 10,
+        "status": "COMPLETED",
+        "timestamp": 123,
+    }
+    with patch.object(
+        mod,
+        "rotate_webhook_secret",
+        return_value="new-secret",
+    ):
+        out = mod.rotate_simulation_webhook_secret(
+            project_id=10,
+            webhook_id=1,
+            db=session,
+            current_user=_current_user(),
+        )
+    assert out.secret == "new-secret"
+
+    with patch.object(
+        delivery,
+        "assert_safe_outbound_url",
+        return_value="https://example.com/hook",
+    ), patch.object(delivery.httpx, "Client", lambda *a, **k: client):
+        result = delivery.deliver_webhook_event(
+            url="https://example.com/hook",
+            secret=sub.secret,
+            payload=payload,
+        )
+    assert result["ok"] is True
+    assert len(client.posts) == 1
+    sent = client.posts[0]
+    body = sent["content"]
+    new_signature = hmac.new(b"new-secret", body, hashlib.sha256).hexdigest()
+    old_signature = hmac.new(b"old-secret", body, hashlib.sha256).hexdigest()
+    assert sent["headers"]["X-TheCee-Signature"] == f"sha256={new_signature}"
+    assert sent["headers"]["X-TheCee-Signature"] != f"sha256={old_signature}"
+
+
+def test_retry_after_secret_rotation_signs_with_rotated_secret() -> None:
+    from app.simulation import webhook_delivery_history as history
+
+    sub = _Subscription(id=1, secret="rotated-secret")
+    original = _Delivery(
+        id=21,
+        webhook_subscription_id=1,
+        status="FAILED",
+        retry_count=0,
+        subscription=sub,
+    )
+    session = _FakeSession(subscriptions=[sub], deliveries=[original])
+
+    captured: dict = {}
+
+    def _fake_deliver(**kwargs):
+        captured.update(kwargs)
+        return {"ok": True, "status_code": 200}
+
+    with patch.object(history, "deliver_webhook_event", _fake_deliver):
+        new_delivery = history.retry_failed_delivery(session, delivery=original)
+
+    assert captured["secret"] == "rotated-secret"
+    assert new_delivery.status == "SUCCESS"
 
 
 def test_create_webhook_rejects_http() -> None:
