@@ -272,3 +272,111 @@ def test_missing_variant_objects_are_handled() -> None:
     )
     assert out["verdict"] == VERDICT_INSUFFICIENT_DATA
     assert out["meta"]["malformed_input"] is True
+
+
+def _sample_size_flag(out: dict) -> dict:
+    return next(s for s in out["key_signals"] if s["label"] == "sample_size_sufficient")
+
+
+def test_sample_size_flag_is_true_for_significant_verdicts() -> None:
+    out = analyze_ab_test(
+        {"label": "A", "visitors": 1000, "conversions": 100},
+        {"label": "B", "visitors": 1000, "conversions": 160},
+    )
+    assert out["verdict"] == VERDICT_SIGNIFICANT
+    assert _sample_size_flag(out)["value"] is True
+
+
+def test_sample_size_flag_uses_observed_uplift_for_trending_verdicts() -> None:
+    out = analyze_ab_test(
+        {"label": "A", "visitors": 5000, "conversions": 500},
+        {"label": "B", "visitors": 5000, "conversions": 560},
+    )
+    assert out["verdict"] == VERDICT_TRENDING
+    needed_observed = out["visitors_needed_for_observed_uplift"]
+    assert needed_observed is not None and needed_observed > 5000
+    assert _sample_size_flag(out)["value"] is False
+
+
+def test_sample_size_flag_uses_mde_for_inconclusive_verdicts() -> None:
+    out = analyze_ab_test(
+        {"label": "A", "visitors": 10000, "conversions": 1000},
+        {"label": "B", "visitors": 10000, "conversions": 1010},
+    )
+    assert out["verdict"] == VERDICT_INCONCLUSIVE
+    assert out["visitors_needed_for_mde"] <= 10000
+    assert _sample_size_flag(out)["value"] is True
+
+
+def test_p_value_signal_severity_honours_configured_alpha() -> None:
+    arms = (
+        {"label": "A", "visitors": 1000, "conversions": 100},
+        {"label": "B", "visitors": 1000, "conversions": 128},
+    )
+
+    out_strict = analyze_ab_test(*arms, alpha=0.01)
+    assert out_strict["verdict"] == VERDICT_TRENDING
+    p_signal = next(
+        s for s in out_strict["key_signals"] if s["label"] == "p_value"
+    )
+    assert p_signal["severity"] == "watch"
+
+    out_lenient = analyze_ab_test(*arms, alpha=0.10)
+    assert out_lenient["verdict"] == VERDICT_SIGNIFICANT
+    p_signal = next(
+        s for s in out_lenient["key_signals"] if s["label"] == "p_value"
+    )
+    assert p_signal["severity"] == "ok"
+
+
+def test_duplicate_labels_are_disambiguated() -> None:
+    out = analyze_ab_test(
+        {"label": "Landing", "visitors": 1000, "conversions": 100},
+        {"label": "Landing", "visitors": 1000, "conversions": 160},
+    )
+    assert out["variant_a"]["label"] == "Landing (arm A)"
+    assert out["variant_b"]["label"] == "Landing (arm B)"
+    assert out["winner"] == "Landing (arm B)"
+
+    long_label = "x" * 80
+    out_long = analyze_ab_test(
+        {"label": long_label, "visitors": 1000, "conversions": 100},
+        {"label": long_label, "visitors": 1000, "conversions": 160},
+    )
+    assert out_long["variant_a"]["label"] != out_long["variant_b"]["label"]
+    assert len(out_long["variant_a"]["label"]) <= 80
+    assert len(out_long["variant_b"]["label"]) <= 80
+
+
+def test_inconclusive_guidance_reports_observed_uplift_cost() -> None:
+    out = analyze_ab_test(
+        {"label": "A", "visitors": 10000, "conversions": 1000},
+        {"label": "B", "visitors": 10000, "conversions": 1010},
+    )
+    assert out["verdict"] == VERDICT_INCONCLUSIVE
+    needed_observed = out["visitors_needed_for_observed_uplift"]
+    assert needed_observed is not None and needed_observed > 10000
+    assert any(
+        str(needed_observed) in r and "per arm would be needed" in r
+        for r in out["recommendations"]
+    )
+
+
+def test_no_sample_size_guidance_from_full_conversion_baseline() -> None:
+    out = analyze_ab_test(
+        {"label": "A", "visitors": 20, "conversions": 20},
+        {"label": "B", "visitors": 20, "conversions": 0},
+    )
+    assert out["verdict"] == VERDICT_SIGNIFICANT
+    assert out["visitors_needed_for_mde"] == 0
+    assert not any("plan for roughly" in r for r in out["recommendations"])
+
+
+def test_malformed_summary_never_shows_impossible_counts() -> None:
+    out = analyze_ab_test(
+        {"label": "A", "visitors": 10, "conversions": 20},
+        {"label": "B", "visitors": 10, "conversions": 2},
+    )
+    assert out["verdict"] == VERDICT_INSUFFICIENT_DATA
+    assert out["variant_a"]["conversions"] <= out["variant_a"]["visitors"]
+    assert out["variant_b"]["conversions"] <= out["variant_b"]["visitors"]

@@ -20,6 +20,10 @@ Methodology
 * Verdict buckets: ``SIGNIFICANT`` (p < alpha), ``TRENDING``
   (alpha <= p < 0.20), ``INCONCLUSIVE`` (p >= 0.20), and
   ``INSUFFICIENT_DATA`` (too few visitors to justify any claim).
+* The ``sample_size_sufficient`` key signal is decision-aware: a
+  significant result is treated as sufficiently powered, a trending result
+  is judged against the observed uplift, and an inconclusive result against
+  the configured MDE.
 
 The module is pure (no DB, no I/O, no LLM) and deliberately conservative:
 it refuses to report p-values for tiny samples, rejects malformed counts
@@ -125,6 +129,28 @@ def _label(raw: Any, fallback: str) -> str:
     if not text:
         text = fallback
     return text[:80]
+
+
+def _disambiguate_labels(
+    a: ExperimentVariant,
+    b: ExperimentVariant,
+) -> tuple[ExperimentVariant, ExperimentVariant]:
+    """Give both arms distinct labels so a winner is never ambiguous."""
+    if a.label != b.label:
+        return a, b
+    base = a.label[:70].rstrip()
+    return (
+        ExperimentVariant(
+            label=f"{base} (arm A)",
+            visitors=a.visitors,
+            conversions=a.conversions,
+        ),
+        ExperimentVariant(
+            label=f"{base} (arm B)",
+            visitors=b.visitors,
+            conversions=b.conversions,
+        ),
+    )
 
 
 def _normalise_variant(
@@ -234,6 +260,12 @@ def _visitors_per_arm(
     if effect <= 0.0:
         return 0
     variant_rate = min(0.9999, control_rate + effect)
+    # The requested uplift is only achievable up to the headroom below a
+    # 100% conversion rate. Size the test for the achievable effect instead
+    # of returning a nonsense number (e.g. "2 visitors" from a 100% baseline).
+    effective_effect = variant_rate - control_rate
+    if effective_effect <= 0.0:
+        return 0
     pooled = (control_rate + variant_rate) / 2.0
     z_alpha = _z_alpha(alpha)
     z_beta = _z_beta(power)
@@ -244,7 +276,7 @@ def _visitors_per_arm(
             + variant_rate * (1.0 - variant_rate)
         )
     ) ** 2
-    return max(1, int(math.ceil(numerator / (effect ** 2))))
+    return max(1, int(math.ceil(numerator / (effective_effect ** 2))))
 
 
 # ---------------------------------------------------------------------------
@@ -358,6 +390,13 @@ def _recommendations(
             "more traffic, test a more impactful change, or accept the "
             "variants as equivalent."
         )
+        if needed_observed is not None and needed_observed > 0:
+            out.append(
+                f"At the observed {uplift:+.2%} uplift, roughly "
+                f"{needed_observed} visitor(s) per arm would be needed — "
+                "if that is impractical, treat the variants as equivalent "
+                "or test a bigger change."
+            )
         if needed_mde is not None and needed_mde > 0:
             out.append(
                 f"To detect a {mde:.1%} minimum uplift, plan for "
@@ -389,7 +428,10 @@ def _variant_summary(raw: Any, fallback_label: str) -> dict[str, Any]:
     return {
         "label": label,
         "visitors": max(0, visitors or 0),
-        "conversions": max(0, conversions or 0),
+        "conversions": min(
+            max(0, conversions or 0),
+            max(0, visitors or 0),
+        ),
         "conversion_rate": 0.0,
     }
 
@@ -409,6 +451,7 @@ def _key_signals(
     p_value: float | None,
     uplift: float | None,
     sample_size_sufficient: bool,
+    alpha: float,
 ) -> list[dict[str, Any]]:
     verdict_severity = _severity_for_verdict(verdict)
     return [
@@ -427,7 +470,7 @@ def _key_signals(
             "value": _round(p_value, 6),
             "severity": (
                 SIGNAL_OK
-                if p_value is not None and p_value < ALPHA_DEFAULT
+                if p_value is not None and p_value < alpha
                 else SIGNAL_WATCH
             ),
         },
@@ -537,6 +580,7 @@ def analyze_ab_test(
                 "malformed_input": True,
             },
         }
+    a, b = _disambiguate_labels(a, b)
 
     total_visitors = a.visitors + b.visitors
     if (
@@ -603,6 +647,7 @@ def analyze_ab_test(
                 p_value=None,
                 uplift=uplift,
                 sample_size_sufficient=False,
+                alpha=safe_alpha,
             ),
             "meta": {
                 "alpha": safe_alpha,
@@ -627,11 +672,19 @@ def analyze_ab_test(
     if uplift > 0.0:
         needed_observed = _visitors_per_arm(pa, uplift, safe_alpha, safe_power)
     needed_mde = _visitors_per_arm(pa, safe_mde, safe_alpha, safe_power)
-    sample_size_sufficient = (
-        needed_mde > 0
-        and a.visitors >= needed_mde
-        and b.visitors >= needed_mde
-    )
+    if verdict == VERDICT_SIGNIFICANT:
+        sample_size_sufficient = True
+    elif verdict == VERDICT_TRENDING and needed_observed is not None:
+        sample_size_sufficient = (
+            a.visitors >= needed_observed
+            and b.visitors >= needed_observed
+        )
+    else:
+        sample_size_sufficient = (
+            needed_mde > 0
+            and a.visitors >= needed_mde
+            and b.visitors >= needed_mde
+        )
 
     return {
         "variant_a": {
@@ -688,6 +741,7 @@ def analyze_ab_test(
             p_value=p_value,
             uplift=uplift,
             sample_size_sufficient=sample_size_sufficient,
+            alpha=safe_alpha,
         ),
         "meta": {
             "alpha": safe_alpha,
