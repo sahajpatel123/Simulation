@@ -89,6 +89,7 @@ from app.schemas.cultural_fit import CulturalFitOut
 from app.schemas.distribution_channels import DistributionChannelsOut
 from app.schemas.ecosystem_compatibility import EcosystemCompatibilityOut
 from app.schemas.feature_prioritization import FeaturePrioritizationOut
+from app.schemas.first_customers import FirstCustomersOut
 from app.schemas.fix_leverage import FixLeverageOut
 from app.schemas.founder_action_plan import FounderActionPlanOut
 from app.schemas.founder_brief import FounderBriefOut
@@ -230,6 +231,12 @@ from app.simulation.findings_trend import (
 )
 from app.simulation.findings_trend import (
     normalise_severity as normalise_findings_severity,
+)
+from app.simulation.first_customers import (
+    DEFAULT_MONTHLY_VISITORS,
+    MAX_MONTHLY_VISITORS,
+    MIN_MONTHLY_VISITORS,
+    build_first_customers,
 )
 from app.simulation.fix_leverage import build_fix_leverage
 from app.simulation.founder_action_plan_export import (
@@ -8479,6 +8486,82 @@ def get_market_sizing(
         ),
     )
     return MarketSizingOut(**payload)
+
+
+@router.get(
+    "/{simulation_id}/first-customers",
+    response_model=FirstCustomersOut,
+    summary=(
+        "First-customer trajectory: time to 10/100/1000 customers "
+        "from weighted conversion + expected monthly traffic"
+    ),
+    responses=_JSON_200,
+)
+def get_first_customers(
+    simulation_id: int,
+    monthly_visitors: int = Query(
+        DEFAULT_MONTHLY_VISITORS,
+        ge=MIN_MONTHLY_VISITORS,
+        le=MAX_MONTHLY_VISITORS,
+        description=(
+            "Expected website/app visitors per month; used as the "
+            "linear traffic assumption for the milestone timeline"
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FirstCustomersOut:
+    """Project the first customer milestones for a completed run.
+
+    Turns the simulation's weighted conversion into a founder-facing
+    timeline: at ``monthly_visitors`` expected monthly visitors, when
+    do the first 10 / 100 / 1,000 customers arrive, how many visitors
+    does each milestone require, and which consumer clusters supply
+    the first wave? Pure post-hoc analytics — no Celery, no LLM.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — the first-customer "
+                "timeline requires completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    registry = {
+        cid: {
+            "name": cluster.name,
+            "population_weight": cluster.population_weight,
+        }
+        for cid, cluster in _clusters_map.items()
+    }
+
+    payload = build_first_customers(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        monthly_visitors=monthly_visitors,
+        cluster_registry=registry,
+        signal_quality=(
+            float(sim.signal_quality)
+            if sim.signal_quality is not None
+            else None
+        ),
+    )
+    return FirstCustomersOut(**payload)
 
 
 @router.get(

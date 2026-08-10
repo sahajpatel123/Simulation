@@ -1,7 +1,10 @@
 """Tests for the pure founder brief export helper."""
 from __future__ import annotations
 
-from app.simulation.brief_export import brief_to_csv
+from app.simulation.brief_export import (
+    brief_completed_count_to_csv,
+    brief_to_csv,
+)
 
 
 def test_brief_to_csv_contains_header_and_row() -> None:
@@ -52,4 +55,15 @@ def test_brief_features_to_csv_contains_header_and_row() -> None:
 
     assert "project_id,brief_features_json" in csv_text
     assert "billing" in csv_text
+    assert "generated_at,now" in csv_text
+
+
+def test_brief_completed_count_to_csv_contains_header_and_row() -> None:
+    csv_text = brief_completed_count_to_csv(
+        {"project_id": 10, "brief_completed_count": 1},
+        metadata={"generated_at": "now", "user_id": 42},
+    )
+
+    assert "project_id,brief_completed_count" in csv_text
+    assert "10,1" in csv_text
     assert "generated_at,now" in csv_text
