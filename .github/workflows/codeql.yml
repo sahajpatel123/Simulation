@@ -9,6 +9,11 @@ on:
   schedule:
     - cron: '0 0 * * 1'  # Weekly on Monday at 00:00 UTC
 
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
 concurrency:
   group: codeql-${{ github.ref }}
   cancel-in-progress: true
@@ -18,10 +23,6 @@ jobs:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    permissions:
-      security-events: write
-      actions: read
-      contents: read
 
     strategy:
       fail-fast: false

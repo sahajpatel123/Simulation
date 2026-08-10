@@ -170,4 +170,6 @@ For security concerns, please contact the project maintainers.
   scanner report gaps.
 - 2026-08-10 - Added a `zizmor` pre-commit hook so workflow-security analysis
   runs locally before commit, alongside the CI hygiene validator.
+- 2026-08-10 - Moved CodeQL workflow permissions to the workflow top level so
+  least-privilege scopes are declared at the workflow boundary.
 - [VERSION] - Initial security policy
