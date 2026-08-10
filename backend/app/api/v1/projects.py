@@ -169,7 +169,10 @@ from app.simulation.dossier_axis_export import dossier_axis_to_csv
 from app.simulation.duplicate_title import find_duplicate_titles
 from app.simulation.environment_export import environment_to_csv
 from app.simulation.evidence_export import evidence_count_to_csv, evidence_to_csv
-from app.simulation.existing_product_export import existing_product_to_csv
+from app.simulation.existing_product_export import (
+    existing_product_count_to_csv,
+    existing_product_to_csv,
+)
 from app.simulation.go_no_go import build_go_no_go
 from app.simulation.intake_mode_export import intake_mode_to_csv
 from app.simulation.intervention_digest import (
@@ -4938,6 +4941,73 @@ def export_existing_product(
         headers={
             "Content-Disposition": (
                 f'attachment; filename="existing-product-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/existing-product-count/export",
+    summary="Export a project's existing product count as CSV or JSON",
+    response_class=StreamingResponse,
+)
+def export_existing_product_count(
+    project_id: int,
+    format: Literal["csv", "json"] = Query(
+        default="csv",
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "existing-product-count row."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Export a project's existing-product presence as CSV (default) or JSON."""
+    project = get_owned_project(db, current_user.id, project_id)
+    existing_product = getattr(project, "existing_product_description", None)
+    count = 1 if isinstance(existing_product, str) and existing_product.strip() else 0
+    row = {"project_id": project_id, "existing_product_count": count}
+
+    if format == "json":
+        json_text = json.dumps(
+            {
+                "generated_at": datetime.now(UTC).isoformat(),
+                "project_id": project_id,
+                "existing_product_count": count,
+            },
+            default=str,
+            indent=2,
+        )
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="existing-product-count-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = existing_product_count_to_csv(
+        row,
+        metadata={
+            "generated_at": datetime.now(UTC).isoformat(),
+            "user_id": current_user.id,
+            "format_version": "1",
+        },
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="existing-product-count-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },

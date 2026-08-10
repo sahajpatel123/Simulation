@@ -804,3 +804,105 @@ def test_export_landing_url_count_missing_project_raises_404() -> None:
         )
 
     assert exc.value.status_code == 404
+
+
+def test_export_existing_product_count_returns_csv_zero_when_missing() -> None:
+    from app.api.v1 import projects as proj_mod
+
+    db = _FakeSession(simulations=[])
+    resp = proj_mod.export_existing_product_count(
+        project_id=10,
+        format="csv",
+        db=db,
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+    assert resp.media_type == "text/csv; charset=utf-8"
+    body = _body(resp).decode("utf-8")
+    assert "project_id,existing_product_count" in body
+    assert "10,0" in body
+
+
+def test_export_existing_product_count_returns_csv_one_when_present() -> None:
+    from app.api.v1 import projects as proj_mod
+
+    class ProjectWithExistingProduct(_Project):
+        existing_product_description = "A live legacy product"
+
+    class SessionWithExistingProduct(_FakeSession):
+        def query(self, model, *args, **kwargs):
+            name = getattr(model, "__name__", "")
+            if name == "Project":
+                return _FakeQuery([ProjectWithExistingProduct()])
+            return _FakeQuery(self.simulations)
+
+    db = SessionWithExistingProduct(simulations=[])
+    resp = proj_mod.export_existing_product_count(
+        project_id=10,
+        format="csv",
+        db=db,
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+    assert resp.media_type == "text/csv; charset=utf-8"
+    body = _body(resp).decode("utf-8")
+    assert "project_id,existing_product_count" in body
+    assert "10,1" in body
+
+
+def test_export_existing_product_count_format_json_returns_payload() -> None:
+    from app.api.v1 import projects as proj_mod
+
+    db = _FakeSession(simulations=[])
+    resp = proj_mod.export_existing_product_count(
+        project_id=10,
+        format="json",
+        db=db,
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+    assert resp.media_type == "application/json; charset=utf-8"
+    body = _body(resp).decode("utf-8")
+    assert '"project_id": 10' in body
+    assert '"existing_product_count": 0' in body
+
+
+def test_export_existing_product_count_invalid_format_rejected_with_422() -> None:
+    from app.api.v1 import projects as proj_mod
+    from app.core.deps import get_current_user, get_db
+
+    mini_app = FastAPI()
+    mini_app.include_router(proj_mod.router)
+    mini_app.dependency_overrides[get_db] = lambda: _FakeSession(simulations=[])
+    mini_app.dependency_overrides[get_current_user] = lambda: type(
+        "U", (), {"id": 42}
+    )()
+
+    with TestClient(mini_app) as client:
+        resp = client.get(
+            "/projects/10/existing-product-count/export",
+            params={"format": "xlsx"},
+        )
+
+    assert resp.status_code == 422
+
+
+def test_export_existing_product_count_missing_project_raises_404() -> None:
+    from app.api.v1 import projects as proj_mod
+
+    class NoProjectSession(_FakeSession):
+        def query(self, model, *args, **kwargs):
+            name = getattr(model, "__name__", "")
+            if name == "Project":
+                return _FakeQuery([])
+            return _FakeQuery(self.simulations)
+
+    with pytest.raises(HTTPException) as exc:
+        proj_mod.export_existing_product_count(
+            project_id=10,
+            format="csv",
+            db=NoProjectSession(simulations=[]),
+            current_user=type("U", (), {"id": 42})(),
+        )
+
+    assert exc.value.status_code == 404
