@@ -151,6 +151,8 @@ def validate_permissions() -> list[str]:
         blocks: list[tuple[str, dict]] = []
         if data.get("permissions"):
             blocks.append(("workflow", data["permissions"]))
+        else:
+            errors.append(f"{rel}: no top-level permissions block")
         for job_name, job in (data.get("jobs") or {}).items():
             if job.get("permissions"):
                 blocks.append((f"job {job_name}", job["permissions"]))

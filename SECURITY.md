@@ -172,4 +172,6 @@ For security concerns, please contact the project maintainers.
   runs locally before commit, alongside the CI hygiene validator.
 - 2026-08-10 - Moved CodeQL workflow permissions to the workflow top level so
   least-privilege scopes are declared at the workflow boundary.
+- 2026-08-10 - Extended `tools/validate_ci.py` to require a top-level
+  `permissions` block on every workflow, matching the repo's current layout.
 - [VERSION] - Initial security policy
