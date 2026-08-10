@@ -9,6 +9,8 @@ keep a durable per-project registry of the tests they have actually run:
 * ``POST /experiments/ab-analysis`` — stateless statistical verdict.
 * ``POST /projects/{project_id}/experiments`` — log a persisted experiment.
 * ``GET /projects/{project_id}/experiments`` — list logged experiments.
+* ``GET /projects/{project_id}/experiments/export`` — download the whole
+  portfolio as CSV, JSON, or Markdown.
 * ``GET /projects/{project_id}/experiments/{experiment_id}`` — fetch one.
 * ``PATCH /projects/{project_id}/experiments/{experiment_id}`` — correct
   counts / params and recompute the verdict.
@@ -20,9 +22,11 @@ LLM calls.
 """
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -41,6 +45,12 @@ from app.schemas.ab_test import (
     AbTestExperimentUpdate,
 )
 from app.simulation import ab_test_analysis as ab_engine
+from app.simulation.ab_test_export import (
+    FORMAT_VERSION,
+    ab_test_experiments_to_csv,
+    ab_test_experiments_to_json,
+    ab_test_experiments_to_markdown,
+)
 from app.simulation.ab_test_summary import build_ab_test_summary
 
 router = APIRouter(tags=["experiments"])
@@ -276,6 +286,127 @@ def get_ab_test_experiments_summary(
     )
     return AbTestExperimentSummaryOut(
         **build_ab_test_summary(rows, project_id)
+    )
+
+
+@router.get(
+    "/projects/{project_id}/experiments/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export a project's A/B experiment portfolio as CSV, JSON, or "
+        "Markdown"
+    ),
+    responses=_JSON_200,
+    # Read-only but iterates the full registry; cap polling so a dashboard
+    # loop can't drive repeated full-table reads.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_ab_test_experiments(
+    project_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns a multi-section "
+            "spreadsheet; ``json`` returns the machine-readable registry "
+            "envelope; ``md`` returns a founder-facing Markdown brief. "
+            "Unsupported values return a 400 response."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """
+    Download the full A/B experiment evidence trail for a project.
+
+    The exported document always contains the same portfolio digest shown
+    by the summary endpoint plus one row per logged experiment, so a
+    founder can keep the record in Sheets, Notion, or an external tool
+    without re-typing verdicts.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json", "md"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; "
+                "expected 'csv', 'json', or 'md'"
+            ),
+        )
+
+    project = get_owned_project(db, current_user.id, project_id)
+    rows = (
+        db.query(AbTestExperiment)
+        .filter(AbTestExperiment.project_id == project_id)
+        .order_by(
+            AbTestExperiment.created_at.desc(),
+            AbTestExperiment.id.desc(),
+        )
+        .all()
+    )
+    experiments = [_hydrate_experiment(row) for row in rows]
+    metadata = {
+        "generated_at": datetime.now(tz=UTC).isoformat(),
+        "user_id": current_user.id,
+        "format_version": FORMAT_VERSION,
+        "project_id": project_id,
+        "experiment_count": len(experiments),
+    }
+
+    if fmt == "json":
+        body = ab_test_experiments_to_json(
+            experiments,
+            project_id=project_id,
+            metadata=metadata,
+        ).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="ab-test-experiments-project-'
+                    f'{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    if fmt == "md":
+        md_text = ab_test_experiments_to_markdown(
+            experiments,
+            project_id=project_id,
+            project_name=project.title,
+            metadata=metadata,
+        )
+        body = md_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="ab-test-experiments-project-'
+                    f'{project_id}.md"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = ab_test_experiments_to_csv(
+        experiments,
+        project_id=project_id,
+        metadata=metadata,
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="ab-test-experiments-project-'
+                f'{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
     )
 
 
