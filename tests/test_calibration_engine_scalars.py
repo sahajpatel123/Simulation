@@ -9,6 +9,7 @@ loop can never learn in the wrong direction.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -58,10 +59,12 @@ class _SequenceDb:
     def __init__(self, responses: list[list[object]]) -> None:
         self._responses = responses
         self.calls: list[dict | None] = []
+        self.statements: list[str] = []
         self.commits = 0
 
     def execute(self, statement: object, params: dict | None = None) -> _FakeResult:
         self.calls.append(params)
+        self.statements.append(str(statement))
         rows = self._responses.pop(0) if self._responses else []
         return _FakeResult(rows)
 
@@ -78,6 +81,7 @@ def _summary_row(
     conversion: float = 0.20,
     actual: float = 0.30,
     weight: float = 1.0,
+    outcome_id: int = 1,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         cluster_id=cluster_id,
@@ -86,6 +90,7 @@ def _summary_row(
         actual_conversion_rate=actual,
         learning_weight=weight,
         architect_scores={},
+        outcome_id=outcome_id,
     )
 
 
@@ -105,6 +110,17 @@ def _param_row(
 
 def _trait_update_params(db: _SequenceDb) -> list[dict]:
     return [p for p in db.calls if p and "val" in p and "cnt" in p]
+
+
+def _state_upsert_params(db: _SequenceDb) -> list[dict]:
+    return [p for p in db.calls if p and "cid" in p and "max_id" in p]
+
+
+def _summary_rows(count: int, **kwargs) -> list[SimpleNamespace]:
+    """Build ``count`` Layer 5 rows with distinct, increasing outcome ids."""
+    return [
+        _summary_row(outcome_id=i, **kwargs) for i in range(1, count + 1)
+    ]
 
 
 # ── layer 2: systematic bias ────────────────────────────────────────────
@@ -217,8 +233,8 @@ def test_structural_patterns_lowers_scalar_when_model_over_predicts() -> None:
 
 
 def test_cluster_trait_calibration_updates_trait_when_eff_count_met() -> None:
-    rows = [_summary_row() for _ in range(5)]
-    db = _SequenceDb([rows, [_param_row()], []])
+    rows = _summary_rows(5)
+    db = _SequenceDb([[], rows, [_param_row()], [], []])
 
     CalibrationEngine().update_cluster_trait_calibration(db)
 
@@ -230,16 +246,23 @@ def test_cluster_trait_calibration_updates_trait_when_eff_count_met() -> None:
     # wmean = +0.10 -> digital_literacy; prior 0.5 -> signal 0.47;
     # alpha = 1 / (0 + 2) -> 0.485.
     assert params["val"] == pytest.approx(0.485)
+    state = _state_upsert_params(db)
+    assert len(state) == 1
+    assert state[0]["cid"] == "c1"
+    assert state[0]["max_id"] == 5
 
 
 def test_cluster_trait_calibration_skips_cluster_below_threshold() -> None:
-    rows = [_summary_row() for _ in range(4)]
-    db = _SequenceDb([rows])
+    rows = _summary_rows(4)
+    db = _SequenceDb([[], rows])
 
     CalibrationEngine().update_cluster_trait_calibration(db)
 
     assert _trait_update_params(db) == []
-    assert db.commits == 1  # engine always commits once after the loop
+    # The watermark must NOT advance: sub-threshold evidence needs to
+    # accumulate toward the gate across future runs.
+    assert _state_upsert_params(db) == []
+    assert db.commits == 1
 
 
 @pytest.mark.parametrize(
@@ -254,11 +277,8 @@ def test_cluster_trait_calibration_clamps_to_safe_bounds(
     error: float,
     expected: float,
 ) -> None:
-    rows = [
-        _summary_row(conversion=0.20, actual=round(0.20 + error, 4))
-        for _ in range(5)
-    ]
-    db = _SequenceDb([rows, [_param_row(calibrated=prior)], []])
+    rows = _summary_rows(5, conversion=0.20, actual=round(0.20 + error, 4))
+    db = _SequenceDb([[], rows, [_param_row(calibrated=prior)], [], []])
 
     CalibrationEngine().update_cluster_trait_calibration(db)
 
@@ -268,8 +288,8 @@ def test_cluster_trait_calibration_clamps_to_safe_bounds(
 
 
 def test_cluster_trait_calibration_handles_null_calibration_count() -> None:
-    rows = [_summary_row() for _ in range(5)]
-    db = _SequenceDb([rows, [_param_row(calibrated=0.5, count=None)], []])
+    rows = _summary_rows(5)
+    db = _SequenceDb([[], rows, [_param_row(calibrated=0.5, count=None)], [], []])
 
     CalibrationEngine().update_cluster_trait_calibration(db)
 
@@ -292,6 +312,95 @@ def test_clusters_ready_returns_false_when_no_cluster_crossed_gate() -> None:
     db = _SequenceDb([[SimpleNamespace(ready=0)]])
 
     assert CalibrationEngine().clusters_ready_for_trait_calibration(db) is False
+
+
+def test_cluster_trait_calibration_is_idempotent_after_evidence_consumed() -> None:
+    rows = _summary_rows(5)
+    db = _SequenceDb([[], rows, [_param_row()], [], []])
+
+    CalibrationEngine().update_cluster_trait_calibration(db)
+
+    # A second run sees no unconsumed outcomes and must be a true no-op:
+    # no trait writes, no watermark churn, no commit.
+    db2 = _SequenceDb([[], []])
+    CalibrationEngine().update_cluster_trait_calibration(db2)
+
+    assert _trait_update_params(db2) == []
+    assert _state_upsert_params(db2) == []
+    assert db2.commits == 0
+
+
+def test_cluster_trait_calibration_accumulates_subthreshold_evidence() -> None:
+    # 3 outcomes: below the gate, so nothing is consumed.
+    db1 = _SequenceDb([[], _summary_rows(3)])
+    CalibrationEngine().update_cluster_trait_calibration(db1)
+
+    assert _trait_update_params(db1) == []
+    assert _state_upsert_params(db1) == []
+
+    # 2 more outcomes for the same cluster: the window must still include
+    # the earlier evidence and now cross the gate exactly once.
+    db2 = _SequenceDb([[], _summary_rows(5), [_param_row()], [], []])
+    CalibrationEngine().update_cluster_trait_calibration(db2)
+
+    updates = _trait_update_params(db2)
+    assert len(updates) == 1
+    assert updates[0]["cnt"] == 1
+    state = _state_upsert_params(db2)
+    assert len(state) == 1
+    assert state[0]["cid"] == "c1"
+    assert state[0]["max_id"] == 5
+
+
+def test_cluster_trait_calibration_skips_malformed_rows_without_wedging() -> None:
+    good = _summary_rows(5, cluster_id="c1")
+    bad = [
+        SimpleNamespace(
+            cluster_id="c2",
+            conversion_rate="n/a",
+            actual_conversion_rate=0.20,
+            learning_weight=1.0,
+            outcome_id=10 + i,
+        )
+        for i in range(5)
+    ]
+    db = _SequenceDb([[], good + bad, [_param_row()], [], [], []])
+
+    # Must not raise: the good cluster learns, the malformed cluster's
+    # poisoned evidence is skipped and its watermark advances past it.
+    CalibrationEngine().update_cluster_trait_calibration(db)
+
+    updates = _trait_update_params(db)
+    assert len(updates) == 1
+    assert updates[0]["pid"] == 7
+    states = _state_upsert_params(db)
+    assert {s["cid"] for s in states} == {"c1", "c2"}
+    assert next(s for s in states if s["cid"] == "c1")["max_id"] == 5
+    assert next(s for s in states if s["cid"] == "c2")["max_id"] == 14
+
+
+def test_trait_calibration_queries_exclude_consumed_outcomes() -> None:
+    db = _SequenceDb([[SimpleNamespace(ready=1)]])
+    CalibrationEngine().clusters_ready_for_trait_calibration(db)
+    db2 = _SequenceDb([[], []])
+    CalibrationEngine().update_cluster_trait_calibration(db2)
+
+    data_statements = [
+        s
+        for s in db.statements + db2.statements
+        if "pg_advisory_xact_lock" not in s
+    ]
+    assert data_statements
+    for statement in data_statements:
+        assert "last_processed_outcome_id" in statement
+
+
+def test_migration_defines_cluster_trait_calibration_state() -> None:
+    migration = Path(__file__).resolve().parents[1] / "migrate_and_start.py"
+    source = migration.read_text(encoding="utf-8")
+    assert "CREATE TABLE IF NOT EXISTS cluster_trait_calibration_state" in source
+    assert "last_processed_outcome_id BIGINT NOT NULL DEFAULT 0" in source
+    assert "cluster_id VARCHAR(100) PRIMARY KEY" in source
 
 
 # ── helper bounds ───────────────────────────────────────────────────────

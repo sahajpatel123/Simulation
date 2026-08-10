@@ -238,6 +238,7 @@ Runs on every Railway deploy before uvicorn starts. It:
 | `cluster_parameters` | 416 rows (52 × 8); calibrated trait base values |
 | `architect_corrections` | Per-architect, per-cluster correction scalars |
 | `founder_outcomes` | Real conversion rates submitted by founders |
+| `cluster_trait_calibration_state` | Per-cluster Layer 5 watermark (last outcome id consumed by trait calibration) |
 | `user_claim_accuracy_profiles` | Per-user accuracy tracking per architect |
 | `user_market_blindspots` | Recurring blind spots surfaced to users |
 | `user_simulation_accuracy_history` | Predicted vs actual per run |

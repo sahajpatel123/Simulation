@@ -55,6 +55,12 @@ ALL_ARCHITECT_NAMES = [
 # API trigger and the engine itself share one threshold.
 CLUSTER_TRAIT_CALIBRATION_MIN_EFF_COUNT: float = 5.0
 
+# Postgres advisory-lock key used to serialize Layer 5 runs. The weekly
+# beat and the outcome-feedback trigger can overlap in the Celery pool;
+# the lock makes the watermark read + trait writes one atomic window so
+# two workers can never consume the same outcome evidence twice.
+CLUSTER_TRAIT_CALIBRATION_LOCK_KEY: int = 735001
+
 
 def _predicted_conversion(results: dict) -> float:
     return float(
@@ -85,6 +91,18 @@ def _calibration_scalar(wmean: float) -> float:
         MIN_CORRECTION_SCALAR,
         min(MAX_CORRECTION_SCALAR, 1.0 / denominator),
     )
+
+
+def _is_finite_number(value: object) -> bool:
+    """Return True when ``value`` casts to a finite float.
+
+    Guards Layer 5 against a single malformed cluster summary (NULL or
+    non-numeric ``conversion_rate``) aborting the whole calibration batch.
+    """
+    try:
+        return math.isfinite(float(value))
+    except (TypeError, ValueError):
+        return False
 
 
 class CalibrationEngine:
@@ -352,7 +370,9 @@ class CalibrationEngine:
         Mirrors the exact join / grouping used by
         :meth:`update_cluster_trait_calibration` so the API only enqueues
         the Celery task once there is enough validated, learning-weighted
-        ground truth to learn from.
+        ground truth to learn from. Outcomes already consumed by a previous
+        run (recorded in ``cluster_trait_calibration_state``) are excluded,
+        so the gate does not stay hot forever after one successful run.
         """
         row = db.execute(
             text("""
@@ -361,8 +381,11 @@ class CalibrationEngine:
                     SELECT crs.cluster_id
                     FROM cluster_run_summaries crs
                     JOIN founder_outcomes fo ON fo.simulation_id = crs.simulation_id
+                    LEFT JOIN cluster_trait_calibration_state st
+                           ON st.cluster_id = crs.cluster_id
                     WHERE fo.validated = true
                       AND fo.learning_weight > 0
+                      AND fo.id > COALESCE(st.last_processed_outcome_id, 0)
                     GROUP BY crs.cluster_id
                     HAVING SUM(fo.learning_weight) >= :min_eff
                 ) ready_clusters
@@ -372,17 +395,31 @@ class CalibrationEngine:
         return bool(row and int(row.ready or 0) > 0)
 
     def update_cluster_trait_calibration(self, db) -> None:
+        # Serialize concurrent weekly-beat / outcome-triggered runs. The
+        # advisory lock is transaction-scoped and released on commit/close.
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(:key)"),
+            {"key": CLUSTER_TRAIT_CALIBRATION_LOCK_KEY},
+        )
+
         rows = db.execute(
             text("""
-            SELECT crs.cluster_id, crs.conversion_rate, crs.signal_quality,
-                   fo.actual_conversion_rate, fo.learning_weight,
-                   crs.architect_scores
+            SELECT crs.cluster_id, crs.conversion_rate,
+                   fo.actual_conversion_rate, fo.learning_weight, fo.id AS outcome_id
             FROM cluster_run_summaries crs
             JOIN founder_outcomes fo ON fo.simulation_id = crs.simulation_id
+            LEFT JOIN cluster_trait_calibration_state st
+                   ON st.cluster_id = crs.cluster_id
             WHERE fo.validated = true
               AND fo.learning_weight > 0
+              AND fo.id > COALESCE(st.last_processed_outcome_id, 0)
         """)
         ).fetchall()
+
+        if not rows:
+            # Nothing new to learn; leave the watermark and calibration
+            # counters untouched so re-runs stay true no-ops.
+            return
 
         groups: dict[str, list] = {}
         for r in rows:
@@ -391,14 +428,43 @@ class CalibrationEngine:
         for cluster_id, group in groups.items():
             eff_count = sum(float(r.learning_weight) for r in group)
             if eff_count < CLUSTER_TRAIT_CALIBRATION_MIN_EFF_COUNT:
+                # Keep this cluster's watermark where it is so older
+                # sub-threshold outcomes accumulate toward the gate.
+                continue
+
+            # Drop malformed rows (NULL / non-numeric conversion rates) so
+            # one bad summary cannot abort the batch. When every row in the
+            # group is malformed we still advance the watermark so poisoned
+            # evidence cannot wedge the pipeline forever.
+            max_outcome_id = max(int(r.outcome_id) for r in group)
+            valid = [
+                r
+                for r in group
+                if _is_finite_number(r.conversion_rate)
+                and _is_finite_number(r.actual_conversion_rate)
+            ]
+            if not valid:
+                db.execute(
+                    text("""
+                        INSERT INTO cluster_trait_calibration_state
+                            (cluster_id, last_processed_outcome_id, updated_at)
+                        VALUES (:cid, :max_id, NOW())
+                        ON CONFLICT (cluster_id) DO UPDATE SET
+                            last_processed_outcome_id = EXCLUDED.last_processed_outcome_id,
+                            updated_at = NOW()
+                    """),
+                    {"cid": cluster_id, "max_id": max_outcome_id},
+                )
                 continue
 
             errors = [
                 float(r.actual_conversion_rate) - float(r.conversion_rate)
-                for r in group
+                for r in valid
             ]
-            w_sum = sum(float(r.learning_weight) for r in group) or 1.0
-            wmean_error = sum(e * float(r.learning_weight) for e, r in zip(errors, group)) / w_sum
+            w_sum = sum(float(r.learning_weight) for r in valid) or 1.0
+            wmean_error = sum(
+                e * float(r.learning_weight) for e, r in zip(errors, valid)
+            ) / w_sum
 
             direction = "price_sensitivity" if wmean_error < -0.02 else "digital_literacy"
 
@@ -431,6 +497,18 @@ class CalibrationEngine:
                     WHERE id = :pid
                 """),
                 {"val": new_val, "cnt": count + 1, "pid": int(param.id)},
+            )
+
+            db.execute(
+                text("""
+                    INSERT INTO cluster_trait_calibration_state
+                        (cluster_id, last_processed_outcome_id, updated_at)
+                    VALUES (:cid, :max_id, NOW())
+                    ON CONFLICT (cluster_id) DO UPDATE SET
+                        last_processed_outcome_id = EXCLUDED.last_processed_outcome_id,
+                        updated_at = NOW()
+                """),
+                {"cid": cluster_id, "max_id": max_outcome_id},
             )
         db.commit()
 

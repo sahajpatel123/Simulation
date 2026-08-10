@@ -281,6 +281,20 @@ def run_migrations():
             conn.rollback()
             print(f"⚠️ founder_outcomes skip: {e}")
 
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS cluster_trait_calibration_state (
+                    cluster_id VARCHAR(100) PRIMARY KEY,
+                    last_processed_outcome_id BIGINT NOT NULL DEFAULT 0,
+                    updated_at TIMESTAMP DEFAULT NOW()
+                );
+            """))
+            conn.commit()
+            print("✅ cluster_trait_calibration_state ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ cluster_trait_calibration_state skip: {e}")
+
         # Step 92: founder_outcomes soft-gate columns + index; user retention + admin
         for col_sql in [
             "ALTER TABLE founder_outcomes ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)",
