@@ -1,6 +1,7 @@
 """
-BlindspotDetector — pattern scan across simulations for ignored high-fit clusters
-and under-explored targeting dimensions (deterministic heuristics).
+BlindspotDetector — pattern scan across simulations for ignored high-fit
+clusters, under-explored targeting dimensions, unchallenged product
+attributes, and missing competitive context (deterministic heuristics).
 """
 from __future__ import annotations
 
@@ -38,6 +39,19 @@ def get_blindspot(
         UserMarketBlindspot.blindspot_value == blindspot_value,
     )
     return db.execute(stmt).scalar_one_or_none()
+
+
+def get_project_ids_with_competitive_analysis(db: Any, project_ids: set[int]) -> set[int]:
+    """Return the subset of ``project_ids`` that have competitive data stored."""
+    if not project_ids:
+        return set()
+    from app.models.project import Project
+
+    stmt = select(Project.id).where(
+        Project.id.in_(sorted(project_ids)),
+        Project.competitive_json.is_not(None),
+    )
+    return {int(row) for row in db.execute(stmt).scalars().all()}
 
 
 class BlindspotDetector:
@@ -80,6 +94,22 @@ class BlindspotDetector:
                 user_id=user_id,
                 blindspot_type="DIMENSION_MISSING",
                 blindspot_value=dim,
+            )
+
+        for architect in self._detect_unchallenged_architects(history):
+            self._upsert_blindspot(
+                db,
+                user_id=user_id,
+                blindspot_type="ARCHITECT_UNCHALLENGED",
+                blindspot_value=architect,
+            )
+
+        for value in self._detect_ignored_competitive_context(history, simulation, db):
+            self._upsert_blindspot(
+                db,
+                user_id=user_id,
+                blindspot_type="COMPETITOR_IGNORED",
+                blindspot_value=value,
             )
 
     def _seen_in_history(self, history: list[Any], cluster_id: str) -> bool:
@@ -130,6 +160,68 @@ class BlindspotDetector:
         if len(segments) <= 1:
             missing.append("segment:B2B_VS_B2C")
         return missing
+
+    def _detect_unchallenged_architects(
+        self,
+        history: list[Any],
+    ) -> list[str]:
+        """Return architects whose top finding repeats unchanged across >=2 runs.
+
+        A finding that keeps coming back with the same wording means the
+        founder is not questioning or varying that product attribute between
+        simulations — the attribute deserves a deliberate experiment.
+        """
+        top_finding_by_architect: dict[str, str] = {}
+        repeated: set[str] = set()
+        for sim in history:
+            rj = sim.results_json or {}
+            if not isinstance(rj, dict):
+                continue
+            findings = rj.get("domain_findings")
+            if not isinstance(findings, list):
+                continue
+            seen_in_run: set[str] = set()
+            for finding in findings:
+                if not isinstance(finding, dict):
+                    continue
+                architect = str(finding.get("architect_name") or "").strip()
+                if not architect or architect in seen_in_run:
+                    continue
+                seen_in_run.add(architect)
+                text = str(finding.get("finding") or "").strip().lower()
+                if not text:
+                    continue
+                previous = top_finding_by_architect.get(architect)
+                if previous is None:
+                    top_finding_by_architect[architect] = text
+                elif previous == text:
+                    repeated.add(architect)
+        return sorted(repeated)
+
+    def _detect_ignored_competitive_context(
+        self,
+        history: list[Any],
+        simulation: Any | None,
+        db: Any,
+    ) -> list[str]:
+        """Flag when no project touched by this user's runs has competitive data."""
+        project_ids: set[int] = {
+            int(sim.project_id)
+            for sim in history
+            if getattr(sim, "project_id", None) is not None
+        }
+        current_project_id = getattr(simulation, "project_id", None)
+        if current_project_id is not None:
+            project_ids.add(int(current_project_id))
+        if not project_ids:
+            return []
+        try:
+            with_competitive = get_project_ids_with_competitive_analysis(db, project_ids)
+        except Exception:
+            return []
+        if with_competitive:
+            return []
+        return ["competitive_analysis"]
 
     def _upsert_blindspot(
         self,

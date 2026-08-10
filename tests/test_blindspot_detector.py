@@ -16,7 +16,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # Fake DB
 # ---------------------------------------------------------------------------
@@ -66,6 +65,7 @@ def _install_fake_helpers(
     *,
     history: list[Any] | None = None,
     blindspot_rows: list[Any] | None = None,
+    competitive_project_ids: set[int] | None = None,
     history_error: Exception | None = None,
 ) -> _FakeDB:
     """Stub get_user_simulation_history and get_blindspot against a fake DB."""
@@ -88,8 +88,16 @@ def _install_fake_helpers(
                 return r
         return None
 
+    def fake_competitive_lookup(db: Any, project_ids: set[int]) -> set[int]:
+        return set(competitive_project_ids or [])
+
     monkeypatch.setattr(_bd_mod, "get_user_simulation_history", fake_history)
     monkeypatch.setattr(_bd_mod, "get_blindspot", fake_lookup)
+    monkeypatch.setattr(
+        _bd_mod,
+        "get_project_ids_with_competitive_analysis",
+        fake_competitive_lookup,
+    )
     return _FakeDB(blindspot_rows=state["blindspot_rows"])
 
 
@@ -271,6 +279,198 @@ def test_detect_missing_dimensions_skips_corrupt_env_params() -> None:
 
 
 # ---------------------------------------------------------------------------
+# _detect_unchallenged_architects
+# ---------------------------------------------------------------------------
+
+
+def _finding(architect: str, text: str) -> dict:
+    return {"architect_name": architect, "finding": text}
+
+
+def _run_with_findings(*findings: dict, project_id: int | None = None) -> _FakeRow:
+    return _FakeRow(
+        project_id=project_id,
+        results_json={"domain_findings": list(findings)},
+    )
+
+
+def test_detect_unchallenged_architects_flags_repeated_top_finding() -> None:
+    from app.simulation.blindspot_detector import BlindspotDetector
+
+    history = [
+        _run_with_findings(
+            _finding("PricingArchitect", "Price is too high"),
+            project_id=1,
+        ),
+        _run_with_findings(
+            _finding("PricingArchitect", "Price is too high"),
+            project_id=2,
+        ),
+    ]
+    bd = BlindspotDetector()
+    assert bd._detect_unchallenged_architects(history) == ["PricingArchitect"]
+
+
+def test_detect_unchallenged_architects_skips_changed_findings() -> None:
+    from app.simulation.blindspot_detector import BlindspotDetector
+
+    history = [
+        _run_with_findings(_finding("PricingArchitect", "Price is too high")),
+        _run_with_findings(_finding("PricingArchitect", "Price is too low")),
+    ]
+    bd = BlindspotDetector()
+    assert bd._detect_unchallenged_architects(history) == []
+
+
+def test_detect_unchallenged_architects_requires_two_runs() -> None:
+    from app.simulation.blindspot_detector import BlindspotDetector
+
+    history = [
+        _run_with_findings(_finding("PricingArchitect", "Price is too high")),
+    ]
+    bd = BlindspotDetector()
+    assert bd._detect_unchallenged_architects(history) == []
+
+
+def test_detect_unchallenged_architects_uses_first_finding_per_run() -> None:
+    """Only the top (first) finding per architect per run counts."""
+    from app.simulation.blindspot_detector import BlindspotDetector
+
+    history = [
+        _run_with_findings(
+            _finding("PricingArchitect", "Top finding A"),
+            _finding("PricingArchitect", "Lower finding A"),
+        ),
+        _run_with_findings(
+            _finding("PricingArchitect", "Top finding A"),
+            _finding("PricingArchitect", "Lower finding B"),
+        ),
+    ]
+    bd = BlindspotDetector()
+    assert bd._detect_unchallenged_architects(history) == ["PricingArchitect"]
+
+
+def test_detect_unchallenged_architects_skips_corrupt_rows() -> None:
+    from app.simulation.blindspot_detector import BlindspotDetector
+
+    history = [
+        _sim("not-a-dict"),
+        _sim({"domain_findings": [{"architect_name": "PricingArchitect"}]}),
+        _run_with_findings(_finding("PricingArchitect", "Price is too high")),
+    ]
+    bd = BlindspotDetector()
+    # Missing finding text and corrupt results_json never produce a match.
+    assert bd._detect_unchallenged_architects(history) == []
+
+
+def test_detect_unchallenged_architects_case_insensitive_and_sorted() -> None:
+    from app.simulation.blindspot_detector import BlindspotDetector
+
+    history = [
+        _run_with_findings(
+            _finding("PricingArchitect", "Price Is Too High"),
+            _finding("TrustArchitect", "Unknown brand"),
+        ),
+        _run_with_findings(
+            _finding("PricingArchitect", "price is too high"),
+            _finding("TrustArchitect", "Different trust finding"),
+        ),
+    ]
+    bd = BlindspotDetector()
+    assert bd._detect_unchallenged_architects(history) == ["PricingArchitect"]
+
+
+# ---------------------------------------------------------------------------
+# _detect_ignored_competitive_context
+# ---------------------------------------------------------------------------
+
+
+def test_detect_ignored_competitive_context_flags_when_no_project_has_data(
+    monkeypatch: Any,
+) -> None:
+    from app.simulation.blindspot_detector import BlindspotDetector
+
+    db = _install_fake_helpers(
+        monkeypatch,
+        history=[_FakeRow(project_id=1, results_json={}), _FakeRow(project_id=2, results_json={})],
+        competitive_project_ids=set(),
+    )
+    bd = BlindspotDetector()
+    assert bd._detect_ignored_competitive_context([_FakeRow(project_id=1), _FakeRow(project_id=2)], None, db) == [
+        "competitive_analysis"
+    ]
+
+
+def test_detect_ignored_competitive_context_skips_when_any_project_has_data(
+    monkeypatch: Any,
+) -> None:
+    from app.simulation.blindspot_detector import BlindspotDetector
+
+    db = _install_fake_helpers(
+        monkeypatch,
+        history=[_FakeRow(project_id=1, results_json={}), _FakeRow(project_id=2, results_json={})],
+        competitive_project_ids={2},
+    )
+    bd = BlindspotDetector()
+    out = bd._detect_ignored_competitive_context(
+        [_FakeRow(project_id=1), _FakeRow(project_id=2)],
+        None,
+        db,
+    )
+    assert out == []
+
+
+def test_detect_ignored_competitive_context_includes_current_simulation_project(
+    monkeypatch: Any,
+) -> None:
+    """The current run's project counts, even when it has no prior runs yet."""
+    from app.simulation.blindspot_detector import BlindspotDetector
+
+    db = _install_fake_helpers(
+        monkeypatch,
+        history=[_FakeRow(project_id=1, results_json={})],
+        competitive_project_ids=set(),
+    )
+    bd = BlindspotDetector()
+    captured: list[set[int]] = []
+
+    def capture(db: Any, project_ids: set[int]) -> set[int]:
+        captured.append(set(project_ids))
+        return set()
+
+    monkeypatch.setattr(_bd_mod, "get_project_ids_with_competitive_analysis", capture)
+    current = _FakeRow(project_id=7, results_json={})
+    bd._detect_ignored_competitive_context([_FakeRow(project_id=1)], current, db)
+    assert captured and 7 in captured[0]
+
+
+def test_detect_ignored_competitive_context_returns_empty_without_project_ids(
+    monkeypatch: Any,
+) -> None:
+    from app.simulation.blindspot_detector import BlindspotDetector
+
+    db = _install_fake_helpers(monkeypatch)
+    bd = BlindspotDetector()
+    assert bd._detect_ignored_competitive_context([_FakeRow(project_id=None)], None, db) == []
+
+
+def test_detect_ignored_competitive_context_survives_db_failure(
+    monkeypatch: Any,
+) -> None:
+    from app.simulation.blindspot_detector import BlindspotDetector
+
+    db = _install_fake_helpers(monkeypatch)
+
+    def boom(db: Any, project_ids: set[int]) -> set[int]:
+        raise RuntimeError("simulated DB outage")
+
+    monkeypatch.setattr(_bd_mod, "get_project_ids_with_competitive_analysis", boom)
+    bd = BlindspotDetector()
+    out = bd._detect_ignored_competitive_context([_FakeRow(project_id=1)], None, db)
+    assert out == []
+
+
+# ---------------------------------------------------------------------------
 # _upsert_blindspot
 # ---------------------------------------------------------------------------
 
@@ -325,7 +525,7 @@ def test_upsert_rolls_back_on_commit_failure(monkeypatch: Any) -> None:
             self.added = []
             self.rollbacks += 1
 
-    base = _install_fake_helpers(monkeypatch)
+    _install_fake_helpers(monkeypatch)
     db = _BoomDB(blindspot_rows=[])  # type: ignore[arg-type]
     bd = BlindspotDetector()
     bd._upsert_blindspot(
@@ -451,6 +651,77 @@ def test_scan_flags_missing_dimensions(monkeypatch: Any) -> None:
     types = {(a.blindspot_type, a.blindspot_value) for a in db.added}
     assert ("DIMENSION_MISSING", "geography:TIER3_EXPLORATION") in types
     assert ("DIMENSION_MISSING", "segment:B2B_VS_B2C") in types
+
+
+def test_scan_flags_unchallenged_architect_and_ignored_competitors(
+    monkeypatch: Any,
+) -> None:
+    from app.simulation.blindspot_detector import BlindspotDetector
+
+    history = [
+        _run_with_findings(
+            _finding("PricingArchitect", "Price is too high"),
+            project_id=1,
+        ),
+        _run_with_findings(
+            _finding("PricingArchitect", "Price is too high"),
+            project_id=2,
+        ),
+    ]
+    db = _install_fake_helpers(
+        monkeypatch,
+        history=history,
+        competitive_project_ids=set(),
+    )
+    bd = BlindspotDetector()
+    bd.scan(
+        user_id=1,
+        simulation=None,
+        cluster_weights={},
+        conductor_result=_FakeConductorResult({}, {}),
+        db=db,
+    )
+    types = {(a.blindspot_type, a.blindspot_value) for a in db.added}
+    assert ("ARCHITECT_UNCHALLENGED", "PricingArchitect") in types
+    assert ("COMPETITOR_IGNORED", "competitive_analysis") in types
+
+
+def test_scan_skips_unchallenged_architect_when_finding_varies(
+    monkeypatch: Any,
+) -> None:
+    from app.simulation.blindspot_detector import BlindspotDetector
+
+    history = [
+        _run_with_findings(
+            _finding("PricingArchitect", "Price is too high"),
+            project_id=1,
+        ),
+        _run_with_findings(
+            _finding("PricingArchitect", "Price is too low"),
+            project_id=1,
+        ),
+    ]
+    db = _install_fake_helpers(
+        monkeypatch,
+        history=history,
+        competitive_project_ids={1},
+    )
+    bd = BlindspotDetector()
+    bd.scan(
+        user_id=1,
+        simulation=None,
+        cluster_weights={},
+        conductor_result=_FakeConductorResult({}, {}),
+        db=db,
+    )
+    architect_rows = [
+        r for r in db.added if getattr(r, "blindspot_type", "") == "ARCHITECT_UNCHALLENGED"
+    ]
+    competitor_rows = [
+        r for r in db.added if getattr(r, "blindspot_type", "") == "COMPETITOR_IGNORED"
+    ]
+    assert architect_rows == []
+    assert competitor_rows == []
 
 
 def test_scan_handles_db_history_lookup_failure_silently(monkeypatch: Any) -> None:
