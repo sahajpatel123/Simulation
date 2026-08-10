@@ -11,6 +11,7 @@ from app.simulation.risk_register import (
     SEVERITY_CRITICAL,
     SEVERITY_INFO,
     SEVERITY_MAJOR,
+    SEVERITY_MINOR,
     SOURCE_COMPETITIVE,
     SOURCE_PREMORTEM,
     SOURCE_SIMULATION,
@@ -64,8 +65,18 @@ def test_empty_register() -> None:
     assert out["top_risk_count"] == 0
     assert out["overall_risk_level"] == RISK_LEVEL_LOW
     assert out["top_risk_score"] is None
-    assert out["severity_breakdown"] == {}
-    assert out["source_breakdown"] == {}
+    assert out["severity_breakdown"] == {
+        "CRITICAL": 0,
+        "MAJOR": 0,
+        "MINOR": 0,
+        "INFO": 0,
+    }
+    assert out["source_breakdown"] == {
+        SOURCE_PREMORTEM: 0,
+        SOURCE_STRESS_TEST: 0,
+        SOURCE_COMPETITIVE: 0,
+        SOURCE_SIMULATION: 0,
+    }
     assert out["risks"] == []
     assert "No risks identified" in out["narrative"]
     assert out["key_signals"][0]["label"] == "overall_risk_level"
@@ -95,6 +106,7 @@ def test_premortem_modes_are_parsed_and_scored() -> None:
     assert item["recommended_action"] == "Start certification early"
     assert out["top_risk_score"] == 0.45
     assert out["overall_risk_level"] == RISK_LEVEL_HIGH
+    assert "across 1 source(s)" in out["narrative"]
 
 
 def test_premortem_missing_probability_uses_severity_fallback() -> None:
@@ -140,6 +152,40 @@ def test_stress_kill_shot_ranks_critical() -> None:
     assert item["recommended_action"] == "Run a landing-page A/B test"
     assert item["metric"] == "conversion_delta_pct"
     assert out["overall_risk_level"] == RISK_LEVEL_HIGH
+
+
+def test_stress_kill_shot_handles_string_booleans() -> None:
+    false_string = build_risk_register(
+        project_id=1,
+        stress_test_data=_stress(
+            {
+                "assumption_text": "Onboarding is self-serve",
+                "sensitivity": "MEDIUM",
+                "delta": -0.004,
+                "delta_pct": -10.0,
+                "kill_shot": "false",
+                "kill_shot_prob": 0.2,
+            }
+        ),
+    )
+    assert false_string["risks"][0]["severity"] == SEVERITY_MINOR
+    assert false_string["risks"][0]["risk_score"] < 0.2
+
+    true_string = build_risk_register(
+        project_id=1,
+        stress_test_data=_stress(
+            {
+                "assumption_text": "Users will pay for premium",
+                "sensitivity": "CRITICAL",
+                "delta": -0.04,
+                "delta_pct": -100.0,
+                "kill_shot": "true",
+                "kill_shot_prob": 0.75,
+            }
+        ),
+    )
+    assert true_string["risks"][0]["severity"] == SEVERITY_CRITICAL
+    assert true_string["risks"][0]["risk_score"] == 0.75
 
 
 def test_stress_partial_kill_shot_maps_to_major() -> None:
@@ -235,10 +281,37 @@ def test_findings_are_parsed_with_category_and_impact() -> None:
     assert item["recommended_action"] == "Introduce a lower-priced tier"
 
 
+def test_negative_finding_conversion_impact_uses_absolute_magnitude() -> None:
+    negative = _finding(conversion_impact=-0.05)
+    out = build_risk_register(project_id=1, findings=[negative])
+    item = out["risks"][0]
+    assert item["impact"] == 0.25
+    assert item["risk_score"] == 0.1375
+
+
 def test_unknown_finding_architect_falls_back_to_product() -> None:
     raw = _finding(architect="MysteryArchitect")
     out = build_risk_register(project_id=1, findings=[raw])
     assert out["risks"][0]["category"] == "PRODUCT"
+
+
+def test_premortem_category_derived_from_title() -> None:
+    out = build_risk_register(
+        project_id=1,
+        premortem_data=_premortem(
+            {
+                "title": "Regulatory approval stalls launch",
+                "severity": "HIGH",
+            },
+            {
+                "title": "Team velocity collapses",
+                "severity": "MEDIUM",
+            },
+        ),
+    )
+    categories = {item["title"]: item["category"] for item in out["risks"]}
+    assert categories["Regulatory approval stalls launch"] == "REGULATORY"
+    assert categories["Team velocity collapses"] == "STRATEGIC"
 
 
 def test_register_is_sorted_by_score_then_severity() -> None:
@@ -300,6 +373,30 @@ def test_register_dedupes_exact_duplicates() -> None:
     assert out["total_risks"] == 1
 
 
+def test_register_dedupe_keeps_higher_risk_variant() -> None:
+    out = build_risk_register(
+        project_id=1,
+        premortem_data=_premortem(
+            {
+                "title": "Same failure",
+                "severity": "MINOR",
+                "probability": 0.2,
+                "impact": 0.3,
+            },
+            {
+                "title": "Same failure",
+                "severity": "CRITICAL",
+                "probability": 0.8,
+                "impact": 0.9,
+            },
+        ),
+    )
+    assert out["total_risks"] == 1
+    item = out["risks"][0]
+    assert item["severity"] == SEVERITY_CRITICAL
+    assert item["risk_score"] == 0.72
+
+
 def test_register_caps_ranked_list_but_counts_all() -> None:
     modes = [
         {
@@ -317,8 +414,18 @@ def test_register_caps_ranked_list_but_counts_all() -> None:
     assert out["total_risks"] == MAX_RISKS + 5
     assert out["top_risk_count"] == MAX_RISKS
     assert len(out["risks"]) == MAX_RISKS
-    assert out["severity_breakdown"] == {SEVERITY_CRITICAL: MAX_RISKS + 5}
-    assert out["source_breakdown"] == {SOURCE_PREMORTEM: MAX_RISKS + 5}
+    assert out["severity_breakdown"] == {
+        SEVERITY_CRITICAL: MAX_RISKS + 5,
+        SEVERITY_MAJOR: 0,
+        SEVERITY_MINOR: 0,
+        SEVERITY_INFO: 0,
+    }
+    assert out["source_breakdown"] == {
+        SOURCE_PREMORTEM: MAX_RISKS + 5,
+        SOURCE_STRESS_TEST: 0,
+        SOURCE_COMPETITIVE: 0,
+        SOURCE_SIMULATION: 0,
+    }
 
 
 def test_overall_risk_level_thresholds() -> None:

@@ -155,6 +155,28 @@ def _safe_float(value: Any) -> float | None:
     return parsed
 
 
+def _as_bool(value: Any) -> bool:
+    """Coerce persisted booleans, including legacy string forms.
+
+    JSONB payloads written by older exporters or external tools sometimes
+    store ``kill_shot`` as ``"false"`` / ``"0"`` / ``"yes"`` instead of a
+    real boolean.  ``bool("false")`` would wrongly read as True, so parse
+    the common serialized forms explicitly and default unknown values to
+    False (the conservative choice for a risk register).
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "y", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "n", "off"}:
+            return False
+    return False
+
+
 def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, value))
 
@@ -199,6 +221,16 @@ def _normalise_title(value: str) -> str:
     return " ".join(str(value).lower().split())
 
 
+def _derive_category(terms: Any, fallback: str) -> str:
+    """Map free text (architect names, premortem titles) to a risk
+    category using the known domain terms, falling back when unknown."""
+    text = str(terms or "").lower()
+    for term, category in _FINDING_CATEGORY_TERMS:
+        if term in text:
+            return category
+    return fallback
+
+
 def _premortem_risks(data: Any) -> list[dict[str, Any]]:
     """Extract risks from ``project.premortem_json``."""
     payload = data if isinstance(data, dict) else {}
@@ -230,7 +262,7 @@ def _premortem_risks(data: Any) -> list[dict[str, Any]]:
             {
                 "id": f"premortem-{index}",
                 "source": SOURCE_PREMORTEM,
-                "category": "STRATEGIC",
+                "category": _derive_category(title, "STRATEGIC"),
                 "title": title,
                 "description": (
                     _safe_text(raw.get("description"))
@@ -268,7 +300,7 @@ def _stress_test_risks(data: Any) -> list[dict[str, Any]]:
     for index, raw in enumerate(raw_rows):
         if not isinstance(raw, dict):
             continue
-        kill_shot = bool(raw.get("kill_shot"))
+        kill_shot = _as_bool(raw.get("kill_shot"))
         delta = _safe_float(raw.get("delta"))
         partial = (
             not kill_shot
@@ -411,11 +443,7 @@ def _competitive_risks(data: Any) -> list[dict[str, Any]]:
 
 
 def _derive_finding_category(architect_name: Any) -> str:
-    name = str(architect_name or "").lower()
-    for term, category in _FINDING_CATEGORY_TERMS:
-        if term in name:
-            return category
-    return "PRODUCT"
+    return _derive_category(architect_name, "PRODUCT")
 
 
 def _finding_risks(findings: Any) -> list[dict[str, Any]]:
@@ -428,7 +456,7 @@ def _finding_risks(findings: Any) -> list[dict[str, Any]]:
         severity = _normalise_severity(raw.get("severity"))
         conversion_impact = _safe_float(raw.get("conversion_impact"))
         impact = (
-            _clamp01(conversion_impact * 5.0)
+            _clamp01(abs(conversion_impact) * 5.0)
             if conversion_impact is not None
             else None
         )
@@ -479,16 +507,30 @@ def _finding_risks(findings: Any) -> list[dict[str, Any]]:
 
 
 def _dedupe(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Drop exact duplicates (same source + normalized title)."""
-    seen: set[tuple[str, str]] = set()
-    unique: list[dict[str, Any]] = []
+    """Collapse duplicates (same source + normalized title).
+
+    When two rows share a source and title but disagree on severity or
+    scores, keep the higher-risk variant so the register never silently
+    understates a risk.  Input order is preserved for ties.
+    """
+    seen: dict[tuple[str, str], dict[str, Any]] = {}
     for item in items:
         key = (item["source"], _normalise_title(item["title"]))
-        if key in seen:
+        current = seen.get(key)
+        if current is None:
+            seen[key] = item
             continue
-        seen.add(key)
-        unique.append(item)
-    return unique
+        current_rank = (
+            float(current["risk_score"]),
+            _SEVERITY_RANK[current["severity"]],
+        )
+        item_rank = (
+            float(item["risk_score"]),
+            _SEVERITY_RANK[item["severity"]],
+        )
+        if item_rank > current_rank:
+            seen[key] = item
+    return list(seen.values())
 
 
 def _sort_key(item: dict[str, Any]) -> tuple[float, int, str]:
@@ -552,18 +594,28 @@ def build_risk_register(
     )
     overall_level = _overall_risk_level(top_score)
 
-    severity_breakdown: dict[str, int] = {}
-    source_breakdown: dict[str, int] = {}
+    # Stable canonical buckets so downstream charts never have to guess
+    # which keys exist; zero counts are meaningful.
+    severity_breakdown: dict[str, int] = {
+        SEVERITY_CRITICAL: 0,
+        SEVERITY_MAJOR: 0,
+        SEVERITY_MINOR: 0,
+        SEVERITY_INFO: 0,
+    }
+    source_breakdown: dict[str, int] = {
+        SOURCE_PREMORTEM: 0,
+        SOURCE_STRESS_TEST: 0,
+        SOURCE_COMPETITIVE: 0,
+        SOURCE_SIMULATION: 0,
+    }
     for item in ranked:
-        severity_breakdown[item["severity"]] = (
-            severity_breakdown.get(item["severity"], 0) + 1
-        )
-        source_breakdown[item["source"]] = (
-            source_breakdown.get(item["source"], 0) + 1
-        )
+        severity_breakdown[item["severity"]] += 1
+        source_breakdown[item["source"]] += 1
 
-    critical_count = severity_breakdown.get(SEVERITY_CRITICAL, 0)
-    source_count = len(source_breakdown)
+    critical_count = severity_breakdown[SEVERITY_CRITICAL]
+    active_source_count = sum(
+        1 for count in source_breakdown.values() if count > 0
+    )
 
     if not ranked:
         narrative = (
@@ -573,7 +625,7 @@ def build_risk_register(
         )
     else:
         sentences = [
-            f"{total_risks} risk(s) identified across {source_count} "
+            f"{total_risks} risk(s) identified across {active_source_count} "
             f"source(s); {critical_count} critical."
         ]
         top = ranked[0]
