@@ -1,17 +1,18 @@
 """
-Pydantic schemas for the user-facing audit-log endpoints.
+Pydantic schemas for the audit-log endpoints.
 
-Powers ``GET /me/audit-log``: a reverse-chronological timeline of every
-mutating request the user has made (and every mutating request anyone
-has made on their behalf, e.g. via a share link).
+Powers ``GET /me/audit-log`` (per-user timeline) and the admin platform
+view ``GET /analytics/audit-log`` (every mutating request across all
+users, with filters). Both use the same row shape: a reverse-
+chronological timeline of mutating HTTP requests.
 
-The endpoint exists for two reasons:
+The endpoints exist for two reasons:
 
 1. **Self-service support** — "what did I just do?" when a user is
    surprised by a project state change and didn't have a tab open.
-2. **Security review** — the user can spot writes they don't recognise
-   and use it as a starting point for investigating compromised
-   sessions.
+2. **Security review** — the user (or an admin, platform-wide) can spot
+   writes they don't recognise and use the trail as a starting point
+   for investigating compromised sessions.
 
 GETs are not logged (deliberately — see ``AuditLogMiddleware``) so the
 table stays small and every entry is meaningful.

@@ -11,7 +11,9 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_admin
 from app.core.rate_limiter import rate_limit
+from app.models.audit_log import ApiAuditLog
 from app.models.user import User
+from app.schemas.audit_log import AuditLogListOut, AuditLogOut
 from app.schemas.calibration import (
     ArchitectWeightedDrift,
     CalibrationStatusOut,
@@ -20,6 +22,11 @@ from app.schemas.calibration import (
 from app.schemas.outcome import FounderOutcomeSubmit
 from app.schemas.pipeline_timing import PipelineTimingSummaryOut
 from app.schemas.portfolio import UserPortfolioOut
+from app.simulation.admin_audit_log import (
+    admin_audit_log_to_csv,
+    admin_audit_log_to_json,
+    apply_admin_audit_filters,
+)
 from app.simulation.calibration_engine import ALL_ARCHITECT_NAMES
 from app.simulation.calibration_insights import (
     build_architect_health,
@@ -49,6 +56,41 @@ _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}
 def _require_admin(current_user: User) -> None:
     """Deprecated alias — see :func:`app.core.deps.require_admin`."""
     require_admin(current_user)
+
+
+def _audit_filter_metadata(
+    *,
+    user_id: int | None = None,
+    method: str | None = None,
+    status: int | None = None,
+    route: str | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
+) -> dict[str, object]:
+    """Collect the active audit-log filters for export metadata."""
+    metadata: dict[str, object] = {}
+    if user_id is not None:
+        metadata["filter_user_id"] = user_id
+    if method is not None:
+        metadata["filter_method"] = method
+    if status is not None:
+        metadata["filter_status"] = status
+    if route is not None:
+        metadata["filter_route"] = route
+    if since is not None:
+        metadata["filter_since"] = since.isoformat()
+    if until is not None:
+        metadata["filter_until"] = until.isoformat()
+    return metadata
+
+
+def _validate_audit_window(since: datetime | None, until: datetime | None) -> None:
+    """Reject inverted since/until windows before they hit the DB."""
+    if since is not None and until is not None and since > until:
+        raise HTTPException(
+            status_code=400,
+            detail="since must be earlier than or equal to until",
+        )
 
 
 @router.get(
@@ -689,4 +731,250 @@ def calibration_status(
         under_calibrated_list=summary["under_calibrated_list"],
         weighted_drift=drift_summary,
         generated_at=datetime.now(UTC).isoformat(),
+    )
+
+
+@router.get(
+    "/audit-log",
+    response_model=AuditLogListOut,
+    summary=(
+        "Admin platform audit log - every mutating request across all "
+        "users, with user/method/status/route/time-window filters"
+    ),
+    # Read-only but admins may page through the whole write trail; 30/min
+    # keeps accidental dashboard-script loops bounded without blocking a
+    # genuine forensics walk (cursor pagination makes deep walks cheap).
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_admin_audit_log(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    user_id: int | None = Query(
+        default=None,
+        ge=1,
+        description="Only rows recorded for this user id.",
+    ),
+    method: str | None = Query(
+        default=None,
+        pattern="^(POST|PUT|PATCH|DELETE)$",
+        description=(
+            "Only rows with this HTTP method. GET/HEAD/OPTIONS are never "
+            "audited, so only POST, PUT, PATCH, or DELETE are valid."
+        ),
+    ),
+    status: int | None = Query(
+        default=None,
+        ge=100,
+        le=599,
+        description="Only rows with this exact HTTP response status.",
+    ),
+    route: str | None = Query(
+        default=None,
+        max_length=255,
+        description=(
+            "Case-insensitive substring match on the matched route template "
+            "e.g. '/projects/' matches every project mutation."
+        ),
+    ),
+    since: datetime | None = Query(
+        default=None,
+        description="Only rows created at or after this UTC timestamp.",
+    ),
+    until: datetime | None = Query(
+        default=None,
+        description="Only rows created at or before this UTC timestamp.",
+    ),
+    before_id: int | None = Query(
+        default=None,
+        ge=1,
+        description=(
+            "Cursor pagination: return only entries with id < before_id. "
+            "Use the smallest ``id`` from the previous page to fetch the "
+            "page before it."
+        ),
+    ),
+    limit: int = Query(
+        default=50,
+        ge=1,
+        le=200,
+        description=(
+            "Page size (1-200, default 50). Hard cap of 200 keeps the "
+            "payload bounded; ``next_before_id`` is the supported way "
+            "to fetch more."
+        ),
+    ),
+) -> AuditLogListOut:
+    """Admin view of the platform-wide audit log, newest first.
+
+    Each row is one mutating HTTP request (POST/PUT/PATCH/DELETE) from any
+    user: the matched FastAPI route template (dynamic IDs folded away), the
+    method, response status, duration, originating IP, correlation id, and
+    the actor's user id. Unlike the per-user endpoint this is never cached
+    — a security review must always read fresh rows.
+    """
+    _require_admin(current_user)
+    _validate_audit_window(since, until)
+
+    clauses = apply_admin_audit_filters(
+        user_id=user_id,
+        method=method,
+        status=status,
+        route=route,
+        since=since,
+        until=until,
+    )
+    query = db.query(ApiAuditLog)
+    if clauses:
+        query = query.filter(*clauses)
+    if before_id is not None:
+        query = query.filter(ApiAuditLog.id < before_id)
+
+    rows = query.order_by(ApiAuditLog.id.desc()).limit(limit + 1).all()
+    has_more = len(rows) > limit
+    page_rows = rows[:limit]
+
+    items = [AuditLogOut.model_validate(row) for row in page_rows]
+    next_before_id = page_rows[-1].id if page_rows and has_more else None
+    return AuditLogListOut(
+        items=items,
+        has_more=has_more,
+        next_before_id=next_before_id,
+    )
+
+
+@router.get(
+    "/audit-log/export",
+    summary=(
+        "Admin CSV/JSON export of the platform audit log (same filters as "
+        "GET /analytics/audit-log)"
+    ),
+    responses=_JSON_200,
+    # Exports scan up to 5,000 rows; a tight cap keeps a runaway admin
+    # token (or a misconfigured dashboard script) from driving repeated
+    # full-table dumps.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
+)
+def export_admin_audit_log(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the spreadsheet-"
+            "friendly table; ``json`` returns the raw audit rows. "
+            "Unsupported values return a 400 response."
+        ),
+    ),
+    user_id: int | None = Query(
+        default=None,
+        ge=1,
+        description="Only rows recorded for this user id.",
+    ),
+    method: str | None = Query(
+        default=None,
+        pattern="^(POST|PUT|PATCH|DELETE)$",
+        description="Only rows with this HTTP method.",
+    ),
+    status: int | None = Query(
+        default=None,
+        ge=100,
+        le=599,
+        description="Only rows with this exact HTTP response status.",
+    ),
+    route: str | None = Query(
+        default=None,
+        max_length=255,
+        description=(
+            "Case-insensitive substring match on the matched route template."
+        ),
+    ),
+    since: datetime | None = Query(
+        default=None,
+        description="Only rows created at or after this UTC timestamp.",
+    ),
+    until: datetime | None = Query(
+        default=None,
+        description="Only rows created at or before this UTC timestamp.",
+    ),
+    limit: int = Query(
+        default=1000,
+        ge=1,
+        le=5000,
+        description="Maximum number of audit rows to export (1-5000).",
+    ),
+) -> StreamingResponse:
+    """Download the platform audit trail for forensics / SIEM ingestion.
+
+    Honors the same filters as the list endpoint so an operator can export
+    exactly the slice they are investigating (e.g. one user's writes in a
+    date window, or every 5xx mutating request). CSV cells are guarded
+    against spreadsheet formula injection.
+    """
+    _require_admin(current_user)
+    _validate_audit_window(since, until)
+
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unsupported export format {format!r}; expected 'csv' or 'json'",
+        )
+
+    clauses = apply_admin_audit_filters(
+        user_id=user_id,
+        method=method,
+        status=status,
+        route=route,
+        since=since,
+        until=until,
+    )
+    query = db.query(ApiAuditLog)
+    if clauses:
+        query = query.filter(*clauses)
+
+    rows = query.order_by(ApiAuditLog.id.desc()).limit(limit).all()
+    items = [
+        AuditLogOut.model_validate(row).model_dump(mode="json") for row in rows
+    ]
+
+    metadata: dict[str, object] = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "requested_by_user_id": current_user.id,
+        "limit": limit,
+        "total": len(items),
+        "format_version": "1",
+    }
+    metadata.update(
+        _audit_filter_metadata(
+            user_id=user_id,
+            method=method,
+            status=status,
+            route=route,
+            since=since,
+            until=until,
+        )
+    )
+
+    if fmt == "json":
+        body = admin_audit_log_to_json(items, metadata=metadata).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="admin-audit-log.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    body = admin_audit_log_to_csv(items, metadata=metadata).encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="admin-audit-log.csv"',
+            "Content-Length": str(len(body)),
+        },
     )
