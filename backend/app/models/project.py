@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
+    from app.models.ab_test_experiment import AbTestExperiment
     from app.models.assumption import Assumption
     from app.models.decision import Decision
     from app.models.environment import Environment
@@ -101,4 +102,10 @@ class Project(Base, TimestampMixin):
         back_populates="project",
         cascade="all, delete-orphan",
         order_by="OutcomeTracker.recorded_at.desc()",
+    )
+    ab_test_experiments: Mapped[list["AbTestExperiment"]] = relationship(
+        "AbTestExperiment",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        order_by="AbTestExperiment.created_at.desc()",
     )

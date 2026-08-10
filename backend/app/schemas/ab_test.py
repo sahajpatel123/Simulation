@@ -9,9 +9,10 @@ landing-page test is worth shipping or still needs traffic.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.simulation.ab_test_analysis import VERDICT_INSUFFICIENT_DATA
 
@@ -117,9 +118,102 @@ class AbTestAnalysisOut(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class AbTestExperimentCreate(BaseModel):
+    """Create a persisted A/B experiment for a project."""
+
+    model_config = {"extra": "forbid"}
+
+    name: str = Field(
+        min_length=1,
+        max_length=120,
+        description="Short founder-facing name for the test.",
+    )
+    hypothesis: str | None = Field(
+        default=None,
+        max_length=2000,
+        description="What the founder expected to change and why.",
+    )
+    analysis: AbTestAnalysisIn = Field(
+        description="Observed arms and statistical parameters to log."
+    )
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("name cannot be blank")
+        return stripped
+
+
+class AbTestExperimentUpdate(BaseModel):
+    """Partial update for a persisted A/B experiment."""
+
+    model_config = {"extra": "forbid"}
+
+    name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=120,
+        description="New founder-facing name for the test.",
+    )
+    hypothesis: str | None = Field(
+        default=None,
+        max_length=2000,
+        description=(
+            "New hypothesis; pass null to clear an existing one."
+        ),
+    )
+    analysis: AbTestAnalysisIn | None = Field(
+        default=None,
+        description=(
+            "Replacement observed arms / statistical parameters; "
+            "recomputes the verdict snapshot."
+        ),
+    )
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("name cannot be blank")
+        return stripped
+
+    @model_validator(mode="after")
+    def _at_least_one_field(self) -> AbTestExperimentUpdate:
+        if not self.model_fields_set:
+            raise ValueError(
+                "provide at least one of name, hypothesis, analysis"
+            )
+        if "name" in self.model_fields_set and self.name is None:
+            raise ValueError("name cannot be null")
+        return self
+
+
+class AbTestExperimentOut(BaseModel):
+    """A persisted A/B experiment with its stored statistical verdict."""
+
+    id: int
+    project_id: int
+    name: str
+    hypothesis: str | None
+    analysis: AbTestAnalysisOut
+    verdict: str
+    significant: bool
+    winner: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
 __all__ = [
     "AbTestAnalysisIn",
     "AbTestAnalysisOut",
+    "AbTestExperimentCreate",
+    "AbTestExperimentOut",
+    "AbTestExperimentUpdate",
     "AbTestVariantIn",
     "AbTestVariantOut",
 ]

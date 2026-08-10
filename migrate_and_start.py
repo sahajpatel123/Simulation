@@ -376,6 +376,56 @@ def run_migrations():
             conn.rollback()
             print(f"⚠️ assumption_evidence index skip: {e}")
 
+        # Step 97: A/B experiment registry — durable per-project landing-page
+        # tests. The stateless ``/experiments/ab-analysis`` endpoint returns a
+        # verdict; this table lets founders keep the tests they actually ran,
+        # correct mis-logged counts, and revisit results. Verdict fields are
+        # denormalised snapshots so list/dashboard reads never re-run stats.
+        try:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS ab_test_experiments (
+                        id SERIAL PRIMARY KEY,
+                        project_id INTEGER
+                            REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
+                        name VARCHAR(120) NOT NULL,
+                        hypothesis TEXT,
+                        variant_a_label VARCHAR(80) NOT NULL,
+                        variant_b_label VARCHAR(80) NOT NULL,
+                        visitors_a INTEGER NOT NULL,
+                        conversions_a INTEGER NOT NULL,
+                        visitors_b INTEGER NOT NULL,
+                        conversions_b INTEGER NOT NULL,
+                        alpha FLOAT NOT NULL,
+                        power FLOAT NOT NULL,
+                        mde FLOAT NOT NULL,
+                        verdict VARCHAR(32) NOT NULL,
+                        significant BOOLEAN NOT NULL,
+                        winner VARCHAR(80),
+                        absolute_uplift FLOAT,
+                        relative_uplift_pct FLOAT,
+                        z_score FLOAT,
+                        p_value FLOAT,
+                        analysis_json JSONB,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    );
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_ab_test_experiments_project_id "
+                    "ON ab_test_experiments (project_id);"
+                )
+            )
+            conn.commit()
+            print("✅ ab_test_experiments table ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ ab_test_experiments table skip: {e}")
+
         try:
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS user_claim_accuracy_profiles (
