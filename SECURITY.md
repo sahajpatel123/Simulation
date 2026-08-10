@@ -149,4 +149,6 @@ For security concerns, please contact the project maintainers.
   `workflow-validation.yml`, with `.github/zizmor.yml` disabling only the
   hash-pinning audit because this repo intentionally pins actions to full
   version tags and enforces that separately.
+- 2026-08-10 - Added a `validate-ci-hygiene` pre-commit hook so the same
+  workflow/security-policy checks run locally before commit.
 - [VERSION] - Initial security policy

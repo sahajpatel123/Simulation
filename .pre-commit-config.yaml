@@ -59,3 +59,15 @@ repos:
     hooks:
       - id: gitleaks
         args: ["--config", ".github/gitleaks.toml"]
+
+  # Local CI hygiene parity: runs the same supply-chain, permissions,
+  # YAML/TOML, security-policy, env-file, and job-timeout checks that
+  # workflow-validation.yml runs on GitHub.
+  - repo: local
+    hooks:
+      - id: validate-ci-hygiene
+        name: Validate CI hygiene (workflows, YAML/TOML, security policy)
+        entry: python3 tools/validate_ci.py
+        language: system
+        pass_filenames: false
+        files: ^\.github/workflows/|^\.github/zizmor\.yml$|^tools/validate_ci\.py$|^SECURITY\.md$|^AGENTS\.md$

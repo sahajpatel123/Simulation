@@ -84,6 +84,9 @@ gitleaks detect --config .github/gitleaks.toml
 python3 tools/validate_ci.py
 ```
 
+The `.pre-commit-config.yaml` repo includes a `validate-ci-hygiene` local hook
+that runs `tools/validate_ci.py` before commit.
+
 ---
 
 ## Key mental models
