@@ -906,3 +906,41 @@ def test_export_existing_product_count_missing_project_raises_404() -> None:
         )
 
     assert exc.value.status_code == 404
+
+
+def test_export_brief_completed_count_format_json_returns_payload() -> None:
+    from app.api.v1 import projects as proj_mod
+
+    db = _FakeSession(simulations=[])
+    resp = proj_mod.export_brief_completed_count(
+        project_id=10,
+        format="json",
+        db=db,
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+    assert resp.media_type == "application/json; charset=utf-8"
+    body = _body(resp).decode("utf-8")
+    assert '"project_id": 10' in body
+    assert '"brief_completed_count": 0' in body
+
+
+def test_export_brief_completed_count_missing_project_raises_404() -> None:
+    from app.api.v1 import projects as proj_mod
+
+    class NoProjectSession(_FakeSession):
+        def query(self, model, *args, **kwargs):
+            name = getattr(model, "__name__", "")
+            if name == "Project":
+                return _FakeQuery([])
+            return _FakeQuery(self.simulations)
+
+    with pytest.raises(HTTPException) as exc:
+        proj_mod.export_brief_completed_count(
+            project_id=10,
+            format="csv",
+            db=NoProjectSession(simulations=[]),
+            current_user=type("U", (), {"id": 42})(),
+        )
+
+    assert exc.value.status_code == 404
