@@ -248,7 +248,38 @@ def validate_concurrency() -> list[str]:
             data = yaml.safe_load(fh) or {}
         rel = Path(path).relative_to(ROOT)
         if not data.get("concurrency"):
-            errors.append(f"{rel}: missing concurrency block")
+                    errors.append(f"{rel}: missing concurrency block")
+    return errors
+
+
+def validate_security_events_permission() -> list[str]:
+    """SARIF/CodeQL uploaders must declare `security-events: write`."""
+    errors: list[str] = []
+    scanner_refs = (
+        "github/codeql-action/analyze@",
+        "github/codeql-action/upload-sarif@",
+        "ossf/scorecard-action@",
+    )
+    for path in sorted(glob.glob(str(ROOT / ".github" / "workflows" / "*.yml"))):
+        with open(path) as fh:
+            data = yaml.safe_load(fh) or {}
+        rel = Path(path).relative_to(ROOT)
+        top = data.get("permissions") or {}
+        has_top = top.get("security-events") == "write"
+        for job_name, job in (data.get("jobs") or {}).items():
+            steps = job.get("steps") or []
+            needs_write = any(
+                (step.get("uses") or "").startswith(scanner_refs)
+                for step in steps
+            )
+            if not needs_write:
+                continue
+            job_perms = (job.get("permissions") or {})
+            if not (has_top or job_perms.get("security-events") == "write"):
+                errors.append(
+                    f"{rel} job {job_name}: scanner/SARIF uploader must "
+                    "declare security-events: write at workflow or job level"
+                )
     return errors
 
 
@@ -265,6 +296,7 @@ def main() -> int:
         ("zizmor config", validate_zizmor_config),
         ("artifact uploads", validate_artifacts),
         ("concurrency", validate_concurrency),
+        ("SARIF permissions", validate_security_events_permission),
     ]
     errors: list[str] = []
     for label, func in checks:
