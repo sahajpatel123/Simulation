@@ -324,19 +324,20 @@ def simulation_health(
 
     Reads only the ``simulations`` table bounded by ``window_days`` (never
     ``results_json``): per-status counts, completion and failure rates,
-    completion-latency percentiles, coarse failure buckets (timeout / LLM
-    API / database / infrastructure / other / missing message), the most
-    recent failures, a zero-filled daily trend, and a HEALTHY / WATCH /
-    DEGRADED / NO_DATA verdict. The digest is database-backed, so it
-    reflects every worker's writes rather than just this process's view.
+    completion-latency percentiles, coarse failure buckets spanning the
+    whole window (timeout / LLM API / database / infrastructure / other /
+    missing message), the most recent failures, a zero-filled daily trend,
+    and a HEALTHY / WATCH / DEGRADED / NO_DATA verdict. The digest is
+    database-backed, so it reflects every worker's writes rather than just
+    this process's view.
     """
     snapshot = simulation_health_module.collect_simulation_snapshot(
         db,
         window_days=window_days,
-        recent_failures_limit=recent_failures_limit,
     )
     return simulation_health_module.build_simulation_health(
         **snapshot,
         window_days=window_days,
+        recent_failures_limit=recent_failures_limit,
         generated_at=datetime.now(UTC).isoformat(),
     )

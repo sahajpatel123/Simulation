@@ -318,7 +318,6 @@ def test_collector_builds_snapshot_from_db_rows() -> None:
     snapshot = collect_simulation_snapshot(
         _FakeDB(rows),
         window_days=7,
-        recent_failures_limit=10,
     )
 
     assert snapshot["status_counts"] == {
@@ -354,7 +353,6 @@ def test_collector_handles_missing_timestamps_and_errors() -> None:
     snapshot = collect_simulation_snapshot(
         _FakeDB(rows),
         window_days=7,
-        recent_failures_limit=10,
     )
 
     assert snapshot["status_counts"] == {
@@ -369,7 +367,7 @@ def test_collector_handles_missing_timestamps_and_errors() -> None:
     assert snapshot["failures"][0]["created_at"] is None
 
 
-def test_collector_limits_recent_failures_newest_first() -> None:
+def test_collector_returns_all_failures_newest_first() -> None:
     created = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
     rows = [
         _SimRow(i, 7, "FAILED", created + timedelta(hours=i), created + timedelta(hours=i), f"error-{i}")
@@ -379,10 +377,56 @@ def test_collector_limits_recent_failures_newest_first() -> None:
     snapshot = collect_simulation_snapshot(
         _FakeDB(rows),
         window_days=7,
-        recent_failures_limit=2,
     )
 
-    assert [row["simulation_id"] for row in snapshot["failures"]] == [3, 2]
+    # The collector keeps every failure in the window (so buckets reconcile
+    # with failed_count); the builder bounds the recent-failures list.
+    assert [row["simulation_id"] for row in snapshot["failures"]] == [3, 2, 1]
+
+
+def test_failure_buckets_span_window_while_recent_list_is_bounded() -> None:
+    inputs = _base_inputs()
+    inputs["failures"] = [
+        _failure(i, f"error-{i}", f"2026-08-10T{i % 10}:00:00+00:00")
+        for i in range(1, 13)
+    ]
+
+    payload = build_simulation_health(**inputs, recent_failures_limit=5)
+
+    bucket_total = sum(row["count"] for row in payload["failure_buckets"])
+    assert bucket_total == 12
+    assert len(payload["recent_failures"]) == 5
+    created = [row["created_at"] for row in payload["recent_failures"]]
+    assert created == sorted(created, reverse=True)
+
+
+def test_failure_buckets_serialize_datetime_latest_at() -> None:
+    inputs = _base_inputs()
+    inputs["failures"] = [
+        {
+            "simulation_id": 2,
+            "project_id": 7,
+            "created_at": datetime(2026, 8, 10, 12, 0, tzinfo=UTC),
+            "error_message": "grok timeout",
+        },
+        {
+            "simulation_id": 1,
+            "project_id": 7,
+            "created_at": datetime(2026, 8, 9, 12, 0, tzinfo=UTC),
+            "error_message": "grok timeout",
+        },
+    ]
+
+    payload = build_simulation_health(**inputs)
+
+    assert payload["failure_buckets"][0]["latest_at"] == (
+        "2026-08-10T12:00:00+00:00"
+    )
+    assert [row["created_at"] for row in payload["recent_failures"]] == [
+        "2026-08-10T12:00:00+00:00",
+        "2026-08-09T12:00:00+00:00",
+    ]
+    assert isinstance(SimulationHealthOut(**payload), SimulationHealthOut)
 
 
 # ---------------------------------------------------------------------------
@@ -394,14 +438,14 @@ def test_simulation_health_route_contract(monkeypatch: pytest.MonkeyPatch) -> No
     snapshot = {
         "status_counts": {"COMPLETED": 3, "FAILED": 0},
         "completed_durations_ms": [1000.0],
-        "failures": [],
+        "failures": [_failure(1, "grok timeout"), _failure(2, "db down")],
         "daily_counts": {},
         "oldest_running_at": None,
     }
     monkeypatch.setattr(
         system_health_module.simulation_health_module,
         "collect_simulation_snapshot",
-        lambda db, window_days=7, recent_failures_limit=10: snapshot,
+        lambda db, window_days=7: snapshot,
     )
 
     payload = system_health_module.simulation_health(
@@ -414,4 +458,6 @@ def test_simulation_health_route_contract(monkeypatch: pytest.MonkeyPatch) -> No
     assert payload["window_days"] == 3
     assert payload["total_simulations"] == 3
     assert len(payload["daily_trend"]) == 3
+    assert len(payload["recent_failures"]) == 2
+    assert sum(row["count"] for row in payload["failure_buckets"]) == 2
     assert isinstance(SimulationHealthOut(**payload), SimulationHealthOut)

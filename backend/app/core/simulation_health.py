@@ -5,8 +5,9 @@ Celery, LLM calls, response cache). This module answers the
 product-level question: are simulations actually completing, how long do
 they take, and what is failing? It reads the ``simulations`` table
 bounded by a recency window and rolls status counts, completion-latency
-percentiles, coarse failure buckets, a daily trend, and a HEALTHY / WATCH
-/ DEGRADED / NO_DATA verdict.
+percentiles, coarse failure buckets across the whole window, a bounded
+recent-failures list, a daily trend, and a HEALTHY / WATCH / DEGRADED /
+NO_DATA verdict.
 
 The builder is pure-Python (no DB, no I/O) so the verdict and percentile
 logic is unit-testable without a database. The collector is a thin
@@ -202,7 +203,9 @@ def _failure_buckets(failures: list[dict[str, Any]]) -> list[dict[str, Any]]:
             {"bucket": bucket_name, "count": 0, "latest_at": None, "sample_error": ""},
         )
         bucket["count"] += 1
-        created_at = failure.get("created_at")
+        # Normalise to an ISO string so datetime and str rows compare and
+        # serialise consistently, even when the builder is fed raw rows.
+        created_at = _iso(failure.get("created_at"))
         if created_at and (bucket["latest_at"] is None or created_at > bucket["latest_at"]):
             bucket["latest_at"] = created_at
         sample = _truncate(failure.get("error_message"))
@@ -247,6 +250,7 @@ def build_simulation_health(
     daily_counts: dict[str, dict[str, int]] | None = None,
     oldest_running_at: str | None = None,
     window_days: int = DEFAULT_WINDOW_DAYS,
+    recent_failures_limit: int = DEFAULT_RECENT_FAILURES_LIMIT,
     generated_at: str | None = None,
     watch_failure_rate: float = WATCH_FAILURE_RATE,
     degraded_failure_rate: float = DEGRADED_FAILURE_RATE,
@@ -255,7 +259,10 @@ def build_simulation_health(
     """Compose the simulation-pipeline health digest from a snapshot.
 
     Pure and deterministic (no DB / I/O), so the verdict, rate and
-    percentile logic is unit-testable without a database.
+    percentile logic is unit-testable without a database. ``failures``
+    holds every failure in the recency window so ``failure_buckets`` sums
+    to ``failed_count``; only ``recent_failures`` is bounded by
+    ``recent_failures_limit``.
     """
     status_counts = status_counts or {}
     completed_durations_ms = completed_durations_ms or []
@@ -294,6 +301,15 @@ def build_simulation_health(
 
     generated_dt = _coerce_dt(generated_at) or datetime.now(UTC)
 
+    recent_failures = sorted(
+        failures,
+        key=lambda failure: (
+            _iso(failure.get("created_at")) or "",
+            _safe_int(failure.get("simulation_id")),
+        ),
+        reverse=True,
+    )[: max(1, recent_failures_limit)]
+
     return {
         "generated_at": generated_at or generated_dt.isoformat(),
         "window_days": max(1, window_days),
@@ -321,7 +337,7 @@ def build_simulation_health(
                 "created_at": _iso(failure.get("created_at")),
                 "error_message": _truncate(failure.get("error_message")),
             }
-            for failure in failures
+            for failure in recent_failures
         ],
         "daily_trend": _daily_trend(
             daily_counts,
@@ -338,7 +354,6 @@ def collect_simulation_snapshot(
     db: Session,
     *,
     window_days: int = DEFAULT_WINDOW_DAYS,
-    recent_failures_limit: int = DEFAULT_RECENT_FAILURES_LIMIT,
 ) -> dict[str, Any]:
     """Read the bounded ``simulations`` window and build a raw snapshot.
 
@@ -412,14 +427,20 @@ def collect_simulation_snapshot(
             if oldest_running is None or created < oldest_running:
                 oldest_running = created
 
+    # All failure rows are returned so the digest's failure buckets span
+    # the whole window and reconcile with ``failed_count``. The builder
+    # bounds the recent-failures list to its ``recent_failures_limit``.
     failure_rows.sort(
-        key=lambda failure: failure.get("created_at") or "",
+        key=lambda failure: (
+            failure.get("created_at") or "",
+            failure.get("simulation_id") or 0,
+        ),
         reverse=True,
     )
     return {
         "status_counts": status_counts,
         "completed_durations_ms": durations,
-        "failures": failure_rows[: max(1, recent_failures_limit)],
+        "failures": failure_rows,
         "daily_counts": daily,
         "oldest_running_at": _iso(oldest_running),
     }
