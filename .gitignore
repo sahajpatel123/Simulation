@@ -112,6 +112,10 @@ thecee-backend/
 .venv_step86/
 .next.nosync/
 
+# Local Claude tooling profile — can contain real API keys and must never be
+# committed. If you need it locally, keep it untracked.
+.openclaude-profile.json
+
 # Claude AI tooling — personal workspace data, not project code
 .claude/
 

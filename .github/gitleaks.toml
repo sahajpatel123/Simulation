@@ -47,6 +47,13 @@ paths = [
     '''requirements.txt''',  # Has no secrets
     '''test.*\.py$''',        # Test files with mock data
     '''\.pydevproject$''',  # Python dev config
+    # Next.js generated build artifacts (encryption/preview signing keys are
+    # local build-time values, not project secrets). The build dir itself is
+    # gitignored; this suppresses historical false positives from commits that
+    # predate the ignore rule.
+    '''\.next\.nosync/.*''',
+    # Share-token schema example is a documented placeholder, not a live token.
+    '''backend/app/schemas/share\.py$''',
 ]
 stopwords = [
     "sk-test-placeholder",  # Test placeholder in CI

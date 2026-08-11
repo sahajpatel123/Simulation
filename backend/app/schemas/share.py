@@ -36,12 +36,12 @@ class ShareTokenOut(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "token": "5k8H2x3vQ1nP9rT4wY7zA0bC6dE8fG2hJ4kL6mN8pQ",
+                "token": "<opaque-token>",
                 "simulation_id": 42,
                 "scope": "read_only",
                 "expires_at": "2026-08-25T00:00:00Z",
                 "created_at": "2026-07-26T00:00:00Z",
-                "share_url": "/api/v1/share/5k8H2x3vQ1nP9rT4wY7zA0bC6dE8fG2hJ4kL6mN8pQ",
+                "share_url": "/api/v1/share/<opaque-token>",
             }
         }
     )
