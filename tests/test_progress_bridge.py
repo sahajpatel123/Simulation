@@ -294,7 +294,7 @@ class TestSubscriberLoop:
             ]
         )
         bridge = ProgressBridge(client=fake, channel="ch")
-        monkeypatch.setattr(pb_module, "_RECONNECT_DELAY_SECONDS", 0.02)
+        monkeypatch.setattr(pb_module, "RECONNECT_DELAY_SECONDS", 0.02)
         delivered = asyncio.Event()
 
         async def _deliver(sim_id: int, delivered_payload: dict) -> bool:
@@ -325,7 +325,7 @@ class TestSubscriberLoop:
 
         bridge = ProgressBridge(client=None, channel="ch")
         monkeypatch.setattr(pb_module, "get_redis_client", lambda: None)
-        monkeypatch.setattr(pb_module, "_RECONNECT_DELAY_SECONDS", 0.01)
+        monkeypatch.setattr(pb_module, "RECONNECT_DELAY_SECONDS", 0.01)
 
         async def _drain() -> None:
             task = asyncio.create_task(bridge._run())

@@ -21,6 +21,12 @@ from app.core.config import settings
 from app.core.database import engine
 from app.core.deps import get_db
 from app.core.metrics import metrics
+from app.core.progress_bridge import (
+    CIRCUIT_BREAKER_SECONDS,
+    PROGRESS_CHANNEL,
+    RECONNECT_DELAY_SECONDS,
+    progress_bridge,
+)
 from app.core.query_metrics import slow_queries_snapshot
 from app.core.rate_limiter import rate_limit
 from app.core.redis_client import get_redis_client
@@ -31,6 +37,8 @@ from app.core.request_health import (
     build_request_health,
 )
 from app.core.system_overview import build_system_overview
+from app.core.websocket import ws_manager
+from app.core.websocket_health import build_websocket_health
 from app.schemas.system_health import (
     CacheHealthOut,
     DatabasePoolHealthOut,
@@ -40,6 +48,7 @@ from app.schemas.system_health import (
     SimulationHealthOut,
     SystemHealthOut,
     SystemOverviewOut,
+    WebsocketHealthOut,
     WorkerHealthOut,
 )
 from app.worker import celery_app
@@ -386,6 +395,51 @@ def database_pool_health(
 
 
 @router.get(
+    "/websocket-health",
+    summary=(
+        "Live simulation-progress WebSocket delivery health (Redis "
+        "pub/sub bridge + active listeners)"
+    ),
+    responses=_JSON_200,
+    response_model=WebsocketHealthOut,
+)
+def websocket_health() -> WebsocketHealthOut:
+    """Return a digest of the live progress-delivery path.
+
+    Reports whether the API process's Redis pub/sub subscriber is running,
+    how many WebSocket listeners are connected (and to which simulations),
+    the delivery mode actually in use (cross-process Redis relay vs the
+    same-process fallback), Redis reachability, and the age of any recent
+    publish outage in this process. State is per-process, matching the
+    request/query/cache health digests.
+    """
+    client = get_redis_client()
+    redis_configured = client is not None
+    redis_reachable: bool | None = None
+    if client is not None:
+        try:
+            redis_reachable = bool(client.ping())
+        except Exception:
+            redis_reachable = False
+
+    payload = build_websocket_health(
+        redis_configured=redis_configured,
+        redis_reachable=redis_reachable,
+        bridge_running=progress_bridge.is_running(),
+        connection_count=ws_manager.connection_count,
+        connected_simulation_ids=ws_manager.connected_simulation_ids(),
+        last_publish_failure_age_seconds=(
+            progress_bridge.last_publish_failure_age_seconds()
+        ),
+        channel=progress_bridge.channel_name or PROGRESS_CHANNEL,
+        reconnect_delay_seconds=RECONNECT_DELAY_SECONDS,
+        circuit_breaker_seconds=CIRCUIT_BREAKER_SECONDS,
+        generated_at=datetime.now(UTC).isoformat(),
+    )
+    return WebsocketHealthOut(**payload)
+
+
+@router.get(
     "/overview",
     summary="One-call system status overview across all health digests",
     responses=_JSON_200,
@@ -480,6 +534,27 @@ def system_overview(
         generated_at=generated_at,
     )
 
+    redis_probe = _redis_status()
+    redis_configured = redis_probe.get("status") != "unconfigured"
+    websocket_digest = build_websocket_health(
+        redis_configured=redis_configured,
+        redis_reachable=(
+            redis_probe.get("status") == "ok"
+            if redis_configured
+            else None
+        ),
+        bridge_running=progress_bridge.is_running(),
+        connection_count=ws_manager.connection_count,
+        connected_simulation_ids=ws_manager.connected_simulation_ids(),
+        last_publish_failure_age_seconds=(
+            progress_bridge.last_publish_failure_age_seconds()
+        ),
+        channel=progress_bridge.channel_name or PROGRESS_CHANNEL,
+        reconnect_delay_seconds=RECONNECT_DELAY_SECONDS,
+        circuit_breaker_seconds=CIRCUIT_BREAKER_SECONDS,
+        generated_at=generated_at,
+    )
+
     return build_system_overview(
         request=request_digest,
         query=query_digest,
@@ -488,9 +563,10 @@ def system_overview(
         worker=worker_digest,
         simulation=simulation_digest,
         pool=pool_digest,
+        websocket=websocket_digest,
         services={
             "database": _db_status(db),
-            "redis": _redis_status(),
+            "redis": redis_probe,
         },
         generated_at=generated_at,
     )

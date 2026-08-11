@@ -358,6 +358,33 @@ class DatabasePoolHealthOut(BaseModel):
     server: DatabaseServerStats = Field(default_factory=DatabaseServerStats)
 
 
+class WebsocketHealthOut(BaseModel):
+    """Response from ``GET /api/v1/system/websocket-health``.
+
+    A per-process digest of the live simulation-progress delivery path:
+    the Redis pub/sub subscriber state, active WebSocket listener count,
+    the delivery mode actually in use, and any recent publish outage.
+    """
+
+    generated_at: str = ""
+    verdict: str = "UNCONFIGURED"
+    healthy: bool = True
+    delivery_mode: str = "IN_PROCESS_FALLBACK"
+    bridge_running: bool = False
+    redis_configured: bool = False
+    redis_reachable: bool | None = None
+    connection_count: int = Field(default=0, ge=0)
+    connected_simulation_ids: list[int] = Field(default_factory=list)
+    last_publish_failure_age_seconds: float | None = Field(
+        default=None, ge=0.0
+    )
+    channel: str = ""
+    reconnect_delay_seconds: float = Field(default=5.0, ge=0.0)
+    circuit_breaker_seconds: float = Field(default=15.0, ge=0.0)
+    reasons: list[str] = Field(default_factory=list)
+    narrative: str = ""
+
+
 class SystemOverviewSubsystem(BaseModel):
     """One subsystem row from ``GET /system/overview``."""
 
@@ -414,6 +441,7 @@ __all__ = [
     "SystemOverviewOut",
     "SystemOverviewService",
     "SystemOverviewSubsystem",
+    "WebsocketHealthOut",
     "WorkerHealthBroker",
     "WorkerHealthOut",
     "WorkerHealthWorker",

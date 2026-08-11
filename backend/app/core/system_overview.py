@@ -1,10 +1,11 @@
 """One-call system status overview across the health digests.
 
 Each subsystem health digest (request, query, database pool, LLM, cache,
-worker, simulation) already exists as its own endpoint. This module composes them
-into a single lightweight dashboard payload: per-subsystem verdicts and
-headline metrics, plus the database / Redis / Celery service probes, so a
-monitoring dashboard can poll one URL instead of seven.
+worker, simulation, websocket) already exists as its own endpoint. This
+module composes them into a single lightweight dashboard payload:
+per-subsystem verdicts and headline metrics, plus the database / Redis /
+Celery service probes, so a monitoring dashboard can poll one URL instead
+of eight.
 
 The composition is pure Python (no I/O): callers build the individual
 digests and service probes, then pass them in. ``NO_DATA`` and
@@ -51,6 +52,7 @@ _SUBSYSTEM_ORDER: tuple[tuple[str, str], ...] = (
     ("cache", "Response cache"),
     ("worker", "Celery workers"),
     ("simulation", "Simulations"),
+    ("websocket", "Live progress delivery"),
 )
 
 
@@ -325,6 +327,38 @@ def _simulation_subsystem(digest: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _websocket_subsystem(digest: dict[str, Any]) -> dict[str, Any]:
+    delivery_mode = str(
+        digest.get("delivery_mode") or "IN_PROCESS_FALLBACK"
+    )
+    connections = _safe_int(digest.get("connection_count"))
+    bridge_running = bool(digest.get("bridge_running"))
+    verdict = str(digest.get("verdict") or VERDICT_UNCONFIGURED).upper()
+
+    if verdict == VERDICT_UNCONFIGURED:
+        summary = "Live progress delivery unconfigured (same-process fallback)"
+    elif bridge_running and connections > 0:
+        summary = f"Redis pub/sub relay live, {connections} listener(s)"
+    elif bridge_running:
+        summary = "Redis pub/sub relay live, no listeners connected"
+    else:
+        summary = "Live progress subscriber not running"
+
+    return {
+        "key": "websocket",
+        "label": "Live progress delivery",
+        "verdict": verdict,
+        "healthy": _verdict_healthy(verdict),
+        "summary": summary,
+        "headline": {
+            "delivery_mode": delivery_mode,
+            "bridge_running": bridge_running,
+            "connection_count": connections,
+            "redis_reachable": digest.get("redis_reachable"),
+        },
+    }
+
+
 def _build_services(
     services: dict[str, Any],
     worker_digest: dict[str, Any],
@@ -393,6 +427,7 @@ def build_system_overview(
     worker: dict[str, Any],
     simulation: dict[str, Any],
     pool: dict[str, Any] | None = None,
+    websocket: dict[str, Any] | None = None,
     services: dict[str, Any],
     generated_at: str | None = None,
 ) -> dict[str, Any]:
@@ -407,6 +442,9 @@ def build_system_overview(
         simulation: ``SimulationHealthOut`` payload.
         pool: ``DatabasePoolHealthOut`` payload. Optional for backward
             compatibility; when omitted the pool row reports NO_DATA.
+        websocket: ``WebsocketHealthOut`` payload. Optional for backward
+            compatibility; when omitted the row reports UNCONFIGURED
+            (same-process fallback, healthy).
         services: Probe results for ``database`` and ``redis`` (the
             worker service row is derived from ``worker``).
         generated_at: ISO timestamp echoed back; defaults to now.
@@ -424,6 +462,7 @@ def build_system_overview(
         "cache": _cache_subsystem,
         "worker": _worker_subsystem,
         "simulation": _simulation_subsystem,
+        "websocket": _websocket_subsystem,
     }
     digests: dict[str, dict[str, Any]] = {
         "request": request,
@@ -439,6 +478,14 @@ def build_system_overview(
         "cache": cache,
         "worker": worker,
         "simulation": simulation,
+        "websocket": websocket
+        or {
+            "verdict": VERDICT_UNCONFIGURED,
+            "delivery_mode": "IN_PROCESS_FALLBACK",
+            "bridge_running": False,
+            "connection_count": 0,
+            "redis_reachable": None,
+        },
     }
 
     subsystems: list[dict[str, Any]] = []

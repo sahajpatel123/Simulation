@@ -104,6 +104,11 @@ class ConnectionManager:
     def is_connected(self, simulation_id: int) -> bool:
         return simulation_id in self._connections
 
+    def connected_simulation_ids(self, limit: int = 20) -> list[int]:
+        """Simulation ids with a live socket, oldest first, capped."""
+        ids = list(self._connections.keys())
+        return ids[:max(0, limit)]
+
     @property
     def connection_count(self) -> int:
         return len(self._connections)

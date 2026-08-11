@@ -158,6 +158,7 @@ def test_all_healthy_digests_produce_ok_overview_and_schema() -> None:
         "cache",
         "worker",
         "simulation",
+        "websocket",
     ]
     assert all(row["healthy"] for row in payload["subsystems"])
     assert isinstance(SystemOverviewOut(**payload), SystemOverviewOut)

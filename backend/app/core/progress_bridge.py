@@ -44,12 +44,12 @@ PROGRESS_CHANNEL = "thecee:simulation-progress"
 # this many seconds. Redis client connect timeouts are ~2s each; without the
 # breaker every progress tick would stall the Celery task for the full
 # timeout while Redis is down.
-_CIRCUIT_BREAKER_SECONDS = 15.0
+CIRCUIT_BREAKER_SECONDS = 15.0
 
 # Delay between subscriber reconnect attempts while Redis is unavailable.
 # Kept short enough that progress resumes quickly after an outage but long
 # enough that a dead Redis does not spin the event loop.
-_RECONNECT_DELAY_SECONDS = 5.0
+RECONNECT_DELAY_SECONDS = 5.0
 
 
 class ProgressBridge:
@@ -72,6 +72,22 @@ class ProgressBridge:
     def is_running(self) -> bool:
         """True when this process has a live subscriber on the channel."""
         return self._running
+
+    @property
+    def channel_name(self) -> str:
+        """The Redis pub/sub channel this bridge relays."""
+        return self._channel
+
+    def last_publish_failure_age_seconds(self) -> float | None:
+        """Seconds since the last publish failure, or ``None`` if none.
+
+        ``None`` means the publisher has not failed since process start
+        (or the bridge was just created); a small value means the
+        circuit breaker is currently dropping publish attempts.
+        """
+        if not self._last_publish_failure:
+            return None
+        return max(0.0, time.monotonic() - self._last_publish_failure)
 
     async def ensure_running(self) -> bool:
         """Start the subscriber loop once; safe to call repeatedly."""
@@ -108,7 +124,7 @@ class ProgressBridge:
         now = time.monotonic()
         breaker_active = (
             self._last_publish_failure
-            and now - self._last_publish_failure < _CIRCUIT_BREAKER_SECONDS
+            and now - self._last_publish_failure < CIRCUIT_BREAKER_SECONDS
         )
         if breaker_active:
             return False
@@ -148,7 +164,7 @@ class ProgressBridge:
             if not settings.REDIS_URL:
                 logger.info("Progress bridge disabled — no Redis configured")
                 break
-            await asyncio.sleep(_RECONNECT_DELAY_SECONDS)
+            await asyncio.sleep(RECONNECT_DELAY_SECONDS)
 
     def _log_outage(self, message: str) -> None:
         """Log a Redis outage once per outage; debug-level while retrying."""
