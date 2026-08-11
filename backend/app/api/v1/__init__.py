@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.analytics import router as analytics_router
+from app.api.v1.api_tokens import router as api_tokens_router
 from app.api.v1.assumption_evidence import router as assumption_evidence_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.billing import router as billing_router
@@ -33,6 +34,7 @@ api_router.include_router(reports_router)
 api_router.include_router(share_router)
 api_router.include_router(simulations_router)
 api_router.include_router(users_router)
+api_router.include_router(api_tokens_router)
 api_router.include_router(ui_generation_router)
 api_router.include_router(hardware_router)
 api_router.include_router(ws_router)

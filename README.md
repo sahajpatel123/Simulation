@@ -212,6 +212,30 @@ With backend running:
 | **Health Check** | `http://localhost:8000/health` |
 | **Celery Status** | `http://localhost:8000/celery/status` |
 
+### 🔑 Personal API Tokens
+
+Programmatic clients (CI pipelines, data exports, integrations) can use
+long-lived, revocable personal API tokens instead of password/JWT flows:
+
+```bash
+# Mint a token (plaintext returned exactly once)
+curl -X POST http://localhost:8000/api/v1/users/me/api-tokens \
+  -H "Authorization: Bearer <access-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "staging ci", "scope": "read_write", "expires_in_days": 90}'
+
+# Use it anywhere you would use a JWT
+curl http://localhost:8000/api/v1/projects \
+  -H "Authorization: Bearer thecee_..."
+```
+
+- `scope: "read"` (default) allows GET/HEAD/OPTIONS only; `"read_write"`
+  allows the full API surface.
+- Tokens expire after 90 days by default (1–365 configurable) and can be
+  revoked individually via `DELETE /api/v1/users/me/api-tokens/{id}`.
+- Only the SHA-256 hash of a token is stored; list endpoints never return
+  plaintext, and token-based writes are attributed in the audit log.
+
 ---
 
 ## 🧱 **Project Structure**

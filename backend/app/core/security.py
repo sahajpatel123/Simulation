@@ -1,3 +1,4 @@
+import hashlib
 import secrets
 import string
 from datetime import UTC, datetime, timedelta
@@ -44,6 +45,59 @@ def create_access_token(subject: str, expires_delta: timedelta | None = None) ->
 def create_refresh_token() -> str:
     """Opaque refresh token; validated via refresh_tokens table hash, not JWT."""
     return secrets.token_urlsafe(32)
+
+
+# Personal API tokens (long-lived, revocable bearer credentials for
+# programmatic access). Plaintext tokens are prefixed so they are instantly
+# recognisable in logs / shell history, while only their SHA-256 hash is ever
+# persisted — a leaked database row cannot be replayed.
+API_TOKEN_PREFIX: str = "thecee_"
+API_TOKEN_DEFAULT_DAYS: int = 90
+API_TOKEN_MIN_DAYS: int = 1
+API_TOKEN_MAX_DAYS: int = 365
+
+
+def generate_api_token() -> str:
+    """Generate a fresh opaque API token (``thecee_`` + 256 bits of entropy)."""
+    return f"{API_TOKEN_PREFIX}{secrets.token_urlsafe(32)}"
+
+
+def hash_api_token(token: str) -> str:
+    """Return the SHA-256 hex digest persisted instead of the plaintext token."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def api_token_expiry(expires_in_days: int | None = None) -> datetime:
+    """Compute the UTC expiry for a new token, clamped to the supported range.
+
+    ``None`` (or an out-of-range value) falls back to the 90-day default so a
+    caller can never accidentally mint a permanent token through bad input.
+    """
+    if expires_in_days is None:
+        days = API_TOKEN_DEFAULT_DAYS
+    else:
+        days = max(API_TOKEN_MIN_DAYS, min(API_TOKEN_MAX_DAYS, int(expires_in_days)))
+    return datetime.now(UTC) + timedelta(days=days)
+
+
+def api_token_is_expired(
+    expires_at: datetime | None,
+    now: datetime | None = None,
+) -> bool:
+    """Return whether a token has passed its expiry, tolerating naive datetimes.
+
+    ``None`` means the token never expires. Naive timestamps (e.g. SQLite
+    round-trips) are interpreted as UTC so the check is deterministic across
+    deployments.
+    """
+    if expires_at is None:
+        return False
+    reference = now if now is not None else datetime.now(UTC)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    if reference.tzinfo is None:
+        reference = reference.replace(tzinfo=UTC)
+    return expires_at <= reference
 
 
 def decode_token(token: str, token_type: str = "access") -> str | None:

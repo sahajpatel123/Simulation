@@ -1,4 +1,5 @@
 from app.models.ab_test_experiment import AbTestExperiment
+from app.models.api_token import ApiToken
 from app.models.assumption import Assumption
 from app.models.assumption_evidence import AssumptionEvidence
 from app.models.audit_log import ApiAuditLog
@@ -48,4 +49,5 @@ __all__ = [
     "AbTestExperiment",
     "SimulationWebhookSubscription",
     "SimulationWebhookDelivery",
+    "ApiToken",
 ]

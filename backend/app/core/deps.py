@@ -1,14 +1,29 @@
-from fastapi import Depends, HTTPException, status
+from datetime import UTC, datetime
+
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import decode_token
+from app.core.security import (
+    API_TOKEN_PREFIX,
+    api_token_is_expired,
+    decode_token,
+    hash_api_token,
+)
+from app.models.api_token import ApiToken
 from app.models.environment import Environment as EnvironmentModel
 from app.models.user import User
 
 security = HTTPBearer()
+
+# Methods a "read"-scoped API token may call. Everything else (POST, PUT,
+# PATCH, DELETE) requires an explicit "read_write" token.
+_API_TOKEN_READ_METHODS: frozenset[str] = frozenset({"GET", "HEAD", "OPTIONS"})
+# Refresh the last-used timestamp at most once per hour per token so token
+# usage stays observable without turning every request into a DB write.
+_LAST_USED_REFRESH_SECONDS: float = 60.0 * 60.0
 
 
 def user_from_access_sub(db: Session, sub: str) -> User | None:
@@ -19,7 +34,66 @@ def user_from_access_sub(db: Session, sub: str) -> User | None:
     return db.query(User).filter(User.id == uid).first()
 
 
+def _as_utc(value: datetime | None) -> datetime | None:
+    """Normalise a possibly-naive datetime to UTC-aware for comparisons."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def user_from_api_token(
+    db: Session,
+    token: str,
+    request: Request,
+) -> User | None:
+    """Resolve a personal API token to its user, or ``None`` when unusable.
+
+    Only the SHA-256 hash is looked up; revoked and expired tokens fail
+    closed, and a ``read``-scoped token cannot call mutating methods (that
+    becomes a 403 so callers know to use ``read_write``). The ``last_used_at``
+    stamp is refreshed on a throttled basis so the write cost stays bounded.
+    """
+    if not token.startswith(API_TOKEN_PREFIX):
+        return None
+    row = (
+        db.query(ApiToken)
+        .filter(ApiToken.token_hash == hash_api_token(token))
+        .first()
+    )
+    if row is None or row.revoked_at is not None:
+        return None
+    if api_token_is_expired(row.expires_at):
+        return None
+
+    user = db.query(User).filter(User.id == row.user_id).first()
+    if user is None:
+        return None
+
+    method = (request.method or "GET").upper()
+    if row.scope != "read_write" and method not in _API_TOKEN_READ_METHODS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "API token scope 'read' cannot call "
+                f"{method} {request.url.path}"
+            ),
+        )
+
+    now = datetime.now(UTC)
+    last_used = _as_utc(row.last_used_at)
+    if last_used is None or (now - last_used).total_seconds() >= _LAST_USED_REFRESH_SECONDS:
+        row.last_used_at = now
+        try:
+            db.commit()
+        except Exception:  # noqa: BLE001 - usage stamping must never block auth
+            db.rollback()
+    return user
+
+
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db),
 ) -> User:
@@ -27,6 +101,9 @@ def get_current_user(
     sub = decode_token(token, token_type="access")
 
     if not sub:
+        api_user = user_from_api_token(db, token, request)
+        if api_user is not None:
+            return api_user
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
@@ -44,15 +121,20 @@ def get_current_user(
 
 
 def get_current_user_optional(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(HTTPBearer(auto_error=False)),
     db: Session = Depends(get_db),
 ) -> User | None:
     if not credentials:
         return None
-    sub = decode_token(credentials.credentials, token_type="access")
-    if not sub:
+    token = credentials.credentials
+    sub = decode_token(token, token_type="access")
+    if sub:
+        return user_from_access_sub(db, sub)
+    try:
+        return user_from_api_token(db, token, request)
+    except HTTPException:
         return None
-    return user_from_access_sub(db, sub)
 
 
 def require_environment(

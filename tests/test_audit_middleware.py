@@ -18,6 +18,7 @@ the contract.
 """
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 from starlette.requests import Request
@@ -133,6 +134,50 @@ def test_resolve_user_id_decodes_valid_jwt() -> None:
     request = MagicMock()
     request.headers = {"authorization": f"Bearer {token}"}
     assert _resolve_user_id(request) == int(sub)
+
+
+def test_resolve_user_id_resolves_api_token_via_hash_lookup() -> None:
+    """A ``thecee_``-prefixed bearer token is resolved by hash lookup so
+    mutating API-token requests are attributed to their owner in the audit
+    log (the same fallback the auth dependency uses)."""
+    from app.core.security import generate_api_token
+
+    token = generate_api_token()
+    fake_db = MagicMock()
+    fake_query = MagicMock()
+    fake_query.filter.return_value.first.return_value = MagicMock(
+        user_id=99,
+        revoked_at=None,
+        expires_at=None,
+    )
+    fake_db.query.return_value = fake_query
+    request = MagicMock()
+    request.headers = {"authorization": f"Bearer {token}"}
+
+    with patch("app.core.audit_middleware.SessionLocal", return_value=fake_db):
+        assert _resolve_user_id(request) == 99
+    fake_db.close.assert_called_once()
+
+
+def test_resolve_user_id_ignores_revoked_api_token() -> None:
+    """Revoked API tokens stay anonymous in audit rows — attribution must
+    never come from a credential that can no longer authenticate."""
+    from app.core.security import generate_api_token
+
+    token = generate_api_token()
+    fake_db = MagicMock()
+    fake_query = MagicMock()
+    fake_query.filter.return_value.first.return_value = MagicMock(
+        user_id=99,
+        revoked_at=datetime.now(UTC),
+        expires_at=None,
+    )
+    fake_db.query.return_value = fake_query
+    request = MagicMock()
+    request.headers = {"authorization": f"Bearer {token}"}
+
+    with patch("app.core.audit_middleware.SessionLocal", return_value=fake_db):
+        assert _resolve_user_id(request) is None
 
 
 def test_resolve_user_id_returns_none_on_decode_exception() -> None:

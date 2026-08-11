@@ -1161,6 +1161,49 @@ def run_migrations():
             conn.rollback()
             print(f"⚠️ share_tokens skip: {e}")
 
+        # Personal API tokens — long-lived, revocable bearer credentials for
+        # programmatic access. Only the SHA-256 hash of the plaintext token
+        # is stored (same principle as refresh_tokens / share_tokens), so a
+        # leaked database row cannot be replayed. Rows are soft-deleted via
+        # revoked_at to preserve an audit trail.
+        try:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS api_tokens (
+                        id           SERIAL PRIMARY KEY,
+                        user_id      INTEGER NOT NULL
+                            REFERENCES users(id) ON DELETE CASCADE,
+                        name         VARCHAR(100) NOT NULL,
+                        token_hash   VARCHAR(64) NOT NULL UNIQUE,
+                        scope        VARCHAR(32) NOT NULL DEFAULT 'read',
+                        expires_at   TIMESTAMP WITH TIME ZONE,
+                        revoked_at   TIMESTAMP WITH TIME ZONE,
+                        last_used_at TIMESTAMP WITH TIME ZONE,
+                        created_at   TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        updated_at   TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    );
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_api_tokens_user_id "
+                    "ON api_tokens (user_id);"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_api_tokens_token_hash "
+                    "ON api_tokens (token_hash);"
+                )
+            )
+            conn.commit()
+            print("✅ api_tokens table created")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ api_tokens table skip: {e}")
+
         # Step 96: api_audit_log — durable record of every mutating request
         # (POST/PUT/PATCH/DELETE). Populated by AuditLogMiddleware in the
         # request path so users have a self-service "what did my session

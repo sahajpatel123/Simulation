@@ -46,12 +46,14 @@ def _normalise_route(request: Request) -> str:
 
 
 def _resolve_user_id(request: Request) -> int | None:
-    """Best-effort extract of the user id from the JWT, if any.
+    """Best-effort extract of the user id from JWT or a personal API token.
 
     The middleware can't run Depends(get_current_user) (the request is
-    already streaming out by the time the middleware fires the wrap-up),
-    so it decodes the Authorization header directly. A failure here is
-    silent — we just return ``None`` and the row is logged as anonymous.
+    already streaming out by the time the middleware fires the wrap-up), so
+    it resolves the Authorization header directly: JWT decode first, then a
+    hashed lookup for ``thecee_``-prefixed API tokens (the same fallback the
+    auth dependency uses). A failure here is silent — we just return
+    ``None`` and the row is logged as anonymous.
     """
     auth = request.headers.get("authorization") or ""
     if not auth.lower().startswith("bearer "):
@@ -62,10 +64,33 @@ def _resolve_user_id(request: Request) -> int | None:
     try:
         # Imported lazily so a startup failure in auth (e.g. a missing
         # SECRET_KEY in a test environment) can't break the middleware.
-        from app.core.security import decode_token
+        from app.core.security import (
+            API_TOKEN_PREFIX,
+            api_token_is_expired,
+            decode_token,
+            hash_api_token,
+        )
+        from app.models.api_token import ApiToken
 
         sub = decode_token(token, token_type="access")
         if sub is None:
+            if not token.startswith(API_TOKEN_PREFIX):
+                return None
+            db = SessionLocal()
+            try:
+                row = (
+                    db.query(ApiToken)
+                    .filter(ApiToken.token_hash == hash_api_token(token))
+                    .first()
+                )
+                if (
+                    row is not None
+                    and row.revoked_at is None
+                    and not api_token_is_expired(row.expires_at)
+                ):
+                    return row.user_id
+            finally:
+                db.close()
             return None
         return int(sub)
     except Exception:
