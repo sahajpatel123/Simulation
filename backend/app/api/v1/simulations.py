@@ -347,6 +347,10 @@ from app.simulation.sustainability_positioning import (
 from app.simulation.trust_barriers import build_trust_barriers
 from app.simulation.unit_economics import build_unit_economics
 from app.simulation.unit_economics_export import unit_economics_to_csv
+from app.simulation.validation_experiment_plan_export import (
+    validation_experiment_plan_to_csv,
+    validation_experiment_plan_to_json,
+)
 from app.simulation.validation_experiment_planner import build_validation_experiment_plan
 from app.simulation.validation_roi import build_validation_roi
 from app.simulation.virality_growth import build_virality_growth
@@ -8166,6 +8170,90 @@ def get_validation_experiment_plan(
         current_user=current_user,
     )
     return build_validation_experiment_plan(roi)
+
+
+@router.get(
+    "/{simulation_id}/validation-experiment-plan/export",
+    response_class=StreamingResponse,
+    summary="Export the validation sprint plan as CSV or JSON",
+    # Pure post-hoc composition of the completed simulation payload; cap
+    # polling so a stray dashboard loop can't drive repeated ROI recomputes.
+    dependencies=[Depends(rate_limit(limit=20, window_s=60))],
+)
+def export_validation_experiment_plan(
+    simulation_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the multi-section "
+            "spreadsheet; ``json`` returns the raw validation-experiment-plan "
+            "payload. Unsupported values return a 400 response."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Download the validation sprint plan for a completed simulation.
+
+    Reuses the exact composition path as
+    ``GET /simulations/{id}/validation-experiment-plan``, so the export can
+    never disagree with the dashboard. ``format=csv`` renders the sprint
+    summary and one row per planned experiment (method, cost tier, duration,
+    sample target, success threshold, go/no-go rule); ``format=json`` returns
+    the raw plan payload for machine consumers.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unsupported export format {format!r}; expected 'csv' or 'json'",
+        )
+
+    plan = get_validation_experiment_plan(
+        simulation_id=simulation_id,
+        db=db,
+        current_user=current_user,
+    )
+
+    metadata = {
+        "generated_at": datetime.now(tz=UTC).isoformat(),
+        "user_id": current_user.id,
+        "format_version": "1",
+        "simulation_id": simulation_id,
+        "project_id": plan.project_id,
+    }
+
+    if fmt == "json":
+        body = validation_experiment_plan_to_json(
+            plan,
+            metadata=metadata,
+        ).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="validation-experiment-plan-{simulation_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    body = validation_experiment_plan_to_csv(
+        plan,
+        metadata=metadata,
+    ).encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="validation-experiment-plan-{simulation_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
 
 
 @router.get(
