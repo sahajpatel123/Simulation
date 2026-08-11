@@ -227,6 +227,12 @@ from app.simulation.project_comparison import (
     build_project_comparison,
     normalise_confidence_score,
 )
+from app.simulation.project_comparison_export import (
+    FORMAT_VERSION as PROJECT_COMPARISON_FORMAT_VERSION,
+    project_comparison_to_csv,
+    project_comparison_to_json,
+    project_comparison_to_markdown,
+)
 from app.simulation.project_duplicate import duplicate_project_payload
 from app.simulation.project_export import build_project_export
 from app.simulation.project_health import build_project_health
@@ -586,6 +592,105 @@ def compare_projects(
 
     rows = [_project_comparison_row(db, project) for project in projects]
     return build_project_comparison(rows)
+
+
+@router.post(
+    "/compare/export",
+    response_class=StreamingResponse,
+    summary="Export a two-project comparison as CSV, JSON, or Markdown",
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_project_comparison(
+    payload: ProjectCompareRequest,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the multi-section "
+            "spreadsheet; ``json`` returns the raw comparison payload; "
+            "``md`` returns a founder-facing Markdown brief."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Export a two-project comparison as CSV, JSON, or Markdown.
+
+    Default ``format=csv`` renders the summary, key signals, project
+    snapshots, and dimension comparison table as a multi-section
+    spreadsheet. ``json`` returns the raw comparison document for machine
+    consumers, and ``md`` returns a concise founder-facing Markdown brief.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json", "md"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; expected "
+                "'csv', 'json', or 'md'"
+            ),
+        )
+
+    result = compare_projects(
+        payload=payload,
+        db=db,
+        current_user=current_user,
+    )
+    metadata = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "user_id": current_user.id,
+        "format_version": PROJECT_COMPARISON_FORMAT_VERSION,
+        "project_id": (
+            result.projects[0].project_id if result.projects else None
+        ),
+        "comparison_id": result.comparison_id,
+    }
+
+    if fmt == "json":
+        body = project_comparison_to_json(
+            result,
+            metadata=metadata,
+        ).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="project-comparison.json"'
+                ),
+                "Content-Length": str(len(body)),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    if fmt == "md":
+        body = project_comparison_to_markdown(
+            result,
+            metadata=metadata,
+        ).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="project-comparison.md"'
+                ),
+                "Content-Length": str(len(body)),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    csv_text = project_comparison_to_csv(result, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="project-comparison.csv"',
+            "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 # ── THE BRIEF — founder-authored product spec ────────────────────────────
