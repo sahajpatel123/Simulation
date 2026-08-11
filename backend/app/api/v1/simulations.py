@@ -187,6 +187,7 @@ from app.simulation.calibration_transparency import (
     DEFAULT_CORRECTIONS_LIMIT,
     MAX_CORRECTIONS_LIMIT,
     build_calibration_transparency,
+    coerce_recorded_applied_corrections,
 )
 from app.simulation.channel_attribution_read import build_channel_attribution
 from app.simulation.cluster_diff import build_cluster_diff
@@ -4656,12 +4657,7 @@ def get_calibration_transparency(
     if not isinstance(diagnostics, dict):
         diagnostics = {}
     recorded = diagnostics.get("applied_corrections")
-    recorded_applied: int | None = (
-        int(recorded)
-        if isinstance(recorded, int)
-        and not isinstance(recorded, bool)
-        else None
-    )
+    recorded_applied: int | None = coerce_recorded_applied_corrections(recorded)
 
     payload = build_calibration_transparency(
         [dict(row) for row in correction_rows],

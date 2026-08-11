@@ -26,6 +26,7 @@ from app.schemas.calibration_transparency import (  # noqa: E402
 )
 from app.simulation.calibration_transparency import (  # noqa: E402
     build_calibration_transparency,
+    coerce_recorded_applied_corrections,
 )
 
 
@@ -146,6 +147,59 @@ def test_builder_rolls_up_global_and_cluster_specific_corrections() -> None:
     validated = CalibrationTransparencyOut(**out)
     assert validated.corrected_pairs == 3
     assert validated.by_cluster[0].cluster_id == "c1"
+
+
+def test_builder_reports_strongest_architect_per_cluster() -> None:
+    rows = [
+        _row(
+            architect_name="PricingArchitect",
+            cluster_id="ALL",
+            scalar=1.1,
+            confidence=0.9,
+        ),
+        _row(
+            architect_name="TrustArchitect",
+            cluster_id="c1",
+            scalar=1.4,
+            confidence=0.9,
+        ),
+    ]
+    out = build_calibration_transparency(
+        rows,
+        product_type="saas",
+        clusters=_clusters(),
+        architect_names=["PricingArchitect", "TrustArchitect"],
+        simulation_id=1,
+        project_id=10,
+    )
+
+    by_cluster = {row["cluster_id"]: row for row in out["by_cluster"]}
+    # TrustArchitect has the larger |scalar - 1| drift on c1, so it must be
+    # reported as the most-corrected architect, not PricingArchitect.
+    assert by_cluster["c1"]["most_corrected_architect"] == "TrustArchitect"
+    assert by_cluster["c2"]["most_corrected_architect"] == "PricingArchitect"
+
+
+def test_coerce_recorded_applied_corrections_accepts_only_whole_counts() -> None:
+    cases: list[tuple[Any, int | None]] = [
+        (3, 3),
+        (3.0, 3),
+        ("3", 3),
+        ("3.0", 3),
+        (True, None),
+        (False, None),
+        (-1, None),
+        (-1.0, None),
+        ("-2", None),
+        (3.5, None),
+        ("3.5", None),
+        (float("nan"), None),
+        ("not-a-count", None),
+        (None, None),
+        ([], None),
+    ]
+    for value, expected in cases:
+        assert coerce_recorded_applied_corrections(value) == expected
 
 
 def test_builder_ignores_low_confidence_and_other_product_types() -> None:
@@ -390,6 +444,39 @@ def test_route_tolerates_malformed_diagnostics(
 
     assert out.recorded_applied_corrections is None
     assert out.corrected_pairs > 0
+
+
+def test_route_coerces_recorded_applied_corrections(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api.v1 import simulations as sim_mod
+
+    for recorded, expected in (
+        (3.0, 3),
+        ("3", 3),
+        (-2, None),
+        (2.5, None),
+    ):
+        sim = _FakeSimulation(
+            results={
+                "product_type_detected": "saas",
+                "conductor_diagnostics": {"applied_corrections": recorded},
+            }
+        )
+        monkeypatch.setattr(
+            sim_mod,
+            "_get_owned_simulation",
+            lambda simulation_id, user_id, db, sim=sim: sim,
+        )
+
+        out = sim_mod.get_calibration_transparency(
+            simulation_id=1,
+            corrections_limit=10,
+            db=_FakeDB([_row(cluster_id="ALL", scalar=0.9)]),
+            current_user=SimpleNamespace(id=42),
+        )
+
+        assert out.recorded_applied_corrections == expected
 
 
 def test_route_is_registered_and_uses_response_model() -> None:

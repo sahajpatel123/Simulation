@@ -126,6 +126,35 @@ def _direction(scalars: Sequence[float]) -> str:
     return DIRECTION_NEUTRAL
 
 
+def coerce_recorded_applied_corrections(value: Any) -> int | None:
+    """Coerce a conductor diagnostics count to a non-negative int.
+
+    The Conductor persists ``applied_corrections`` as an int, but legacy
+    or hand-edited ``results_json`` may store a JSON float or numeric
+    string. Accept only whole, non-negative numbers so a malformed
+    diagnostic can never 500 the endpoint; return ``None`` otherwise.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, float):
+        if not math.isfinite(value) or value != int(value):
+            return None
+        parsed = int(value)
+        return parsed if parsed >= 0 else None
+    if isinstance(value, str):
+        try:
+            parsed_float = float(value.strip())
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(parsed_float) or parsed_float != int(parsed_float):
+            return None
+        parsed = int(parsed_float)
+        return parsed if parsed >= 0 else None
+    return None
+
+
 def build_calibration_transparency(
     correction_rows: Sequence[Mapping[str, Any]] | None,
     *,
@@ -247,14 +276,20 @@ def build_calibration_transparency(
         by_cluster_raw.setdefault(str(row["cluster_id"]), []).append(row)
 
     by_cluster: list[dict[str, Any]] = []
+    cluster_names = {
+        _cluster_id(cluster): _cluster_name(cluster)
+        for cluster in cluster_list
+    }
     for cluster_id in cluster_ids:
         rows = by_cluster_raw[cluster_id]
         scalars = [_safe_float(row["correction_scalar"], 1.0) for row in rows]
-        most_corrected = (
+        # "Most corrected" = the row with the largest |scalar - 1| drift;
+        # ties break deterministically by architect then cluster id.
+        strongest = (
             sorted(
                 rows,
                 key=lambda row: (
-                    abs(row["correction_scalar"] - 1.0),
+                    -abs(row["correction_scalar"] - 1.0),
                     str(row["architect_name"]),
                     str(row["cluster_id"]),
                 ),
@@ -265,9 +300,7 @@ def build_calibration_transparency(
         by_cluster.append(
             {
                 "cluster_id": cluster_id,
-                "cluster_name": _cluster_name(
-                    cluster_list[cluster_ids.index(cluster_id)]
-                ),
+                "cluster_name": cluster_names.get(cluster_id, cluster_id),
                 "corrected_architects": len(rows),
                 "total_architects": len(stack),
                 "coverage_pct": (
@@ -281,8 +314,8 @@ def build_calibration_transparency(
                     else 1.0
                 ),
                 "most_corrected_architect": (
-                    str(most_corrected["architect_name"])
-                    if most_corrected is not None
+                    str(strongest["architect_name"])
+                    if strongest is not None
                     else None
                 ),
             }
@@ -334,4 +367,5 @@ __all__ = [
     "DIRECTION_RAISES",
     "MAX_CORRECTIONS_LIMIT",
     "build_calibration_transparency",
+    "coerce_recorded_applied_corrections",
 ]
