@@ -317,6 +317,47 @@ class SimulationHealthOut(BaseModel):
     reasons: list[str] = Field(default_factory=list)
 
 
+class DatabasePoolStats(BaseModel):
+    """SQLAlchemy connection-pool section from ``/system/database-pool-health``."""
+
+    status: str = "unavailable"
+    pool_class: str = ""
+    pool_size: int | None = Field(default=None, ge=0)
+    max_overflow: int | None = Field(default=None, ge=0)
+    checkedout: int = Field(default=0, ge=0)
+    checkedin: int | None = Field(default=None, ge=0)
+    overflow: int | None = Field(default=None, ge=0)
+    total_capacity: int = Field(default=0, ge=0)
+    utilization: float | None = Field(default=None, ge=0.0, le=1.0)
+    pool_timeout_seconds: int | None = Field(default=None, ge=0)
+    pool_recycle_seconds: int | None = Field(default=None, ge=0)
+    pre_ping: bool = False
+    error: str | None = None
+
+
+class DatabaseServerStats(BaseModel):
+    """PostgreSQL server headroom section from ``/system/database-pool-health``."""
+
+    status: str = "unavailable"
+    reason: str | None = None
+    active_connections: int | None = Field(default=None, ge=0)
+    max_connections: int | None = Field(default=None, ge=0)
+    connection_ratio: float | None = Field(default=None, ge=0.0, le=1.0)
+    latency_ms: float | None = Field(default=None, ge=0.0)
+    error: str | None = None
+
+
+class DatabasePoolHealthOut(BaseModel):
+    """Response from ``GET /api/v1/system/database-pool-health``."""
+
+    generated_at: str = ""
+    verdict: str = "NO_DATA"
+    reasons: list[str] = Field(default_factory=list)
+    summary: str = "Database pool unavailable"
+    pool: DatabasePoolStats = Field(default_factory=DatabasePoolStats)
+    server: DatabaseServerStats = Field(default_factory=DatabaseServerStats)
+
+
 class SystemOverviewSubsystem(BaseModel):
     """One subsystem row from ``GET /system/overview``."""
 
@@ -351,6 +392,9 @@ class SystemOverviewOut(BaseModel):
 __all__ = [
     "CacheHealthOut",
     "CacheNamespaceStats",
+    "DatabasePoolHealthOut",
+    "DatabasePoolStats",
+    "DatabaseServerStats",
     "LLMFailureReason",
     "LLMHealthOut",
     "LLMModelStats",

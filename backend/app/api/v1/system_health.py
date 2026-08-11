@@ -10,12 +10,15 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.core import database_pool_health as database_pool_health_module
 from app.core import llm_health as llm_health_module
 from app.core import query_health as query_health_module
 from app.core import response_cache as response_cache_module
 from app.core import simulation_health as simulation_health_module
 from app.core import worker_health as worker_health_module
 from app.core.cache_health import build_cache_health
+from app.core.config import settings
+from app.core.database import engine
 from app.core.deps import get_db
 from app.core.metrics import metrics
 from app.core.query_metrics import slow_queries_snapshot
@@ -30,6 +33,7 @@ from app.core.request_health import (
 from app.core.system_overview import build_system_overview
 from app.schemas.system_health import (
     CacheHealthOut,
+    DatabasePoolHealthOut,
     LLMHealthOut,
     QueryHealthOut,
     RequestHealthOut,
@@ -346,6 +350,42 @@ def simulation_health(
 
 
 @router.get(
+    "/database-pool-health",
+    summary=(
+        "Database connection-pool health (in-use connections, "
+        "utilization, server headroom)"
+    ),
+    responses=_JSON_200,
+    response_model=DatabasePoolHealthOut,
+)
+def database_pool_health(
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Return a digest of the SQLAlchemy pool and PostgreSQL headroom.
+
+    Reads the engine's live pool state (checked-out / checked-in
+    connections, overflow, utilization against pool_size + max_overflow)
+    and probes the server for active connections vs ``max_connections``.
+    Every probe is individually guarded: a non-PostgreSQL database or a
+    restricted ``pg_stat_activity`` view degrades the server section to
+    ``unavailable`` instead of failing the digest, and a broken pool
+    reports ``ERROR`` so operators can page on connection exhaustion
+    before requests start timing out on ``pool_timeout``.
+    """
+    pool = database_pool_health_module.collect_pool_snapshot(engine)
+    server = database_pool_health_module.collect_server_snapshot(
+        db,
+        settings.DATABASE_URL,
+    )
+    database_pool_health_module.record_pool_gauges(pool, server)
+    return database_pool_health_module.build_database_pool_health(
+        pool=pool,
+        server=server,
+        generated_at=datetime.now(UTC).isoformat(),
+    )
+
+
+@router.get(
     "/overview",
     summary="One-call system status overview across all health digests",
     responses=_JSON_200,
@@ -425,6 +465,21 @@ def system_overview(
         generated_at=generated_at,
     )
 
+    pool_snapshot = database_pool_health_module.collect_pool_snapshot(engine)
+    server_snapshot = database_pool_health_module.collect_server_snapshot(
+        db,
+        settings.DATABASE_URL,
+    )
+    database_pool_health_module.record_pool_gauges(
+        pool_snapshot,
+        server_snapshot,
+    )
+    pool_digest = database_pool_health_module.build_database_pool_health(
+        pool=pool_snapshot,
+        server=server_snapshot,
+        generated_at=generated_at,
+    )
+
     return build_system_overview(
         request=request_digest,
         query=query_digest,
@@ -432,6 +487,7 @@ def system_overview(
         cache=cache_digest,
         worker=worker_digest,
         simulation=simulation_digest,
+        pool=pool_digest,
         services={
             "database": _db_status(db),
             "redis": _redis_status(),

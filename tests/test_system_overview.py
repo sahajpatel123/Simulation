@@ -37,6 +37,7 @@ def _digests(
     *,
     request: dict[str, Any] | None = None,
     query: dict[str, Any] | None = None,
+    pool: dict[str, Any] | None = None,
     llm: dict[str, Any] | None = None,
     cache: dict[str, Any] | None = None,
     worker: dict[str, Any] | None = None,
@@ -55,6 +56,24 @@ def _digests(
             "error_rate": 0.0,
             "slow_query_count": 0,
             "verdict": VERDICT_HEALTHY,
+        },
+        "pool": pool
+        or {
+            "verdict": VERDICT_HEALTHY,
+            "reasons": [],
+            "summary": "6/30 connections in use",
+            "pool": {
+                "status": "ok",
+                "checkedout": 6,
+                "total_capacity": 30,
+                "utilization": 0.2,
+            },
+            "server": {
+                "status": "ok",
+                "active_connections": 24,
+                "max_connections": 100,
+                "connection_ratio": 0.24,
+            },
         },
         "llm": llm
         or {
@@ -134,6 +153,7 @@ def test_all_healthy_digests_produce_ok_overview_and_schema() -> None:
     assert [row["key"] for row in payload["subsystems"]] == [
         "request",
         "query",
+        "pool",
         "llm",
         "cache",
         "worker",
@@ -284,6 +304,18 @@ def test_subsystem_summaries_and_headlines() -> None:
         "total_queries": 50,
         "error_rate": 0.0,
         "slow_query_count": 0,
+    }
+
+    assert by_key["pool"]["summary"] == (
+        "6/30 connections in use, server 24/100"
+    )
+    assert by_key["pool"]["headline"] == {
+        "checkedout": 6,
+        "total_capacity": 30,
+        "utilization": 0.2,
+        "active_connections": 24,
+        "max_connections": 100,
+        "connection_ratio": 0.24,
     }
 
     assert by_key["llm"]["summary"] == "20 attempt(s), 100.0% success"
@@ -457,6 +489,26 @@ def test_system_overview_route_contract(monkeypatch: pytest.MonkeyPatch) -> None
         lambda **kwargs: _digests()["simulation"],
     )
     monkeypatch.setattr(
+        system_health_module.database_pool_health_module,
+        "collect_pool_snapshot",
+        lambda engine: _digests()["pool"]["pool"],
+    )
+    monkeypatch.setattr(
+        system_health_module.database_pool_health_module,
+        "collect_server_snapshot",
+        lambda db, database_url: _digests()["pool"]["server"],
+    )
+    monkeypatch.setattr(
+        system_health_module.database_pool_health_module,
+        "record_pool_gauges",
+        lambda pool, server: None,
+    )
+    monkeypatch.setattr(
+        system_health_module.database_pool_health_module,
+        "build_database_pool_health",
+        lambda **kwargs: _digests()["pool"],
+    )
+    monkeypatch.setattr(
         system_health_module,
         "_db_status",
         lambda db: {"status": "ok", "latency_ms": 1.2},
@@ -485,6 +537,7 @@ def test_system_overview_route_contract(monkeypatch: pytest.MonkeyPatch) -> None
     assert captured["services"]["redis"]["status"] == "ok"
     assert captured["request"]["total_requests"] == 0
     assert captured["simulation"]["verdict"] == VERDICT_HEALTHY
+    assert captured["pool"]["verdict"] == VERDICT_HEALTHY
     assert gauges_seen["workers_online"] == 2
     assert gauges_seen["broker"]["status"] == "ok"
     assert isinstance(SystemOverviewOut(**payload), SystemOverviewOut)

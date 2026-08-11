@@ -320,6 +320,26 @@ class _Metrics:
     def set_db_pool_checked_out(self, n: int) -> None:
         self.set_gauge("thecee_db_pool_checked_out", n)
 
+    def set_db_pool_checkedin(self, n: int) -> None:
+        self.set_gauge("thecee_db_pool_checked_in", n)
+
+    def set_db_pool_overflow(self, n: int) -> None:
+        self.set_gauge("thecee_db_pool_overflow", n)
+
+    def set_db_pool_utilization(self, ratio: float) -> None:
+        """Set pool utilization (checked-out / pool_size + overflow)."""
+        self.set_gauge("thecee_db_pool_utilization", ratio)
+
+    def set_db_server_connections(self, n: int) -> None:
+        self.set_gauge("thecee_db_server_connections", n)
+
+    def set_db_server_max_connections(self, n: int) -> None:
+        self.set_gauge("thecee_db_server_max_connections", n)
+
+    def set_db_server_connection_ratio(self, ratio: float) -> None:
+        """Set server connection headroom (active / max_connections)."""
+        self.set_gauge("thecee_db_server_connection_ratio", ratio)
+
     def set_celery_workers_online(self, n: int) -> None:
         self.set_gauge("thecee_celery_workers_online", n)
 

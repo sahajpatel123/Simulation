@@ -1,10 +1,10 @@
 """One-call system status overview across the health digests.
 
-Each subsystem health digest (request, query, LLM, cache, worker,
-simulation) already exists as its own endpoint. This module composes them
+Each subsystem health digest (request, query, database pool, LLM, cache,
+worker, simulation) already exists as its own endpoint. This module composes them
 into a single lightweight dashboard payload: per-subsystem verdicts and
 headline metrics, plus the database / Redis / Celery service probes, so a
-monitoring dashboard can poll one URL instead of six.
+monitoring dashboard can poll one URL instead of seven.
 
 The composition is pure Python (no I/O): callers build the individual
 digests and service probes, then pass them in. ``NO_DATA`` and
@@ -23,6 +23,7 @@ VERDICT_WATCH: str = "WATCH"
 VERDICT_DEGRADED: str = "DEGRADED"
 VERDICT_NO_DATA: str = "NO_DATA"
 VERDICT_UNCONFIGURED: str = "UNCONFIGURED"
+VERDICT_ERROR: str = "ERROR"
 
 # Verdicts that mean "nothing is broken". NO_DATA / UNCONFIGURED are
 # healthy because there is no traffic to judge yet, not because a probe
@@ -45,6 +46,7 @@ REQUEST_DEGRADED_ERROR_RATE: float = 0.10
 _SUBSYSTEM_ORDER: tuple[tuple[str, str], ...] = (
     ("request", "HTTP requests"),
     ("query", "Database queries"),
+    ("pool", "Database pool"),
     ("llm", "LLM calls"),
     ("cache", "Response cache"),
     ("worker", "Celery workers"),
@@ -146,6 +148,47 @@ def _query_subsystem(digest: dict[str, Any]) -> dict[str, Any]:
             "total_queries": total_queries,
             "error_rate": error_rate,
             "slow_query_count": slow_query_count,
+        },
+    }
+
+
+def _pool_subsystem(digest: dict[str, Any]) -> dict[str, Any]:
+    pool = digest.get("pool") or {}
+    server = digest.get("server") or {}
+    checkedout = _safe_int(pool.get("checkedout"))
+    total_capacity = _safe_int(pool.get("total_capacity"))
+    utilization = _safe_float(pool.get("utilization"))
+    active = _safe_int(server.get("active_connections"))
+    maximum = _safe_int(server.get("max_connections"))
+    verdict = str(digest.get("verdict") or VERDICT_NO_DATA).upper()
+
+    if total_capacity > 0 and maximum > 0:
+        summary = (
+            f"{checkedout}/{total_capacity} connections in use, "
+            f"server {active}/{maximum}"
+        )
+    elif total_capacity > 0:
+        summary = f"{checkedout}/{total_capacity} connections in use"
+    elif maximum > 0:
+        summary = f"server {active}/{maximum} connections"
+    elif verdict == VERDICT_ERROR:
+        summary = "Database connection probes are failing"
+    else:
+        summary = "Database pool unavailable"
+
+    return {
+        "key": "pool",
+        "label": "Database pool",
+        "verdict": verdict,
+        "healthy": _verdict_healthy(verdict),
+        "summary": summary,
+        "headline": {
+            "checkedout": checkedout,
+            "total_capacity": total_capacity,
+            "utilization": utilization,
+            "active_connections": active,
+            "max_connections": maximum,
+            "connection_ratio": _safe_float(server.get("connection_ratio")),
         },
     }
 
@@ -349,6 +392,7 @@ def build_system_overview(
     cache: dict[str, Any],
     worker: dict[str, Any],
     simulation: dict[str, Any],
+    pool: dict[str, Any] | None = None,
     services: dict[str, Any],
     generated_at: str | None = None,
 ) -> dict[str, Any]:
@@ -361,6 +405,8 @@ def build_system_overview(
         cache: ``CacheHealthOut`` payload.
         worker: ``WorkerHealthOut`` payload.
         simulation: ``SimulationHealthOut`` payload.
+        pool: ``DatabasePoolHealthOut`` payload. Optional for backward
+            compatibility; when omitted the pool row reports NO_DATA.
         services: Probe results for ``database`` and ``redis`` (the
             worker service row is derived from ``worker``).
         generated_at: ISO timestamp echoed back; defaults to now.
@@ -373,6 +419,7 @@ def build_system_overview(
     builders: dict[str, Any] = {
         "request": _request_subsystem,
         "query": _query_subsystem,
+        "pool": _pool_subsystem,
         "llm": _llm_subsystem,
         "cache": _cache_subsystem,
         "worker": _worker_subsystem,
@@ -381,6 +428,13 @@ def build_system_overview(
     digests: dict[str, dict[str, Any]] = {
         "request": request,
         "query": query,
+        "pool": pool
+        or {
+            "verdict": VERDICT_NO_DATA,
+            "reasons": [],
+            "pool": {"status": "unavailable"},
+            "server": {"status": "unavailable"},
+        },
         "llm": llm,
         "cache": cache,
         "worker": worker,
