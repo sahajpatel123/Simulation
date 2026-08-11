@@ -14,7 +14,11 @@ from sqlalchemy.orm import Session
 from app.api.v1.cache_namespaces import _CONFIDENCE_EXPLAINER_CACHE_NAMESPACE
 from app.api.v1.common import get_owned_project
 from app.api.v1.users import (
+    _USER_COVERAGE_GAPS_CACHE_NAMESPACE,
+    _USER_DASHBOARD_CACHE_NAMESPACE,
     _USER_INSIGHTS_CACHE_NAMESPACE,
+    _USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
+    _USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
     _USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
     _USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
     _USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
@@ -122,6 +126,12 @@ from app.schemas.stress_test import (
     StressTestOut,
     StressTestStatusOut,
 )
+from app.services.brief_assistance import assist
+from app.services.dossier_intelligence import (
+    generate_both,
+    generate_precis,
+    readings_json_payload,
+)
 from app.simulation.accountability_summary import (
     DEFAULT_LIMIT as _FINDINGS_DEFAULT_LIMIT,
 )
@@ -151,8 +161,13 @@ from app.simulation.brief_export import (
     brief_to_csv,
 )
 from app.simulation.brief_hook_export import brief_hook_to_csv
+from app.simulation.calibration_health import build_calibration_health
 from app.simulation.cluster_cohort_drift import (
     compute_cluster_cohort_drift,
+)
+from app.simulation.cluster_reweighting import (
+    REWEIGHTING_RULES,
+    ClusterReweightingEngine,
 )
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.competitive_export import competitive_count_to_csv, competitors_to_csv
@@ -161,7 +176,10 @@ from app.simulation.conductor import Conductor
 from app.simulation.confidence_explainer import (
     build_confidence_explainer,
 )
-from app.simulation.convergence_check import build_convergence_check
+from app.simulation.convergence_check import (
+    MAX_SIMS_CONSIDERED,
+    build_convergence_check,
+)
 from app.simulation.coverage_gaps import build_coverage_gaps
 from app.simulation.coverage_gaps_export import (
     coverage_gaps_count_to_csv,
@@ -389,8 +407,6 @@ def _backfill_display_precis_lazy(db: Session, project: Project) -> None:
     if project.precis_title_fingerprint is not None:
         return
     try:
-        from app.services.dossier_intelligence import generate_precis
-
         line = generate_precis(project.title, project.description)
         if line:
             project.precis = line
@@ -582,12 +598,10 @@ def get_brief(
     )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    import json as _json
-
     features = []
     if project.brief_features_json:
         try:
-            features = _json.loads(project.brief_features_json)
+            features = json.loads(project.brief_features_json)
         except Exception:
             features = []
     return {
@@ -614,8 +628,6 @@ def save_brief(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    import json as _json
-
     project = (
         db.query(Project)
         .filter(Project.id == project_id, Project.user_id == current_user.id)
@@ -630,7 +642,7 @@ def save_brief(
     mark_complete = payload.mark_complete
 
     project.brief_positioning = positioning
-    project.brief_features_json = _json.dumps(
+    project.brief_features_json = json.dumps(
         [str(f).strip() for f in features if str(f).strip()][:5]
     )
     project.brief_hook = hook
@@ -644,7 +656,7 @@ def save_brief(
     features_out = []
     if project.brief_features_json:
         try:
-            features_out = _json.loads(project.brief_features_json)
+            features_out = json.loads(project.brief_features_json)
         except Exception:
             features_out = []
 
@@ -671,8 +683,6 @@ def assist_brief(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from app.services.brief_assistance import assist
-
     project = (
         db.query(Project)
         .filter(Project.id == project_id, Project.user_id == current_user.id)
@@ -1229,8 +1239,6 @@ def patch_project(
 
     if title_changed:
         try:
-            from app.services.dossier_intelligence import generate_precis
-
             line = generate_precis(project.title, project.description)
             if line:
                 project.precis = line
@@ -1247,14 +1255,6 @@ def patch_project(
     # current description). Either field change leaves them
     # stale for up to each tile's TTL.
     if title_changed or payload.description is not None:
-        from app.api.v1.users import (
-            _USER_DASHBOARD_CACHE_NAMESPACE,
-            _USER_LAST_TOUCHED_PROJECT_CACHE_NAMESPACE,
-            _USER_MOST_ACTIVE_PROJECT_CACHE_NAMESPACE,
-            _USER_PORTFOLIO_HEALTH_SNAPSHOT_CACHE_NAMESPACE,
-            _USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
-            _USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
-        )
         for _ns in (
             _USER_DASHBOARD_CACHE_NAMESPACE,
             _USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE,
@@ -1544,11 +1544,6 @@ def get_reweighting_preview(
     and the top-/bottom-weighted clusters by final weight. Pure preview —
     no DB writes, no Celery dispatch.
     """
-    from app.simulation.cluster_reweighting import (
-        REWEIGHTING_RULES,
-        ClusterReweightingEngine,
-    )
-
     project = get_owned_project(db, current_user.id, project_id)
     environment = (
         db.query(Environment).filter(Environment.project_id == project_id).first()
@@ -2120,11 +2115,6 @@ def extract_assumptions(
     # user's assumption set is regenerated. Also bust the
     # project-level stale-check (latest assumption
     # created_at changes).
-    from app.api.v1.users import (
-        _CONFIDENCE_EXPLAINER_CACHE_NAMESPACE,
-        _USER_COVERAGE_GAPS_CACHE_NAMESPACE,
-        _USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE,
-    )
     cache_invalidate(
         namespace=_USER_COVERAGE_GAPS_CACHE_NAMESPACE,
         user_id=current_user.id,
@@ -5788,8 +5778,6 @@ def regenerate_intelligence(
             detail="Project not found",
         )
 
-    from app.services.dossier_intelligence import generate_both, readings_json_payload
-
     intel = generate_both(project.title, project.description)
 
     if intel["precis"]:
@@ -5904,9 +5892,6 @@ def get_next_action(
     # sims (last 10) — cheap sub-helper.
     calibration_health: dict | None = None
     try:
-        from app.simulation.calibration_health import (
-            build_calibration_health,
-        )
         health_rows: list[tuple] = []
         recent_for_health = (
             db.query(
@@ -6811,10 +6796,6 @@ def get_convergence_check(
     if cached is not None:
         return ConvergenceCheckOut(**cached)
 
-    from app.simulation.convergence_check import (
-        MAX_SIMS_CONSIDERED,
-    )
-
     rows = (
         db.query(
             Simulation.id,
@@ -7054,9 +7035,6 @@ def get_project_health(
 
     # Assumption weak-link count.
     weak_link_count = 0
-    from app.simulation.assumption_digest import (
-        build_assumption_digest,
-    )
     assumption_rows = (
         db.query(Assumption)
         .filter(
@@ -7553,9 +7531,8 @@ def get_project_export(
         ),
     }
     if isinstance(brief_dict.get("features"), str):
-        import json as _json
         try:
-            brief_dict["features"] = _json.loads(
+            brief_dict["features"] = json.loads(
                 brief_dict["features"],
             )
         except Exception:
