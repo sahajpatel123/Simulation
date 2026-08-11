@@ -760,6 +760,14 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         results_fingerprint = stable_result_fingerprint(results_dict)
         stage_timings["aggregation_and_serialization"] = time.perf_counter() - _stage_t0
 
+        # Per-architect compute timings are volatile by nature: wall-clock
+        # durations differ between identical-input replays, so they are added
+        # after the fingerprint is computed and stripped by
+        # VOLATILE_RESULT_KEYS during any read-back verification.
+        results_dict["conductor_architect_timing"] = (
+            conductor_result.diagnostics.timing_to_dict()
+        )
+
         # Timing is volatile by nature: identical-input replays must still
         # match, so it is added after the fingerprint is computed and is
         # listed in VOLATILE_RESULT_KEYS for any read-back verification.

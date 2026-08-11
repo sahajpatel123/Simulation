@@ -167,6 +167,26 @@ def test_run_records_full_coverage_per_architect() -> None:
     assert sum(pricing["severity_counts"].values()) == 52
 
 
+def test_run_records_compute_timing_for_every_architect() -> None:
+    result = _run_conductor(Conductor())
+    payload = result.diagnostics.timing_to_dict()
+
+    assert payload["compute_calls"] > 0
+    assert payload["total_ms"] >= 0.0
+    assert payload["slowest_architect"] in {
+        row["architect_name"] for row in payload["architects"]
+    }
+    by_name = {row["architect_name"]: row for row in payload["architects"]}
+    pricing = by_name["PricingArchitect"]
+    assert pricing["compute_calls"] == 52
+    assert pricing["total_ms"] >= 0.0
+    assert pricing["p50_ms"] is not None
+    assert pricing["p95_ms"] is not None
+    assert pricing["max_ms"] is not None
+    # The timing payload must never leak into the fingerprinted diagnostics.
+    assert "total_ms" not in result.diagnostics.to_dict()["architect_stats"][0]
+
+
 def test_run_counts_compute_failures_and_first_cluster(
     monkeypatch: Any,
 ) -> None:

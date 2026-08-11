@@ -1029,6 +1029,16 @@ class SimulationResultOut(BaseModel):
             "results persisted before the diagnostics feature shipped."
         ),
     )
+    conductor_architect_timing: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Per-architect compute wall-clock rollups for the run (compute_calls, "
+            "total/mean/p50/p95/max milliseconds per architect, plus run-level "
+            "totals and the slowest architect). Volatile by nature and excluded "
+            "from the reproducibility fingerprint. Empty for legacy results "
+            "persisted before this feature shipped."
+        ),
+    )
     pipeline_timing: dict[str, Any] = Field(
         default_factory=dict,
         description=(

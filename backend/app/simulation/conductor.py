@@ -6,6 +6,8 @@ for the learning system.
 from __future__ import annotations
 
 import logging
+import math
+import time
 
 logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field, replace
@@ -446,9 +448,11 @@ class ArchitectDiagnostics:
 
     Tracks how many clusters each architect was asked to evaluate, how many
     computations completed, how many raised (previously swallowed) exceptions,
-    and the severity distribution of the outputs it did produce. All fields are
-    deterministic for identical inputs, so the reproducibility fingerprint
-    stays meaningful.
+    and the severity distribution of the outputs it did produce. It also
+    records wall-clock compute durations for observability; those timings are
+    deliberately kept out of :meth:`to_dict` so the deterministic fields stay
+    part of the reproducibility fingerprint and identical-input replays still
+    match.
     """
 
     architect_name: str
@@ -459,13 +463,31 @@ class ArchitectDiagnostics:
     severity_counts: dict[str, int] = field(
         default_factory=lambda: {"INFO": 0, "WARNING": 0, "CRITICAL": 0}
     )
+    compute_durations_ms: list[float] = field(default_factory=list)
 
-    def record_success(self, output: ArchitectOutput) -> None:
-        """Record one completed ``compute()`` and its severity."""
+    def record_success(
+        self,
+        output: ArchitectOutput,
+        duration_ms: float | None = None,
+    ) -> None:
+        """Record one completed ``compute()``, its severity and (optionally) its
+        wall-clock duration in milliseconds.
+
+        ``duration_ms`` is optional so existing callers (and tests) keep
+        working unchanged. Non-finite or negative durations are ignored so a
+        bad timer can never poison the timing rollups.
+        """
         self.attempted_clusters += 1
         self.completed_clusters += 1
         severity = str(output.severity or "INFO").upper()
         self.severity_counts[severity] = self.severity_counts.get(severity, 0) + 1
+        if duration_ms is not None:
+            try:
+                parsed = float(duration_ms)
+            except (TypeError, ValueError, OverflowError):
+                return
+            if math.isfinite(parsed) and parsed >= 0.0:
+                self.compute_durations_ms.append(parsed)
 
     def record_failure(self, cluster_id: str) -> None:
         """Record one failed ``compute()`` for a cluster."""
@@ -482,6 +504,27 @@ class ArchitectDiagnostics:
             "failed_clusters": self.failed_clusters,
             "first_failed_cluster": self.first_failed_cluster,
             "severity_counts": dict(sorted(self.severity_counts.items())),
+        }
+
+    def timing_to_dict(self) -> dict[str, Any]:
+        """Roll this architect's compute durations into compact observability
+        stats (total / mean / p50 / p95 / max, all in milliseconds).
+
+        Volatile by nature: wall-clock durations differ between identical-input
+        replays, so this payload is persisted separately from
+        :meth:`to_dict` and excluded from the reproducibility fingerprint.
+        """
+        durations = sorted(self.compute_durations_ms)
+        count = len(durations)
+        total = round(sum(durations), 4)
+        return {
+            "architect_name": self.architect_name,
+            "compute_calls": count,
+            "total_ms": total,
+            "mean_ms": round(total / count, 4) if count else None,
+            "p50_ms": _timing_percentile(durations, 0.50),
+            "p95_ms": _timing_percentile(durations, 0.95),
+            "max_ms": round(durations[-1], 4) if count else None,
         }
 
 
@@ -516,6 +559,40 @@ class ConductorDiagnostics:
             "failed_report_architects": sorted(self.failed_report_architects),
             "applied_corrections": self.applied_corrections,
         }
+
+    def timing_to_dict(self) -> dict[str, Any]:
+        """Cross-architect compute-timing rollup for one simulation run.
+
+        Returns one row per architect that completed at least one timed
+        ``compute()`` (sorted by name), plus run-level totals and the
+        slowest architect by total compute time. Volatile and excluded from
+        the reproducibility fingerprint.
+        """
+        rows = [
+            stats.timing_to_dict()
+            for stats in self.architect_stats
+            if stats.compute_durations_ms
+        ]
+        rows.sort(key=lambda row: row["architect_name"])
+        compute_calls = sum(row["compute_calls"] for row in rows)
+        total_ms = round(sum(row["total_ms"] for row in rows), 4)
+        slowest = max(rows, key=lambda row: row["total_ms"]) if rows else None
+        return {
+            "architects": rows,
+            "compute_calls": compute_calls,
+            "total_ms": total_ms,
+            "mean_ms": round(total_ms / compute_calls, 4) if compute_calls else None,
+            "slowest_architect": slowest["architect_name"] if slowest else None,
+            "slowest_architect_total_ms": slowest["total_ms"] if slowest else None,
+        }
+
+
+def _timing_percentile(sorted_ms: list[float], percentile: float) -> float | None:
+    """Nearest-rank percentile of an ascending duration list, or ``None``."""
+    if not sorted_ms:
+        return None
+    rank = max(1, min(len(sorted_ms), int(percentile * len(sorted_ms) + 0.5)))
+    return round(sorted_ms[rank - 1], 4)
 
 
 def _mean_metric(output: ArchitectOutput) -> float:
@@ -822,18 +899,20 @@ class Conductor:
                     arch_name, ArchitectDiagnostics(architect_name=arch_name)
                 )
                 try:
+                    compute_started = time.perf_counter()
                     output = architect.compute(
                         cluster=cluster_working,
                         agent_profile=agent_profile,
                         assumptions=assumptions,
                         env_params=env_params,
                     )
+                    duration_ms = (time.perf_counter() - compute_started) * 1000.0
                     corrected = apply_correction_to_output(output, corrections)
                     if corrected is not output:
                         diagnostics.applied_corrections += 1
                         output = corrected
                     cluster_outputs[arch_name] = output
-                    stats.record_success(output)
+                    stats.record_success(output, duration_ms=duration_ms)
                 except Exception:
                     stats.record_failure(cluster.cluster_id)
                     logger.exception(

@@ -24,6 +24,7 @@ VOLATILE_RESULT_KEYS: frozenset[str] = frozenset(
     {
         "agents_per_second",
         "completed_at",
+        "conductor_architect_timing",
         "generated_at",
         "pipeline_timing",
         "wall_time_seconds",
