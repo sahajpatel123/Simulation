@@ -255,6 +255,10 @@ from app.simulation.reweighting_preview import (
     summarise_rule_bundle as _summarise_rule_bundle,
 )
 from app.simulation.risk_register import build_risk_register
+from app.simulation.risk_register_export import (
+    risk_register_to_csv,
+    risk_register_to_json,
+)
 from app.simulation.scored_assumption import score_assumptions, signal_quality_tier
 from app.simulation.similar_projects import find_similar_projects
 from app.simulation.simulation_evolution import build_simulation_evolution
@@ -7261,6 +7265,38 @@ def get_recommendations_digest(
     return RecommendationsDigestOut(**payload)
 
 
+def _build_risk_register_payload(
+    db: Session,
+    project_id: int,
+    current_user_id: int,
+) -> dict[str, Any]:
+    """Build the persisted-data risk register payload for a project."""
+    project = get_owned_project(db, current_user_id, project_id)
+
+    latest_sim = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status == "COMPLETED",
+        )
+        .order_by(Simulation.created_at.desc(), Simulation.id.desc())
+        .first()
+    )
+    findings = (
+        extract_findings(latest_sim.results_json)
+        if latest_sim is not None
+        else []
+    )
+    payload = build_risk_register(
+        project_id=project_id,
+        premortem_data=getattr(project, "premortem_json", None),
+        stress_test_data=getattr(project, "stress_test_json", None),
+        competitive_data=getattr(project, "competitive_json", None),
+        findings=findings,
+    )
+    return payload
+
+
 @router.get(
     "/{project_id}/risk-register",
     response_model=RiskRegisterOut,
@@ -7285,30 +7321,75 @@ def get_project_risk_register(
     into a single score-normalized list with severities, probabilities,
     impacts and mitigations.
     """
-    project = get_owned_project(db, current_user.id, project_id)
-
-    latest_sim = (
-        db.query(Simulation)
-        .filter(
-            Simulation.project_id == project_id,
-            Simulation.status == "COMPLETED",
-        )
-        .order_by(Simulation.created_at.desc(), Simulation.id.desc())
-        .first()
-    )
-    findings = (
-        extract_findings(latest_sim.results_json)
-        if latest_sim is not None
-        else []
-    )
-    payload = build_risk_register(
+    payload = _build_risk_register_payload(
+        db=db,
         project_id=project_id,
-        premortem_data=getattr(project, "premortem_json", None),
-        stress_test_data=getattr(project, "stress_test_json", None),
-        competitive_data=getattr(project, "competitive_json", None),
-        findings=findings,
+        current_user_id=current_user.id,
     )
     return RiskRegisterOut(**payload)
+
+
+@router.get(
+    "/{project_id}/risk-register/export",
+    response_class=StreamingResponse,
+    summary="Export a project's ranked risk register as CSV or JSON",
+    # Read-only composition of already-persisted analysis JSON. Export is
+    # usually a manual handoff/audit action, so a lower cap than the digest
+    # endpoint is fine.
+    dependencies=[Depends(rate_limit(limit=20, window_s=60))],
+)
+def export_risk_register(
+    project_id: int,
+    format: Literal["csv", "json"] = Query(
+        default="csv",
+        description=(
+            "Output format. ``csv`` (default) returns the multi-section "
+            "spreadsheet-friendly register; ``json`` returns the full "
+            "risk-register payload."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Export a project's consolidated risk register as CSV or JSON."""
+    payload = _build_risk_register_payload(
+        db=db,
+        project_id=project_id,
+        current_user_id=current_user.id,
+    )
+    metadata = {
+        "generated_at": payload.get("generated_at"),
+        "project_id": project_id,
+        "user_id": current_user.id,
+        "format_version": "1",
+    }
+
+    if format == "json":
+        json_text = risk_register_to_json(payload, metadata=metadata)
+        body = json_text.encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="risk-register-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    csv_text = risk_register_to_csv(payload, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="risk-register-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
+    )
 
 
 @router.get(
