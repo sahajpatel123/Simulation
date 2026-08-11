@@ -133,10 +133,34 @@ def _key_signal_severity(panel: dict[str, Any]) -> str | None:
     return worst
 
 
+def _prediction_range_severity(panel: dict[str, Any]) -> str | None:
+    """Map a prediction-range panel's canonical label to a severity.
+
+    The digest's granular key-signals mark the sample size and range width
+    as ``critical`` even when there is simply no calibration data yet (a
+    normal state for a young project). Its ``confidence_label`` is the
+    canonical calibration verdict, so it takes precedence over those
+    granular signals whenever it is present.
+    """
+    label = str(panel.get("confidence_label") or "").upper()
+    if label == "POORLY_CALIBRATED":
+        return SIGNAL_CRITICAL
+    if label in {"NEEDS_ATTENTION", "INSUFFICIENT_DATA"}:
+        return SIGNAL_WATCH
+    if label == "WELL_CALIBRATED":
+        return SIGNAL_OK
+    return None
+
+
 def _panel_severity(key: str, panel: dict[str, Any] | None) -> str:
     """Derive one panel's severity bucket, falling back to known fields."""
     if panel is None:
         return SIGNAL_OK
+
+    if key == "prediction_range":
+        from_label = _prediction_range_severity(panel)
+        if from_label is not None:
+            return from_label
 
     from_signals = _key_signal_severity(panel)
     if from_signals is not None:
@@ -173,15 +197,6 @@ def _panel_severity(key: str, panel: dict[str, Any] | None) -> str:
             return SIGNAL_WATCH
         if overall_verdict == "PASS":
             return SIGNAL_OK
-    if key == "prediction_range":
-        label = str(panel.get("confidence_label") or "").upper()
-        if label == "POORLY_CALIBRATED":
-            return SIGNAL_CRITICAL
-        if label in {"NEEDS_ATTENTION", "INSUFFICIENT_DATA"}:
-            return SIGNAL_WATCH
-        if label == "WELL_CALIBRATED":
-            return SIGNAL_OK
-
     return SIGNAL_OK
 
 

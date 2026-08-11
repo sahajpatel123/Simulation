@@ -380,6 +380,54 @@ def test_insufficient_trust_panels_mark_watch() -> None:
     assert payload["overall_verdict"] == VERDICT_WATCH
 
 
+def test_prediction_range_label_overrides_granular_critical_signals() -> None:
+    panels = _panels()
+    panels["prediction_range"] = {
+        "key_signals": [
+            {"label": "calibration_sample_count", "severity": "critical"},
+            {"label": "accuracy_adjusted_range", "severity": "critical"},
+        ],
+        "confidence_label": "INSUFFICIENT_DATA",
+    }
+    payload = _build(panels=panels)
+    by_key = {row["key"]: row for row in payload["subsystems"]}
+
+    # No calibration data yet is a normal young-project state (watch), not
+    # a critical signal, so the digest's canonical label wins.
+    assert by_key["prediction_range"]["verdict"] == VERDICT_WATCH
+    assert payload["overall_verdict"] == VERDICT_WATCH
+
+
+def test_prediction_range_well_calibrated_label_overrides_signals() -> None:
+    panels = _panels()
+    panels["prediction_range"] = {
+        "key_signals": [
+            {"label": "accuracy_adjusted_range", "severity": "critical"}
+        ],
+        "confidence_label": "WELL_CALIBRATED",
+    }
+    payload = _build(panels=panels)
+    by_key = {row["key"]: row for row in payload["subsystems"]}
+
+    assert by_key["prediction_range"]["verdict"] == VERDICT_HEALTHY
+    assert payload["overall_verdict"] == VERDICT_HEALTHY
+
+
+def test_prediction_range_missing_label_falls_back_to_signals() -> None:
+    panels = _panels()
+    panels["prediction_range"] = {
+        "key_signals": [
+            {"label": "calibration_sample_count", "severity": "critical"}
+        ],
+        "confidence_label": "",
+    }
+    payload = _build(panels=panels)
+    by_key = {row["key"]: row for row in payload["subsystems"]}
+
+    assert by_key["prediction_range"]["verdict"] == VERDICT_CRITICAL
+    assert payload["overall_verdict"] == VERDICT_CRITICAL
+
+
 def test_unknown_panel_keys_are_ignored() -> None:
     panels = _panels()
     panels["mystery_digest"] = _panel(severity="critical")
