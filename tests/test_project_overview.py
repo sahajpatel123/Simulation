@@ -120,6 +120,8 @@ def test_empty_panels_produce_empty_healthy_overview() -> None:
     assert payload["overall_verdict"] == VERDICT_EMPTY
     assert payload["healthy"] is True
     assert payload["headline"].startswith("No project data yet")
+    assert payload["narrative"] == payload["headline"]
+    assert "Not available" not in payload["narrative"]
     # No panels → nothing to judge, but the canonical rows still render as
     # "Not available / healthy" so the dashboard layout never shifts.
     assert len(payload["subsystems"]) == len(PANEL_ORDER)
@@ -160,6 +162,35 @@ def test_critical_panel_wins_over_watch() -> None:
         "convergence",
         "stale_check",
     ]
+
+
+def test_worst_key_signal_severity_wins() -> None:
+    panels = _panels()
+    panels["outcomes_digest"] = {
+        "key_signals": [
+            {
+                "label": "outcome_count",
+                "value": 4,
+                "severity": "ok",
+            },
+            {
+                "label": "mean_abs_variance",
+                "value": 0.12,
+                "severity": "critical",
+            },
+        ],
+        "narrative": "Calibration is poor",
+    }
+    payload = _build(panels=panels)
+
+    outcomes_row = next(
+        row
+        for row in payload["subsystems"]
+        if row["key"] == "outcomes_digest"
+    )
+    assert outcomes_row["verdict"] == VERDICT_CRITICAL
+    assert payload["overall_verdict"] == VERDICT_CRITICAL
+    assert payload["unhealthy_components"] == ["outcomes_digest"]
 
 
 # ---------------------------------------------------------------------------
@@ -274,6 +305,22 @@ def test_malformed_panel_severities_default_to_ok() -> None:
     )
     assert health_row["verdict"] == VERDICT_HEALTHY
     assert health_row["healthy"] is True
+
+
+def test_malformed_key_signal_does_not_mask_direct_verdict() -> None:
+    panels = _panels()
+    panels["health"] = {
+        "key_signals": [{"severity": "banana"}],
+        "project_health_score": 30,
+        "verdict": "AT_RISK",
+    }
+    payload = _build(panels=panels)
+
+    health_row = next(
+        row for row in payload["subsystems"] if row["key"] == "health"
+    )
+    assert health_row["verdict"] == VERDICT_CRITICAL
+    assert payload["overall_verdict"] == VERDICT_CRITICAL
 
 
 def test_health_verdict_field_fallback() -> None:

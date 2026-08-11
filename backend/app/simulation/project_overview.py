@@ -36,6 +36,12 @@ _VALID_SEVERITIES: frozenset[str] = frozenset(
     {SIGNAL_OK, SIGNAL_WATCH, SIGNAL_CRITICAL}
 )
 
+_SEVERITY_RANK: dict[str, int] = {
+    SIGNAL_OK: 0,
+    SIGNAL_WATCH: 1,
+    SIGNAL_CRITICAL: 2,
+}
+
 # Canonical panel order + labels for the project dashboard.
 PANEL_ORDER: tuple[str, ...] = (
     "status_banner",
@@ -102,14 +108,25 @@ def _explicit_severity(raw: Any) -> str | None:
 
 
 def _key_signal_severity(panel: dict[str, Any]) -> str | None:
-    """Return the first usable severity from a panel's key-signals."""
+    """Return the worst valid severity from a panel's key-signals.
+
+    ``critical`` wins, then ``watch``, then ``ok``. Malformed or missing
+    severities are ignored so they cannot mask the panel's direct
+    ``severity`` / ``verdict`` fallbacks.
+    """
+    worst: str | None = None
     for signal in panel.get("key_signals") or []:
         if not isinstance(signal, dict):
             continue
-        severity = _normalise_severity(signal.get("severity"))
-        if severity in _VALID_SEVERITIES:
-            return severity
-    return None
+        severity = _explicit_severity(signal.get("severity"))
+        if severity is None:
+            continue
+        if (
+            worst is None
+            or _SEVERITY_RANK[severity] > _SEVERITY_RANK[worst]
+        ):
+            worst = severity
+    return worst
 
 
 def _panel_severity(key: str, panel: dict[str, Any] | None) -> str:
@@ -372,7 +389,9 @@ def build_project_overview(
         })
 
     narrative = " | ".join(
-        row["summary"] for row in subsystems if row["summary"] != "No data"
+        row["summary"]
+        for row in subsystems
+        if row["summary"] not in {"No data", "Not available"}
     )
     if not narrative:
         narrative = headline
