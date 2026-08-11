@@ -30,6 +30,26 @@ class SimulationWebhookDeliveryListOut(BaseModel):
     items: list[SimulationWebhookDeliveryOut] = Field(default_factory=list)
 
 
+class SimulationWebhookDeliveryGroupOut(BaseModel):
+    """One webhook subscription plus every delivery attempt for a simulation."""
+
+    webhook_id: int
+    webhook_url: str = ""
+    webhook_status: str = ""
+    webhook_event_type: str = ""
+    deliveries: list[SimulationWebhookDeliveryOut] = Field(default_factory=list)
+
+
+class SimulationWebhookDeliveryOverviewOut(BaseModel):
+    """Per-simulation webhook delivery overview across all project subscriptions."""
+
+    project_id: int
+    simulation_id: int
+    webhook_count: int = 0
+    delivery_count: int = 0
+    items: list[SimulationWebhookDeliveryGroupOut] = Field(default_factory=list)
+
+
 class SimulationWebhookRetryOut(BaseModel):
     delivery: SimulationWebhookDeliveryOut
 
@@ -83,6 +103,8 @@ class SimulationWebhookDeliveryStatsOut(BaseModel):
 __all__ = [
     "SimulationWebhookDeliveryOut",
     "SimulationWebhookDeliveryListOut",
+    "SimulationWebhookDeliveryGroupOut",
+    "SimulationWebhookDeliveryOverviewOut",
     "SimulationWebhookRetryOut",
     "SimulationWebhookBatchRetryOut",
     "SimulationWebhookDeliveryStatsOut",

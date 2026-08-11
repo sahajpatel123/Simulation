@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.v1.common import get_owned_project
 from app.core.deps import get_current_user, get_db
 from app.core.rate_limiter import rate_limit
+from app.models.simulation import Simulation
 from app.models.simulation_webhook_delivery import SimulationWebhookDelivery
 from app.models.simulation_webhook_subscription import SimulationWebhookSubscription
 from app.models.user import User
@@ -18,6 +19,7 @@ from app.schemas.simulation_webhook_delivery import (
     SimulationWebhookBatchRetryOut,
     SimulationWebhookDeliveryListOut,
     SimulationWebhookDeliveryOut,
+    SimulationWebhookDeliveryOverviewOut,
     SimulationWebhookDeliveryStatsOut,
     SimulationWebhookRetryOut,
 )
@@ -32,6 +34,9 @@ from app.simulation.simulation_webhook_delivery import (
     deliver_webhook_event,
     generate_webhook_secret,
     rotate_webhook_secret,
+)
+from app.simulation.simulation_webhook_overview import (
+    build_simulation_webhook_delivery_overview,
 )
 from app.simulation.webhook_delivery_history import (
     record_webhook_delivery,
@@ -318,6 +323,80 @@ def list_simulation_webhook_deliveries(
 
 
 @router.get(
+    "/{project_id}/simulations/{simulation_id}/webhook-deliveries",
+    response_model=SimulationWebhookDeliveryOverviewOut,
+    summary="Show webhook delivery attempts for one simulation across all subscriptions",
+)
+def get_simulation_webhook_deliveries(
+    project_id: int,
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SimulationWebhookDeliveryOverviewOut:
+    """Return a per-simulation delivery overview for every project webhook.
+
+    After a run finishes, this endpoint answers "did each webhook fire and
+    what did it return?" in one call instead of looping over every webhook's
+    delivery history. Deliveries are grouped by subscription, newest first,
+    and webhook subscriptions with no attempt for the simulation are still
+    listed with an empty ``deliveries`` array so a missing notification is
+    visible rather than silently absent.
+    """
+    get_owned_project(db, current_user.id, project_id)
+    simulation = (
+        db.query(Simulation)
+        .filter(
+            Simulation.id == simulation_id,
+            Simulation.project_id == project_id,
+        )
+        .first()
+    )
+    if not simulation:
+        raise HTTPException(
+            status_code=404,
+            detail="Simulation not found",
+        )
+
+    subscriptions = (
+        db.query(SimulationWebhookSubscription)
+        .filter(SimulationWebhookSubscription.project_id == project_id)
+        .order_by(
+            SimulationWebhookSubscription.created_at.desc(),
+            SimulationWebhookSubscription.id.desc(),
+        )
+        .all()
+    )
+    deliveries = (
+        db.query(SimulationWebhookDelivery)
+        .filter(SimulationWebhookDelivery.simulation_id == simulation_id)
+        .order_by(
+            SimulationWebhookDelivery.created_at.desc(),
+            SimulationWebhookDelivery.id.desc(),
+        )
+        .all()
+    )
+
+    subscription_dicts = [
+        SimulationWebhookOut.model_validate(item).model_dump(
+            mode="json",
+            exclude={"secret"},
+        )
+        for item in subscriptions
+    ]
+    delivery_dicts = [
+        SimulationWebhookDeliveryOut.model_validate(item).model_dump(mode="json")
+        for item in deliveries
+    ]
+    payload = build_simulation_webhook_delivery_overview(
+        project_id=project_id,
+        simulation_id=simulation_id,
+        subscriptions=subscription_dicts,
+        deliveries=delivery_dicts,
+    )
+    return SimulationWebhookDeliveryOverviewOut(**payload)
+
+
+@router.get(
     "/{project_id}/webhooks/{webhook_id}/deliveries/export",
     response_class=StreamingResponse,
     summary=(
@@ -546,6 +625,7 @@ __all__ = [
     "delete_simulation_webhook",
     "ping_simulation_webhook",
     "list_simulation_webhook_deliveries",
+    "get_simulation_webhook_deliveries",
     "export_simulation_webhook_deliveries",
     "get_simulation_webhook_delivery_stats",
     "retry_simulation_webhook_delivery",

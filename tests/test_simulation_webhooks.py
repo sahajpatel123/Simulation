@@ -40,6 +40,7 @@ class _Subscription:
         secret: str = "s3cr3t",
         status: str = "ACTIVE",
         event_type: str = "simulation.completed",
+        created_at: datetime | None = None,
     ) -> None:
         self.id = id
         self.project_id = project_id
@@ -50,8 +51,8 @@ class _Subscription:
         self.last_delivery_at = None
         self.last_delivery_status = None
         self.last_delivery_error = None
-        self.created_at = datetime(2026, 1, 1, tzinfo=UTC)
-        self.updated_at = datetime(2026, 1, 1, tzinfo=UTC)
+        self.created_at = created_at or datetime(2026, 1, 1, tzinfo=UTC)
+        self.updated_at = self.created_at
 
 
 class _Delivery:
@@ -70,6 +71,7 @@ class _Delivery:
         request_body: dict | None = None,
         retry_count: int = 0,
         delivered_at: datetime | None = None,
+        created_at: datetime | None = None,
         subscription: _Subscription | None = None,
     ) -> None:
         self.id = id
@@ -86,9 +88,22 @@ class _Delivery:
         self.delivered_at = delivered_at or datetime(
             2026, 1, 2, tzinfo=UTC
         )
-        self.created_at = self.delivered_at
+        self.created_at = created_at or self.delivered_at
         self.updated_at = self.delivered_at
         self.subscription = subscription
+
+
+class _FakeSimulation:
+    def __init__(
+        self,
+        *,
+        id: int = 5,
+        project_id: int = 10,
+        status: str = "COMPLETED",
+    ) -> None:
+        self.id = id
+        self.project_id = project_id
+        self.status = status
 
 
 class _FakeQuery:
@@ -162,10 +177,12 @@ class _FakeSession:
         project: object | None = None,
         subscriptions: list[_Subscription] | None = None,
         deliveries: list[_Delivery] | None = None,
+        simulations: list[_FakeSimulation] | None = None,
     ) -> None:
         self.project = project if project is not None else _Project()
         self.subscriptions = subscriptions if subscriptions is not None else []
         self.deliveries = deliveries if deliveries is not None else []
+        self.simulations = simulations if simulations is not None else []
         self.commits = 0
         self.deleted: list[object] = []
         self.added: list[object] = []
@@ -178,6 +195,8 @@ class _FakeSession:
             return _FakeQuery(self.subscriptions)
         if name == "SimulationWebhookDelivery":
             return _FakeQuery(self.deliveries)
+        if name == "Simulation":
+            return _FakeQuery(self.simulations)
         return _FakeQuery([])
 
     def add(self, obj) -> None:
@@ -955,6 +974,10 @@ def test_routes_registered() -> None:
     assert "/projects/{project_id}/webhooks/{webhook_id}/ping" in paths
     assert "/projects/{project_id}/webhooks/{webhook_id}/rotate-secret" in paths
     assert "/projects/{project_id}/webhooks/{webhook_id}/retry-failed" in paths
+    assert (
+        "/projects/{project_id}/simulations/{simulation_id}/webhook-deliveries"
+        in paths
+    )
 
 
 def test_deliver_simulation_webhook_task_success() -> None:
@@ -1031,6 +1054,132 @@ def test_list_simulation_webhook_deliveries() -> None:
     assert [item.id for item in out.items] == [2, 1]
     assert out.items[0].status == "SUCCESS"
     assert out.items[1].status == "FAILED"
+
+
+def test_simulation_webhook_delivery_overview_groups_and_sorts() -> None:
+    from app.api.v1 import simulation_webhooks as mod
+
+    sub_old = _Subscription(id=1, url="https://example.com/old")
+    sub_new = _Subscription(
+        id=2,
+        url="https://example.com/new",
+        created_at=datetime(2026, 2, 1, tzinfo=UTC),
+    )
+    simulation = _FakeSimulation(id=5, project_id=10)
+    deliveries = [
+        _Delivery(
+            id=2,
+            webhook_subscription_id=1,
+            simulation_id=5,
+            status="SUCCESS",
+            created_at=datetime(2026, 1, 4, tzinfo=UTC),
+        ),
+        _Delivery(
+            id=3,
+            webhook_subscription_id=2,
+            simulation_id=5,
+            status="FAILED",
+            created_at=datetime(2026, 1, 5, tzinfo=UTC),
+        ),
+        _Delivery(
+            id=1,
+            webhook_subscription_id=1,
+            simulation_id=5,
+            status="FAILED",
+            created_at=datetime(2026, 1, 3, tzinfo=UTC),
+        ),
+    ]
+    session = _FakeSession(
+        subscriptions=[sub_old, sub_new],
+        deliveries=deliveries,
+        simulations=[simulation],
+    )
+    out = mod.get_simulation_webhook_deliveries(
+        project_id=10,
+        simulation_id=5,
+        db=session,
+        current_user=_current_user(),
+    )
+    assert out.project_id == 10
+    assert out.simulation_id == 5
+    assert out.webhook_count == 2
+    assert out.delivery_count == 3
+    assert [item.webhook_id for item in out.items] == [2, 1]
+    assert [d.id for d in out.items[0].deliveries] == [3]
+    assert [d.id for d in out.items[1].deliveries] == [2, 1]
+    assert out.items[1].webhook_url == "https://example.com/old"
+
+
+def test_simulation_webhook_delivery_overview_404_when_not_owned() -> None:
+    from app.api.v1 import simulation_webhooks as mod
+
+    session = _FakeSession(simulations=[])
+    with pytest.raises(HTTPException) as exc:
+        mod.get_simulation_webhook_deliveries(
+            project_id=10,
+            simulation_id=99,
+            db=session,
+            current_user=_current_user(),
+        )
+    assert exc.value.status_code == 404
+
+
+def test_simulation_webhook_delivery_overview_lists_empty_webhook() -> None:
+    from app.api.v1 import simulation_webhooks as mod
+
+    sub = _Subscription(id=1)
+    simulation = _FakeSimulation(id=5, project_id=10)
+    session = _FakeSession(
+        subscriptions=[sub],
+        deliveries=[],
+        simulations=[simulation],
+    )
+    out = mod.get_simulation_webhook_deliveries(
+        project_id=10,
+        simulation_id=5,
+        db=session,
+        current_user=_current_user(),
+    )
+    assert out.webhook_count == 1
+    assert out.delivery_count == 0
+    assert out.items[0].deliveries == []
+
+
+def test_simulation_webhook_delivery_overview_ignores_unmatched_deliveries() -> None:
+    from app.simulation.simulation_webhook_overview import (
+        build_simulation_webhook_delivery_overview,
+    )
+
+    payload = build_simulation_webhook_delivery_overview(
+        project_id=10,
+        simulation_id=5,
+        subscriptions=[
+            {
+                "id": 1,
+                "url": "https://example.com/hook",
+                "status": "ACTIVE",
+                "event_type": "simulation.completed",
+                "created_at": "2026-01-02T00:00:00+00:00",
+            }
+        ],
+        deliveries=[
+            {
+                "id": 7,
+                "webhook_subscription_id": 1,
+                "status": "SUCCESS",
+                "created_at": "2026-01-03T00:00:00+00:00",
+            },
+            {
+                "id": 8,
+                "webhook_subscription_id": 999,
+                "status": "FAILED",
+                "created_at": "2026-01-04T00:00:00+00:00",
+            },
+        ],
+    )
+    assert payload["webhook_count"] == 1
+    assert payload["delivery_count"] == 1
+    assert [d["id"] for d in payload["items"][0]["deliveries"]] == [7]
 
 
 def test_retry_delivery_route_returns_new_delivery() -> None:
