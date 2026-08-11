@@ -197,6 +197,60 @@ class CacheHealthOut(BaseModel):
     namespaces: list[CacheNamespaceStats] = Field(default_factory=list)
 
 
+class WorkerHealthBroker(BaseModel):
+    """Broker probe section from ``/system/worker-health``."""
+
+    status: str = "unconfigured"
+    scheme: str = ""
+    database: int | None = Field(default=None, ge=0)
+    error: str | None = None
+
+
+class WorkerHealthWorker(BaseModel):
+    """Per-worker row from ``/system/worker-health``."""
+
+    hostname: str = ""
+    concurrency: int | None = Field(default=None, ge=1)
+    pid: int | None = Field(default=None, ge=0)
+    prefetch_count: int | None = Field(default=None, ge=0)
+    uptime_seconds: int | None = Field(default=None, ge=0)
+    active_tasks: int = Field(default=0, ge=0)
+    reserved_tasks: int = Field(default=0, ge=0)
+    scheduled_tasks: int = Field(default=0, ge=0)
+
+
+class WorkerQueueHealth(BaseModel):
+    """Per-queue row from ``/system/worker-health``."""
+
+    name: str = ""
+    depth: int | None = Field(default=None, ge=0)
+    active_tasks: int = Field(default=0, ge=0)
+    reserved_tasks: int = Field(default=0, ge=0)
+    scheduled_tasks: int = Field(default=0, ge=0)
+
+
+class WorkerTotalsOut(BaseModel):
+    """Aggregate in-flight and backlog counters from ``/system/worker-health``."""
+
+    workers_online: int = Field(default=0, ge=0)
+    active_tasks: int = Field(default=0, ge=0)
+    reserved_tasks: int = Field(default=0, ge=0)
+    scheduled_tasks: int = Field(default=0, ge=0)
+    queue_depth: int = Field(default=0, ge=0)
+
+
+class WorkerHealthOut(BaseModel):
+    """Response from ``GET /api/v1/system/worker-health``."""
+
+    generated_at: str = ""
+    verdict: str = "NO_DATA"
+    reasons: list[str] = Field(default_factory=list)
+    broker: WorkerHealthBroker = Field(default_factory=WorkerHealthBroker)
+    totals: WorkerTotalsOut = Field(default_factory=WorkerTotalsOut)
+    workers: list[WorkerHealthWorker] = Field(default_factory=list)
+    queues: list[WorkerQueueHealth] = Field(default_factory=list)
+
+
 __all__ = [
     "CacheHealthOut",
     "CacheNamespaceStats",
@@ -211,4 +265,9 @@ __all__ = [
     "SlowQueryOut",
     "SystemHealthCheck",
     "SystemHealthOut",
+    "WorkerHealthBroker",
+    "WorkerHealthOut",
+    "WorkerHealthWorker",
+    "WorkerQueueHealth",
+    "WorkerTotalsOut",
 ]

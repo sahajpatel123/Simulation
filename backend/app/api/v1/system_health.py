@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.core import llm_health as llm_health_module
 from app.core import query_health as query_health_module
 from app.core import response_cache as response_cache_module
+from app.core import worker_health as worker_health_module
 from app.core.cache_health import build_cache_health
 from app.core.deps import get_db
 from app.core.metrics import metrics
@@ -31,6 +32,7 @@ from app.schemas.system_health import (
     QueryHealthOut,
     RequestHealthOut,
     SystemHealthOut,
+    WorkerHealthOut,
 )
 from app.worker import celery_app
 
@@ -237,5 +239,53 @@ def cache_health() -> dict[str, Any]:
         metrics.snapshot(),
         key_counts=key_counts,
         redis_configured=redis_configured,
+        generated_at=datetime.now(UTC).isoformat(),
+    )
+
+
+@router.get(
+    "/worker-health",
+    summary=(
+        "Celery worker and queue health (backlog depth, concurrency, "
+        "in-flight tasks)"
+    ),
+    responses=_JSON_200,
+    response_model=WorkerHealthOut,
+    # Probes every worker (ping/stats/active/reserved/scheduled/queues) and
+    # LLENs each queue on the broker, so bound dashboard polling the way the
+    # other observability digests are bounded. Fails open so the probe that
+    # would report a broker outage is not 503ed by the Redis-backed limiter.
+    dependencies=[
+        Depends(rate_limit(limit=10, window_s=60, fail_open=True))
+    ],
+)
+def worker_health(
+    backlog_threshold: int = Query(
+        default=worker_health_module.DEFAULT_BACKLOG_THRESHOLD,
+        ge=1,
+        le=worker_health_module.MAX_BACKLOG_THRESHOLD,
+        description=(
+            "Total broker queue depth at which the digest reports WATCH "
+            "instead of HEALTHY."
+        ),
+    ),
+) -> dict[str, Any]:
+    """Return a digest of Celery workers and broker queue backlogs.
+
+    Probes the Celery control API (ping, stats, active, reserved, scheduled,
+    active_queues) plus the Redis broker's ``LLEN`` per queue. Every probe
+    is individually guarded, so a broker outage degrades the digest instead
+    of failing it, and no broker URL / credentials are ever echoed back —
+    only scheme and database index.
+    """
+    inspect = celery_app.control.inspect(timeout=2.0)
+    snapshot = worker_health_module.collect_worker_snapshot(
+        inspect=inspect,
+        broker_client=worker_health_module.get_broker_client(),
+    )
+    worker_health_module.record_worker_gauges(snapshot)
+    return worker_health_module.build_worker_health(
+        **snapshot,
+        backlog_threshold=backlog_threshold,
         generated_at=datetime.now(UTC).isoformat(),
     )

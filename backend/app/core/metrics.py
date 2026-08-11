@@ -271,6 +271,10 @@ class _Metrics:
     def set_celery_workers_online(self, n: int) -> None:
         self.set_gauge("thecee_celery_workers_online", n)
 
+    def set_celery_queue_depth(self, queue: str, n: int) -> None:
+        """Set the current broker queue depth for one Celery queue."""
+        self.set_gauge("thecee_celery_queue_depth", n, {"queue": queue})
+
     # ------------------------------------------------------------------
     # Rendering
     # ------------------------------------------------------------------
