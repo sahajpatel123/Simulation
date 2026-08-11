@@ -71,6 +71,21 @@ _SERVER_PROBE_SQL = text(
 )
 
 
+def _is_postgresql_url(database_url: str) -> bool:
+    """Whether a SQLAlchemy database URL targets PostgreSQL.
+
+    SQLAlchemy accepts both ``postgres://`` and ``postgresql://`` as
+    aliases, and either may carry a driver suffix such as
+    ``postgresql+psycopg``. The probe is PostgreSQL-specific, so all of
+    those forms must be recognized or a perfectly healthy PostgreSQL
+    deployment would silently report ``unavailable``.
+    """
+    url = (database_url or "").strip().lower()
+    scheme = url.split("://", 1)[0]
+    dialect = scheme.split("+", 1)[0]
+    return dialect in {"postgres", "postgresql"}
+
+
 def _safe_int(value: Any, default: int = 0) -> int:
     """Coerce a value to a non-negative int, or ``default`` when unusable."""
     if value is None or isinstance(value, bool):
@@ -219,8 +234,7 @@ def collect_server_snapshot(
         ``active_connections``, ``max_connections``, ``connection_ratio``,
         ``latency_ms``, an optional ``reason`` and an optional ``error``.
     """
-    url = (database_url or "").strip().lower()
-    if not url.startswith("postgresql"):
+    if not _is_postgresql_url(database_url):
         return {
             "status": SERVER_STATUS_UNAVAILABLE,
             "reason": "non_postgresql",

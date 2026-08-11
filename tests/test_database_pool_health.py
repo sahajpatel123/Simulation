@@ -324,6 +324,31 @@ def test_collect_server_snapshot_skips_non_postgresql() -> None:
     assert db.executed is False
 
 
+@pytest.mark.parametrize(
+    "database_url",
+    [
+        "postgresql://app:secret@db:5432/thecee",
+        "postgres://app:secret@db:5432/thecee",
+        "postgresql+psycopg://app:secret@db:5432/thecee",
+        "postgres+psycopg2://app:secret@db:5432/thecee",
+        "POSTGRESQL://app:secret@db:5432/thecee",
+    ],
+)
+def test_collect_server_snapshot_recognizes_postgresql_url_aliases(
+    database_url: str,
+) -> None:
+    row = _FakeRow(
+        {"active_connections": 12, "max_connections": 100}
+    )
+    db = _FakeDB(row=row)
+
+    snapshot = collect_server_snapshot(db, database_url)
+
+    assert snapshot["status"] == SERVER_STATUS_OK
+    assert snapshot["active_connections"] == 12
+    assert db.executed is True
+
+
 def test_collect_server_snapshot_reads_rows() -> None:
     row = _FakeRow(
         {"active_connections": 12, "max_connections": 100}
