@@ -139,6 +139,20 @@ def test_route_returns_csv_export() -> None:
     assert "WILLINGNESS_TO_PAY_SURVEY" in body
 
 
+def test_route_csv_body_is_utf8_bom_prefixed() -> None:
+    response = _call_route(
+        _FakeSession(
+            _FakeSimulation(),
+            assumptions=[_FakeAssumption("pricing ⚠️ 高风险合规")],
+        )
+    )
+
+    body = _body(response)
+    assert body.startswith(b"\xef\xbb\xbf")
+    assert int(response.headers["Content-Length"]) == len(body)
+    assert "pricing ⚠️ 高风险合规".encode() in body
+
+
 def test_route_returns_json_export() -> None:
     response = _call_route(
         _FakeSession(

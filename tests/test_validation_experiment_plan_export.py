@@ -163,6 +163,20 @@ def test_csv_neutralizes_spreadsheet_formula_injection() -> None:
     assert "http://evil" in csv_text
 
 
+def test_csv_starts_with_utf8_bom_for_excel_compatibility() -> None:
+    plan = _plan(
+        [
+            _row("⚠️ 高风险合规", category="PricingArchitect"),
+        ]
+    )
+
+    csv_text = validation_experiment_plan_to_csv(plan)
+
+    assert csv_text.startswith("\ufeff")
+    assert csv_text.encode("utf-8").startswith(b"\xef\xbb\xbf")
+    assert "⚠️ 高风险合规" in csv_text
+
+
 def test_csv_guards_whitespace_prefixed_formula() -> None:
     plan = _plan(
         [

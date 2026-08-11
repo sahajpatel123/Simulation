@@ -8200,8 +8200,9 @@ def export_validation_experiment_plan(
     ``GET /simulations/{id}/validation-experiment-plan``, so the export can
     never disagree with the dashboard. ``format=csv`` renders the sprint
     summary and one row per planned experiment (method, cost tier, duration,
-    sample target, success threshold, go/no-go rule); ``format=json`` returns
-    the raw plan payload for machine consumers.
+    sample target, success threshold, go/no-go rule) with a UTF-8 BOM so
+    Excel decodes non-Latin text correctly; ``format=json`` returns the raw
+    plan payload for machine consumers.
     """
     fmt = (format or "csv").strip().lower()
     if fmt not in {"csv", "json"}:

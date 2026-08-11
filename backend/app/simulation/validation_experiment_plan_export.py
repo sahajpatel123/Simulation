@@ -12,8 +12,9 @@ The CSV follows the lightweight multi-section convention used by the
 risk-register and launch-checklist exports: an optional metadata block, a
 one-row-per-key sprint summary, one row per planned experiment, and a meta
 section. Missing optional fields render as blanks rather than crashing the
-export. The JSON export emits UTF-8 with ``ensure_ascii=False`` and a
-trailing newline so non-Latin assumption text round-trips cleanly.
+export. The CSV starts with a UTF-8 BOM so Excel decodes non-Latin assumption
+text correctly; the JSON export emits UTF-8 with ``ensure_ascii=False`` and a
+trailing newline so the same text round-trips cleanly.
 """
 
 from __future__ import annotations
@@ -204,7 +205,10 @@ def validation_experiment_plan_to_csv(
             else:
                 _write_row(writer, [key, _safe_text(value)])
 
-    return buffer.getvalue()
+    # UTF-8 BOM: without it, Excel on Windows guesses ANSI and mangles
+    # non-Latin assumption text (emoji, accents, CJK) even though the
+    # response advertises charset=utf-8.
+    return "\ufeff" + buffer.getvalue()
 
 
 def validation_experiment_plan_to_json(
