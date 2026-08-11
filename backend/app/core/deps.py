@@ -125,6 +125,15 @@ def get_current_user_optional(
     credentials: HTTPAuthorizationCredentials | None = Depends(HTTPBearer(auto_error=False)),
     db: Session = Depends(get_db),
 ) -> User | None:
+    """Resolve the current user from a JWT or personal API token.
+
+    Returns ``None`` when no credentials are sent or the credentials are
+    invalid / expired / revoked. A *valid* API token whose scope forbids
+    the requested method is deliberately not downgraded to anonymous:
+    ``user_from_api_token`` raises 403 and it propagates, so a read-scoped
+    token can never silently pass as "no credential" on a mutating
+    optional-auth endpoint.
+    """
     if not credentials:
         return None
     token = credentials.credentials
@@ -133,7 +142,9 @@ def get_current_user_optional(
         return user_from_access_sub(db, sub)
     try:
         return user_from_api_token(db, token, request)
-    except HTTPException:
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_403_FORBIDDEN:
+            raise
         return None
 
 

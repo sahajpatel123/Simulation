@@ -119,6 +119,12 @@ def _app_with(db) -> FastAPI:
     ) -> dict:
         return {"user_id": current_user.id if current_user else None}
 
+    @app.post("/optional-write")
+    def optional_write(
+        current_user: User | None = Depends(get_current_user_optional),
+    ) -> dict:
+        return {"user_id": current_user.id if current_user else None}
+
     app.dependency_overrides[get_db] = lambda: db
     return app
 
@@ -385,6 +391,49 @@ def test_optional_auth_resolves_token_or_none(db_session) -> None:
     )
     assert invalid.status_code == 200
     assert invalid.json() == {"user_id": None}
+
+
+def test_optional_auth_read_scope_rejects_mutating_methods(db_session) -> None:
+    """A valid read-scoped token is not downgraded to anonymous on POST —
+    the scope violation surfaces as 403 instead of a silent bypass."""
+    user = _user(db_session)
+    _, plaintext = _token_row(db_session, user.id, scope="read")
+    client = TestClient(_app_with(db_session))
+
+    resp = client.post(
+        "/optional-write",
+        headers={"Authorization": f"Bearer {plaintext}"},
+    )
+    assert resp.status_code == 403
+    assert "scope 'read'" in resp.json()["detail"]
+
+
+def test_optional_auth_read_write_scope_allows_mutating_methods(db_session) -> None:
+    user = _user(db_session)
+    _, plaintext = _token_row(db_session, user.id, scope="read_write")
+    client = TestClient(_app_with(db_session))
+
+    resp = client.post(
+        "/optional-write",
+        headers={"Authorization": f"Bearer {plaintext}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"user_id": user.id}
+
+
+def test_optional_auth_invalid_token_stays_anonymous_on_mutating_methods(
+    db_session,
+) -> None:
+    """Invalid credentials still downgrade to anonymous (None) on optional
+    auth — only valid-but-insufficient tokens are rejected."""
+    client = TestClient(_app_with(db_session))
+
+    resp = client.post(
+        "/optional-write",
+        headers={"Authorization": "Bearer nope"},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"user_id": None}
 
 
 def test_last_used_at_is_stamped_on_authentication(db_session) -> None:
