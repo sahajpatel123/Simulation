@@ -128,6 +128,21 @@ def test_export_go_no_go_returns_json(
     )
 
 
+def test_export_go_no_go_metadata_uses_format_version_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api.v1 import projects as projects_mod
+
+    monkeypatch.setattr(projects_mod, "FORMAT_VERSION", "9")
+
+    json_response = _call_route(format="json", monkeypatch=monkeypatch)
+    parsed = json.loads(_body(json_response).decode("utf-8"))
+    assert parsed["metadata"]["format_version"] == "9"
+
+    csv_response = _call_route(monkeypatch=monkeypatch)
+    assert b"format_version,9" in _body(csv_response)
+
+
 def test_export_go_no_go_accepts_uppercase_format(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

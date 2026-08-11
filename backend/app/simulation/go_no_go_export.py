@@ -10,8 +10,11 @@ The CSV follows the same lightweight multi-section convention as the
 risk-register and launch-checklist exports: an optional metadata block, a
 one-row-per-key summary section, one row per pillar, one row per gate,
 strength/risk/action lists and a meta section. Missing optional fields
-render as blanks rather than crashing the export. The CSV starts with a
-UTF-8 BOM so Excel decodes non-Latin pillar summaries and actions
+render as blanks rather than crashing the export, and malformed legacy
+payloads (dict- or tuple-shaped pillar/gate collections, non-string list
+items) are normalised so summary counts always match the rows actually
+rendered and no Python reprs leak into spreadsheet cells. The CSV starts
+with a UTF-8 BOM so Excel decodes non-Latin pillar summaries and actions
 correctly; the JSON export emits UTF-8 with ``ensure_ascii=False`` and a
 trailing newline so the same text round-trips cleanly.
 """
@@ -115,11 +118,34 @@ def _evidence_text(raw: Any) -> str:
 
 
 def _list_rows(data: dict[str, Any], key: str) -> list[str]:
-    """Normalise a string list field to a list of non-empty strings."""
+    """Normalise a string list field to a list of non-empty strings.
+
+    Malformed items (dicts, nested lists, ``None``) are dropped rather
+    than stringified, so a corrupt legacy payload cannot leak Python
+    reprs into the spreadsheet.
+    """
     raw = data.get(key) or []
     if not isinstance(raw, (list, tuple)):
         raw = [raw]
-    return [str(item) for item in raw if item is not None and str(item) != ""]
+    return [
+        str(item)
+        for item in raw
+        if item is not None
+        and not isinstance(item, (dict, list))
+        and str(item) != ""
+    ]
+
+
+def _item_list(raw: Any) -> list[dict[str, Any]]:
+    """Normalise a pillar/gate collection to renderable dicts.
+
+    A malformed legacy payload (``None``, a string, or a dict instead of
+    a list) degrades to an empty list, and unrenderable entries are
+    dropped, so the summary counts always match the rows rendered.
+    """
+    if not isinstance(raw, (list, tuple)):
+        return []
+    return [item for item in (_as_dict(entry) for entry in raw) if item]
 
 
 def go_no_go_to_csv(
@@ -128,6 +154,8 @@ def go_no_go_to_csv(
 ) -> str:
     """Render a go/no-go payload as a multi-section CSV string."""
     data = _as_dict(payload)
+    pillars = _item_list(data.get("pillars"))
+    gates = _item_list(data.get("gates"))
     buffer = io.StringIO()
     writer = csv.writer(buffer, lineterminator="\n")
 
@@ -154,9 +182,9 @@ def go_no_go_to_csv(
     )
     for key in summary_keys:
         if key == "pillar_count":
-            value = len(data.get("pillars") or [])
+            value = len(pillars)
         elif key == "gate_count":
-            value = len(data.get("gates") or [])
+            value = len(gates)
         elif key == "strengths_count":
             value = len(_list_rows(data, "strengths"))
         elif key == "risks_count":
@@ -171,10 +199,7 @@ def go_no_go_to_csv(
     # Pillar scores.
     _write_row(writer, ["section", "Pillars"])
     _write_row(writer, list(PILLAR_CSV_HEADERS))
-    for raw_pillar in data.get("pillars") or []:
-        pillar = _as_dict(raw_pillar) if raw_pillar is not None else {}
-        if not pillar:
-            continue
+    for pillar in pillars:
         _write_row(
             writer,
             [
@@ -192,10 +217,7 @@ def go_no_go_to_csv(
     # Launch gates.
     _write_row(writer, ["section", "Launch Gates"])
     _write_row(writer, list(GATE_CSV_HEADERS))
-    for raw_gate in data.get("gates") or []:
-        gate = _as_dict(raw_gate) if raw_gate is not None else {}
-        if not gate:
-            continue
+    for gate in gates:
         _write_row(
             writer,
             [

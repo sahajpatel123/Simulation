@@ -200,6 +200,7 @@ from app.simulation.existing_product_export import (
 from app.simulation.findings_export import extract_findings
 from app.simulation.go_no_go import build_go_no_go
 from app.simulation.go_no_go_export import (
+    FORMAT_VERSION,
     go_no_go_to_csv,
     go_no_go_to_json,
 )
@@ -6152,7 +6153,7 @@ def export_go_no_go(
         "generated_at": datetime.now(UTC).isoformat(),
         "project_id": project_id,
         "user_id": current_user.id,
-        "format_version": "1",
+        "format_version": FORMAT_VERSION,
     }
 
     if fmt == "json":

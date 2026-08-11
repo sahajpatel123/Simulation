@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 
 from app.schemas.go_no_go import GoNoGoOut
@@ -174,6 +176,58 @@ def test_csv_skips_malformed_pillar_and_gate_rows() -> None:
     assert "junk" not in csv_text
     assert "readiness,Launch readiness,88,STRONG,0.2" in csv_text
     assert "readiness_gate,Launch readiness is strong enough,True,True" in csv_text
+
+
+def test_csv_counts_match_rendered_rows_when_items_are_malformed() -> None:
+    payload = _payload()
+    payload["pillars"] = [
+        None,
+        "junk",
+        payload["pillars"][0],
+        payload["pillars"][1],
+    ]
+    payload["gates"] = {"readiness_gate": payload["gates"][0]}
+
+    csv_text = go_no_go_to_csv(payload)
+
+    # Only renderable items are counted, so the summary never promises
+    # rows the sections do not actually contain.
+    assert "pillar_count,2" in csv_text
+    assert "gate_count,0" in csv_text
+    assert "junk" not in csv_text
+
+
+def test_csv_drops_non_string_list_items() -> None:
+    payload = _payload()
+    payload["strengths"] = [
+        "Readiness is strong",
+        {"key": "value"},
+        ["nested"],
+        None,
+    ]
+    payload["risks"] = ["Coverage is thin", 3]
+
+    csv_text = go_no_go_to_csv(payload)
+    rows = list(csv.reader(io.StringIO(csv_text.lstrip("\ufeff"))))
+
+    assert "strengths_count,1" in csv_text
+    assert "risks_count,2" in csv_text
+    assert "'key': 'value'" not in csv_text
+    assert "['nested']" not in csv_text
+
+    in_strengths = False
+    strength_cells: list[str] = []
+    for row in rows:
+        if row and row[0] == "section":
+            in_strengths = row[1] == "Strengths"
+            continue
+        if in_strengths:
+            if not row:
+                break
+            if row[0] == "strength":
+                continue
+            strength_cells.append(row[0])
+    assert strength_cells == ["Readiness is strong"]
 
 
 def test_csv_metadata_none_values_render_empty() -> None:
