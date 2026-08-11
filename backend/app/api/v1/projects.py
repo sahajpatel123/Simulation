@@ -79,6 +79,9 @@ from app.schemas.environment import (
 )
 from app.schemas.go_no_go import GoNoGoOut
 from app.schemas.intervention import Intervention, InterventionOut, InterventionRequest
+from app.schemas.prediction_range_coverage import (
+    PredictionRangeCoverageOut,
+)
 from app.schemas.premortem import FailureMode, PremortemOut, PremortemRequest
 from app.schemas.project import (
     ActivityFeedOut,
@@ -220,6 +223,9 @@ from app.simulation.outcome_tracker_export import outcome_tracker_count_to_csv
 from app.simulation.outcomes_export import outcome_count_to_csv
 from app.simulation.precis_export import precis_to_csv
 from app.simulation.precis_fingerprint_export import precis_fingerprint_to_csv
+from app.simulation.prediction_range_coverage import (
+    build_prediction_range_coverage,
+)
 from app.simulation.premortem_digest import build_premortem_digest
 from app.simulation.premortem_export import premortem_count_to_csv, premortem_to_csv
 from app.simulation.product_type import ProductType
@@ -229,6 +235,8 @@ from app.simulation.project_comparison import (
 )
 from app.simulation.project_comparison_export import (
     FORMAT_VERSION as PROJECT_COMPARISON_FORMAT_VERSION,
+)
+from app.simulation.project_comparison_export import (
     project_comparison_to_csv,
     project_comparison_to_json,
     project_comparison_to_markdown,
@@ -7082,6 +7090,70 @@ def get_project_simulation_quality(
         generated_at=datetime.now(UTC).isoformat(),
     )
     return ProjectSimulationQualityOut(**payload)
+
+
+@router.get(
+    "/{project_id}/prediction-range-coverage",
+    response_model=PredictionRangeCoverageOut,
+    summary=(
+        "Out-of-sample prediction-range coverage — how often the "
+        "accuracy-adjusted conversion band actually contained the "
+        "recorded outcome"
+    ),
+    # Read-only, bounded by the owned outcome set; cap polling the same way
+    # as the other per-project analytics reads.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_prediction_range_coverage(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PredictionRangeCoverageOut:
+    """Return the project's prediction-range coverage digest.
+
+    For every project outcome with a usable predicted + actual conversion,
+    the band is rebuilt out-of-sample from history available before that
+    outcome was recorded — using the same project-first / user-pool
+    calibration fallback as ``GET /simulations/{id}/prediction-range`` —
+    then checked against the recorded actual. The digest rolls these checks
+    into a coverage rate, mean miss margin, worst miss, verdict, narrative
+    and key signals.
+    """
+    get_owned_project(db, current_user.id, project_id)
+
+    owned_project_ids = [
+        row[0]
+        for row in db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+    outcome_rows = (
+        db.query(Outcome)
+        .filter(
+            Outcome.project_id.in_(owned_project_ids or [-1]),
+            Outcome.predicted_conversion_rate.isnot(None),
+            Outcome.actual_conversion_rate.isnot(None),
+        )
+        .order_by(Outcome.created_at.asc(), Outcome.id.asc())
+        .all()
+    )
+    rows = [
+        {
+            "id": outcome.id,
+            "project_id": outcome.project_id,
+            "simulation_id": outcome.simulation_id,
+            "predicted_conversion_rate": outcome.predicted_conversion_rate,
+            "actual_conversion_rate": outcome.actual_conversion_rate,
+            "created_at": outcome.created_at,
+        }
+        for outcome in outcome_rows
+    ]
+    payload = build_prediction_range_coverage(
+        project_id=project_id,
+        rows=rows,
+        generated_at=datetime.now(UTC).isoformat(),
+    )
+    return PredictionRangeCoverageOut(**payload)
 
 
 @router.get(
