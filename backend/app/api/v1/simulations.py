@@ -284,6 +284,10 @@ from app.simulation.launch_checklist_export import (
     launch_checklist_to_markdown,
 )
 from app.simulation.market_concentration import build_market_concentration
+from app.simulation.market_concentration_export import (
+    market_concentration_to_csv,
+    market_concentration_to_json,
+)
 from app.simulation.market_sizing import (
     DEFAULT_AVERAGE_ORDER_VALUE,
     DEFAULT_MARKET_SIZE,
@@ -5585,6 +5589,91 @@ def get_market_concentration(
         else None,
         cluster_summaries=summaries or None,
         cluster_registry=registry,
+    )
+
+
+@router.get(
+    "/{simulation_id}/market-concentration/export",
+    response_class=StreamingResponse,
+    summary="Export the demand-concentration read as CSV or JSON",
+    # Pure post-hoc composition of the completed simulation payload; cap
+    # polling so a stray dashboard loop can't drive repeated HHI recomputes.
+    dependencies=[Depends(rate_limit(limit=20, window_s=60))],
+)
+def export_market_concentration(
+    simulation_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the multi-section "
+            "spreadsheet; ``json`` returns the raw market-concentration "
+            "payload. Unsupported values return a 400 response."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Download the demand-concentration read for a completed simulation.
+
+    Reuses the exact composition path as
+    ``GET /simulations/{id}/market-concentration``, so the export can never
+    disagree with the dashboard. ``format=csv`` renders the HHI summary,
+    one row per cluster demand share, fragility flags and recommendations
+    with a UTF-8 BOM so Excel decodes non-Latin cluster names correctly;
+    ``format=json`` returns the raw concentration payload for machine
+    consumers.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unsupported export format {format!r}; expected 'csv' or 'json'",
+        )
+
+    concentration = get_market_concentration(
+        simulation_id=simulation_id,
+        db=db,
+        current_user=current_user,
+    )
+
+    metadata = {
+        "generated_at": datetime.now(tz=UTC).isoformat(),
+        "user_id": current_user.id,
+        "format_version": "1",
+        "simulation_id": simulation_id,
+        "project_id": concentration.project_id,
+    }
+
+    if fmt == "json":
+        body = market_concentration_to_json(
+            concentration,
+            metadata=metadata,
+        ).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="market-concentration-{simulation_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    body = market_concentration_to_csv(
+        concentration,
+        metadata=metadata,
+    ).encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="market-concentration-{simulation_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+        },
     )
 
 
