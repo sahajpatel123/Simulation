@@ -144,6 +144,35 @@ def test_export_risk_register_format_json_returns_payload(
     assert '"Price exceeds willingness to pay"' in body
 
 
+def test_export_risk_register_json_preserves_unicode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = _FakeProject(
+        10,
+        premortem_json={
+            "failure_modes": [
+                {
+                    "title": "⚠️ 高风险合规",
+                    "severity": "CRITICAL",
+                    "probability": 0.5,
+                    "impact": 0.9,
+                }
+            ]
+        },
+    )
+
+    resp = _call_route(
+        format="json",
+        session=_FakeSession(sim=None),
+        project=project,
+        monkeypatch=monkeypatch,
+    )
+    body = _body(resp).decode("utf-8")
+
+    assert "⚠️ 高风险合规" in body
+    assert "\\u26a0" not in body
+
+
 def test_export_risk_register_missing_project_raises_404(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

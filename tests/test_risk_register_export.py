@@ -176,6 +176,55 @@ def test_json_round_trips_payload() -> None:
     assert parsed["risk_register"]["key_signals"][0]["label"] == ("overall_risk_level")
 
 
+def test_json_preserves_unicode_and_ends_with_newline() -> None:
+    payload = _payload()
+    payload["risks"][0]["title"] = "⚠️ 高风险合规"
+
+    json_text = risk_register_to_json(payload)
+
+    assert json_text.endswith("\n")
+    assert "⚠️ 高风险合规" in json_text
+    parsed = json.loads(json_text)
+    assert parsed["risk_register"]["risks"][0]["title"] == "⚠️ 高风险合规"
+
+
+def test_csv_skips_malformed_risk_and_signal_rows() -> None:
+    payload = _payload()
+    payload["risks"] = [None, "junk", [], payload["risks"][0]]
+    payload["key_signals"] = [None, payload["key_signals"][0]]
+
+    csv_text = risk_register_to_csv(payload)
+
+    assert "junk" not in csv_text
+    assert "stress-1,STRESS_TEST,PRICING,Premium pricing kill shot" in csv_text
+    assert "overall_risk_level,HIGH,critical,Overall risk: high" in csv_text
+
+
+def test_csv_metadata_none_values_render_empty() -> None:
+    csv_text = risk_register_to_csv(
+        _payload(),
+        metadata={
+            "generated_at": None,
+            "project_id": 10,
+            "user_id": None,
+            "format_version": None,
+        },
+    )
+
+    assert "generated_at,\n" in csv_text
+    assert "user_id,\n" in csv_text
+    assert "format_version,\n" in csv_text
+
+
+def test_csv_guards_whitespace_prefixed_formula_in_risk_cell() -> None:
+    payload = _payload()
+    payload["risks"][1]["title"] = '  =HYPERLINK("http://evil")'
+
+    csv_text = risk_register_to_csv(payload)
+
+    assert "'  =HYPERLINK(" in csv_text
+
+
 def test_helper_accepts_pydantic_model() -> None:
     model = RiskRegisterOut(**_payload())
 

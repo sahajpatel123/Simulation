@@ -10,7 +10,10 @@ The CSV follows the same lightweight multi-section convention as the
 founder-action-plan and project-health exports: an optional metadata block,
 a one-row-per-key summary section, severity/source breakdown tables, one row
 per risk, and a key-signal table. Missing optional fields render as blanks
-rather than crashing the export.
+rather than crashing the export. The JSON export emits UTF-8 with
+``ensure_ascii=False`` and a trailing newline so non-Latin titles,
+descriptions, and emoji round-trip cleanly into spreadsheets and audit
+pipelines.
 """
 
 from __future__ import annotations
@@ -162,10 +165,10 @@ def risk_register_to_csv(
             _write_row(
                 writer,
                 [
-                    signal.get("label"),
-                    signal.get("value"),
-                    signal.get("severity"),
-                    signal.get("display"),
+                    _value(signal.get("label")),
+                    _value(signal.get("value")),
+                    _value(signal.get("severity")),
+                    _value(signal.get("display")),
                 ],
             )
     else:
@@ -183,7 +186,8 @@ def risk_register_to_json(
         {"metadata": metadata or {}, "risk_register": _as_dict(payload)},
         default=str,
         indent=2,
-    )
+        ensure_ascii=False,
+    ) + "\n"
 
 
 __all__ = [
