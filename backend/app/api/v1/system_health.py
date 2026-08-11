@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.core import llm_health as llm_health_module
 from app.core import query_health as query_health_module
 from app.core import response_cache as response_cache_module
+from app.core import simulation_health as simulation_health_module
 from app.core import worker_health as worker_health_module
 from app.core.cache_health import build_cache_health
 from app.core.deps import get_db
@@ -31,6 +32,7 @@ from app.schemas.system_health import (
     LLMHealthOut,
     QueryHealthOut,
     RequestHealthOut,
+    SimulationHealthOut,
     SystemHealthOut,
     WorkerHealthOut,
 )
@@ -287,5 +289,54 @@ def worker_health(
     return worker_health_module.build_worker_health(
         **snapshot,
         backlog_threshold=backlog_threshold,
+        generated_at=datetime.now(UTC).isoformat(),
+    )
+
+
+@router.get(
+    "/simulation-health",
+    summary=(
+        "Simulation pipeline health (completion rates, latency "
+        "percentiles, failure buckets)"
+    ),
+    responses=_JSON_200,
+    response_model=SimulationHealthOut,
+)
+def simulation_health(
+    db: Session = Depends(get_db),
+    window_days: int = Query(
+        default=simulation_health_module.DEFAULT_WINDOW_DAYS,
+        ge=1,
+        le=simulation_health_module.MAX_WINDOW_DAYS,
+        description=(
+            "Number of recent days of simulation history to include in "
+            "the digest."
+        ),
+    ),
+    recent_failures_limit: int = Query(
+        default=simulation_health_module.DEFAULT_RECENT_FAILURES_LIMIT,
+        ge=1,
+        le=simulation_health_module.MAX_RECENT_FAILURES_LIMIT,
+        description="Maximum number of recent failed runs to return.",
+    ),
+) -> dict[str, Any]:
+    """Return a digest of the simulation pipeline's recent performance.
+
+    Reads only the ``simulations`` table bounded by ``window_days`` (never
+    ``results_json``): per-status counts, completion and failure rates,
+    completion-latency percentiles, coarse failure buckets (timeout / LLM
+    API / database / infrastructure / other / missing message), the most
+    recent failures, a zero-filled daily trend, and a HEALTHY / WATCH /
+    DEGRADED / NO_DATA verdict. The digest is database-backed, so it
+    reflects every worker's writes rather than just this process's view.
+    """
+    snapshot = simulation_health_module.collect_simulation_snapshot(
+        db,
+        window_days=window_days,
+        recent_failures_limit=recent_failures_limit,
+    )
+    return simulation_health_module.build_simulation_health(
+        **snapshot,
+        window_days=window_days,
         generated_at=datetime.now(UTC).isoformat(),
     )

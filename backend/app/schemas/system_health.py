@@ -251,6 +251,72 @@ class WorkerHealthOut(BaseModel):
     queues: list[WorkerQueueHealth] = Field(default_factory=list)
 
 
+class SimulationLatencyStats(BaseModel):
+    """Completion-latency stats from ``/system/simulation-health``."""
+
+    count: int = Field(default=0, ge=0)
+    mean_ms: float | None = Field(default=None, ge=0.0)
+    p50_ms: float | None = Field(default=None, ge=0.0)
+    p95_ms: float | None = Field(default=None, ge=0.0)
+    p99_ms: float | None = Field(default=None, ge=0.0)
+    min_ms: float | None = Field(default=None, ge=0.0)
+    max_ms: float | None = Field(default=None, ge=0.0)
+
+
+class SimulationFailureBucket(BaseModel):
+    """One coarse failure bucket from ``/system/simulation-health``."""
+
+    bucket: str = ""
+    count: int = Field(default=0, ge=0)
+    latest_at: str | None = None
+    sample_error: str = ""
+
+
+class SimulationFailureOut(BaseModel):
+    """One recent failed simulation from ``/system/simulation-health``."""
+
+    simulation_id: int = Field(default=0, ge=0)
+    project_id: int = Field(default=0, ge=0)
+    created_at: str | None = None
+    error_message: str = ""
+
+
+class SimulationDailyTrendRow(BaseModel):
+    """One day's simulation activity from ``/system/simulation-health``."""
+
+    date: str = ""
+    created: int = Field(default=0, ge=0)
+    completed: int = Field(default=0, ge=0)
+    failed: int = Field(default=0, ge=0)
+
+
+class SimulationHealthOut(BaseModel):
+    """Response from ``GET /api/v1/system/simulation-health``.
+
+    A database-backed digest of the simulation pipeline: status counts,
+    completion/failure rates, completion-latency percentiles, coarse
+    failure buckets, recent failures, a zero-filled daily trend and a
+    HEALTHY / WATCH / DEGRADED / NO_DATA verdict.
+    """
+
+    generated_at: str = ""
+    window_days: int = Field(default=7, ge=1)
+    total_simulations: int = Field(default=0, ge=0)
+    status_breakdown: dict[str, int] = Field(default_factory=dict)
+    completed_count: int = Field(default=0, ge=0)
+    failed_count: int = Field(default=0, ge=0)
+    terminal_count: int = Field(default=0, ge=0)
+    completion_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    failure_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    latency: SimulationLatencyStats = Field(default_factory=SimulationLatencyStats)
+    failure_buckets: list[SimulationFailureBucket] = Field(default_factory=list)
+    recent_failures: list[SimulationFailureOut] = Field(default_factory=list)
+    daily_trend: list[SimulationDailyTrendRow] = Field(default_factory=list)
+    oldest_running_at: str | None = None
+    verdict: str = "NO_DATA"
+    reasons: list[str] = Field(default_factory=list)
+
+
 __all__ = [
     "CacheHealthOut",
     "CacheNamespaceStats",
@@ -262,6 +328,11 @@ __all__ = [
     "QueryKindStats",
     "RequestHealthOut",
     "RequestHealthRoute",
+    "SimulationDailyTrendRow",
+    "SimulationFailureBucket",
+    "SimulationFailureOut",
+    "SimulationHealthOut",
+    "SimulationLatencyStats",
     "SlowQueryOut",
     "SystemHealthCheck",
     "SystemHealthOut",
