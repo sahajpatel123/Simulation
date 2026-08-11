@@ -4570,7 +4570,10 @@ def get_simulation_results(
 
 @router.get(
     "/{simulation_id}/progress",
-    summary="Coarse percent progress while a simulation is running",
+    summary=(
+        "Live percent progress while a simulation is running, including "
+        "per-cluster updates during the conductor phase"
+    ),
     responses=_JSON_200,
 )
 def get_simulation_progress(

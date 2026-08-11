@@ -298,6 +298,24 @@ def _simulation_is_cancelled(db: Session, simulation_id: int) -> bool:
     return status == "CANCELLED"
 
 
+def _cluster_progress_pct(completed: int, total: int) -> int:
+    """Map completed/total clusters into the 25–89% band of a run.
+
+    The conductor phase is entered at 25% and the next persisted stage
+    ("Persisting results") owns 90%, so per-cluster updates stay inside
+    ``[25, 89]`` regardless of how many clusters a product type evaluates.
+    """
+    if total <= 0 or completed <= 0:
+        return 25
+    raw = 25 + int(64 * completed / total)
+    return max(25, min(89, raw))
+
+
+def _cluster_progress_stage(cluster_id: str, completed: int, total: int) -> str:
+    """Human-readable stage label for one completed cluster."""
+    return f"Simulating cluster {cluster_id} ({completed}/{total})"
+
+
 def _mark_cancelled(db: Session, sim: Simulation | None, simulation_id: int) -> None:
     """Persist a user-initiated cancellation and notify listeners.
 
@@ -676,6 +694,38 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         )
         active_stage = "conductor_run"
         t0 = time.perf_counter()
+
+        def _report_cluster_progress(
+            cluster_id: str,
+            completed: int,
+            total: int,
+        ) -> None:
+            pct = _cluster_progress_pct(completed, total)
+            stage = _cluster_progress_stage(cluster_id, completed, total)
+            self.update_state(
+                state="PROGRESS",
+                meta={
+                    "stage": stage,
+                    "pct": pct,
+                    "cluster_id": cluster_id,
+                    "clusters_completed": completed,
+                    "clusters_total": total,
+                },
+            )
+            sync_broadcast(
+                simulation_id,
+                "RUNNING",
+                stage,
+                pct,
+                0,
+                sim.consumer_volume,
+                extra={
+                    "cluster_id": cluster_id,
+                    "clusters_completed": completed,
+                    "clusters_total": total,
+                },
+            )
+
         conductor_result = conductor.run(
             agents=agents,
             env_params=env_params,
@@ -687,6 +737,7 @@ def run_full_simulation(self, simulation_id: int) -> dict:
             simulation=sim,
             user_id=project.user_id,
             cancel_check=lambda: _simulation_is_cancelled(self.db, simulation_id),
+            progress_callback=_report_cluster_progress,
         )
         wall_s = time.perf_counter() - t0
         stage_timings["conductor_run"] = wall_s

@@ -808,7 +808,15 @@ class Conductor:
         db: Any = None,
         simulation: Any | None = None,
         cancel_check: Callable[[], bool] | None = None,
+        progress_callback: Callable[[str, int, int], None] | None = None,
     ) -> ConductorResult:
+        """Run the full cluster × architect simulation.
+
+        ``progress_callback`` is advisory: after each cluster's architect
+        pass finishes it receives ``(cluster_id, completed, total)``, and a
+        callback that raises is logged and ignored so observability can
+        never break a simulation run.
+        """
         if product_type is None:
             desc = str(env_params.get("description", ""))
             product_type = self.detect_product_type(desc, assumptions)
@@ -846,11 +854,13 @@ class Conductor:
         diagnostics = ConductorDiagnostics()
         stats_by_name: dict[str, ArchitectDiagnostics] = {}
 
-        for cluster in all_clusters:
+        for cluster_index, cluster in enumerate(all_clusters):
             if cancel_check is not None and cancel_check():
                 raise SimulationCancelled(
                     f"Simulation cancelled before cluster {cluster.cluster_id}"
                 )
+            completed_clusters = cluster_index + 1
+            total_clusters = len(all_clusters)
             cluster_outputs: dict[str, ArchitectOutput] = {}
             _mutation_log: dict[str, float] = {}
             cluster_working = cluster
@@ -938,6 +948,20 @@ class Conductor:
                 if arch:
                     overrides_acc.update(arch.transition_overrides(output))
             per_cluster_matrices[cluster.cluster_id] = overrides_acc
+
+            if progress_callback is not None:
+                try:
+                    progress_callback(
+                        cluster.cluster_id,
+                        completed_clusters,
+                        total_clusters,
+                    )
+                except Exception:
+                    logger.warning(
+                        "Progress callback failed after cluster %s",
+                        cluster.cluster_id,
+                        exc_info=True,
+                    )
 
         pwc = sum(
             cluster_breakdown.get(c.cluster_id, 0.0) * cluster_weights.get(c.cluster_id, 0.0)
