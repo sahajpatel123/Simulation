@@ -265,6 +265,10 @@ def collect_worker_snapshot(
     active_queues = _probe_active_queues(inspect)
     broker = _probe_broker(broker_client)
 
+    active_by_queue = _task_counts_by_queue(active_tasks)
+    reserved_by_queue = _task_counts_by_queue(reserved_tasks)
+    scheduled_by_queue = _task_counts_by_queue(scheduled_tasks)
+
     queue_names: list[str] = []
     for queues in active_queues.values():
         for queue in queues:
@@ -273,18 +277,23 @@ def collect_worker_snapshot(
             name = str(queue.get("name") or "").strip()
             if name and name not in queue_names:
                 queue_names.append(name)
+    # ``active_queues`` is one of the more fragile control-command probes.
+    # When it fails, recover queue names from the routing keys of in-flight
+    # active / reserved / scheduled tasks so per-queue depth is still
+    # measured for the queues that actually have work.
+    task_queue_names: set[str] = set()
+    task_queue_names.update(active_by_queue)
+    task_queue_names.update(reserved_by_queue)
+    task_queue_names.update(scheduled_by_queue)
+    queue_names = sorted(set(queue_names) | task_queue_names)
     if not queue_names:
         queue_names = [DEFAULT_QUEUE]
-    queue_names.sort()
 
     depth_by_queue = _queue_depths(
         queue_names,
         broker["status"],
         broker_client,
     )
-    active_by_queue = _task_counts_by_queue(active_tasks)
-    reserved_by_queue = _task_counts_by_queue(reserved_tasks)
-    scheduled_by_queue = _task_counts_by_queue(scheduled_tasks)
 
     workers: list[dict[str, Any]] = []
     for hostname in worker_hostnames:

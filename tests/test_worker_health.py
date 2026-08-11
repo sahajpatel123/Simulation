@@ -258,6 +258,13 @@ class _BrokenInspect(_FakeInspect):
         return {}
 
 
+class _QueuesUnavailableInspect(_FakeInspect):
+    """Inspect that fails only the ``active_queues`` control command."""
+
+    def active_queues(self) -> dict[str, list[dict[str, str]]]:
+        raise RuntimeError("control command failed")
+
+
 class _FakeBroker:
     def __init__(self, depths: dict[str, int]) -> None:
         self.depths = depths
@@ -383,6 +390,36 @@ def test_collector_tolerates_failed_probes_and_missing_broker() -> None:
 
     payload = build_worker_health(**snapshot, generated_at="now")
     assert payload["verdict"] == VERDICT_NO_DATA
+    assert isinstance(WorkerHealthOut(**payload), WorkerHealthOut)
+
+
+def test_collector_recovers_queue_names_from_routing_keys_when_active_queues_fails() -> None:
+    workers = {
+        "celery@w": {
+            "stats": {"pool": {"max-concurrency": 2}},
+            "active": [
+                {
+                    "id": "t1",
+                    "name": "simulation.run",
+                    "delivery_info": {"routing_key": "simulation"},
+                }
+            ],
+            "reserved": [],
+            "scheduled": [],
+            "queues": [],
+        }
+    }
+
+    snapshot = collect_worker_snapshot(
+        inspect=_QueuesUnavailableInspect(workers),
+        broker_client=_FakeBroker({"simulation": 12}),
+    )
+
+    assert [q["name"] for q in snapshot["queues"]] == ["simulation"]
+    assert snapshot["queues"][0]["depth"] == 12
+    assert snapshot["queues"][0]["active_tasks"] == 1
+    payload = build_worker_health(**snapshot, generated_at="now")
+    assert payload["totals"]["queue_depth"] == 12
     assert isinstance(WorkerHealthOut(**payload), WorkerHealthOut)
 
 
