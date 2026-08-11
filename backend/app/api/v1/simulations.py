@@ -82,6 +82,7 @@ from app.schemas.architect_stack import ArchitectStackRegistryOut
 from app.schemas.assumption_cascade import AssumptionCascadeOut
 from app.schemas.assumption_postmortem import AssumptionPostmortemOut
 from app.schemas.buyer_personas import BuyerPersonasOut
+from app.schemas.calibration_transparency import CalibrationTransparencyOut
 from app.schemas.channel_attribution import ChannelAttributionOut
 from app.schemas.cluster_opportunity import ClusterOpportunityMatrixOut
 from app.schemas.cohort_retention import CohortRetentionOut
@@ -182,6 +183,11 @@ from app.simulation.calibration_health import (
     build_calibration_health,
 )
 from app.simulation.calibration_health_export import calibration_health_to_csv
+from app.simulation.calibration_transparency import (
+    DEFAULT_CORRECTIONS_LIMIT,
+    MAX_CORRECTIONS_LIMIT,
+    build_calibration_transparency,
+)
 from app.simulation.channel_attribution_read import build_channel_attribution
 from app.simulation.cluster_diff import build_cluster_diff
 from app.simulation.cluster_drill_down import (
@@ -4566,6 +4572,108 @@ def get_simulation_results(
         signal_quality=float(sim.signal_quality or 0.0),
         user_blindspots=user_blindspots,
     )
+
+
+@router.get(
+    "/{simulation_id}/calibration-transparency",
+    response_model=CalibrationTransparencyOut,
+    summary=(
+        "Per-simulation calibration transparency — which learned architect "
+        "corrections currently apply to this run's product type"
+    ),
+    responses=_JSON_200,
+    # One simulation read plus a bounded architect_corrections lookup for
+    # the run's product type; cap polling the same way the calibration
+    # health views are bounded.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_calibration_transparency(
+    simulation_id: int,
+    corrections_limit: int = Query(
+        default=DEFAULT_CORRECTIONS_LIMIT,
+        ge=1,
+        le=MAX_CORRECTIONS_LIMIT,
+        description=(
+            "Maximum number of strongest correction rows to return "
+            "(sorted by |scalar - 1| descending)."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CalibrationTransparencyOut:
+    """Show the learning layer's current influence on a completed run.
+
+    Uses the same ``architect_corrections`` table and selection logic the
+    Conductor loads at run time (product type filter, confidence gate,
+    exact-cluster vs ``ALL`` fallback), so the coverage shown here is what
+    a re-run of this product type would apply *today*. ``by_architect`` and
+    ``by_cluster`` roll up coverage across the deterministic architect
+    stack; ``corrections`` lists the strongest adjustments.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — calibration transparency "
+                "requires completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    product_type_name = str(
+        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
+    )
+    try:
+        product_type = ProductType(product_type_name)
+    except ValueError:
+        product_type = ProductType.SAAS
+    product_type_value = product_type.value
+
+    correction_rows = db.execute(
+        text("""
+            SELECT architect_name, product_type, product_attribute,
+                   cluster_id, correction_scalar, confidence_weight,
+                   effective_sample_count, scope
+            FROM architect_corrections
+            WHERE product_type = :pt
+            ORDER BY architect_name, cluster_id
+        """),
+        {"pt": product_type_value},
+    ).mappings().all()
+
+    diagnostics = (sim.results_json or {}).get("conductor_diagnostics") or {}
+    if not isinstance(diagnostics, dict):
+        diagnostics = {}
+    recorded = diagnostics.get("applied_corrections")
+    recorded_applied: int | None = (
+        int(recorded)
+        if isinstance(recorded, int)
+        and not isinstance(recorded, bool)
+        else None
+    )
+
+    payload = build_calibration_transparency(
+        [dict(row) for row in correction_rows],
+        product_type=product_type_value,
+        clusters=_registry.all_clusters(),
+        architect_names=ARCHITECT_STACKS.get(product_type, []),
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        corrections_limit=corrections_limit,
+    )
+    payload["recorded_applied_corrections"] = recorded_applied
+    return CalibrationTransparencyOut(**payload)
 
 
 @router.get(

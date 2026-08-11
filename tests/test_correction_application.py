@@ -14,6 +14,7 @@ from app.simulation.correction_application import (
     MIN_CORRECTION_SCALAR,
     Correction,
     apply_correction_to_output,
+    best_correction_for_architect_cluster,
     correction_for_output,
     index_corrections,
 )
@@ -227,6 +228,75 @@ def test_correction_for_output_prefers_exact_on_confidence_tie() -> None:
         correction_for_output(_output(), corrections).correction_scalar
         == 0.7
     )
+
+
+def test_best_correction_works_without_an_output_object() -> None:
+    corrections = {
+        ("PricingArchitect", "metro_power_professional"): Correction(
+            architect_name="PricingArchitect",
+            product_type="saas",
+            product_attribute="ALL",
+            cluster_id="metro_power_professional",
+            correction_scalar=0.9,
+            confidence_weight=0.8,
+        )
+    }
+
+    selected = best_correction_for_architect_cluster(
+        "PricingArchitect",
+        "metro_power_professional",
+        corrections,
+    )
+
+    assert selected is not None
+    assert selected.correction_scalar == 0.9
+    assert (
+        best_correction_for_architect_cluster(
+            "PricingArchitect",
+            "tier3_first_time_app_user",
+            corrections,
+        )
+        is None
+    )
+    assert (
+        best_correction_for_architect_cluster(
+            "PricingArchitect",
+            "metro_power_professional",
+            {},
+        )
+        is None
+    )
+
+
+def test_best_correction_matches_output_selection_for_global_fallback() -> None:
+    corrections = {
+        ("PricingArchitect", "ALL"): Correction(
+            architect_name="PricingArchitect",
+            product_type="saas",
+            product_attribute="ALL",
+            cluster_id="ALL",
+            correction_scalar=0.95,
+            confidence_weight=0.9,
+        ),
+        ("PricingArchitect", "metro_power_professional"): Correction(
+            architect_name="PricingArchitect",
+            product_type="saas",
+            product_attribute="ALL",
+            cluster_id="metro_power_professional",
+            correction_scalar=0.6,
+            confidence_weight=0.5,
+        ),
+    }
+
+    from_output = correction_for_output(_output(), corrections)
+    from_parts = best_correction_for_architect_cluster(
+        "PricingArchitect",
+        "metro_power_professional",
+        corrections,
+    )
+
+    assert from_output is from_parts
+    assert from_parts.correction_scalar == 0.95
 
 
 def test_apply_scales_only_probability_floats() -> None:

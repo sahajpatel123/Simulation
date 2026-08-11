@@ -165,10 +165,30 @@ def correction_for_output(
     confidence tie; otherwise the higher-confidence row wins (mirroring
     the original ``BaseArchitect._apply_correction`` SQL semantics).
     """
+    return best_correction_for_architect_cluster(
+        output.architect_name,
+        output.cluster_id,
+        corrections,
+    )
+
+
+def best_correction_for_architect_cluster(
+    architect_name: str,
+    cluster_id: str,
+    corrections: Mapping[tuple[str, str], Correction] | None,
+) -> Correction | None:
+    """Return the best correction for an architect + cluster, if any.
+
+    This is the selection logic behind :func:`correction_for_output`
+    without requiring an ``ArchitectOutput``, so read-only transparency
+    endpoints can answer "what would the Conductor apply here?" for
+    persisted runs. A cluster-specific row wins over the global ``ALL``
+    row on a confidence tie; otherwise the higher-confidence row wins.
+    """
     if not corrections:
         return None
-    exact = corrections.get((output.architect_name, output.cluster_id))
-    global_row = corrections.get((output.architect_name, CLUSTER_ALL))
+    exact = corrections.get((architect_name, cluster_id))
+    global_row = corrections.get((architect_name, CLUSTER_ALL))
     if exact is None:
         return global_row
     if global_row is None:
@@ -216,6 +236,7 @@ __all__ = [
     "MIN_CORRECTION_SCALAR",
     "Correction",
     "apply_correction_to_output",
+    "best_correction_for_architect_cluster",
     "correction_for_output",
     "index_corrections",
 ]
