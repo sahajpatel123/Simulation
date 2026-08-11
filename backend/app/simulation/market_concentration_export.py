@@ -62,6 +62,25 @@ def _safe_float(value: Any) -> float:
     return parsed if math.isfinite(parsed) else 0.0
 
 
+def _summary_value(value: Any) -> object:
+    """Render one summary cell while preserving the original value's type.
+
+    Integer identity/count fields (``simulation_id``, ``project_id``,
+    ``total_clusters``, ``clusters_with_demand``) stay integers so a
+    spreadsheet shows ``1`` instead of ``1.0``, while non-finite floats
+    are still sanitised to ``0.0`` and missing fields render as blanks.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return _safe_text(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return _safe_float(value)
+    return _safe_text(value)
+
+
 def _safe_csv_cell(value: object) -> object:
     """Neutralise spreadsheet formula injection while leaving data intact."""
     if isinstance(value, str):
@@ -151,10 +170,7 @@ def market_concentration_to_csv(
     _write_row(writer, ["section", "Demand Concentration Summary"])
     _write_row(writer, ["key", "value"])
     for key, value in _summary_dict(data).items():
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            _write_row(writer, [key, _safe_float(value)])
-        else:
-            _write_row(writer, [key, _safe_text(value)])
+        _write_row(writer, [key, _summary_value(value)])
     _write_row(writer, [])
 
     # Per-segment demand shares.

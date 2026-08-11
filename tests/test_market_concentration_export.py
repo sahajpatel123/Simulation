@@ -64,6 +64,30 @@ def test_csv_contains_metadata_and_summary() -> None:
     assert "effective_segments,4.0" in csv_text
 
 
+def test_csv_preserves_integer_summary_cells() -> None:
+    csv_text = market_concentration_to_csv(_uniform_payload())
+    rows = list(csv.reader(io.StringIO(csv_text.lstrip("\ufeff"))))
+
+    summary: dict[str, str] = {}
+    in_summary = False
+    for row in rows:
+        if len(row) >= 2 and row[0] == "section":
+            in_summary = row[1] == "Demand Concentration Summary"
+            continue
+        if in_summary and len(row) >= 2 and row[0] == "key":
+            continue
+        if in_summary and len(row) >= 2:
+            summary[row[0]] = row[1]
+
+    # Identity/count fields must stay integers, not float-looking "1.0".
+    assert summary["simulation_id"] == "1"
+    assert summary["project_id"] == "2"
+    assert summary["total_clusters"] == "4"
+    assert summary["clusters_with_demand"] == "4"
+    # Genuinely fractional fields keep their float form.
+    assert summary["effective_segments"] == "4.0"
+
+
 def test_csv_renders_one_row_per_segment_with_full_share_table() -> None:
     csv_text = market_concentration_to_csv(_uniform_payload())
 

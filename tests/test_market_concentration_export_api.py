@@ -143,6 +143,13 @@ def test_route_csv_body_is_utf8_bom_prefixed() -> None:
     assert int(response.headers["Content-Length"]) == len(body)
 
 
+def test_route_export_responses_are_not_cached() -> None:
+    for fmt in ("csv", "json"):
+        response = _call_route(format=fmt)
+        assert response.headers["Cache-Control"] == "no-store"
+        assert int(response.headers["Content-Length"]) == len(_body(response))
+
+
 def test_route_returns_json_export() -> None:
     response = _call_route(format="json")
 

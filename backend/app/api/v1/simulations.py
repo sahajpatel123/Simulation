@@ -5658,6 +5658,7 @@ def export_market_concentration(
                     f'attachment; filename="market-concentration-{simulation_id}.json"'
                 ),
                 "Content-Length": str(len(body)),
+                "Cache-Control": "no-store",
             },
         )
 
@@ -5673,6 +5674,7 @@ def export_market_concentration(
                 f'attachment; filename="market-concentration-{simulation_id}.csv"'
             ),
             "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
         },
     )
 
