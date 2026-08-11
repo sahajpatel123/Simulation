@@ -255,7 +255,9 @@ from app.simulation.journey_analytics import (
     summarise_journey_matrices,
 )
 from app.simulation.journey_analytics_export import (
-    FORMAT_VERSION,
+    FORMAT_VERSION as JOURNEY_ANALYTICS_FORMAT_VERSION,
+)
+from app.simulation.journey_analytics_export import (
     journey_analytics_to_csv,
     journey_analytics_to_json,
 )
@@ -315,7 +317,9 @@ from app.simulation.prediction_range import (
 from app.simulation.premortem_digest import build_premortem_digest
 from app.simulation.pricing_optimization import build_pricing_optimization
 from app.simulation.pricing_optimization_export import (
-    FORMAT_VERSION,
+    FORMAT_VERSION as PRICING_OPTIMIZATION_FORMAT_VERSION,
+)
+from app.simulation.pricing_optimization_export import (
     pricing_optimization_to_csv,
     pricing_optimization_to_json,
     pricing_optimization_to_markdown,
@@ -5960,7 +5964,7 @@ def export_pricing_optimization(
     metadata = {
         "generated_at": datetime.now(tz=UTC).isoformat(),
         "user_id": current_user.id,
-        "format_version": FORMAT_VERSION,
+        "format_version": PRICING_OPTIMIZATION_FORMAT_VERSION,
         "simulation_id": simulation_id,
         "project_id": payload.project_id,
     }
@@ -10080,7 +10084,7 @@ def export_simulation_journey_analytics(
         "user_id": current_user.id,
         "simulation_id": sim.id,
         "project_id": sim.project_id,
-        "format_version": FORMAT_VERSION,
+        "format_version": JOURNEY_ANALYTICS_FORMAT_VERSION,
     }
 
     if fmt == "json":

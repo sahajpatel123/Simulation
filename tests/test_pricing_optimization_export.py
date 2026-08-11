@@ -409,7 +409,7 @@ def test_export_route_metadata_uses_format_version_contract(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sim_mod = _import_simulations_module()
-    monkeypatch.setattr(sim_mod, "FORMAT_VERSION", "9")
+    monkeypatch.setattr(sim_mod, "PRICING_OPTIMIZATION_FORMAT_VERSION", "9")
 
     resp = _call_route(monkeypatch, format="json")
     body = _body(resp).decode("utf-8")
