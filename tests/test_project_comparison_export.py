@@ -71,6 +71,15 @@ def _rows(csv_text: str) -> list[list[str]]:
     return list(csv.reader(io.StringIO(csv_text)))
 
 
+def _strict_json_loads(text: str) -> Any:
+    """Parse JSON, rejecting the non-standard NaN/Infinity tokens."""
+
+    def _reject_constant(token: str) -> None:
+        raise AssertionError(f"non-finite JSON token emitted: {token}")
+
+    return json.loads(text, parse_constant=_reject_constant)
+
+
 # ---------------------------------------------------------------------------
 # CSV
 # ---------------------------------------------------------------------------
@@ -134,6 +143,22 @@ def test_csv_handles_malformed_rows_without_raising() -> None:
     assert "label,value,severity,display" in csv_text
 
 
+def test_csv_sanitises_nested_non_finite_values() -> None:
+    comparison = _comparison()
+    comparison.dimensions[0].a = {"score": float("nan")}
+    comparison.dimensions[0].b = {"score": float("inf")}
+
+    csv_text = project_comparison_to_csv(comparison, metadata=_METADATA)
+
+    assert "NaN" not in csv_text
+    assert "Infinity" not in csv_text
+    assert any(
+        cell == '{"score":null}'
+        for row in _rows(csv_text)
+        for cell in row
+    )
+
+
 # ---------------------------------------------------------------------------
 # JSON
 # ---------------------------------------------------------------------------
@@ -150,6 +175,63 @@ def test_json_envelope_includes_metadata_and_payload() -> None:
     assert len(comp["projects"]) == 2
     assert len(comp["dimensions"]) == 10
     assert comp["projects"][0]["title"] == "Project 1"
+
+
+def test_json_export_sanitises_nested_non_finite_values() -> None:
+    comparison = _comparison()
+    comparison.dimensions[0].a = float("nan")
+    comparison.dimensions[0].b = float("inf")
+    comparison.dimensions[1].a = {
+        "PricingArchitect": float("inf"),
+        "TrustArchitect": 0.48,
+    }
+    comparison.dimensions[1].b = {"PricingArchitect": float("nan")}
+
+    text = project_comparison_to_json(
+        comparison,
+        metadata={**_METADATA, "generated_at": float("nan")},
+    )
+
+    assert "NaN" not in text
+    assert "Infinity" not in text
+    parsed = _strict_json_loads(text)
+    dims = parsed["project_comparison"]["dimensions"]
+    assert dims[0]["a"] is None
+    assert dims[0]["b"] is None
+    assert dims[1]["a"] == {
+        "PricingArchitect": None,
+        "TrustArchitect": 0.48,
+    }
+    assert dims[1]["b"] == {"PricingArchitect": None}
+    assert parsed["metadata"]["generated_at"] is None
+
+
+def test_json_export_strict_for_direct_payload() -> None:
+    text = project_comparison_to_json(
+        {
+            "comparison_id": "abc123",
+            "generated_at": "2026-08-12T00:00:00Z",
+            "summary": {},
+            "projects": [],
+            "dimensions": [
+                {
+                    "dimension": "nested",
+                    "label": "Nested",
+                    "higher_is_better": True,
+                    "a": {"score": float("nan")},
+                    "b": [float("inf")],
+                    "winner": "TIE",
+                    "display_a": "",
+                    "display_b": "",
+                }
+            ],
+        }
+    )
+
+    parsed = _strict_json_loads(text)
+    dim = parsed["project_comparison"]["dimensions"][0]
+    assert dim["a"] == {"score": None}
+    assert dim["b"] == [None]
 
 
 # ---------------------------------------------------------------------------

@@ -84,6 +84,22 @@ def _safe_csv_cell(value: object) -> object:
     return value
 
 
+def _json_safe(value: Any) -> Any:
+    """Recursively coerce a JSON-like value for strict JSON serialization.
+
+    Non-finite floats (``NaN``/``±Infinity``) are not valid JSON tokens and
+    cannot be persisted by PostgreSQL jsonb; render them as ``null`` instead
+    of emitting tokens that strict BI parsers reject.
+    """
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return value
+
+
 def _write_row(writer: Any, row: list[object]) -> None:
     writer.writerow([_safe_csv_cell(value) for value in row])
 
@@ -134,7 +150,17 @@ def _key_signals(data: dict[str, Any]) -> list[dict[str, Any]]:
 def _csv_scalar(value: Any) -> object:
     """Render a nested value as a CSV-safe scalar."""
     if isinstance(value, (dict, list)):
-        return json.dumps(value, default=str)
+        try:
+            return json.dumps(
+                _json_safe(value),
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                default=str,
+                allow_nan=False,
+            )
+        except (TypeError, ValueError):
+            return _safe_text(value)
     return value
 
 
@@ -271,12 +297,14 @@ def project_comparison_to_json(
     """Render a project-comparison payload as an indented JSON document."""
     return json.dumps(
         {
-            "metadata": metadata or {},
-            "project_comparison": _as_dict(payload),
+            "metadata": _json_safe(metadata or {}),
+            "project_comparison": _json_safe(_as_dict(payload)),
         },
         default=str,
+        ensure_ascii=False,
         indent=2,
-    )
+        allow_nan=False,
+    ) + "\n"
 
 
 def _escape_md_cell(value: Any) -> str:
