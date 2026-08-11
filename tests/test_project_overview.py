@@ -2,7 +2,7 @@
 
 Covers the pure composition builder in ``app.simulation.project_overview``
 (verdict rollups, panel normalisation, headline/narrative composition) and
-the route contract that wires the eight existing per-project digests into it.
+the route contract that wires the ten existing per-project digests into it.
 These run without a live database, Redis or Celery worker.
 """
 
@@ -52,6 +52,8 @@ def _panels(
     *,
     status: str = "ok",
     latest: str = "ok",
+    simulation_quality: str = "ok",
+    prediction_range: str = "ok",
     confidence: str = "ok",
     next_action: str = "ok",
     stale: str = "ok",
@@ -63,6 +65,14 @@ def _panels(
         "status_banner": _panel(severity=status, narrative="Project status ok"),
         "latest_snapshot": _panel(
             severity=latest, narrative="Latest activity ok"
+        ),
+        "simulation_quality": _panel(
+            severity=simulation_quality,
+            narrative="Simulation quality is healthy",
+        ),
+        "prediction_range": _panel(
+            severity=prediction_range,
+            narrative="Prediction range is calibrated",
         ),
         "confidence_explainer": _panel(
             severity=confidence, narrative="Confidence ok"
@@ -286,6 +296,90 @@ def test_panel_summaries_and_headlines() -> None:
     }
 
 
+def test_trust_panels_summaries_and_headlines() -> None:
+    panels = _panels()
+    panels["simulation_quality"] = {
+        "overall_verdict": "REVIEW",
+        "mean_trust_score": 0.72,
+        "pass_count": 1,
+        "review_count": 2,
+        "fail_count": 1,
+        "evaluated_runs": 4,
+    }
+    panels["prediction_range"] = {
+        "simulation_id": 12,
+        "predicted_conversion_rate": 0.04,
+        "low": 0.02,
+        "high": 0.06,
+        "confidence_label": "WELL_CALIBRATED",
+        "calibration_sample_count": 8,
+    }
+    payload = _build(panels=panels)
+    by_key = {row["key"]: row for row in payload["subsystems"]}
+
+    assert by_key["simulation_quality"]["summary"] == (
+        "4 run(s), mean trust 72% (REVIEW)"
+    )
+    assert by_key["simulation_quality"]["headline"] == {
+        "overall_verdict": "REVIEW",
+        "mean_trust_score": 0.72,
+        "pass_count": 1,
+        "review_count": 2,
+        "fail_count": 1,
+    }
+    assert by_key["prediction_range"]["summary"] == (
+        "Realistic range 2.0%–6.0% (WELL_CALIBRATED)"
+    )
+    assert by_key["prediction_range"]["headline"] == {
+        "simulation_id": 12,
+        "predicted_conversion_rate": 0.04,
+        "low": 0.02,
+        "high": 0.06,
+        "confidence_label": "WELL_CALIBRATED",
+        "calibration_sample_count": 8,
+    }
+
+
+def test_trust_panel_verdict_field_fallbacks() -> None:
+    panels = _panels()
+    panels["simulation_quality"] = {
+        "key_signals": [],
+        "overall_verdict": "FAIL",
+    }
+    panels["prediction_range"] = {
+        "key_signals": [],
+        "confidence_label": "POORLY_CALIBRATED",
+    }
+    payload = _build(panels=panels)
+    by_key = {row["key"]: row for row in payload["subsystems"]}
+
+    assert by_key["simulation_quality"]["verdict"] == VERDICT_CRITICAL
+    assert by_key["prediction_range"]["verdict"] == VERDICT_CRITICAL
+    assert payload["overall_verdict"] == VERDICT_CRITICAL
+    assert sorted(payload["unhealthy_components"]) == [
+        "prediction_range",
+        "simulation_quality",
+    ]
+
+
+def test_insufficient_trust_panels_mark_watch() -> None:
+    panels = _panels()
+    panels["simulation_quality"] = {
+        "key_signals": [],
+        "overall_verdict": "INSUFFICIENT_DATA",
+    }
+    panels["prediction_range"] = {
+        "key_signals": [],
+        "confidence_label": "INSUFFICIENT_DATA",
+    }
+    payload = _build(panels=panels)
+    by_key = {row["key"]: row for row in payload["subsystems"]}
+
+    assert by_key["simulation_quality"]["verdict"] == VERDICT_WATCH
+    assert by_key["prediction_range"]["verdict"] == VERDICT_WATCH
+    assert payload["overall_verdict"] == VERDICT_WATCH
+
+
 def test_unknown_panel_keys_are_ignored() -> None:
     panels = _panels()
     panels["mystery_digest"] = _panel(severity="critical")
@@ -346,6 +440,8 @@ def test_health_verdict_field_fallback() -> None:
 _LOADER_ATTRS: dict[str, str] = {
     "status_banner": "get_status_banner",
     "latest_snapshot": "get_latest_snapshot",
+    "simulation_quality": "get_project_simulation_quality",
+    "prediction_range": "_latest_prediction_range_loader",
     "confidence_explainer": "get_confidence_explainer",
     "next_action": "get_next_action",
     "stale_check": "get_stale_check",
@@ -353,6 +449,22 @@ _LOADER_ATTRS: dict[str, str] = {
     "health": "get_project_health",
     "outcomes_digest": "get_outcomes_digest",
 }
+
+
+class _FakeQuery:
+    """Minimal query-chain double for the latest-simulation loader."""
+
+    def __init__(self, result: Any) -> None:
+        self._result = result
+
+    def filter(self, *args: Any, **kwargs: Any) -> _FakeQuery:
+        return self
+
+    def order_by(self, *args: Any, **kwargs: Any) -> _FakeQuery:
+        return self
+
+    def first(self) -> Any:
+        return self._result
 
 
 def _fake_model(payload: dict[str, Any]) -> Any:
@@ -363,6 +475,53 @@ def _fake_model(payload: dict[str, Any]) -> Any:
 
 def _fake_panels() -> dict[str, dict[str, Any]]:
     return _panels()
+
+
+def test_latest_prediction_range_loader_uses_latest_completed_sim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_ids: list[int] = []
+
+    def fake_get_prediction_range(
+        simulation_id: int,
+        db: Any,
+        current_user: Any,
+    ) -> Any:
+        captured_ids.append(simulation_id)
+        return _fake_model({"simulation_id": simulation_id})
+
+    monkeypatch.setattr(
+        project_overview_module,
+        "get_prediction_range",
+        fake_get_prediction_range,
+    )
+    fake_sim = types.SimpleNamespace(id=99)
+    db = types.SimpleNamespace(
+        query=lambda *args: _FakeQuery(fake_sim),
+    )
+
+    result = project_overview_module._latest_prediction_range_loader(
+        project_id=1,
+        db=db,
+        current_user=types.SimpleNamespace(id=7),
+    )
+
+    assert captured_ids == [99]
+    assert result.model_dump() == {"simulation_id": 99}
+
+
+def test_latest_prediction_range_loader_returns_none_without_sim() -> None:
+    db = types.SimpleNamespace(
+        query=lambda *args: _FakeQuery(None),
+    )
+
+    result = project_overview_module._latest_prediction_range_loader(
+        project_id=1,
+        db=db,
+        current_user=types.SimpleNamespace(id=7),
+    )
+
+    assert result is None
 
 
 def test_project_overview_route_composes_all_panels(
@@ -451,6 +610,57 @@ def test_project_overview_route_cache_hit_skips_loaders(
     )
 
     assert payload.overall_verdict == VERDICT_WATCH
+    assert isinstance(payload, ProjectOverviewOut)
+
+
+def test_project_overview_route_accepts_none_panel_loader(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_panels = _fake_panels()
+    loaders = {
+        key: _fake_model(payload)
+        for key, payload in fake_panels.items()
+    }
+    monkeypatch.setattr(
+        project_overview_module,
+        "get_owned_project",
+        lambda db, user_id, project_id: None,
+    )
+    monkeypatch.setattr(
+        project_overview_module,
+        "cache_get_json",
+        lambda **kwargs: None,
+    )
+    monkeypatch.setattr(
+        project_overview_module,
+        "cache_set_json",
+        lambda **kwargs: None,
+    )
+    for key, model in loaders.items():
+        monkeypatch.setattr(
+            project_overview_module,
+            _LOADER_ATTRS[key],
+            lambda project_id, db, current_user, _model=model: _model,
+        )
+    monkeypatch.setattr(
+        project_overview_module,
+        "_latest_prediction_range_loader",
+        lambda project_id, db, current_user: None,
+    )
+
+    payload = project_overview_module.get_project_overview(
+        project_id=1,
+        db=object(),
+        current_user=types.SimpleNamespace(id=7),
+    )
+
+    assert payload.panels["prediction_range"] is None
+    prediction_row = next(
+        row for row in payload.subsystems if row.key == "prediction_range"
+    )
+    assert prediction_row.summary == "Not available"
+    assert prediction_row.verdict == VERDICT_HEALTHY
+    assert payload.overall_verdict == VERDICT_HEALTHY
     assert isinstance(payload, ProjectOverviewOut)
 
 

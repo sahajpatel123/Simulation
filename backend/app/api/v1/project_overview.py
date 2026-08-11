@@ -1,9 +1,9 @@
 """One-call per-project overview endpoint.
 
-Composes the eight existing per-project digest endpoints into a single
+Composes the ten existing per-project digest endpoints into a single
 dashboard payload, mirroring how ``/api/v1/system/overview`` composes the
 subsystem health digests. A dashboard can render the project header with one
-request instead of eight, and the overview-level cache absorbs polling while
+request instead of ten, and the overview-level cache absorbs polling while
 each panel keeps its own 60s cache for the individual endpoints.
 """
 
@@ -24,12 +24,15 @@ from app.api.v1.projects import (
     get_latest_snapshot,
     get_next_action,
     get_project_health,
+    get_project_simulation_quality,
     get_stale_check,
     get_status_banner,
 )
+from app.api.v1.simulations import get_prediction_range
 from app.core.deps import get_current_user, get_db
 from app.core.rate_limiter import rate_limit
 from app.core.response_cache import cache_get_json, cache_set_json
+from app.models.simulation import Simulation
 from app.models.user import User
 from app.schemas.project_overview import ProjectOverviewOut
 from app.simulation.project_overview import build_project_overview
@@ -41,6 +44,35 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 _PROJECT_OVERVIEW_CACHE_NAMESPACE: str = "project-overview"
 _PROJECT_OVERVIEW_CACHE_TTL_S: int = 60
 
+
+def _latest_prediction_range_loader(
+    project_id: int,
+    db: Session,
+    current_user: User,
+) -> Any:
+    """Load the project's latest completed-run prediction range, if any.
+
+    The prediction-range endpoint is per-simulation, while every other
+    overview panel is per-project. This loader resolves the project's newest
+    completed run (with persisted results) and delegates to the same route
+    function the per-simulation endpoint uses, so the overview panel cannot
+    drift from the standalone digest.
+    """
+    latest = (
+        db.query(Simulation)
+        .filter(
+            Simulation.project_id == project_id,
+            Simulation.status == "COMPLETED",
+            Simulation.results_json.isnot(None),
+        )
+        .order_by(Simulation.created_at.desc(), Simulation.id.desc())
+        .first()
+    )
+    if latest is None:
+        return None
+    return get_prediction_range(latest.id, db, current_user)
+
+
 # Canonical (panel key, loader attribute name) pairs in dashboard display
 # order. Each loader is an existing route function with the same signature,
 # resolved at call time so the overview always reflects exactly what the
@@ -48,6 +80,8 @@ _PROJECT_OVERVIEW_CACHE_TTL_S: int = 60
 _PANEL_LOADER_NAMES: tuple[tuple[str, str], ...] = (
     ("status_banner", get_status_banner.__name__),
     ("latest_snapshot", get_latest_snapshot.__name__),
+    ("simulation_quality", get_project_simulation_quality.__name__),
+    ("prediction_range", _latest_prediction_range_loader.__name__),
     ("confidence_explainer", get_confidence_explainer.__name__),
     ("next_action", get_next_action.__name__),
     ("stale_check", get_stale_check.__name__),
@@ -62,11 +96,11 @@ _PANEL_LOADER_NAMES: tuple[tuple[str, str], ...] = (
     response_model=ProjectOverviewOut,
     summary=(
         "One-call per-project dashboard digest - composes status banner, "
-        "latest snapshot, confidence explainer, next action, stale check, "
-        "convergence, health and outcome accuracy into a single payload "
-        "with an overall verdict"
+        "latest snapshot, simulation quality, prediction range, confidence "
+        "explainer, next action, stale check, convergence, health and "
+        "outcome accuracy into a single payload with an overall verdict"
     ),
-    # Composes eight bounded read-only digests, so cap polling the way the
+    # Composes ten bounded read-only digests, so cap polling the way the
     # other lightweight project endpoints are capped.
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
@@ -99,11 +133,14 @@ def get_project_overview(
             continue
         try:
             model = loader(project_id, db, current_user)
-            panels[key] = (
-                model.model_dump()
-                if hasattr(model, "model_dump")
-                else dict(model)
-            )
+            if model is None:
+                panels[key] = None
+            else:
+                panels[key] = (
+                    model.model_dump()
+                    if hasattr(model, "model_dump")
+                    else dict(model)
+                )
         except Exception as exc:  # noqa: BLE001 - fail open per panel
             logger.warning(
                 "project overview: %s panel failed for project %s: %s",

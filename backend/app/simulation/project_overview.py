@@ -1,10 +1,10 @@
 """Pure composition helper for the one-call per-project overview.
 
-Each per-project digest endpoint (status banner, latest snapshot, confidence
-explainer, next action, stale check, convergence, health, outcomes digest)
-already exists as its own API route. This module composes them into a single
-lightweight dashboard payload so the frontend can render the project header
-with one request instead of eight.
+Each per-project digest endpoint (status banner, latest snapshot, simulation
+quality, prediction range, confidence explainer, next action, stale check,
+convergence, health, outcomes digest) already exists as its own API route.
+This module composes them into a single lightweight dashboard payload so the
+frontend can render the project header with one request instead of ten.
 
 Every digest exposes ``key_signals`` with a ``severity`` bucket (``ok`` /
 ``watch`` / ``critical``). The overview normalises each panel into a
@@ -46,6 +46,8 @@ _SEVERITY_RANK: dict[str, int] = {
 PANEL_ORDER: tuple[str, ...] = (
     "status_banner",
     "latest_snapshot",
+    "simulation_quality",
+    "prediction_range",
     "confidence_explainer",
     "next_action",
     "stale_check",
@@ -57,6 +59,8 @@ PANEL_ORDER: tuple[str, ...] = (
 PANEL_LABELS: dict[str, str] = {
     "status_banner": "Project status",
     "latest_snapshot": "Latest activity",
+    "simulation_quality": "Simulation quality",
+    "prediction_range": "Prediction range",
     "confidence_explainer": "Prediction confidence",
     "next_action": "Next action",
     "stale_check": "Data freshness",
@@ -159,6 +163,24 @@ def _panel_severity(key: str, panel: dict[str, Any] | None) -> str:
             return SIGNAL_WATCH
         if verdict == "CONVERGED":
             return SIGNAL_OK
+    if key == "simulation_quality":
+        overall_verdict = str(
+            panel.get("overall_verdict") or ""
+        ).upper()
+        if overall_verdict == "FAIL":
+            return SIGNAL_CRITICAL
+        if overall_verdict in {"REVIEW", "INSUFFICIENT_DATA"}:
+            return SIGNAL_WATCH
+        if overall_verdict == "PASS":
+            return SIGNAL_OK
+    if key == "prediction_range":
+        label = str(panel.get("confidence_label") or "").upper()
+        if label == "POORLY_CALIBRATED":
+            return SIGNAL_CRITICAL
+        if label in {"NEEDS_ATTENTION", "INSUFFICIENT_DATA"}:
+            return SIGNAL_WATCH
+        if label == "WELL_CALIBRATED":
+            return SIGNAL_OK
 
     return SIGNAL_OK
 
@@ -202,6 +224,27 @@ def _panel_summary(key: str, panel: dict[str, Any] | None) -> str:
             if score is not None
             else "No confidence score"
         )
+    if key == "simulation_quality":
+        verdict = _safe_str(
+            panel.get("overall_verdict"),
+            "INSUFFICIENT_DATA",
+        )
+        score = _safe_float(panel.get("mean_trust_score"))
+        evaluated = _safe_int(panel.get("evaluated_runs"))
+        if score is not None:
+            return f"{evaluated} run(s), mean trust {score:.0%} ({verdict})"
+        return f"Simulation quality: {verdict}"
+    if key == "prediction_range":
+        low = _safe_float(panel.get("low"))
+        high = _safe_float(panel.get("high"))
+        if low is not None and high is not None:
+            label = _safe_str(
+                panel.get("confidence_label"),
+                "INSUFFICIENT_DATA",
+            )
+            return f"Realistic range {low:.1%}–{high:.1%} ({label})"
+        narrative = _safe_str(panel.get("narrative"))
+        return narrative or "No prediction range yet"
 
     return "No data"
 
@@ -246,6 +289,35 @@ def _panel_headline(key: str, panel: dict[str, Any] | None) -> dict[str, Any]:
             "mean_pcr": _safe_float(panel.get("mean_pcr")),
             "cv": _safe_float(panel.get("cv")),
             "verdict": _safe_str(panel.get("verdict")),
+        }
+    if key == "simulation_quality":
+        return {
+            "overall_verdict": _safe_str(
+                panel.get("overall_verdict"),
+                "INSUFFICIENT_DATA",
+            ),
+            "mean_trust_score": _safe_float(
+                panel.get("mean_trust_score")
+            ),
+            "pass_count": _safe_int(panel.get("pass_count")),
+            "review_count": _safe_int(panel.get("review_count")),
+            "fail_count": _safe_int(panel.get("fail_count")),
+        }
+    if key == "prediction_range":
+        return {
+            "simulation_id": _safe_int(panel.get("simulation_id")),
+            "predicted_conversion_rate": _safe_float(
+                panel.get("predicted_conversion_rate")
+            ),
+            "low": _safe_float(panel.get("low")),
+            "high": _safe_float(panel.get("high")),
+            "confidence_label": _safe_str(
+                panel.get("confidence_label"),
+                "INSUFFICIENT_DATA",
+            ),
+            "calibration_sample_count": _safe_int(
+                panel.get("calibration_sample_count")
+            ),
         }
     if key == "health":
         return {

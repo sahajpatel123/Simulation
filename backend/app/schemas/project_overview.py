@@ -1,9 +1,10 @@
 """Pydantic schemas for the one-call per-project overview digest.
 
-``GET /api/v1/projects/{project_id}/overview`` composes the eight existing
-per-project digests (status banner, latest snapshot, confidence explainer,
-next action, stale check, convergence, health, outcomes digest) into a single
-dashboard payload with an overall verdict.
+``GET /api/v1/projects/{project_id}/overview`` composes the ten existing
+per-project digests (status banner, latest snapshot, simulation quality,
+prediction range, confidence explainer, next action, stale check,
+convergence, health, outcomes digest) into a single dashboard payload with
+an overall verdict.
 """
 
 from __future__ import annotations
