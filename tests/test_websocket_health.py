@@ -20,6 +20,7 @@ if "razorpay" not in sys.modules:
     _razorpay_stub.Client = object  # type: ignore[attr-defined]
     sys.modules["razorpay"] = _razorpay_stub
 
+from app.core.metrics import metrics  # noqa: E402
 from app.core.system_overview import build_system_overview  # noqa: E402
 from app.core.websocket_health import (  # noqa: E402
     MODE_IN_PROCESS_FALLBACK,
@@ -30,8 +31,27 @@ from app.core.websocket_health import (  # noqa: E402
     VERDICT_UNCONFIGURED,
     VERDICT_WATCH,
     build_websocket_health,
+    record_websocket_gauges,
 )
 from app.schemas.system_health import WebsocketHealthOut  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def reset_registry() -> None:
+    """Each test starts from an empty metrics registry."""
+    with metrics._lock:
+        metrics._counters.clear()
+        metrics._gauges.clear()
+        metrics._histograms.clear()
+    yield
+
+
+def _gauge(name: str) -> float | None:
+    for (metric_name, _labels), value in metrics.snapshot()["gauges"].items():
+        if metric_name == name:
+            return float(value)
+    return None
+
 
 # ---------------------------------------------------------------------------
 # Pure builder: verdict matrix
@@ -170,6 +190,65 @@ def test_builder_defensively_sanitises_inputs() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Prometheus gauge mirror
+# ---------------------------------------------------------------------------
+
+
+def test_record_gauges_healthy_digest() -> None:
+    payload = build_websocket_health(
+        redis_configured=True,
+        redis_reachable=True,
+        bridge_running=True,
+        connection_count=2,
+        connected_simulation_ids=[7, 8],
+    )
+
+    record_websocket_gauges(payload)
+
+    assert _gauge("thecee_websocket_connections") == 2.0
+    assert _gauge("thecee_websocket_bridge_running") == 1.0
+    assert _gauge("thecee_websocket_redis_configured") == 1.0
+    assert _gauge("thecee_websocket_redis_reachable") == 1.0
+    assert _gauge("thecee_websocket_unhealthy") == 0.0
+    assert _gauge("thecee_websocket_last_publish_failure_age_seconds") is None
+
+
+def test_record_gauges_degraded_digest() -> None:
+    payload = build_websocket_health(
+        redis_configured=True,
+        redis_reachable=False,
+        bridge_running=True,
+        connection_count=1,
+        last_publish_failure_age_seconds=4.0,
+    )
+
+    record_websocket_gauges(payload)
+
+    assert _gauge("thecee_websocket_redis_reachable") == 0.0
+    assert _gauge("thecee_websocket_unhealthy") == 1.0
+    assert (
+        _gauge("thecee_websocket_last_publish_failure_age_seconds") == 4.0
+    )
+
+
+def test_record_gauges_unconfigured_leaves_absences_unset() -> None:
+    payload = build_websocket_health(
+        redis_configured=False,
+        bridge_running=False,
+        connection_count=0,
+    )
+
+    record_websocket_gauges(payload)
+
+    assert _gauge("thecee_websocket_connections") == 0.0
+    assert _gauge("thecee_websocket_bridge_running") == 0.0
+    assert _gauge("thecee_websocket_redis_configured") == 0.0
+    assert _gauge("thecee_websocket_unhealthy") == 0.0
+    assert _gauge("thecee_websocket_redis_reachable") is None
+    assert _gauge("thecee_websocket_last_publish_failure_age_seconds") is None
+
+
+# ---------------------------------------------------------------------------
 # Route contract
 # ---------------------------------------------------------------------------
 
@@ -224,6 +303,10 @@ def test_websocket_health_route_composes_digest(
     assert payload.connection_count == 2
     assert payload.connected_simulation_ids == [7, 8]
     assert payload.channel == "thecee:simulation-progress"
+    # The route mirrors digest state into Prometheus gauges.
+    assert _gauge("thecee_websocket_connections") == 2.0
+    assert _gauge("thecee_websocket_bridge_running") == 1.0
+    assert _gauge("thecee_websocket_unhealthy") == 0.0
 
 
 def test_websocket_health_route_unconfigured(

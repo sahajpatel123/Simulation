@@ -19,6 +19,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from app.core.metrics import metrics
+
 VERDICT_HEALTHY: str = "HEALTHY"
 VERDICT_WATCH: str = "WATCH"
 VERDICT_DEGRADED: str = "DEGRADED"
@@ -277,6 +279,33 @@ def build_websocket_health(
     }
 
 
+def record_websocket_gauges(payload: dict[str, Any]) -> None:
+    """Mirror the digest's live numbers into Prometheus gauges.
+
+    Keeps ``/metrics`` fresh even when only the standalone endpoint is
+    polled, matching how worker-health and database-pool-health mirror
+    their snapshots. Fields that were not measured stay unset so an absent
+    probe never masquerades as a zero value: ``redis_reachable`` remains
+    unset while Redis is unconfigured, and the publish-failure-age gauge
+    is only written once a failure has actually been observed.
+    """
+    metrics.set_websocket_connections(
+        _safe_int(payload.get("connection_count"))
+    )
+    metrics.set_websocket_bridge_running(bool(payload.get("bridge_running")))
+    metrics.set_websocket_redis_configured(
+        bool(payload.get("redis_configured"))
+    )
+    reachable = payload.get("redis_reachable")
+    if reachable is not None:
+        metrics.set_websocket_redis_reachable(bool(reachable))
+    outage_age = _safe_float(payload.get("last_publish_failure_age_seconds"))
+    if outage_age is not None:
+        metrics.set_websocket_last_publish_failure_age(outage_age)
+    verdict = str(payload.get("verdict") or VERDICT_UNCONFIGURED)
+    metrics.set_websocket_unhealthy(verdict not in _HEALTHY_VERDICTS)
+
+
 __all__ = [
     "MODE_IN_PROCESS_FALLBACK",
     "MODE_REDIS_CROSS_PROCESS",
@@ -288,4 +317,5 @@ __all__ = [
     "VERDICT_UNCONFIGURED",
     "VERDICT_WATCH",
     "build_websocket_health",
+    "record_websocket_gauges",
 ]

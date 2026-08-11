@@ -347,6 +347,33 @@ class _Metrics:
         """Set the current broker queue depth for one Celery queue."""
         self.set_gauge("thecee_celery_queue_depth", n, {"queue": queue})
 
+    def set_websocket_connections(self, n: int) -> None:
+        """Set the live WebSocket listener count for simulation progress."""
+        self.set_gauge("thecee_websocket_connections", n)
+
+    def set_websocket_bridge_running(self, flag: bool) -> None:
+        """Set whether the progress pub/sub subscriber loop is alive."""
+        self.set_gauge("thecee_websocket_bridge_running", 1.0 if flag else 0.0)
+
+    def set_websocket_redis_configured(self, flag: bool) -> None:
+        """Set whether a Redis client is configured for the bridge."""
+        self.set_gauge("thecee_websocket_redis_configured", 1.0 if flag else 0.0)
+
+    def set_websocket_redis_reachable(self, flag: bool) -> None:
+        """Set the live Redis reachability result for progress delivery."""
+        self.set_gauge("thecee_websocket_redis_reachable", 1.0 if flag else 0.0)
+
+    def set_websocket_last_publish_failure_age(self, seconds: float) -> None:
+        """Set the age of the last progress publish failure (seconds)."""
+        self.set_gauge(
+            "thecee_websocket_last_publish_failure_age_seconds",
+            seconds,
+        )
+
+    def set_websocket_unhealthy(self, flag: bool) -> None:
+        """Set 1 when the delivery digest verdict is WATCH or DEGRADED."""
+        self.set_gauge("thecee_websocket_unhealthy", 1.0 if flag else 0.0)
+
     # ------------------------------------------------------------------
     # Rendering
     # ------------------------------------------------------------------

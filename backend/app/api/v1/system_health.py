@@ -38,7 +38,10 @@ from app.core.request_health import (
 )
 from app.core.system_overview import build_system_overview
 from app.core.websocket import ws_manager
-from app.core.websocket_health import build_websocket_health
+from app.core.websocket_health import (
+    build_websocket_health,
+    record_websocket_gauges,
+)
 from app.schemas.system_health import (
     CacheHealthOut,
     DatabasePoolHealthOut,
@@ -436,6 +439,7 @@ def websocket_health() -> WebsocketHealthOut:
         circuit_breaker_seconds=CIRCUIT_BREAKER_SECONDS,
         generated_at=datetime.now(UTC).isoformat(),
     )
+    record_websocket_gauges(payload)
     return WebsocketHealthOut(**payload)
 
 
@@ -554,6 +558,7 @@ def system_overview(
         circuit_breaker_seconds=CIRCUIT_BREAKER_SECONDS,
         generated_at=generated_at,
     )
+    record_websocket_gauges(websocket_digest)
 
     return build_system_overview(
         request=request_digest,
