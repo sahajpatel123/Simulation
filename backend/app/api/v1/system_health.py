@@ -27,6 +27,7 @@ from app.core.request_health import (
     MAX_LIMIT,
     build_request_health,
 )
+from app.core.system_overview import build_system_overview
 from app.schemas.system_health import (
     CacheHealthOut,
     LLMHealthOut,
@@ -34,6 +35,7 @@ from app.schemas.system_health import (
     RequestHealthOut,
     SimulationHealthOut,
     SystemHealthOut,
+    SystemOverviewOut,
     WorkerHealthOut,
 )
 from app.worker import celery_app
@@ -340,4 +342,95 @@ def simulation_health(
         window_days=window_days,
         recent_failures_limit=recent_failures_limit,
         generated_at=datetime.now(UTC).isoformat(),
+    )
+
+
+@router.get(
+    "/overview",
+    summary="One-call system status overview across all health digests",
+    responses=_JSON_200,
+    response_model=SystemOverviewOut,
+    # Probes the Celery control API, the Redis broker and key space, and
+    # several tables, so bound dashboard polling the way the other
+    # observability digests are bounded. Fails open so the overview is
+    # still reachable when the Redis-backed limiter itself is down.
+    dependencies=[
+        Depends(rate_limit(limit=5, window_s=60, fail_open=True))
+    ],
+)
+def system_overview(
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Return every subsystem health digest as one lightweight payload.
+
+    Composes the request, query, LLM, response-cache, Celery worker and
+    simulation digests into per-subsystem verdict / summary / headline
+    rows, plus the database / Redis / Celery service probes. This is the
+    single URL a dashboard can poll instead of the six individual
+    ``/system/*-health`` endpoints; ``NO_DATA`` / ``UNCONFIGURED``
+    verdicts count as healthy, while any ``WATCH`` / ``DEGRADED`` /
+    ``ERROR`` subsystem or service marks the overall status degraded.
+    """
+    snapshot = metrics.snapshot()
+    generated_at = datetime.now(UTC).isoformat()
+
+    request_digest = build_request_health(
+        snapshot,
+        generated_at=generated_at,
+    )
+    query_digest = query_health_module.build_query_health(
+        snapshot,
+        slow_queries=slow_queries_snapshot(
+            limit=query_health_module.DEFAULT_LIMIT
+        ),
+        generated_at=generated_at,
+    )
+    llm_digest = llm_health_module.build_llm_health(
+        snapshot,
+        generated_at=generated_at,
+    )
+    key_counts, redis_configured = response_cache_module.current_key_counts()
+    cache_digest = build_cache_health(
+        snapshot,
+        key_counts=key_counts,
+        redis_configured=redis_configured,
+        generated_at=generated_at,
+    )
+
+    inspect = celery_app.control.inspect(timeout=2.0)
+    worker_snapshot = worker_health_module.collect_worker_snapshot(
+        inspect=inspect,
+        broker_client=worker_health_module.get_broker_client(),
+    )
+    worker_digest = worker_health_module.build_worker_health(
+        **worker_snapshot,
+        backlog_threshold=worker_health_module.DEFAULT_BACKLOG_THRESHOLD,
+        generated_at=generated_at,
+    )
+
+    simulation_snapshot = simulation_health_module.collect_simulation_snapshot(
+        db,
+        window_days=simulation_health_module.DEFAULT_WINDOW_DAYS,
+    )
+    simulation_digest = simulation_health_module.build_simulation_health(
+        **simulation_snapshot,
+        window_days=simulation_health_module.DEFAULT_WINDOW_DAYS,
+        recent_failures_limit=(
+            simulation_health_module.DEFAULT_RECENT_FAILURES_LIMIT
+        ),
+        generated_at=generated_at,
+    )
+
+    return build_system_overview(
+        request=request_digest,
+        query=query_digest,
+        llm=llm_digest,
+        cache=cache_digest,
+        worker=worker_digest,
+        simulation=simulation_digest,
+        services={
+            "database": _db_status(db),
+            "redis": _redis_status(),
+        },
+        generated_at=generated_at,
     )

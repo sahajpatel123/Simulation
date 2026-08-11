@@ -21,7 +21,9 @@ logger = logging.getLogger("thecee.timing")
 # dashboard poll would otherwise add a self-observation to the exact
 # histogram the digest reports on. ``/api/v1/system/cache-health`` is the
 # same class of probe and additionally scans the Redis key space, so its
-# polls are exempt too.
+# polls are exempt too. ``/api/v1/system/overview`` composes the request /
+# query / LLM / cache / worker / simulation digests, so its polls must not
+# feed the request histogram they report on either.
 _METRICS_EXEMPT_PATHS = frozenset(
     {
         "/metrics",
@@ -30,6 +32,7 @@ _METRICS_EXEMPT_PATHS = frozenset(
         "/api/v1/system/request-health",
         "/api/v1/system/query-health",
         "/api/v1/system/cache-health",
+        "/api/v1/system/overview",
     }
 )
 

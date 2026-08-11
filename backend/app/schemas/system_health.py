@@ -317,6 +317,37 @@ class SimulationHealthOut(BaseModel):
     reasons: list[str] = Field(default_factory=list)
 
 
+class SystemOverviewSubsystem(BaseModel):
+    """One subsystem row from ``GET /system/overview``."""
+
+    key: str = ""
+    label: str = ""
+    verdict: str = "NO_DATA"
+    healthy: bool = True
+    summary: str = ""
+    headline: dict[str, Any] = Field(default_factory=dict)
+
+
+class SystemOverviewService(BaseModel):
+    """One service probe row from ``GET /system/overview``."""
+
+    name: str = ""
+    status: str = "unknown"
+    latency_ms: float | None = Field(default=None, ge=0.0)
+    detail: str = ""
+
+
+class SystemOverviewOut(BaseModel):
+    """Response from ``GET /api/v1/system/overview``."""
+
+    generated_at: str = ""
+    status: str = "degraded"
+    healthy: bool = False
+    unhealthy_components: list[str] = Field(default_factory=list)
+    services: list[SystemOverviewService] = Field(default_factory=list)
+    subsystems: list[SystemOverviewSubsystem] = Field(default_factory=list)
+
+
 __all__ = [
     "CacheHealthOut",
     "CacheNamespaceStats",
@@ -336,6 +367,9 @@ __all__ = [
     "SlowQueryOut",
     "SystemHealthCheck",
     "SystemHealthOut",
+    "SystemOverviewOut",
+    "SystemOverviewService",
+    "SystemOverviewSubsystem",
     "WorkerHealthBroker",
     "WorkerHealthOut",
     "WorkerHealthWorker",
