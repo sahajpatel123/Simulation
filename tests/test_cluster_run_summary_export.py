@@ -48,6 +48,15 @@ def _metadata() -> dict[str, Any]:
     }
 
 
+def _strict_json_loads(text: str) -> Any:
+    """Parse JSON, rejecting the non-standard NaN/Infinity tokens."""
+
+    def _reject_constant(_: str) -> None:
+        raise AssertionError("non-finite JSON token emitted")
+
+    return json.loads(text, parse_constant=_reject_constant)
+
+
 def test_build_payload_aggregates_rows_and_enriches_names() -> None:
     export = build_cluster_run_summary_export(
         [
@@ -104,6 +113,71 @@ def test_build_payload_sanitises_malformed_rows() -> None:
     assert export["total_agents_assigned"] == 0
     assert export["total_agents_converted"] == 40
     assert export["agents_weighted_conversion_rate"] is None
+
+
+def test_export_sanitises_nested_non_finite_values() -> None:
+    row = _row()
+    row.update(
+        {
+            "drop_state_distribution": {
+                "ARRIVE": 1000,
+                "BROWSE": float("inf"),
+                "CONSIDER": float("nan"),
+            },
+            "architect_scores": {
+                "PricingArchitect": float("inf"),
+                "TrustArchitect": 0.48,
+            },
+            "claim_confidence_distribution": {"HIGH": float("nan")},
+        }
+    )
+    export = build_cluster_run_summary_export(
+        [row],
+        simulation_id=7,
+        project_id=9,
+        status="COMPLETED",
+    )
+
+    rendered = export["rows"][0]
+    assert rendered["drop_state_distribution"]["BROWSE"] is None
+    assert rendered["drop_state_distribution"]["CONSIDER"] is None
+    assert rendered["architect_scores"]["PricingArchitect"] is None
+    assert rendered["architect_scores"]["TrustArchitect"] == 0.48
+    assert rendered["claim_confidence_distribution"]["HIGH"] is None
+
+    json_text = cluster_run_summary_to_json(export, metadata=_metadata())
+    assert "NaN" not in json_text
+    assert "Infinity" not in json_text
+    parsed = _strict_json_loads(json_text)
+    parsed_row = parsed["cluster_run_summaries"]["rows"][0]
+    assert parsed_row["drop_state_distribution"]["BROWSE"] is None
+    assert parsed_row["architect_scores"]["PricingArchitect"] is None
+
+    csv_text = cluster_run_summary_to_csv(export, metadata=_metadata())
+    assert "NaN" not in csv_text
+    assert "Infinity" not in csv_text
+    assert "null" in csv_text
+
+
+def test_json_helper_sanitises_non_finite_values_directly() -> None:
+    text = cluster_run_summary_to_json(
+        {
+            "simulation_id": 1,
+            "project_id": 2,
+            "status": "COMPLETED",
+            "rows": [
+                {
+                    "architect_scores": {"PricingArchitect": float("nan")},
+                    "drop_state_distribution": {"ARRIVE": float("inf")},
+                }
+            ],
+        }
+    )
+
+    parsed = _strict_json_loads(text)
+    parsed_row = parsed["cluster_run_summaries"]["rows"][0]
+    assert parsed_row["architect_scores"]["PricingArchitect"] is None
+    assert parsed_row["drop_state_distribution"]["ARRIVE"] is None
 
 
 def test_build_payload_accepts_orm_like_objects() -> None:

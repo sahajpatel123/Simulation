@@ -113,16 +113,33 @@ def _bounded_rate(value: Any) -> float:
     return round(max(0.0, min(1.0, parsed)), 6)
 
 
+def _json_safe(value: Any) -> Any:
+    """Recursively coerce a JSON-like value for strict JSON serialization.
+
+    Non-finite floats (``NaN``/``±Infinity``) are not valid JSON tokens and
+    cannot be persisted by PostgreSQL jsonb; render them as ``null`` instead
+    of emitting tokens that strict BI parsers reject.
+    """
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return value
+
+
 def _json_text(value: Any) -> str:
     """Render a JSONB cell as compact, deterministic JSON text."""
     if isinstance(value, (dict, list)):
         try:
             return json.dumps(
-                value,
+                _json_safe(value),
                 ensure_ascii=False,
                 sort_keys=True,
                 separators=(",", ":"),
                 default=str,
+                allow_nan=False,
             )
         except (TypeError, ValueError):
             return _safe_text(value)
@@ -225,13 +242,15 @@ def build_cluster_run_summary_export(
                 "agents_assigned": assigned,
                 "agents_converted": converted,
                 "conversion_rate": _bounded_rate(row.get("conversion_rate")),
-                "drop_state_distribution": row.get("drop_state_distribution"),
+                "drop_state_distribution": _json_safe(
+                    row.get("drop_state_distribution")
+                ),
                 "mean_drop_state": _safe_text(row.get("mean_drop_state")),
-                "architect_scores": row.get("architect_scores"),
+                "architect_scores": _json_safe(row.get("architect_scores")),
                 "primary_drop_trigger": _safe_text(row.get("primary_drop_trigger")),
                 "signal_quality": _optional_float(row.get("signal_quality")),
-                "claim_confidence_distribution": row.get(
-                    "claim_confidence_distribution"
+                "claim_confidence_distribution": _json_safe(
+                    row.get("claim_confidence_distribution")
                 ),
                 "product_type": _safe_text(row.get("product_type")),
                 "created_at": _safe_text(row.get("created_at")),
@@ -332,12 +351,15 @@ def cluster_run_summary_to_json(
     """Render a cluster-run-summary payload as an indented JSON document."""
     return json.dumps(
         {
-            "metadata": metadata or {},
-            "cluster_run_summaries": payload if isinstance(payload, dict) else {},
+            "metadata": _json_safe(metadata or {}),
+            "cluster_run_summaries": (
+                _json_safe(payload) if isinstance(payload, dict) else {}
+            ),
         },
         default=str,
         ensure_ascii=False,
         indent=2,
+        allow_nan=False,
     ) + "\n"
 
 
