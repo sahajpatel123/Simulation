@@ -147,6 +147,8 @@ class _FakeQuery:
                 matches = actual < right
             elif op_name == "le":
                 matches = actual <= right
+            elif op_name in {"in_op", "in_"}:
+                matches = actual in right
             else:
                 matches = actual == right
             if not matches:
@@ -186,6 +188,7 @@ class _FakeSession:
         self.commits = 0
         self.deleted: list[object] = []
         self.added: list[object] = []
+        self.last_delivery_query: _FakeQuery | None = None
 
     def query(self, model, *args, **kwargs):
         name = getattr(model, "__name__", "")
@@ -194,7 +197,9 @@ class _FakeSession:
         if name == "SimulationWebhookSubscription":
             return _FakeQuery(self.subscriptions)
         if name == "SimulationWebhookDelivery":
-            return _FakeQuery(self.deliveries)
+            query = _FakeQuery(self.deliveries)
+            self.last_delivery_query = query
+            return query
         if name == "Simulation":
             return _FakeQuery(self.simulations)
         return _FakeQuery([])
@@ -1180,6 +1185,82 @@ def test_simulation_webhook_delivery_overview_ignores_unmatched_deliveries() -> 
     assert payload["webhook_count"] == 1
     assert payload["delivery_count"] == 1
     assert [d["id"] for d in payload["items"][0]["deliveries"]] == [7]
+
+
+def test_simulation_webhook_delivery_overview_scopes_query_to_project_webhooks() -> None:
+    """The overview must only load deliveries sent by this project's webhooks."""
+    from app.api.v1 import simulation_webhooks as mod
+
+    sub = _Subscription(id=1)
+    simulation = _FakeSimulation(id=5, project_id=10)
+    foreign_delivery = _Delivery(
+        id=9,
+        webhook_subscription_id=99,
+        simulation_id=5,
+        status="FAILED",
+    )
+    session = _FakeSession(
+        subscriptions=[sub],
+        deliveries=[foreign_delivery],
+        simulations=[simulation],
+    )
+    out = mod.get_simulation_webhook_deliveries(
+        project_id=10,
+        simulation_id=5,
+        db=session,
+        current_user=_current_user(),
+    )
+
+    assert out.webhook_count == 1
+    assert out.delivery_count == 0
+    assert out.items[0].deliveries == []
+    assert session.last_delivery_query is not None
+    in_filters = [
+        (op_name, right)
+        for _, op_name, right in session.last_delivery_query._filters
+        if op_name in {"in_op", "in_"}
+    ]
+    assert in_filters == [("in_op", [1])]
+
+
+def test_simulation_webhook_delivery_overview_skips_query_without_webhooks() -> None:
+    """A project with no webhooks must not scan the delivery audit trail."""
+    from app.api.v1 import simulation_webhooks as mod
+
+    simulation = _FakeSimulation(id=5, project_id=10)
+    session = _FakeSession(
+        subscriptions=[],
+        deliveries=[
+            _Delivery(
+                id=9,
+                webhook_subscription_id=99,
+                simulation_id=5,
+                status="FAILED",
+            )
+        ],
+        simulations=[simulation],
+    )
+    out = mod.get_simulation_webhook_deliveries(
+        project_id=10,
+        simulation_id=5,
+        db=session,
+        current_user=_current_user(),
+    )
+
+    assert out.webhook_count == 0
+    assert out.delivery_count == 0
+    assert out.items == []
+    assert session.last_delivery_query is None
+
+
+def test_webhook_delivery_model_indexes_per_simulation_lookup() -> None:
+    """The overview's (simulation_id, webhook_subscription_id) filter is indexed."""
+    from app.models.simulation_webhook_delivery import SimulationWebhookDelivery
+
+    index_names = {
+        index.name for index in SimulationWebhookDelivery.__table__.indexes
+    }
+    assert "ix_sim_webhook_delivery_sim_sub" in index_names
 
 
 def test_retry_delivery_route_returns_new_delivery() -> None:

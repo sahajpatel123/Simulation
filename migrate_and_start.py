@@ -1048,6 +1048,19 @@ def run_migrations():
                     """
                 )
             )
+            # The per-simulation overview endpoint filters by simulation_id
+            # plus the project's webhook subscription ids; this composite
+            # index keeps that lookup from scanning the whole audit trail.
+            conn.execute(
+                text(
+                    """
+                    CREATE INDEX IF NOT EXISTS
+                        ix_sim_webhook_delivery_sim_sub
+                    ON simulation_webhook_deliveries
+                        (simulation_id, webhook_subscription_id);
+                    """
+                )
+            )
             # Additive columns for the delivery audit trail. attempt_status
             # preserves the event's original simulation/ping status so manual
             # retries rebuild the exact payload instead of guessing from the

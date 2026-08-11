@@ -30,6 +30,11 @@ class SimulationWebhookDelivery(Base, TimestampMixin):
             "webhook_subscription_id",
             "created_at",
         ),
+        Index(
+            "ix_sim_webhook_delivery_sim_sub",
+            "simulation_id",
+            "webhook_subscription_id",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

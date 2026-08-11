@@ -366,15 +366,26 @@ def get_simulation_webhook_deliveries(
         )
         .all()
     )
-    deliveries = (
-        db.query(SimulationWebhookDelivery)
-        .filter(SimulationWebhookDelivery.simulation_id == simulation_id)
-        .order_by(
-            SimulationWebhookDelivery.created_at.desc(),
-            SimulationWebhookDelivery.id.desc(),
+    subscription_ids = [item.id for item in subscriptions]
+    if subscription_ids:
+        deliveries = (
+            db.query(SimulationWebhookDelivery)
+            .filter(
+                SimulationWebhookDelivery.simulation_id == simulation_id,
+                SimulationWebhookDelivery.webhook_subscription_id.in_(
+                    subscription_ids
+                ),
+            )
+            .order_by(
+                SimulationWebhookDelivery.created_at.desc(),
+                SimulationWebhookDelivery.id.desc(),
+            )
+            .all()
         )
-        .all()
-    )
+    else:
+        # Nothing in this project could have sent a delivery, so skip the
+        # audit-trail scan entirely.
+        deliveries = []
 
     subscription_dicts = [
         SimulationWebhookOut.model_validate(item).model_dump(
