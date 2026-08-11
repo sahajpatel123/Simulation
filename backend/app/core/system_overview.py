@@ -334,9 +334,18 @@ def _websocket_subsystem(digest: dict[str, Any]) -> dict[str, Any]:
     connections = _safe_int(digest.get("connection_count"))
     bridge_running = bool(digest.get("bridge_running"))
     verdict = str(digest.get("verdict") or VERDICT_UNCONFIGURED).upper()
+    reasons = [str(reason) for reason in digest.get("reasons") or []]
 
     if verdict == VERDICT_UNCONFIGURED:
         summary = "Live progress delivery unconfigured (same-process fallback)"
+    elif verdict == VERDICT_DEGRADED:
+        reason = reasons[0] if reasons else "delivery path is down"
+        summary = f"Live progress delivery degraded: {reason}"
+    elif verdict == VERDICT_WATCH:
+        summary = (
+            "Live progress delivery recovering after a recent publish "
+            f"outage ({connections} listener(s))"
+        )
     elif bridge_running and connections > 0:
         summary = f"Redis pub/sub relay live, {connections} listener(s)"
     elif bridge_running:
@@ -355,6 +364,7 @@ def _websocket_subsystem(digest: dict[str, Any]) -> dict[str, Any]:
             "bridge_running": bridge_running,
             "connection_count": connections,
             "redis_reachable": digest.get("redis_reachable"),
+            "reasons": reasons,
         },
     }
 

@@ -453,6 +453,7 @@ def test_overview_websocket_healthy_counts_as_ok() -> None:
     assert row["label"] == "Live progress delivery"
     assert row["verdict"] == VERDICT_HEALTHY
     assert row["healthy"] is True
+    assert "relay live" in row["summary"]
     assert row["headline"]["connection_count"] == 2
 
 
@@ -477,6 +478,42 @@ def test_overview_websocket_watch_marks_overall_degraded() -> None:
     assert payload["status"] == "degraded"
     assert payload["healthy"] is False
     assert "websocket" in payload["unhealthy_components"]
+    row = next(
+        row for row in payload["subsystems"] if row["key"] == "websocket"
+    )
+    assert "recovering" in row["summary"]
+    assert "relay live" not in row["summary"]
+    assert any("recovery" in reason for reason in row["headline"]["reasons"])
+
+
+def test_overview_websocket_degraded_summary_does_not_claim_relay_live() -> None:
+    websocket_digest = build_websocket_health(
+        redis_configured=True,
+        redis_reachable=False,
+        bridge_running=True,
+        connection_count=1,
+        connected_simulation_ids=[9],
+    )
+
+    payload = build_system_overview(
+        **_healthy_digests(),
+        websocket=websocket_digest,
+        services={
+            "database": {"status": "ok", "latency_ms": 1.2, "error": None},
+            "redis": {"status": "error", "latency_ms": None, "error": "down"},
+        },
+    )
+
+    assert payload["status"] == "degraded"
+    assert payload["healthy"] is False
+    row = next(
+        row for row in payload["subsystems"] if row["key"] == "websocket"
+    )
+    assert row["verdict"] == VERDICT_DEGRADED
+    assert row["healthy"] is False
+    assert "degraded" in row["summary"]
+    assert "relay live" not in row["summary"]
+    assert any("unreachable" in reason for reason in row["headline"]["reasons"])
 
 
 def test_overview_websocket_unconfigured_counts_as_healthy() -> None:
