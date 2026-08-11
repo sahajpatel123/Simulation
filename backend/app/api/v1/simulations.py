@@ -4593,15 +4593,22 @@ def get_simulation_progress(
 
     pct_map = {"QUEUED": 0, "RUNNING": 50, "COMPLETED": 100, "FAILED": 0, "CANCELLED": 0}
     pct = pct_map.get(sim.status, 0)
+    stage: str | None = None
+    cluster_id: str | None = None
+    clusters_completed: int | None = None
+    clusters_total: int | None = None
 
     if sim.status == "RUNNING" and sim.task_id:
         try:
-            from app.worker import celery_app
-
             task_result = celery_app.AsyncResult(sim.task_id)
             if task_result.state == "PROGRESS":
                 meta = task_result.info or {}
-                pct = meta.get("pct", 50)
+                if isinstance(meta, dict):
+                    pct = meta.get("pct", 50)
+                    stage = meta.get("stage")
+                    cluster_id = meta.get("cluster_id")
+                    clusters_completed = meta.get("clusters_completed")
+                    clusters_total = meta.get("clusters_total")
         except Exception as _exc:
             logger.debug(
                 "%s suppressed: %s",
@@ -4613,6 +4620,10 @@ def get_simulation_progress(
         "simulation_id": sim.id,
         "status": sim.status,
         "pct": pct,
+        "stage": stage,
+        "cluster_id": cluster_id,
+        "clusters_completed": clusters_completed,
+        "clusters_total": clusters_total,
         "agents_processed": agents_processed,
         "agents_total": sim.consumer_volume,
         "elapsed_seconds": round(elapsed, 1),

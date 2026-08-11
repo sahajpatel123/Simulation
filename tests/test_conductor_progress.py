@@ -11,6 +11,8 @@ endpoint see live per-cluster movement.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.conductor import Conductor
 from app.simulation.product_type import ProductType
@@ -21,6 +23,46 @@ _ENV = {
     "price_sensitivity": 0.5,
     "market_maturity": 0.3,
 }
+
+
+class _FakeSimulation:
+    def __init__(
+        self,
+        *,
+        status: str = "RUNNING",
+        task_id: str | None = "task-abc",
+    ) -> None:
+        self.id = 1
+        self.project_id = 10
+        self.status = status
+        self.task_id = task_id
+        self.error_message: str | None = None
+        self.results_json: dict | None = None
+        self.consumer_volume = 10_000
+        self.created_at = datetime(2026, 1, 1, tzinfo=UTC)
+        self.updated_at = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+class _FakeQuery:
+    def __init__(self, sims: list[_FakeSimulation]) -> None:
+        self.sims = sims
+
+    def join(self, *args, **kwargs):
+        return self
+
+    def filter(self, *args, **kwargs):
+        return self
+
+    def first(self) -> _FakeSimulation | None:
+        return self.sims[0] if self.sims else None
+
+
+class _FakeSession:
+    def __init__(self, sims: list[_FakeSimulation]) -> None:
+        self.sims = sims
+
+    def query(self, *args, **kwargs) -> _FakeQuery:
+        return _FakeQuery(self.sims)
 
 
 def test_conductor_progress_callback_reports_every_cluster() -> None:
@@ -71,3 +113,68 @@ def test_cluster_progress_stage_includes_position() -> None:
         tasks_mod._cluster_progress_stage("cluster_a", 3, 52)
         == "Simulating cluster cluster_a (3/52)"
     )
+
+
+def test_progress_endpoint_surfaces_cluster_metadata(monkeypatch) -> None:
+    from app.api.v1 import simulations as sim_mod
+
+    sim = _FakeSimulation(status="RUNNING", task_id="task-abc")
+    meta = {
+        "stage": "Simulating cluster metro_power_professional (1/52)",
+        "pct": 26,
+        "cluster_id": "metro_power_professional",
+        "clusters_completed": 1,
+        "clusters_total": 52,
+    }
+
+    class _TaskResult:
+        state = "PROGRESS"
+        info = meta
+
+    monkeypatch.setattr(
+        sim_mod.celery_app,
+        "AsyncResult",
+        lambda task_id: _TaskResult(),
+    )
+
+    out = sim_mod.get_simulation_progress(
+        simulation_id=1,
+        db=_FakeSession([sim]),
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+    assert out["pct"] == 26
+    assert out["stage"] == "Simulating cluster metro_power_professional (1/52)"
+    assert out["cluster_id"] == "metro_power_professional"
+    assert out["clusters_completed"] == 1
+    assert out["clusters_total"] == 52
+
+
+def test_progress_endpoint_tolerates_non_dict_celery_meta(monkeypatch) -> None:
+    """A string ``info`` (possible with some Celery result backends) must not
+    hide the per-cluster progress or crash the polling fallback path."""
+    from app.api.v1 import simulations as sim_mod
+
+    sim = _FakeSimulation(status="RUNNING", task_id="task-abc")
+
+    class _TaskResult:
+        state = "PROGRESS"
+        info = "PROGRESS"
+
+    monkeypatch.setattr(
+        sim_mod.celery_app,
+        "AsyncResult",
+        lambda task_id: _TaskResult(),
+    )
+
+    out = sim_mod.get_simulation_progress(
+        simulation_id=1,
+        db=_FakeSession([sim]),
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+    assert out["pct"] == 50
+    assert out["stage"] is None
+    assert out["cluster_id"] is None
+    assert out["clusters_completed"] is None
+    assert out["clusters_total"] is None
