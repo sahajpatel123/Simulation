@@ -100,6 +100,41 @@ class SimulationWebhookDeliveryStatsOut(BaseModel):
     narrative: str
 
 
+class ProjectWebhookHealthItemOut(BaseModel):
+    """One webhook's delivery health row in the project-wide overview."""
+
+    webhook_id: int
+    webhook_url: str = ""
+    status: str = ""
+    event_type: str = ""
+    total_deliveries: int = 0
+    success_count: int = 0
+    failed_count: int = 0
+    success_rate: float | None = None
+    health_label: str = "NO_DATA"
+    last_delivery_at: datetime | None = None
+    last_delivery_status: str | None = None
+    last_delivery_error: str | None = None
+    narrative: str = ""
+
+
+class ProjectWebhookHealthOut(BaseModel):
+    """Project-wide webhook delivery health summary across all subscriptions."""
+
+    project_id: int
+    generated_at: str = ""
+    window_days: int
+    webhook_count: int = 0
+    active_webhook_count: int = 0
+    total_deliveries: int = 0
+    success_count: int = 0
+    failed_count: int = 0
+    success_rate: float | None = None
+    health_label: str
+    narrative: str = ""
+    webhooks: list[ProjectWebhookHealthItemOut] = Field(default_factory=list)
+
+
 __all__ = [
     "SimulationWebhookDeliveryOut",
     "SimulationWebhookDeliveryListOut",
@@ -109,4 +144,6 @@ __all__ = [
     "SimulationWebhookBatchRetryOut",
     "SimulationWebhookDeliveryStatsOut",
     "WebhookDeliveryErrorOut",
+    "ProjectWebhookHealthItemOut",
+    "ProjectWebhookHealthOut",
 ]

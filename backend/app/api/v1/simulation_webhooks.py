@@ -16,6 +16,7 @@ from app.models.simulation_webhook_delivery import SimulationWebhookDelivery
 from app.models.simulation_webhook_subscription import SimulationWebhookSubscription
 from app.models.user import User
 from app.schemas.simulation_webhook_delivery import (
+    ProjectWebhookHealthOut,
     SimulationWebhookBatchRetryOut,
     SimulationWebhookDeliveryListOut,
     SimulationWebhookDeliveryOut,
@@ -29,6 +30,7 @@ from app.schemas.simulation_webhooks import (
     SimulationWebhookOut,
     SimulationWebhookUpdate,
 )
+from app.simulation.project_webhook_health import build_project_webhook_health
 from app.simulation.simulation_webhook_delivery import (
     build_webhook_payload,
     deliver_webhook_event,
@@ -545,6 +547,81 @@ def get_simulation_webhook_delivery_stats(
         now=now,
     )
     return SimulationWebhookDeliveryStatsOut(**stats)
+
+
+@router.get(
+    "/{project_id}/webhooks/health",
+    response_model=ProjectWebhookHealthOut,
+    summary="Show webhook delivery health across every project subscription",
+    # One bounded query over the project's delivery history; cap polling the
+    # same way the per-webhook stats endpoint is capped.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_project_webhook_health(
+    project_id: int,
+    days: int = Query(default=30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProjectWebhookHealthOut:
+    """Return a project-wide webhook delivery health summary.
+
+    Aggregates the same windowed delivery statistics the per-webhook stats
+    endpoint computes, but across every subscription in the project in one
+    call. Each subscription is listed with its own health row; the overall
+    verdict is computed from ACTIVE subscriptions only so a disabled webhook
+    cannot drag the project's delivery health down.
+    """
+    get_owned_project(db, current_user.id, project_id)
+    now = datetime.now(UTC)
+    cutoff = now - timedelta(days=days)
+
+    subscriptions = (
+        db.query(SimulationWebhookSubscription)
+        .filter(SimulationWebhookSubscription.project_id == project_id)
+        .order_by(
+            SimulationWebhookSubscription.created_at.desc(),
+            SimulationWebhookSubscription.id.desc(),
+        )
+        .all()
+    )
+    subscription_ids = [item.id for item in subscriptions]
+    if subscription_ids:
+        deliveries = (
+            db.query(SimulationWebhookDelivery)
+            .filter(
+                SimulationWebhookDelivery.webhook_subscription_id.in_(
+                    subscription_ids
+                ),
+                SimulationWebhookDelivery.created_at >= cutoff,
+            )
+            .order_by(
+                SimulationWebhookDelivery.created_at.desc(),
+                SimulationWebhookDelivery.id.desc(),
+            )
+            .all()
+        )
+    else:
+        deliveries = []
+
+    subscription_dicts = [
+        SimulationWebhookOut.model_validate(item).model_dump(
+            mode="json",
+            exclude={"secret"},
+        )
+        for item in subscriptions
+    ]
+    delivery_dicts = [
+        SimulationWebhookDeliveryOut.model_validate(item).model_dump(mode="json")
+        for item in deliveries
+    ]
+    payload = build_project_webhook_health(
+        project_id=project_id,
+        subscriptions=subscription_dicts,
+        deliveries=delivery_dicts,
+        window_days=days,
+        now=now,
+    )
+    return ProjectWebhookHealthOut(**payload)
 
 
 @router.post(
