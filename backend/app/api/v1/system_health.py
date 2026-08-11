@@ -370,6 +370,9 @@ def system_overview(
     ``/system/*-health`` endpoints; ``NO_DATA`` / ``UNCONFIGURED``
     verdicts count as healthy, while any ``WATCH`` / ``DEGRADED`` /
     ``ERROR`` subsystem or service marks the overall status degraded.
+    It also mirrors the Celery snapshot into the same Prometheus gauges
+    the standalone worker-health endpoint updates, so polling only the
+    overview keeps ``/metrics`` fresh.
     """
     snapshot = metrics.snapshot()
     generated_at = datetime.now(UTC).isoformat()
@@ -402,6 +405,7 @@ def system_overview(
         inspect=inspect,
         broker_client=worker_health_module.get_broker_client(),
     )
+    worker_health_module.record_worker_gauges(worker_snapshot)
     worker_digest = worker_health_module.build_worker_health(
         **worker_snapshot,
         backlog_threshold=worker_health_module.DEFAULT_BACKLOG_THRESHOLD,

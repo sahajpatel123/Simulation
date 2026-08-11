@@ -436,6 +436,16 @@ def test_system_overview_route_contract(monkeypatch: pytest.MonkeyPatch) -> None
         "build_worker_health",
         lambda **kwargs: _digests()["worker"],
     )
+    gauges_seen: dict[str, Any] = {}
+
+    def recording_gauges(snapshot: dict[str, Any]) -> None:
+        gauges_seen.update(snapshot)
+
+    monkeypatch.setattr(
+        system_health_module.worker_health_module,
+        "record_worker_gauges",
+        recording_gauges,
+    )
     monkeypatch.setattr(
         system_health_module.simulation_health_module,
         "collect_simulation_snapshot",
@@ -475,4 +485,6 @@ def test_system_overview_route_contract(monkeypatch: pytest.MonkeyPatch) -> None
     assert captured["services"]["redis"]["status"] == "ok"
     assert captured["request"]["total_requests"] == 0
     assert captured["simulation"]["verdict"] == VERDICT_HEALTHY
+    assert gauges_seen["workers_online"] == 2
+    assert gauges_seen["broker"]["status"] == "ok"
     assert isinstance(SystemOverviewOut(**payload), SystemOverviewOut)
