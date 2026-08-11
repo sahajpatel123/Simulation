@@ -22,6 +22,7 @@ from app.simulation.webhook_delivery_stats import (
     HEALTH_NO_DATA,
     MAX_TOP_ERRORS,
     build_webhook_delivery_stats,
+    health_label_for_rate,
 )
 
 BASE = datetime(2026, 1, 31, tzinfo=UTC)
@@ -301,6 +302,29 @@ def test_days_is_sanitised_to_at_least_one() -> None:
     assert out["window_days"] == 1
 
 
+def test_created_at_missing_falls_back_to_delivered_at() -> None:
+    out = _build(
+        [
+            _row(
+                1,
+                created_at=None,
+                delivered_at="2026-01-15T00:00:00+00:00",
+            )
+        ]
+    )
+    assert out["total_deliveries"] == 1
+    assert out["success_count"] == 1
+    assert out["first_delivery_at"] == datetime(2026, 1, 15, tzinfo=UTC)
+
+
+def test_health_label_for_rate_is_public_and_buckets_boundaries() -> None:
+    assert health_label_for_rate(0, None) == HEALTH_NO_DATA
+    assert health_label_for_rate(3, 1.0) == HEALTH_HEALTHY
+    assert health_label_for_rate(5, 0.8) == HEALTH_DEGRADED
+    assert health_label_for_rate(5, 0.79) == HEALTH_DOWN
+    assert health_label_for_rate(1, None) == HEALTH_DOWN
+
+
 def test_schema_round_trip() -> None:
     payload = _build(
         [
@@ -325,8 +349,10 @@ class _Delivery:
 class _Query:
     def __init__(self, items: list[_Delivery]) -> None:
         self._items = items
+        self.filters: list[object] = []
 
     def filter(self, *args, **kwargs):
+        self.filters.extend(args)
         return self
 
     def order_by(self, *args, **kwargs):
@@ -339,9 +365,11 @@ class _Query:
 class _Session:
     def __init__(self, items: list[_Delivery]) -> None:
         self.items = items
+        self.last_query: _Query | None = None
 
     def query(self, model, *args, **kwargs):
-        return _Query(self.items)
+        self.last_query = _Query(self.items)
+        return self.last_query
 
 
 def _delivery_row(
@@ -406,3 +434,28 @@ def test_route_returns_delivery_stats() -> None:
     assert out.http_status_breakdown == {"200": 1, "500": 1}
     assert out.health_label == HEALTH_DOWN
     assert out.top_errors[0].error == "boom"
+
+
+def test_route_window_filter_includes_delivered_at_fallback() -> None:
+    from app.api.v1 import simulation_webhooks as mod
+
+    session = _Session(
+        [_delivery_row(1, status="SUCCESS")]
+    )
+    with patch.object(
+        mod,
+        "_get_owned_webhook",
+        return_value=type("Webhook", (), {"id": 7})(),
+    ), patch.object(mod, "datetime", _FixedDatetime):
+        mod.get_simulation_webhook_delivery_stats(
+            project_id=10,
+            webhook_id=7,
+            days=30,
+            db=session,
+            current_user=type("U", (), {"id": 42})(),
+        )
+
+    assert session.last_query is not None
+    rendered = " ".join(str(expr) for expr in session.last_query.filters)
+    assert "created_at" in rendered
+    assert "delivered_at" in rendered

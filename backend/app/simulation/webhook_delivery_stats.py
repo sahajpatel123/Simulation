@@ -92,8 +92,15 @@ def _sorted_counts(counter: Counter[str]) -> dict[str, int]:
     }
 
 
-def _health_label(total: int, success_rate: float | None) -> str:
-    if total == 0:
+def health_label_for_rate(total: int, success_rate: float | None) -> str:
+    """Bucket a success rate into the shared HEALTHY/DEGRADED/DOWN verdict.
+
+    ``total <= 0`` is always NO_DATA, and a missing rate is treated as DOWN
+    so a caller with rows but no computable rate cannot accidentally report
+    healthy. This is the single source of truth for both per-webhook stats
+    and the project-wide health overview.
+    """
+    if total <= 0:
         return HEALTH_NO_DATA
     if success_rate is None:
         return HEALTH_DOWN
@@ -248,7 +255,7 @@ def build_webhook_delivery_stats(
         "last_delivery_at": last[0] if last else None,
         "last_delivery_status": last_delivery_status,
         "last_delivery_error": last_delivery_error,
-        "health_label": _health_label(total, success_rate),
+        "health_label": health_label_for_rate(total, success_rate),
         "narrative": _narrative(
             total=total,
             failed_count=failed_count,
@@ -265,4 +272,5 @@ __all__ = [
     "HEALTH_NO_DATA",
     "MAX_TOP_ERRORS",
     "build_webhook_delivery_stats",
+    "health_label_for_rate",
 ]

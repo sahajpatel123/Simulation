@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.api.v1.common import get_owned_project
@@ -519,7 +520,9 @@ def get_simulation_webhook_delivery_stats(
     success/failure counts and rate, HTTP status and event-type breakdowns,
     retry pressure, the most frequent delivery errors, and a
     HEALTHY/DEGRADED/DOWN verdict so operators can spot an endpoint outage
-    without scanning the raw delivery list.
+    without scanning the raw delivery list. Rows are matched by
+    ``created_at``, falling back to ``delivered_at`` for legacy rows whose
+    creation timestamp is missing.
     """
     webhook = _get_owned_webhook(db, current_user.id, project_id, webhook_id)
     now = datetime.now(UTC)
@@ -528,7 +531,10 @@ def get_simulation_webhook_delivery_stats(
         db.query(SimulationWebhookDelivery)
         .filter(
             SimulationWebhookDelivery.webhook_subscription_id == webhook.id,
-            SimulationWebhookDelivery.created_at >= cutoff,
+            or_(
+                SimulationWebhookDelivery.created_at >= cutoff,
+                SimulationWebhookDelivery.delivered_at >= cutoff,
+            ),
         )
         .order_by(
             SimulationWebhookDelivery.created_at.desc(),
@@ -569,7 +575,9 @@ def get_project_webhook_health(
     endpoint computes, but across every subscription in the project in one
     call. Each subscription is listed with its own health row; the overall
     verdict is computed from ACTIVE subscriptions only so a disabled webhook
-    cannot drag the project's delivery health down.
+    cannot drag the project's delivery health down. Rows are matched by
+    ``created_at``, falling back to ``delivered_at`` for legacy rows whose
+    creation timestamp is missing.
     """
     get_owned_project(db, current_user.id, project_id)
     now = datetime.now(UTC)
@@ -592,7 +600,10 @@ def get_project_webhook_health(
                 SimulationWebhookDelivery.webhook_subscription_id.in_(
                     subscription_ids
                 ),
-                SimulationWebhookDelivery.created_at >= cutoff,
+                or_(
+                    SimulationWebhookDelivery.created_at >= cutoff,
+                    SimulationWebhookDelivery.delivered_at >= cutoff,
+                ),
             )
             .order_by(
                 SimulationWebhookDelivery.created_at.desc(),
@@ -716,6 +727,7 @@ __all__ = [
     "get_simulation_webhook_deliveries",
     "export_simulation_webhook_deliveries",
     "get_simulation_webhook_delivery_stats",
+    "get_project_webhook_health",
     "retry_simulation_webhook_delivery",
     "retry_failed_simulation_webhook_deliveries",
 ]

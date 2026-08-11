@@ -251,6 +251,39 @@ def test_schema_round_trip() -> None:
     )
 
 
+def test_project_builder_counts_deliveries_with_delivered_at_only() -> None:
+    delivery = _delivery(1, 7, status="SUCCESS")
+    delivery["created_at"] = None
+    delivery["delivered_at"] = "2026-01-15T00:00:00+00:00"
+
+    payload = _build(
+        subscriptions=[_subscription(7)],
+        deliveries=[delivery],
+    )
+
+    assert payload["total_deliveries"] == 1
+    assert payload["success_count"] == 1
+    assert payload["webhooks"][0]["total_deliveries"] == 1
+    assert payload["health_label"] == HEALTH_HEALTHY
+
+
+def test_project_verdict_delegates_to_shared_health_label() -> None:
+    from app.simulation import project_webhook_health as builder_mod
+
+    with patch.object(
+        builder_mod,
+        "health_label_for_rate",
+        return_value="CUSTOM",
+    ) as mock_label:
+        payload = _build(
+            subscriptions=[_subscription(7)],
+            deliveries=[_delivery(1, 7, status="SUCCESS")],
+        )
+
+    mock_label.assert_called_once()
+    assert payload["health_label"] == "CUSTOM"
+
+
 class _Subscription:
     def __init__(
         self,
@@ -298,8 +331,10 @@ class _Delivery:
 class _Query:
     def __init__(self, items: list[object]) -> None:
         self._items = items
+        self.filters: list[object] = []
 
     def filter(self, *args, **kwargs):
+        self.filters.extend(args)
         return self
 
     def order_by(self, *args, **kwargs):
@@ -317,14 +352,18 @@ class _Session:
     ) -> None:
         self.subscriptions = subscriptions
         self.deliveries = deliveries
+        self.last_query: _Query | None = None
 
     def query(self, model, *args, **kwargs):
         name = getattr(model, "__name__", "")
         if name == "SimulationWebhookSubscription":
-            return _Query(self.subscriptions)
-        if name == "SimulationWebhookDelivery":
-            return _Query(self.deliveries)
-        return _Query([])
+            query = _Query(self.subscriptions)
+        elif name == "SimulationWebhookDelivery":
+            query = _Query(self.deliveries)
+        else:
+            query = _Query([])
+        self.last_query = query
+        return query
 
 
 class _FakeDatetime(datetime):
@@ -369,3 +408,34 @@ def test_route_composes_all_subscriptions_into_one_payload() -> None:
     assert payload.total_deliveries == 1
     assert payload.health_label == HEALTH_HEALTHY
     assert [item.webhook_id for item in payload.webhooks] == [1, 2]
+
+
+def test_route_window_filter_includes_delivered_at_fallback() -> None:
+    from app.api.v1 import simulation_webhooks as mod
+
+    session = _Session(
+        subscriptions=[_Subscription(id=1)],
+        deliveries=[_Delivery(id=1, webhook_subscription_id=1)],
+    )
+    with patch.object(mod, "get_owned_project", return_value=None), patch.object(
+        mod,
+        "datetime",
+        _FakeDatetime,
+    ):
+        mod.get_project_webhook_health(
+            project_id=10,
+            days=30,
+            db=session,
+            current_user=_user(),
+        )
+
+    assert session.last_query is not None
+    rendered = " ".join(str(expr) for expr in session.last_query.filters)
+    assert "created_at" in rendered
+    assert "delivered_at" in rendered
+
+
+def test_route_module_exports_health_endpoint() -> None:
+    from app.api.v1 import simulation_webhooks as mod
+
+    assert "get_project_webhook_health" in mod.__all__

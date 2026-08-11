@@ -10,7 +10,8 @@ The builder groups delivery rows by ``webhook_subscription_id``, delegates
 the per-webhook arithmetic to :func:`build_webhook_delivery_stats` so the
 project overview cannot drift from the standalone endpoint, and then rolls
 the *active* subscriptions' deliveries up into one project-level health
-label. Disabled subscriptions are still listed (with their own history) but
+label using the same shared rate-to-label bucketing as the per-webhook
+stats. Disabled subscriptions are still listed (with their own history) but
 do not drag the project verdict down, because a disabled webhook is not
 expected to deliver.
 
@@ -25,11 +26,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.simulation.webhook_delivery_stats import (
-    HEALTH_DEGRADED,
-    HEALTH_DOWN,
-    HEALTH_HEALTHY,
     HEALTH_NO_DATA,
     build_webhook_delivery_stats,
+    health_label_for_rate,
 )
 
 STATUS_ACTIVE: str = "ACTIVE"
@@ -78,15 +77,9 @@ def _normalise_now(now: datetime | None) -> datetime:
 
 
 def _overall_health(total: int, success_count: int) -> str:
-    """Bucket a project-wide success rate into the same labels as per-webhook stats."""
-    if total <= 0:
-        return HEALTH_NO_DATA
-    rate = success_count / total
-    if rate == 1.0:
-        return HEALTH_HEALTHY
-    if rate >= 0.8:
-        return HEALTH_DEGRADED
-    return HEALTH_DOWN
+    """Bucket a project-wide success rate into the shared health labels."""
+    rate = success_count / total if total else None
+    return health_label_for_rate(total, rate)
 
 
 def _overall_narrative(
