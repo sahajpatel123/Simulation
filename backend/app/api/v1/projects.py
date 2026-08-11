@@ -199,6 +199,10 @@ from app.simulation.existing_product_export import (
 )
 from app.simulation.findings_export import extract_findings
 from app.simulation.go_no_go import build_go_no_go
+from app.simulation.go_no_go_export import (
+    go_no_go_to_csv,
+    go_no_go_to_json,
+)
 from app.simulation.intake_mode_export import intake_mode_to_csv
 from app.simulation.intervention_digest import (
     build_intervention_digest,
@@ -6102,6 +6106,80 @@ def get_go_no_go(
         latest_simulation_id=(
             latest_sim.id if latest_sim is not None else None
         ),
+    )
+
+
+@router.get(
+    "/{project_id}/go-no-go/export",
+    response_class=StreamingResponse,
+    summary="Export a project's go/no-go launch scorecard as CSV or JSON",
+    # Read-only composition of already-persisted analysis JSON. Export is
+    # usually a manual handoff/audit action, so a lower cap than the digest
+    # endpoint is fine.
+    dependencies=[Depends(rate_limit(limit=20, window_s=60))],
+)
+def export_go_no_go(
+    project_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the multi-section "
+            "launch-scorecard spreadsheet; ``json`` returns the full "
+            "go/no-go payload. Unsupported values return a 400 response."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Export a project's go/no-go launch scorecard as CSV or JSON."""
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; expected "
+                "'csv' or 'json'"
+            ),
+        )
+
+    payload = get_go_no_go(
+        project_id=project_id,
+        db=db,
+        current_user=current_user,
+    )
+    metadata = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "project_id": project_id,
+        "user_id": current_user.id,
+        "format_version": "1",
+    }
+
+    if fmt == "json":
+        body = go_no_go_to_json(payload, metadata=metadata).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="go-no-go-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    body = go_no_go_to_csv(payload, metadata=metadata).encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="go-no-go-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
+        },
     )
 
 
