@@ -23,6 +23,7 @@ Usage:
 """
 from __future__ import annotations
 
+import math
 import threading
 import time
 from typing import Iterable
@@ -39,6 +40,35 @@ LLM_DURATION_HISTOGRAM: str = "thecee_llm_duration_seconds"
 CACHE_READ_COUNTER: str = "thecee_response_cache_reads_total"
 CACHE_WRITE_COUNTER: str = "thecee_response_cache_writes_total"
 CACHE_INVALIDATION_COUNTER: str = "thecee_response_cache_invalidations_total"
+
+# Per-architect compute duration histogram. Recorded by
+# ``app.simulation.conductor`` for every successful architect ``compute()`` so
+# the signal that the persisted run-level rollup provides after completion is
+# also visible live on ``/metrics``. Values are observed in seconds (the
+# repo-wide convention for duration metrics); the persisted
+# ``results_json["conductor_architect_timing"]`` payload keeps the same
+# measurements in milliseconds.
+ARCHITECT_DURATION_HISTOGRAM: str = "thecee_architect_compute_duration_seconds"
+
+# Seconds buckets for the per-architect compute histogram. Architect
+# ``compute()`` calls are pure in-process functions that typically take
+# microseconds to a few milliseconds, so the first buckets cover that range
+# and the tail captures the slow outliers an operator should investigate.
+ARCHITECT_DURATION_BUCKETS_SECONDS: tuple[float, ...] = (
+    0.001,
+    0.002,
+    0.005,
+    0.01,
+    0.025,
+    0.05,
+    0.1,
+    0.25,
+    0.5,
+    1.0,
+    2.0,
+    5.0,
+    10.0,
+)
 
 
 class _Metrics:
@@ -240,6 +270,28 @@ class _Metrics:
                 "scope": scope,
                 "result": result,
             },
+        )
+
+    def architect_compute(self, architect: str, duration_ms: float) -> None:
+        """Observe one successful architect ``compute()`` wall-clock duration.
+
+        The duration is accepted in milliseconds (the unit used by the
+        persisted timing rollup) and converted to seconds for the histogram,
+        matching the other duration metrics in this registry. Non-finite or
+        negative durations are ignored so a bad timer can never skew the
+        latency distribution.
+        """
+        try:
+            duration = float(duration_ms)
+        except (TypeError, ValueError, OverflowError):
+            return
+        if not math.isfinite(duration) or duration < 0.0:
+            return
+        self.observe(
+            ARCHITECT_DURATION_HISTOGRAM,
+            duration / 1000.0,
+            labels={"architect": architect},
+            buckets=ARCHITECT_DURATION_BUCKETS_SECONDS,
         )
 
     def snapshot(self) -> dict[str, object]:

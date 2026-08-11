@@ -27,12 +27,19 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from app.core.metrics import (
+    ARCHITECT_DURATION_HISTOGRAM,
+    _Metrics,
+    metrics,
+)
 from app.schemas.simulation import SimulationResultOut
 from app.simulation.architects.base import ArchitectOutput
 from app.simulation.conductor import (
-    ConductorDiagnostics,
     ArchitectDiagnostics,
+    Conductor,
+    ConductorDiagnostics,
 )
+from app.simulation.product_type import ProductType
 from app.simulation.reproducibility import (
     VOLATILE_RESULT_KEYS,
     stable_result_fingerprint,
@@ -56,6 +63,22 @@ def _output(severity: str = "INFO") -> ArchitectOutput:
         narrative_findings=["ok"],
         severity=severity,
     )
+
+
+def _histogram_delta(
+    before: dict[object, object],
+    after: dict[object, object],
+    architect: str,
+) -> tuple[int, float]:
+    """Return (observation count, sum) added for one architect's histogram."""
+    key = (ARCHITECT_DURATION_HISTOGRAM, (("architect", architect),))
+    prev = before.get(key)
+    curr = after.get(key)
+    prev_count = prev[1][-1] if prev else 0
+    curr_count = curr[1][-1] if curr else 0
+    prev_sum = prev[2] if prev else 0.0
+    curr_sum = curr[2] if curr else 0.0
+    return curr_count - prev_count, curr_sum - prev_sum
 
 
 # ── Recording behaviour ─────────────────────────────────────────────────────
@@ -166,6 +189,59 @@ def test_timing_payload_is_json_safe() -> None:
 
     round_tripped = json.loads(json.dumps(payload))
     assert round_tripped == payload
+
+
+# ── Live Prometheus observability ───────────────────────────────────────────
+
+
+def test_architect_compute_metric_observes_seconds_histogram() -> None:
+    registry = _Metrics()
+    registry.architect_compute("PricingArchitect", 1.5)
+    registry.architect_compute("PricingArchitect", 2.5)
+    registry.architect_compute("PricingArchitect", -1.0)
+    registry.architect_compute("PricingArchitect", float("nan"))
+    registry.architect_compute("PricingArchitect", float("inf"))
+    registry.architect_compute("PricingArchitect", "nope")  # type: ignore[arg-type]
+
+    out = registry.render()
+    assert (
+        'thecee_architect_compute_duration_seconds_count{architect="PricingArchitect"} 2'
+        in out
+    )
+    # 1.5 ms lands in le=0.002 s; 2.5 ms lands in le=0.005 s (cumulative).
+    assert (
+        'thecee_architect_compute_duration_seconds_bucket'
+        '{architect="PricingArchitect",le="0.002"} 1' in out
+    )
+    assert (
+        'thecee_architect_compute_duration_seconds_bucket'
+        '{architect="PricingArchitect",le="0.005"} 2' in out
+    )
+    rendered_sum = next(
+        line
+        for line in out.splitlines()
+        if line.startswith("thecee_architect_compute_duration_seconds_sum")
+    )
+    assert float(rendered_sum.rsplit(" ", 1)[-1]) == pytest.approx(0.004)
+
+
+def test_conductor_run_observes_architect_compute_histogram() -> None:
+    before = metrics.snapshot()["histograms"]
+    result = Conductor().run(
+        agents=[],
+        env_params={
+            "average_order_value": 999,
+            "description": "A saas crm dashboard",
+        },
+        assumptions=[],
+        product_type=ProductType.SAAS,
+    )
+    after = metrics.snapshot()["histograms"]
+
+    assert result.diagnostics.timing_to_dict()["compute_calls"] > 0
+    count, total = _histogram_delta(before, after, "PricingArchitect")
+    assert count == 52
+    assert total >= 0.0
 
 
 # ── Reproducibility fingerprint ─────────────────────────────────────────────

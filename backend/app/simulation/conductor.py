@@ -15,6 +15,7 @@ from typing import Any, Callable
 
 from sqlalchemy import delete, text
 
+from app.core.metrics import metrics
 from app.simulation.architects.base import ArchitectOutput, DomainReport
 from app.simulation.cancellation import SimulationCancelled
 from app.simulation.cluster_reweighting import ClusterReweightingEngine
@@ -913,6 +914,10 @@ class Conductor:
                         output = corrected
                     cluster_outputs[arch_name] = output
                     stats.record_success(output, duration_ms=duration_ms)
+                    metrics.architect_compute(
+                        architect=arch_name,
+                        duration_ms=duration_ms,
+                    )
                 except Exception:
                     stats.record_failure(cluster.cluster_id)
                     logger.exception(
