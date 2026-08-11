@@ -208,6 +208,11 @@ from app.simulation.cluster_overlap_matrix import (
 from app.simulation.cluster_overlap_matrix import (
     build_cluster_overlap_matrix,
 )
+from app.simulation.cluster_run_summary_export import (
+    build_cluster_run_summary_export,
+    cluster_run_summary_to_csv,
+    cluster_run_summary_to_json,
+)
 from app.simulation.cluster_trend import (
     build_cluster_trend,
 )
@@ -11465,6 +11470,131 @@ def get_simulation_export(
                 f'attachment; filename="simulation-{simulation_id}.csv"'
             ),
             "Content-Length": str(len(body)),
+        },
+    )
+
+
+@router.get(
+    "/{simulation_id}/cluster-run-summaries/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export a simulation's per-cluster run summaries (agents, "
+        "conversion, drop triggers, architect scores) as CSV or JSON"
+    ),
+    # Read-rare calibration/observability export; cap polling so a
+    # dashboard loop can't drive repeated JSONB reads.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_cluster_run_summaries(
+    simulation_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly table; ``json`` returns the raw "
+            "cluster-run-summary payload. Unsupported values return "
+            "a 400 response."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Download a completed simulation's per-cluster run summaries.
+
+    Unlike the main simulation export (which reconstructs cluster rows from
+    ``results_json``), this endpoint reads the persisted
+    ``cluster_run_summaries`` audit rows: agents assigned/converted,
+    conversion rate, funnel drop-state distribution, mean drop state,
+    primary drop trigger, architect scores, per-cluster signal quality,
+    claim-confidence distribution and product type. These are the rows the
+    calibration layer consumes, so the export is the transparency surface
+    for "why did this cluster convert the way it did?".
+
+    ``format=csv`` returns a metadata block, a compact summary section and
+    one row per cluster with JSONB columns rendered as compact JSON strings;
+    ``format=json`` returns the raw nested payload for BI pipelines.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unsupported export format {format!r}; expected 'csv' or 'json'",
+        )
+
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — cluster-run-summary export "
+                "requires completed results."
+            ),
+        )
+
+    summary_rows = (
+        db.query(ClusterRunSummary)
+        .filter(ClusterRunSummary.simulation_id == sim.id)
+        .order_by(ClusterRunSummary.cluster_id.asc())
+        .all()
+    )
+
+    cluster_names = {
+        cluster_id: cluster.name for cluster_id, cluster in _clusters_map.items()
+    }
+    export = build_cluster_run_summary_export(
+        summary_rows,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        cluster_names=cluster_names,
+        created_at=sim.created_at,
+    )
+
+    metadata = {
+        "generated_at": datetime.now(tz=UTC).isoformat(),
+        "user_id": current_user.id,
+        "format_version": "1",
+        "simulation_id": simulation_id,
+        "project_id": sim.project_id,
+    }
+
+    if fmt == "json":
+        body = cluster_run_summary_to_json(
+            export,
+            metadata=metadata,
+        ).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="cluster-run-summaries-{simulation_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    body = cluster_run_summary_to_csv(
+        export,
+        metadata=metadata,
+    ).encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="cluster-run-summaries-{simulation_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
         },
     )
 
