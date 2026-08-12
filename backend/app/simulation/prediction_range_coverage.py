@@ -100,6 +100,31 @@ def _usable_row(row: dict[str, Any]) -> tuple[float, float] | None:
     return predicted, actual
 
 
+def _select_history(
+    project_pairs: list[tuple[float, float]],
+    user_pairs: list[tuple[float, float]],
+) -> tuple[list[tuple[float, float]], str]:
+    """Pick the calibration history + source from prebuilt pair lists.
+
+    Project-level pairs are preferred once at least
+    :data:`MIN_OUTCOMES_FOR_RANGE` exist; otherwise the user pool (all owned
+    project outcomes) is used, with any project pairs as the final fallback —
+    mirroring ``app.api.v1.simulations._load_prediction_calibration_pairs``.
+    The history is capped to the same :data:`MAX_HISTORY_PAIRS` budget as the
+    live prediction-range endpoint. Callers may maintain the pair lists
+    incrementally so digest builders stay linear in the outcome count.
+    """
+    if len(project_pairs) >= MIN_OUTCOMES_FOR_RANGE:
+        return project_pairs[-MAX_HISTORY_PAIRS:], "project"
+    if len(user_pairs) >= MIN_OUTCOMES_FOR_RANGE:
+        return user_pairs[-MAX_HISTORY_PAIRS:], "user"
+    if project_pairs:
+        return project_pairs, "project"
+    if user_pairs:
+        return user_pairs, "user"
+    return [], "none"
+
+
 def _choose_history(
     earlier: list[dict[str, Any]],
     *,
@@ -107,11 +132,8 @@ def _choose_history(
 ) -> tuple[list[tuple[float, float]], str]:
     """Pick the calibration history + source exactly like the live route.
 
-    Project-level pairs are preferred once at least
-    :data:`MIN_OUTCOMES_FOR_RANGE` exist; otherwise the user pool (all owned
-    project outcomes passed to the helper) is used, with any project pairs
-    as the final fallback — mirroring
-    ``app.api.v1.simulations._load_prediction_calibration_pairs``.
+    Convenience wrapper around :func:`_select_history` that rebuilds the
+    project and user pair lists from a prefix of outcome rows.
     """
     project_pairs = [
         pair
@@ -124,15 +146,7 @@ def _choose_history(
         for row in earlier
         if (pair := _usable_row(row)) is not None
     ]
-    if len(project_pairs) >= MIN_OUTCOMES_FOR_RANGE:
-        return project_pairs[-MAX_HISTORY_PAIRS:], "project"
-    if len(user_pairs) >= MIN_OUTCOMES_FOR_RANGE:
-        return user_pairs[-MAX_HISTORY_PAIRS:], "user"
-    if project_pairs:
-        return project_pairs, "project"
-    if user_pairs:
-        return user_pairs, "user"
-    return [], "none"
+    return _select_history(project_pairs, user_pairs)
 
 
 def _coverage_verdict(coverage_rate: float | None, evaluated: int) -> str:

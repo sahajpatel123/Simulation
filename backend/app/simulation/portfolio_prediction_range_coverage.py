@@ -13,9 +13,14 @@ project:
 * The per-outcome checks are rolled up into a portfolio coverage rate, mean
   miss margin, worst miss, verdict, narrative, key signals, a per-project
   breakdown, and one row per outcome.
+* History selection is shared with the per-project digest, and prefix
+  history is maintained incrementally so the whole evaluation is linear in
+  the outcome count rather than quadratic.
 
 The module is pure Python (no SQL, no I/O), matching the per-project digest,
 so the full out-of-sample behaviour is verifiable with plain dicts.
+Malformed row metadata (bad ``id`` / ``simulation_id`` values) is tolerated
+and never raises.
 """
 
 from __future__ import annotations
@@ -37,13 +42,32 @@ from app.simulation.prediction_range_coverage import (
     VERDICT_INSUFFICIENT_DATA,
     VERDICT_NEEDS_ATTENTION,
     VERDICT_WELL_CALIBRATED,
-    _choose_history,
     _coverage_verdict,
     _iso,
-    _sort_key,
+    _select_history,
     _usable_row,
     _verdict_severity,
 )
+
+
+def _safe_int(value: Any) -> int | None:
+    """Coerce a row's ``id`` / ``simulation_id`` to an int, or ``None``.
+
+    Booleans and non-numeric values are treated as missing metadata so a
+    malformed row can never crash the digest — ids only order rows and get
+    echoed back to the client.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _portfolio_sort_key(row: dict[str, Any]) -> tuple[str, int]:
+    """Stable sort key: created_at ascending, id ascending (id tolerant)."""
+    return (_iso(row.get("created_at")) or "", _safe_int(row.get("id")) or 0)
 
 
 def _portfolio_narrative(
@@ -146,28 +170,34 @@ def build_portfolio_prediction_range_coverage(
         if project_id <= 0 or _usable_row(raw) is None:
             continue
         usable.append(raw)
-    usable.sort(key=_sort_key)
+    usable.sort(key=_portfolio_sort_key)
 
     project_ids = sorted(
         {int(row["project_id"]) for row in usable}
     )
 
     evaluated_rows: list[dict[str, Any]] = []
-    for index, row in enumerate(usable):
+    # Incremental prefix history: these lists mirror
+    # ``_choose_history(usable[:index], project_id=...)`` at every step
+    # without rebuilding both lists from scratch per row, so the digest
+    # stays linear in the number of owned outcomes.
+    project_prefix_pairs: dict[int, list[tuple[float, float]]] = {}
+    user_prefix_pairs: list[tuple[float, float]] = []
+    for row in usable:
         project_id = int(row["project_id"])
-        earlier = usable[:index]
-        history, source = _choose_history(
-            earlier,
-            project_id=project_id,
-        )
         predicted, actual = _usable_row(row)
         if predicted is None or actual is None:
             continue
 
+        history, source = _select_history(
+            project_prefix_pairs.get(project_id, []),
+            user_prefix_pairs,
+        )
+        simulation_id = _safe_int(row.get("simulation_id"))
         payload = build_prediction_range(
             predicted_conversion_rate=predicted,
             pairs=history,
-            simulation_id=int(row.get("simulation_id") or 0),
+            simulation_id=simulation_id or 0,
             project_id=project_id,
             calibration_source=source,
         )
@@ -193,11 +223,7 @@ def build_portfolio_prediction_range_coverage(
 
         evaluated_rows.append(
             {
-                "simulation_id": (
-                    int(row.get("simulation_id"))
-                    if row.get("simulation_id") is not None
-                    else None
-                ),
+                "simulation_id": simulation_id,
                 "project_id": project_id,
                 "predicted_conversion_rate": predicted,
                 "actual_conversion_rate": actual,
@@ -215,6 +241,10 @@ def build_portfolio_prediction_range_coverage(
                 "created_at": _iso(row.get("created_at")),
             }
         )
+        project_prefix_pairs.setdefault(project_id, []).append(
+            (predicted, actual)
+        )
+        user_prefix_pairs.append((predicted, actual))
 
     checked = [row for row in evaluated_rows if row["evaluated"]]
     within_count = sum(1 for row in checked if row["within"])
