@@ -120,6 +120,14 @@ from app.simulation.outcome_benchmark_export import (
     outcome_benchmark_to_json,
 )
 from app.simulation.outcome_gaps import build_outcome_gaps_digest
+from app.simulation.outcome_gaps_export import (
+    FORMAT_VERSION as OUTCOME_GAPS_FORMAT_VERSION,
+)
+from app.simulation.outcome_gaps_export import (
+    outcome_gaps_to_csv,
+    outcome_gaps_to_json,
+    outcome_gaps_to_markdown,
+)
 from app.simulation.outcome_tracker_drift import (
     build_outcome_tracker_drift,
 )
@@ -2716,6 +2724,123 @@ def get_project_outcome_gaps(
         now=datetime.now(UTC),
     )
     return ProjectOutcomeGapsOut(**payload)
+
+
+# Exports deliberately render every matching unscored run rather than a page,
+# so a founder can keep the full feedback queue in a spreadsheet or pipeline.
+# The cap is a defensive ceiling, not a user-facing pagination limit.
+_OUTCOME_GAPS_EXPORT_ROW_CAP: int = 100_000
+
+
+@router.get(
+    "/{project_id}/outcome-gaps/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export a project's outcome-feedback gaps digest as CSV, JSON, "
+        "or Markdown"
+    ),
+    # Same bounded read cost as the JSON digest; cap polling like the
+    # other per-project analytics exports.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_project_outcome_gaps(
+    project_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the multi-section "
+            "spreadsheet; ``json`` returns the raw gaps payload; ``md`` "
+            "returns a founder-facing Markdown brief. Unsupported values "
+            "return a 400 response."
+        ),
+    ),
+    learning_eligible_only: bool = Query(
+        default=False,
+        description=(
+            "When true, only export unscored runs whose signal quality "
+            "is at least 0.25 (the calibration learning-weight floor)."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Export a project's outcome-feedback gaps digest for download.
+
+    Reuses the same digest as ``GET /projects/{id}/outcome-gaps`` but
+    renders every matching unscored simulation (not just the first page),
+    so the exported queue is complete. Default ``format=csv`` renders a
+    multi-section spreadsheet; ``json`` returns a strict machine-readable
+    envelope; ``md`` returns a founder-facing brief.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json", "md"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; expected "
+                "'csv', 'json', or 'md'"
+            ),
+        )
+
+    payload = get_project_outcome_gaps(
+        project_id=project_id,
+        limit=_OUTCOME_GAPS_EXPORT_ROW_CAP,
+        learning_eligible_only=learning_eligible_only,
+        db=db,
+        current_user=current_user,
+    )
+    metadata = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "user_id": current_user.id,
+        "format_version": OUTCOME_GAPS_FORMAT_VERSION,
+        "project_id": project_id,
+    }
+
+    if fmt == "json":
+        body = outcome_gaps_to_json(payload, metadata=metadata).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="outcome-gaps-{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    if fmt == "md":
+        body = outcome_gaps_to_markdown(
+            payload,
+            metadata=metadata,
+        ).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="outcome-gaps-{project_id}.md"'
+                ),
+                "Content-Length": str(len(body)),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    csv_text = outcome_gaps_to_csv(payload, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="outcome-gaps-{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.get(

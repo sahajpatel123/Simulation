@@ -9,11 +9,13 @@ capture/trimming, error counting and the copy semantics of the snapshot.
 
 from __future__ import annotations
 
+import gc
 from typing import Any
 
 import pytest
 from sqlalchemy import create_engine, text
 
+from app.core import query_metrics as query_metrics_module
 from app.core.metrics import metrics
 from app.core.query_health import VERDICT_NO_DATA, build_query_health
 from app.core.query_metrics import (
@@ -110,6 +112,32 @@ def test_install_is_idempotent_per_engine() -> None:
     with engine.begin() as conn:
         conn.execute(text("SELECT 1"))
     assert _counter_value(QUERY_COUNTER, KIND_SELECT) == 1.0
+
+
+def test_install_forgets_garbage_collected_engines() -> None:
+    """A dead engine must not suppress listeners for an address-reusing twin.
+
+    The install guard used to remember raw ``id(engine)`` values, so a new
+    engine allocated at a dead engine's old address was silently skipped and
+    never got query listeners. The guard now tracks engines by weak
+    reference, so garbage collection removes the stale entry and a fresh
+    engine (even at the same address) installs and records queries again.
+    """
+    engine = create_engine("sqlite:///:memory:")
+    assert install_query_metrics(engine, threshold_ms=0.0) is True
+    engine_id = id(engine)
+    del engine
+    gc.collect()
+    assert not any(
+        ref() is not None and id(ref()) == engine_id
+        for ref in query_metrics_module._installed_engines
+    )
+
+    replacement = create_engine("sqlite:///:memory:")
+    assert install_query_metrics(replacement, threshold_ms=0.0) is True
+    with replacement.begin() as conn:
+        conn.execute(text("SELECT 1"))
+    assert len(slow_queries_snapshot()) == 1
 
 
 def test_slow_ring_keeps_slowest_and_respects_bounded_limit() -> None:

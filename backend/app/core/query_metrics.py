@@ -37,6 +37,7 @@ from __future__ import annotations
 import re
 import threading
 import time
+import weakref
 from datetime import UTC, datetime
 from typing import Any
 
@@ -93,7 +94,7 @@ QUERY_DURATION_BUCKETS_SECONDS: tuple[float, ...] = (
 
 _COMMENT_PREFIX_RE = re.compile(r"^\s*(?:(?:--[^\n]*|/\*.*?\*/)\s*)*", re.S)
 
-_installed_engines: set[int] = set()
+_installed_engines: set[weakref.ReferenceType[Engine]] = set()
 _install_lock = threading.Lock()
 
 _starts: dict[tuple[int, int], float] = {}
@@ -177,11 +178,15 @@ def install_query_metrics(
     most ``max_entries`` statements (slowest first) and the threshold is
     configurable so tests can force entries cheaply.
     """
-    engine_id = id(engine)
+    def _drop_engine(ref: weakref.ReferenceType[Engine]) -> None:
+        with _install_lock:
+            _installed_engines.discard(ref)
+
+    engine_ref = weakref.ref(engine, _drop_engine)
     with _install_lock:
-        if engine_id in _installed_engines:
+        if engine_ref in _installed_engines:
             return False
-        _installed_engines.add(engine_id)
+        _installed_engines.add(engine_ref)
 
     def _before_cursor_execute(
         conn: Any,
