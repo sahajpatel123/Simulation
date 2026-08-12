@@ -31,6 +31,7 @@ from app.schemas.portfolio_outcome_gaps import PortfolioOutcomeGapsOut
 from app.schemas.prediction_range_coverage import (
     PortfolioPredictionRangeCoverageOut,
 )
+from app.schemas.product_type_outcome_gaps import ProductTypeOutcomeGapsOut
 from app.schemas.project import (
     MostActiveWeekdayOut,
     OldestOpenItemOut,
@@ -97,6 +98,7 @@ from app.simulation.oldest_open_item import (
 )
 from app.simulation.outcome_gaps import (
     LEARNING_ELIGIBLE_SIGNAL_QUALITY,
+    RECENT_DAYS,
     STALE_DAYS,
 )
 from app.simulation.outcome_gaps_export import (
@@ -121,6 +123,9 @@ from app.simulation.portfolio_prediction_range_coverage import (
     build_portfolio_prediction_range_coverage,
 )
 from app.simulation.premortem_digest import build_premortem_digest
+from app.simulation.product_type_outcome_gaps import (
+    build_product_type_outcome_gaps_digest,
+)
 from app.simulation.projects_by_status import (
     build_projects_by_status,
 )
@@ -5243,6 +5248,156 @@ def get_my_outcome_gaps(
         now=datetime.now(UTC),
     )
     return PortfolioOutcomeGapsOut(**payload)
+
+
+@router.get(
+    "/me/outcome-gaps/product-types",
+    response_model=ProductTypeOutcomeGapsOut,
+    summary=(
+        "Portfolio outcome-feedback coverage by product type - which "
+        "product categories have the weakest real-world feedback loop"
+    ),
+    # Read-only, bounded by the user's owned projects; same budget as the
+    # sibling outcome-gaps reads so polling stays cheap.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_my_outcome_gaps_by_product_type(
+    learning_eligible_only: bool = Query(
+        default=False,
+        description=(
+            "When true, only count unscored runs whose signal quality "
+            "is at least 0.25 (the calibration learning-weight floor)."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProductTypeOutcomeGapsOut:
+    """Return outcome-feedback coverage rolled up by detected product type.
+
+    The per-project and portfolio gap digests list *which* completed runs
+    still need real-world feedback; this digest answers *which category of
+    ideas* has the weakest feedback loop. Every completed simulation across
+    the founder's projects is grouped by the product type detected in its
+    results, and each group reports coverage, learning-eligible gaps, stale
+    high-priority gaps, the oldest open gap, an urgency distribution, and
+    the mean absolute prediction error on runs that were already scored.
+    Rows are sorted weakest-first so the least-calibrated product line
+    appears first.
+
+    ``learning_eligible_only`` restricts the unscored counts and urgency
+    distribution to runs whose signal quality meets the 0.25 learning-weight
+    floor; ``scored`` and ``total_completed`` always reflect the full
+    portfolio so the coverage rate stays honest under filtering.
+    """
+    min_sq = LEARNING_ELIGIBLE_SIGNAL_QUALITY
+    stale_cutoff = datetime.now(UTC) - timedelta(days=STALE_DAYS)
+    recent_cutoff = datetime.now(UTC) - timedelta(days=RECENT_DAYS)
+
+    coverage_rows = (
+        db.execute(
+            text(
+                """
+                SELECT
+                    COALESCE(
+                        NULLIF(
+                            TRIM(s.results_json->>'product_type_detected'),
+                            ''
+                        ),
+                        'unknown'
+                    ) AS product_type,
+                    s.project_id AS project_id,
+                    COUNT(DISTINCT s.id)::int AS total_completed,
+                    COUNT(DISTINCT fo.simulation_id)::int AS scored,
+                    COUNT(DISTINCT s.id) FILTER (
+                        WHERE fo.simulation_id IS NULL
+                    )::int AS unscored,
+                    COUNT(DISTINCT s.id) FILTER (
+                        WHERE fo.simulation_id IS NULL
+                          AND COALESCE(s.signal_quality, 0) >= :min_sq
+                    )::int AS learning_eligible_unscored,
+                    COUNT(DISTINCT s.id) FILTER (
+                        WHERE fo.simulation_id IS NULL
+                          AND COALESCE(s.signal_quality, 0) >= :min_sq
+                          AND s.created_at <= :stale_cutoff
+                    )::int AS high_priority_unscored,
+                    COUNT(DISTINCT s.id) FILTER (
+                        WHERE fo.simulation_id IS NULL
+                          AND (
+                              COALESCE(s.signal_quality, 0) >= :min_sq
+                              OR s.created_at <= :recent_cutoff
+                          )
+                          AND NOT (
+                              COALESCE(s.signal_quality, 0) >= :min_sq
+                              AND s.created_at <= :stale_cutoff
+                          )
+                    )::int AS medium_priority_unscored,
+                    MIN(s.created_at) FILTER (
+                        WHERE fo.simulation_id IS NULL
+                    ) AS oldest_unscored_created_at,
+                    MIN(s.created_at) FILTER (
+                        WHERE fo.simulation_id IS NULL
+                          AND COALESCE(s.signal_quality, 0) >= :min_sq
+                    ) AS oldest_eligible_unscored_created_at
+                FROM simulations s
+                LEFT JOIN founder_outcomes fo
+                  ON fo.simulation_id = s.id
+                 AND fo.project_id = s.project_id
+                JOIN projects p
+                  ON p.id = s.project_id
+                 AND p.user_id = :uid
+                WHERE UPPER(s.status) = 'COMPLETED'
+                GROUP BY s.project_id, product_type
+                """
+            ),
+            {
+                "uid": current_user.id,
+                "min_sq": min_sq,
+                "stale_cutoff": stale_cutoff,
+                "recent_cutoff": recent_cutoff,
+            },
+        )
+        .mappings()
+        .all()
+    )
+
+    accuracy_rows = (
+        db.execute(
+            text(
+                """
+                SELECT
+                    COALESCE(
+                        NULLIF(
+                            TRIM(s.results_json->>'product_type_detected'),
+                            ''
+                        ),
+                        'unknown'
+                    ) AS product_type,
+                    s.results_json AS results_json,
+                    fo.actual_conversion_rate AS actual_conversion_rate
+                FROM founder_outcomes fo
+                JOIN simulations s
+                  ON s.id = fo.simulation_id
+                JOIN projects p
+                  ON p.id = s.project_id
+                 AND p.user_id = :uid
+                WHERE fo.actual_conversion_rate IS NOT NULL
+                  AND s.results_json IS NOT NULL
+                """
+            ),
+            {"uid": current_user.id},
+        )
+        .mappings()
+        .all()
+    )
+
+    payload = build_product_type_outcome_gaps_digest(
+        user_id=current_user.id,
+        coverage_rows=[dict(row) for row in coverage_rows],
+        accuracy_rows=[dict(row) for row in accuracy_rows],
+        learning_eligible_only=learning_eligible_only,
+        now=datetime.now(UTC),
+    )
+    return ProductTypeOutcomeGapsOut(**payload)
 
 
 # Exports deliberately render every matching unscored run rather than a page,
