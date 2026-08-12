@@ -297,6 +297,98 @@ def test_mean_absolute_gap_aggregation_per_product_type() -> None:
     assert hardware["mean_absolute_gap"] == pytest.approx(0.02)
 
 
+def test_mean_absolute_gap_uses_scalar_prediction_fields() -> None:
+    """The route can avoid shipping full results blobs for accuracy math."""
+    payload = build_product_type_outcome_gaps_digest(
+        user_id=42,
+        coverage_rows=[
+            _coverage_row(
+                total_completed=2,
+                scored=2,
+                unscored=0,
+                learning_eligible_unscored=0,
+                high_priority_unscored=0,
+                medium_priority_unscored=0,
+                oldest_unscored_created_at=None,
+                oldest_eligible_unscored_created_at=None,
+            )
+        ],
+        accuracy_rows=[
+            {
+                "product_type": "saas",
+                "population_weighted_conversion": 0.04,
+                "conversion_rate": None,
+                "mean_conversion_rate": None,
+                "actual_conversion_rate": 0.06,
+            },
+            {
+                "product_type": "saas",
+                "population_weighted_conversion": None,
+                "conversion_rate": 0.10,
+                "mean_conversion_rate": None,
+                "actual_conversion_rate": 0.08,
+            },
+        ],
+        now=_NOW,
+    )
+
+    saas = payload["product_types"][0]
+    assert saas["scored_with_prediction"] == 2
+    assert saas["mean_absolute_gap"] == pytest.approx(0.02)
+
+
+def test_learning_eligible_only_recommendation_for_below_floor_only() -> None:
+    """A product type with only low-signal unscored runs is not 'all scored'."""
+    payload = build_product_type_outcome_gaps_digest(
+        user_id=42,
+        coverage_rows=[
+            _coverage_row(
+                total_completed=5,
+                scored=3,
+                unscored=2,
+                learning_eligible_unscored=0,
+                high_priority_unscored=0,
+                medium_priority_unscored=0,
+                oldest_unscored_created_at=_NOW - timedelta(days=2),
+                oldest_eligible_unscored_created_at=None,
+            )
+        ],
+        learning_eligible_only=True,
+        now=_NOW,
+    )
+
+    saas = payload["product_types"][0]
+    assert saas["unscored"] == 0
+    assert "No learning-eligible unscored runs remain" in saas["recommendation"]
+    assert "All completed runs" not in saas["recommendation"]
+
+
+def test_malformed_coverage_rate_is_clamped_and_validates() -> None:
+    """Scored-beyond-total rows cannot overflow the 100% schema bound."""
+    payload = build_product_type_outcome_gaps_digest(
+        user_id=42,
+        coverage_rows=[
+            _coverage_row(
+                total_completed=2,
+                scored=5,
+                unscored=0,
+                learning_eligible_unscored=0,
+                high_priority_unscored=0,
+                medium_priority_unscored=0,
+                oldest_unscored_created_at=None,
+                oldest_eligible_unscored_created_at=None,
+            )
+        ],
+        now=_NOW,
+    )
+
+    assert payload["product_types"][0]["coverage_rate_pct"] == 100.0
+    assert payload["summary"]["coverage_rate_pct"] == 100.0
+    # The response schema must still accept the payload (previously a 500).
+    parsed = ProductTypeOutcomeGapsOut(**payload)
+    assert parsed.product_types[0].coverage_rate_pct == 100.0
+
+
 def test_malformed_rows_are_tolerated() -> None:
     payload = build_product_type_outcome_gaps_digest(
         user_id=42,
@@ -458,6 +550,11 @@ def test_route_sql_is_scoped_and_uses_filter_aggregates() -> None:
     assert "fo.simulation_id = s.id" in coverage_sql
     assert "fo.project_id = s.project_id" in coverage_sql
     assert "fo.actual_conversion_rate IS NOT NULL" in accuracy_sql
+    assert "DISTINCT ON (s.id)" in accuracy_sql
+    assert "fo.project_id = s.project_id" in accuracy_sql
+    assert "UPPER(s.status) = 'COMPLETED'" in accuracy_sql
+    assert "population_weighted_conversion" in accuracy_sql
+    assert "s.results_json AS results_json" not in accuracy_sql
     assert session.calls[0]["params"] == {
         "uid": 42,
         "min_sq": 0.25,

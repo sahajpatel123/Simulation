@@ -12,7 +12,9 @@ simulation's results:
   learning-eligible runs are flagged high-priority.
 * Each product type also reports the mean absolute gap between predicted and
   actual conversion on scored runs, so a founder can see both *where
-  feedback is missing* and *where predictions are wrong*.
+  feedback is missing* and *where predictions are wrong*. Accuracy is based
+  on the latest outcome record per completed simulation, so re-submitting
+  feedback never double-counts the same run.
 * Rows are sorted weakest-first (lowest coverage, then most unscored) so the
   least-calibrated product line appears first.
 
@@ -40,6 +42,11 @@ from app.simulation.outcome_gaps import (
 )
 
 _UNKNOWN_PRODUCT_TYPE: str = "unknown"
+_PREDICTION_KEYS: tuple[str, ...] = (
+    "population_weighted_conversion",
+    "conversion_rate",
+    "mean_conversion_rate",
+)
 
 
 def _utcnow() -> datetime:
@@ -84,7 +91,7 @@ def _age_days(
     now: datetime | None = None,
 ) -> int | None:
     """Whole days between ``created_at`` and ``now`` (None when missing)."""
-    reference = now or _utcnow()
+    reference = _safe_datetime(now) or _utcnow()
     created = _safe_datetime(created_at)
     if created is None:
         return None
@@ -124,16 +131,28 @@ def _normalise_coverage_row(row: dict[str, Any]) -> dict[str, Any] | None:
 def _mean_absolute_gaps(
     accuracy_rows: list[dict[str, Any]] | None,
 ) -> dict[str, tuple[int, float]]:
-    """Accumulate per-product-type ``(count, summed gap)`` for scored runs."""
+    """Accumulate per-product-type ``(count, summed gap)`` for scored runs.
+
+    The route layer now passes scalar prediction fields (and may still pass a
+    ``results_json`` payload for compatibility); scalar fields win because the
+    row no longer needs to carry the full simulation results blob.
+    """
     accums: dict[str, list[float]] = {}
     for raw in accuracy_rows or []:
         if not isinstance(raw, dict):
             continue
         product_type = _safe_str(raw.get("product_type"))
         actual = _safe_float(raw.get("actual_conversion_rate"))
-        predicted = predicted_conversion_from_results(
-            raw.get("results_json")
-        )
+        predicted = None
+        for key in _PREDICTION_KEYS:
+            value = _safe_float(raw.get(key))
+            if value is not None:
+                predicted = value
+                break
+        if predicted is None:
+            predicted = predicted_conversion_from_results(
+                raw.get("results_json")
+            )
         if actual is None or predicted is None:
             continue
         accums.setdefault(product_type, []).append(abs(actual - predicted))
@@ -170,14 +189,22 @@ def _urgency_counts(
 def _recommendation(
     *,
     total_completed: int,
+    scored: int,
     unscored: int,
     learning_eligible_unscored: int,
     high_priority_unscored: int,
+    learning_eligible_only: bool,
 ) -> str:
     """Plain-language next step for one product type."""
     if total_completed <= 0:
         return ""
     if unscored <= 0:
+        if learning_eligible_only and scored < total_completed:
+            return (
+                "No learning-eligible unscored runs remain for this product "
+                "type — the remaining unscored run(s) are below the 0.25 "
+                "learning-weight floor."
+            )
         return "All completed runs for this product type have outcome feedback."
     if high_priority_unscored > 0:
         return (
@@ -288,7 +315,9 @@ def build_product_type_outcome_gaps_digest(
             ``medium_priority_unscored``, ``oldest_unscored_created_at`` and
             ``oldest_eligible_unscored_created_at``.
         accuracy_rows: scored outcome row dicts (``product_type``,
-            ``results_json``, ``actual_conversion_rate``) used to compute
+            ``actual_conversion_rate``, plus either ``results_json`` or the
+            scalar prediction fields ``population_weighted_conversion`` /
+            ``conversion_rate`` / ``mean_conversion_rate``) used to compute
             per-type mean absolute prediction error.
         learning_eligible_only: whether the route restricted the unscored
             universe to learning-eligible runs. ``scored`` and
@@ -357,11 +386,12 @@ def build_product_type_outcome_gaps_digest(
         eligible = bucket["learning_eligible_unscored"]
         high = bucket["high_priority_unscored"]
         medium = bucket["medium_priority_unscored"]
-        coverage_rate_pct = (
-            round((scored / total_completed) * 100.0, 2)
-            if total_completed > 0
-            else 0.0
-        )
+        coverage_rate_pct = 0.0
+        if total_completed > 0:
+            coverage_rate_pct = min(
+                100.0,
+                round((scored / total_completed) * 100.0, 2),
+            )
 
         if learning_eligible_only:
             display_unscored = min(unscored, eligible)
@@ -397,9 +427,11 @@ def build_product_type_outcome_gaps_digest(
                 "scored_with_prediction": gap_count,
                 "recommendation": _recommendation(
                     total_completed=total_completed,
+                    scored=scored,
                     unscored=display_unscored,
                     learning_eligible_unscored=eligible,
                     high_priority_unscored=high,
+                    learning_eligible_only=learning_eligible_only,
                 ),
             }
         )
@@ -418,11 +450,12 @@ def build_product_type_outcome_gaps_digest(
     unscored = sum(row["unscored"] for row in rows)
     eligible = sum(row["learning_eligible_unscored"] for row in rows)
     high = sum(row["high_priority_unscored"] for row in rows)
-    coverage_rate_pct = (
-        round((scored / total_completed) * 100.0, 2)
-        if total_completed > 0
-        else 0.0
-    )
+    coverage_rate_pct = 0.0
+    if total_completed > 0:
+        coverage_rate_pct = min(
+            100.0,
+            round((scored / total_completed) * 100.0, 2),
+        )
 
     weakest: tuple[str, int, int] | None = None
     for row in rows:
@@ -462,7 +495,7 @@ def build_product_type_outcome_gaps_digest(
     }
 
     return {
-        "user_id": max(0, int(user_id or 0)),
+        "user_id": _safe_int(user_id),
         "generated_at": reference,
         "summary": summary,
         "product_types": rows,

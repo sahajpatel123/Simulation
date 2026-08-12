@@ -5281,6 +5281,8 @@ def get_my_outcome_gaps_by_product_type(
     results, and each group reports coverage, learning-eligible gaps, stale
     high-priority gaps, the oldest open gap, an urgency distribution, and
     the mean absolute prediction error on runs that were already scored.
+    Accuracy uses the latest outcome record per completed simulation, so
+    re-submitting feedback never double-counts the same run.
     Rows are sorted weakest-first so the least-calibrated product line
     appears first.
 
@@ -5364,7 +5366,7 @@ def get_my_outcome_gaps_by_product_type(
         db.execute(
             text(
                 """
-                SELECT
+                SELECT DISTINCT ON (s.id)
                     COALESCE(
                         NULLIF(
                             TRIM(s.results_json->>'product_type_detected'),
@@ -5372,16 +5374,24 @@ def get_my_outcome_gaps_by_product_type(
                         ),
                         'unknown'
                     ) AS product_type,
-                    s.results_json AS results_json,
+                    s.id AS simulation_id,
+                    s.results_json->'population_weighted_conversion'
+                        AS population_weighted_conversion,
+                    s.results_json->'conversion_rate' AS conversion_rate,
+                    s.results_json->'mean_conversion_rate'
+                        AS mean_conversion_rate,
                     fo.actual_conversion_rate AS actual_conversion_rate
                 FROM founder_outcomes fo
                 JOIN simulations s
                   ON s.id = fo.simulation_id
+                 AND fo.project_id = s.project_id
                 JOIN projects p
                   ON p.id = s.project_id
                  AND p.user_id = :uid
                 WHERE fo.actual_conversion_rate IS NOT NULL
                   AND s.results_json IS NOT NULL
+                  AND UPPER(s.status) = 'COMPLETED'
+                ORDER BY s.id, fo.created_at DESC NULLS LAST, fo.id DESC
                 """
             ),
             {"uid": current_user.id},
