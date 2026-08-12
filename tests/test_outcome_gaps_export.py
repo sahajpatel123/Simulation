@@ -199,6 +199,19 @@ def test_csv_empty_payload_still_renders_sections() -> None:
     assert "simulation_id,created_at,age_days" in csv_text
 
 
+def test_csv_preserves_zero_coverage_rate() -> None:
+    payload = _project_payload()
+    payload.summary.scored = 0
+    payload.summary.coverage_rate_pct = 0.0
+
+    csv_text = outcome_gaps_to_csv(payload)
+
+    # A real 0% coverage rate must survive the export; only missing or
+    # non-finite values render as blank cells.
+    assert "coverage_rate_pct,0.0" in csv_text
+    assert "coverage_rate_pct,\n" not in csv_text
+
+
 def test_csv_neutralises_spreadsheet_formula_injection() -> None:
     payload = _project_payload()
     payload.summary.narrative = "-2+3"
@@ -369,3 +382,6 @@ def test_markdown_empty_payload_renders_sections() -> None:
     assert "## Unscored Simulations" in text
     assert "| Metric | Value |" in text
     assert "| ---: | --- |" in text
+    # Missing identifiers must not be invented as "Project 0" / "User 0".
+    assert "Project 0" not in text
+    assert "User 0" not in text

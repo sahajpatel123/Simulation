@@ -205,7 +205,8 @@ def _summary_rows(data: dict[str, Any]) -> list[tuple[str, object]]:
             continue
         value = summary.get(key)
         if key == "coverage_rate_pct":
-            rows.append((key, _safe_float(value) or ""))
+            parsed = _safe_float(value)
+            rows.append((key, "" if parsed is None else parsed))
         elif key == "oldest_unscored_age_days":
             rows.append((key, "" if value is None else _safe_int(value)))
         elif key == "narrative":
@@ -475,10 +476,12 @@ def outcome_gaps_to_markdown(
     lines.append("---")
     lines.append("")
     footer = ["Outcome feedback gaps"]
-    if "user_id" in data:
-        footer.append(f"User {_safe_int(data.get('user_id'))}")
-    else:
-        footer.append(f"Project {_safe_int(data.get('project_id'))}")
+    user_id = _safe_int(data.get("user_id"))
+    project_id = _safe_int(data.get("project_id"))
+    if user_id:
+        footer.append(f"User {user_id}")
+    elif project_id:
+        footer.append(f"Project {project_id}")
     if data.get("generated_at"):
         footer.append(
             f"Generated {_escape_md_cell(data.get('generated_at'))}"
