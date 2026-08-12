@@ -11,6 +11,9 @@ founder record *what happened* and see the consequence:
   implied by the derived confidence tier.
 * ``GET /projects/{project_id}/evidence-digest`` rolls every logged
   experiment up into a project-level de-risking summary.
+* ``GET /projects/{project_id}/assumption-validation-timeline`` replays
+  every logged experiment chronologically with cumulative validation
+  progress and first-occurrence milestones.
 
 Pure post-hoc analysis — no Celery dispatch, no LLM calls.
 """
@@ -33,6 +36,7 @@ from app.schemas.assumption_evidence import (
     EvidenceCreate,
     EvidenceOut,
 )
+from app.schemas.validation_timeline import AssumptionValidationTimelineOut
 from app.simulation.assumption_evidence_digest import (
     build_assumption_evidence_digest,
 )
@@ -41,6 +45,7 @@ from app.simulation.evidence_scorecard import (
     derive_confidence,
     evidence_to_out,
 )
+from app.simulation.validation_timeline import build_validation_timeline
 
 router = APIRouter(prefix="/projects", tags=["assumption-evidence"])
 
@@ -250,6 +255,53 @@ def get_assumption_evidence_digest(
     )
     return AssumptionEvidenceDigestOut(
         **build_assumption_evidence_digest(
+            assumptions=assumptions,
+            evidence=evidence,
+            project_id=project.id,
+        )
+    )
+
+
+@router.get(
+    "/{project_id}/assumption-validation-timeline",
+    response_model=AssumptionValidationTimelineOut,
+    summary="Chronological validation-evidence timeline for a project",
+    responses=_JSON_200,
+)
+def get_assumption_validation_timeline(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AssumptionValidationTimelineOut:
+    """
+    Replay the project's logged validation experiments in chronological
+    order: each event's method/result, the assumption status it produced,
+    cumulative de-risked / challenged / pending counts, and the first time
+    each state occurred. Unlike the per-assumption scorecard, this endpoint
+    does not require a completed simulation — a founder can watch validation
+    progress accumulate from the first logged experiment.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+    assumptions = (
+        db.query(Assumption)
+        .filter(
+            Assumption.project_id == project.id,
+            Assumption.is_hidden.is_(False),
+        )
+        .order_by(Assumption.id.asc())
+        .all()
+    )
+    evidence = (
+        db.query(AssumptionEvidence)
+        .filter(AssumptionEvidence.project_id == project.id)
+        .order_by(
+            AssumptionEvidence.created_at.asc(),
+            AssumptionEvidence.id.asc(),
+        )
+        .all()
+    )
+    return AssumptionValidationTimelineOut(
+        **build_validation_timeline(
             assumptions=assumptions,
             evidence=evidence,
             project_id=project.id,
