@@ -181,6 +181,12 @@ def build_validation_timeline(
         definition["assumption_id"]: STATUS_PENDING
         for definition in definitions
     }
+    status_counts: dict[str, int] = {
+        STATUS_DE_RISKED: 0,
+        STATUS_CHALLENGED: 0,
+        STATUS_INCONCLUSIVE: 0,
+        STATUS_PENDING: total_assumptions,
+    }
     evidence_counts: dict[int, int] = {
         definition["assumption_id"]: 0
         for definition in definitions
@@ -227,7 +233,10 @@ def build_validation_timeline(
                 if evidence_counts[assumption_id] > 0
                 else STATUS_PENDING
             )
+        previous_status = statuses[assumption_id]
+        status_counts[previous_status] -= 1
         statuses[assumption_id] = status_after
+        status_counts[status_after] += 1
         event_status_by_id[event_id] = status_after
 
         derived = derive_confidence(result)
@@ -259,20 +268,10 @@ def build_validation_timeline(
         ):
             first_inconclusive_event_id = event_id
 
-        de_risked_count = sum(
-            1 for status in statuses.values() if status == STATUS_DE_RISKED
-        )
-        challenged_count = sum(
-            1 for status in statuses.values() if status == STATUS_CHALLENGED
-        )
-        inconclusive_count = sum(
-            1
-            for status in statuses.values()
-            if status == STATUS_INCONCLUSIVE
-        )
-        pending_count = sum(
-            1 for status in statuses.values() if status == STATUS_PENDING
-        )
+        de_risked_count = status_counts[STATUS_DE_RISKED]
+        challenged_count = status_counts[STATUS_CHALLENGED]
+        inconclusive_count = status_counts[STATUS_INCONCLUSIVE]
+        pending_count = status_counts[STATUS_PENDING]
         assumptions_with_evidence = len(has_evidence)
         progress.append({
             "event_id": event_id,

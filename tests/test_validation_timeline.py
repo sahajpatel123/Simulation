@@ -131,6 +131,56 @@ class TestChronologicalOrder:
 
 
 class TestStatusPolicy:
+    def test_progress_counts_stay_consistent_across_many_events(self) -> None:
+        assumptions = [_assumption(i) for i in range(1, 6)]
+        out = _build(
+            assumptions=assumptions,
+            evidence=[
+                _evidence(10, assumption_id=1, result="PASS", day=1),
+                _evidence(
+                    11, assumption_id=2, result="INCONCLUSIVE", day=2
+                ),
+                _evidence(12, assumption_id=1, result="FAIL", day=3),
+                _evidence(
+                    13, assumption_id=3, result="INCONCLUSIVE", day=4
+                ),
+                _evidence(14, assumption_id=2, result="PASS", day=5),
+                _evidence(15, assumption_id=4, result="PASS", day=6),
+                _evidence(
+                    16, assumption_id=1, result="INCONCLUSIVE", day=7
+                ),
+            ],
+        )
+
+        total = len(assumptions)
+        for snapshot in out["progress"]:
+            count_sum = (
+                snapshot["de_risked_count"]
+                + snapshot["challenged_count"]
+                + snapshot["inconclusive_count"]
+                + snapshot["pending_count"]
+            )
+            assert count_sum == total
+            assert snapshot["de_risked_count"] >= 0
+            assert snapshot["challenged_count"] >= 0
+            assert snapshot["inconclusive_count"] >= 0
+            assert snapshot["pending_count"] >= 0
+
+        final = out["progress"][-1]
+        assert (
+            final["de_risked_count"],
+            final["challenged_count"],
+            final["inconclusive_count"],
+            final["pending_count"],
+        ) == (2, 1, 1, 1)
+        assert [row["status"] for row in out["assumptions"]] == [
+            STATUS_CHALLENGED,
+            STATUS_DE_RISKED,
+            STATUS_INCONCLUSIVE,
+            STATUS_DE_RISKED,
+            STATUS_PENDING,
+        ]
+
     def test_inconclusive_after_pass_keeps_de_risked(self) -> None:
         out = _build(
             assumptions=[_assumption(1), _assumption(2)],
