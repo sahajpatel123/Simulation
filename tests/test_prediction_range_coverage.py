@@ -7,6 +7,7 @@ narratives, malformed-input tolerance and the Pydantic contract.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -19,6 +20,7 @@ from app.schemas.prediction_range_coverage import (
     PredictionRangeCoverageOut,
 )
 from app.simulation.prediction_range_coverage import (
+    MAX_HISTORY_PAIRS,
     MIN_EVALUATED_FOR_VERDICT,
     MIN_OUTCOMES_FOR_RANGE,
     build_prediction_range_coverage,
@@ -191,6 +193,68 @@ def test_project_history_preferred_over_user_pool() -> None:
     ]
     assert len(project_sourced) == 1
     assert project_sourced[0]["history_count"] == 3
+
+
+def test_history_is_capped_to_live_endpoint_limit() -> None:
+    """The rebuild uses the same 200-pair budget as the live endpoint."""
+    from app.simulation.prediction_range import build_prediction_range
+
+    base = datetime(2026, 1, 1, tzinfo=UTC)
+    rows = [
+        _row(
+            row_id=index + 1,
+            project_id=7,
+            predicted=0.10,
+            actual=0.90,
+            created_at=base + timedelta(days=index),
+        )
+        for index in range(5)
+    ]
+    rows.extend(
+        _row(
+            row_id=index + 6,
+            project_id=7,
+            predicted=0.10,
+            actual=0.09 if index % 2 == 0 else 0.11,
+            created_at=base + timedelta(days=index + 5),
+        )
+        for index in range(MAX_HISTORY_PAIRS)
+    )
+    target = _row(
+        row_id=MAX_HISTORY_PAIRS + 6,
+        project_id=7,
+        predicted=0.10,
+        actual=0.10,
+        created_at=base + timedelta(days=MAX_HISTORY_PAIRS + 5),
+    )
+
+    payload = build_prediction_range_coverage(
+        project_id=7,
+        rows=[*rows, target],
+    )
+    evaluated = [row for row in payload["rows"] if row["evaluated"]]
+    target_row = next(
+        row
+        for row in evaluated
+        if row["simulation_id"] == target["simulation_id"]
+    )
+    assert target_row["history_count"] == MAX_HISTORY_PAIRS
+    assert target_row["calibration_source"] == "project"
+
+    recent_pairs = [
+        (row["predicted_conversion_rate"], row["actual_conversion_rate"])
+        for row in rows[-MAX_HISTORY_PAIRS:]
+    ]
+    expected = build_prediction_range(
+        predicted_conversion_rate=0.10,
+        pairs=recent_pairs,
+        simulation_id=target["simulation_id"],
+        project_id=7,
+        calibration_source="project",
+    )
+    assert target_row["low"] == pytest.approx(expected["low"])
+    assert target_row["high"] == pytest.approx(expected["high"])
+    assert target_row["within"] is True
 
 
 def test_malformed_rows_are_skipped_without_crashing() -> None:

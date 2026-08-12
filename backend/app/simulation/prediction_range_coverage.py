@@ -31,6 +31,12 @@ from app.simulation.prediction_range import (
     build_prediction_range,
 )
 
+# The live prediction-range endpoint caps its calibration history at the 200
+# most recent usable outcome pairs (``app.api.v1.simulations._query_outcome_pairs``).
+# Keep the out-of-sample rebuild on the same budget so the digest measures the
+# band a founder would actually have seen at the time.
+MAX_HISTORY_PAIRS: int = 200
+
 # Verdict labels — same wording family as the calibration digests.
 VERDICT_INSUFFICIENT_DATA: str = "INSUFFICIENT_DATA"
 VERDICT_WELL_CALIBRATED: str = "WELL_CALIBRATED"
@@ -119,9 +125,9 @@ def _choose_history(
         if (pair := _usable_row(row)) is not None
     ]
     if len(project_pairs) >= MIN_OUTCOMES_FOR_RANGE:
-        return project_pairs, "project"
+        return project_pairs[-MAX_HISTORY_PAIRS:], "project"
     if len(user_pairs) >= MIN_OUTCOMES_FOR_RANGE:
-        return user_pairs, "user"
+        return user_pairs[-MAX_HISTORY_PAIRS:], "user"
     if project_pairs:
         return project_pairs, "project"
     if user_pairs:
@@ -426,6 +432,7 @@ def build_prediction_range_coverage(
 
 
 __all__ = [
+    "MAX_HISTORY_PAIRS",
     "MIN_EVALUATED_FOR_VERDICT",
     "MIN_OUTCOMES_FOR_RANGE",
     "NEEDS_ATTENTION_MIN_COVERAGE",
