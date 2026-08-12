@@ -226,6 +226,12 @@ from app.simulation.precis_fingerprint_export import precis_fingerprint_to_csv
 from app.simulation.prediction_range_coverage import (
     build_prediction_range_coverage,
 )
+from app.simulation.prediction_range_coverage_export import (
+    FORMAT_VERSION as PREDICTION_RANGE_COVERAGE_FORMAT_VERSION,
+    prediction_range_coverage_to_csv,
+    prediction_range_coverage_to_json,
+    prediction_range_coverage_to_markdown,
+)
 from app.simulation.premortem_digest import build_premortem_digest
 from app.simulation.premortem_export import premortem_count_to_csv, premortem_to_csv
 from app.simulation.product_type import ProductType
@@ -7154,6 +7160,117 @@ def get_prediction_range_coverage(
         generated_at=datetime.now(UTC).isoformat(),
     )
     return PredictionRangeCoverageOut(**payload)
+
+
+@router.get(
+    "/{project_id}/prediction-range-coverage/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export a project's prediction-range coverage digest as CSV, "
+        "JSON, or Markdown"
+    ),
+    # Same bounded read cost as the JSON digest; cap polling like the
+    # other per-project analytics exports.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_prediction_range_coverage(
+    project_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the multi-section "
+            "spreadsheet; ``json`` returns the raw coverage payload; "
+            "``md`` returns a founder-facing Markdown brief. Unsupported "
+            "values return a 400 response."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Export a project's prediction-range coverage digest for download.
+
+    Reuses the same digest as
+    ``GET /projects/{id}/prediction-range-coverage``: summary, key signals,
+    verdict, narrative, and every out-of-sample band check. Default
+    ``format=csv`` renders a multi-section spreadsheet; ``json`` returns a
+    strict machine-readable envelope; ``md`` returns a founder-facing brief.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json", "md"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; expected "
+                "'csv', 'json', or 'md'"
+            ),
+        )
+
+    payload = get_prediction_range_coverage(
+        project_id=project_id,
+        db=db,
+        current_user=current_user,
+    )
+    metadata = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "user_id": current_user.id,
+        "format_version": PREDICTION_RANGE_COVERAGE_FORMAT_VERSION,
+        "project_id": project_id,
+    }
+
+    if fmt == "json":
+        body = prediction_range_coverage_to_json(
+            payload,
+            metadata=metadata,
+        ).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="prediction-range-coverage-'
+                    f'{project_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    if fmt == "md":
+        body = prediction_range_coverage_to_markdown(
+            payload,
+            metadata=metadata,
+        ).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="prediction-range-coverage-'
+                    f'{project_id}.md"'
+                ),
+                "Content-Length": str(len(body)),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    csv_text = prediction_range_coverage_to_csv(
+        payload,
+        metadata=metadata,
+    )
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="prediction-range-coverage-'
+                f'{project_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.get(
