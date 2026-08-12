@@ -26,6 +26,9 @@ from app.models.simulation import Simulation
 from app.models.user import User
 from app.schemas.audit_log import AuditLogListOut, AuditLogOut
 from app.schemas.auth import MessageResponse
+from app.schemas.prediction_range_coverage import (
+    PortfolioPredictionRangeCoverageOut,
+)
 from app.schemas.project import (
     MostActiveWeekdayOut,
     OldestOpenItemOut,
@@ -96,6 +99,9 @@ from app.simulation.outcome_velocity import (
 )
 from app.simulation.portfolio_health_snapshot import (
     build_portfolio_health_snapshot,
+)
+from app.simulation.portfolio_prediction_range_coverage import (
+    build_portfolio_prediction_range_coverage,
 )
 from app.simulation.premortem_digest import build_premortem_digest
 from app.simulation.projects_by_status import (
@@ -4998,3 +5004,63 @@ def get_audit_log(
             ttl_seconds=_USER_AUDIT_LOG_CACHE_TTL_S,
         )
     return response
+
+
+@router.get(
+    "/me/prediction-range-coverage",
+    response_model=PortfolioPredictionRangeCoverageOut,
+    summary=(
+        "Portfolio-level out-of-sample prediction-range coverage - how "
+        "often the accuracy-adjusted conversion band contained recorded "
+        "outcomes across all owned projects"
+    ),
+    # Read-only, bounded by the user's owned outcome set; cap polling the
+    # same way as the other user-level analytics reads.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_my_prediction_range_coverage(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioPredictionRangeCoverageOut:
+    """Return the current user's portfolio prediction-range coverage digest.
+
+    Every owned-project outcome with a usable predicted + actual conversion
+    is evaluated out-of-sample from the history available before it was
+    recorded — using the same project-first / user-pool calibration
+    fallback as ``GET /simulations/{id}/prediction-range`` — then checked
+    against the recorded actual. The digest rolls these checks up across the
+    whole portfolio, including a per-project breakdown.
+    """
+    owned_project_ids = [
+        row[0]
+        for row in db.query(Project.id)
+        .filter(Project.user_id == current_user.id)
+        .all()
+    ]
+    outcome_rows = (
+        db.query(Outcome)
+        .filter(
+            Outcome.project_id.in_(owned_project_ids or [-1]),
+            Outcome.predicted_conversion_rate.isnot(None),
+            Outcome.actual_conversion_rate.isnot(None),
+        )
+        .order_by(Outcome.created_at.asc(), Outcome.id.asc())
+        .all()
+    )
+    rows = [
+        {
+            "id": outcome.id,
+            "project_id": outcome.project_id,
+            "simulation_id": outcome.simulation_id,
+            "predicted_conversion_rate": outcome.predicted_conversion_rate,
+            "actual_conversion_rate": outcome.actual_conversion_rate,
+            "created_at": outcome.created_at,
+        }
+        for outcome in outcome_rows
+    ]
+    payload = build_portfolio_prediction_range_coverage(
+        user_id=current_user.id,
+        rows=rows,
+        generated_at=datetime.now(UTC).isoformat(),
+    )
+    return PortfolioPredictionRangeCoverageOut(**payload)

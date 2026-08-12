@@ -78,12 +78,55 @@ class PredictionRangeCoverageOut(BaseModel):
     rows: list[PredictionRangeCoverageRow] = Field(default_factory=list)
 
 
+class PortfolioPredictionRangeCoverageProject(BaseModel):
+    """One project's summary inside the portfolio coverage digest."""
+
+    project_id: int = Field(default=0, ge=0)
+    total_outcomes: int = Field(default=0, ge=0)
+    evaluated_runs: int = Field(default=0, ge=0)
+    within_range_count: int = Field(default=0, ge=0)
+    coverage_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    verdict: str = VERDICT_INSUFFICIENT_DATA
+
+
+class PortfolioPredictionRangeCoverageOut(BaseModel):
+    """Response from ``GET /users/me/prediction-range-coverage``.
+
+    The per-project endpoint verifies one project's accuracy-adjusted bands;
+    this portfolio digest does the same across every owned project. Each
+    outcome is still evaluated out-of-sample from history available before it
+    was recorded, and the rollup shows whether the founder can rely on the
+    prediction ranges across their whole portfolio.
+    """
+
+    user_id: int = Field(default=0, ge=0)
+    generated_at: str = ""
+    project_count: int = Field(default=0, ge=0)
+    total_outcomes: int = Field(default=0, ge=0)
+    evaluated_runs: int = Field(default=0, ge=0)
+    within_range_count: int = Field(default=0, ge=0)
+    coverage_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    mean_margin: float | None = Field(default=None, ge=0.0)
+    worst_miss: dict[str, Any] | None = None
+    verdict: str = VERDICT_INSUFFICIENT_DATA
+    narrative: str = ""
+    key_signals: list[PredictionRangeCoverageKeySignal] = Field(
+        default_factory=list
+    )
+    projects: list[PortfolioPredictionRangeCoverageProject] = Field(
+        default_factory=list
+    )
+    rows: list[PredictionRangeCoverageRow] = Field(default_factory=list)
+
+
 __all__ = [
     "VALID_VERDICTS",
     "VERDICT_INSUFFICIENT_DATA",
     "VERDICT_NEEDS_ATTENTION",
     "VERDICT_POORLY_CALIBRATED",
     "VERDICT_WELL_CALIBRATED",
+    "PortfolioPredictionRangeCoverageOut",
+    "PortfolioPredictionRangeCoverageProject",
     "PredictionRangeCoverageKeySignal",
     "PredictionRangeCoverageOut",
     "PredictionRangeCoverageRow",
