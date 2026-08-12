@@ -70,6 +70,7 @@ from app.schemas.outcome import (
     VarianceReport,
 )
 from app.schemas.outcome_benchmark import OutcomeBenchmarkOut
+from app.schemas.outcome_gaps import ProjectOutcomeGapsOut
 from app.schemas.outcome_tracker import (
     OutcomeTrackerCreate,
     OutcomeTrackerDriftOut,
@@ -118,6 +119,7 @@ from app.simulation.outcome_benchmark_export import (
     outcome_benchmark_to_csv,
     outcome_benchmark_to_json,
 )
+from app.simulation.outcome_gaps import build_outcome_gaps_digest
 from app.simulation.outcome_tracker_drift import (
     build_outcome_tracker_drift,
 )
@@ -2560,6 +2562,158 @@ def get_outcomes_digest(
         ttl_seconds=120,
     )
     return OutcomeDigestOut(**payload)
+
+
+@router.get(
+    "/{project_id}/outcome-gaps",
+    response_model=ProjectOutcomeGapsOut,
+    summary=(
+        "Per-project outcome-feedback gaps digest — completed simulations "
+        "that still need a real-world outcome"
+    ),
+    # Read-only scan over the project's simulations and founder_outcomes;
+    # cap polling the same way the other per-project outcome digests do.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_project_outcome_gaps(
+    project_id: int,
+    limit: int = Query(default=50, ge=1, le=200),
+    learning_eligible_only: bool = Query(
+        default=False,
+        description=(
+            "When true, only return unscored runs whose signal quality "
+            "is at least 0.25 (the calibration learning-weight floor)."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProjectOutcomeGapsOut:
+    """List completed simulations that still need founder outcome feedback.
+
+    A completed run only teaches the calibration layer once the founder
+    records a real-world outcome against it (``founder_outcomes``). This
+    digest surfaces the gap at the item level — oldest first, with signal
+    quality, predicted conversion, and an urgency tier — so the dashboard
+    can turn "you only scored 40% of your runs" into a concrete list of
+    which simulations to close out next.
+
+    ``learning_eligible_only`` restricts both the list and the summary to
+    runs whose signal quality meets the 0.25 learning-weight floor, which
+    is the fastest path to better calibration. ``scored`` and
+    ``total_completed`` always reflect the full project so the coverage
+    rate stays honest under filtering.
+    """
+    get_owned_project(db, current_user.id, project_id)
+
+    total_rows = (
+        db.execute(
+            text(
+                """
+                SELECT COUNT(*)::int AS total_completed
+                FROM simulations s
+                WHERE s.project_id = :pid
+                  AND UPPER(s.status) = 'COMPLETED'
+                """
+            ),
+            {"pid": project_id},
+        )
+        .mappings()
+        .all()
+    )
+    total_completed = (
+        int(total_rows[0]["total_completed"]) if total_rows else 0
+    )
+
+    scored_rows = (
+        db.execute(
+            text(
+                """
+                SELECT COUNT(DISTINCT fo.simulation_id)::int AS scored
+                FROM founder_outcomes fo
+                JOIN simulations s ON s.id = fo.simulation_id
+                WHERE fo.project_id = :pid
+                  AND s.project_id = :pid
+                  AND UPPER(s.status) = 'COMPLETED'
+                """
+            ),
+            {"pid": project_id},
+        )
+        .mappings()
+        .all()
+    )
+    scored_count = int(scored_rows[0]["scored"]) if scored_rows else 0
+
+    gap_counts_sql = """
+        SELECT
+            COUNT(*)::int AS unscored_total,
+            COUNT(*) FILTER (
+                WHERE COALESCE(s.signal_quality, 0) >= :min_sq
+            )::int AS learning_eligible_unscored,
+            MIN(s.created_at) AS oldest_unscored_created_at
+        FROM simulations s
+        WHERE s.project_id = :pid
+          AND UPPER(s.status) = 'COMPLETED'
+          AND NOT EXISTS (
+              SELECT 1 FROM founder_outcomes fo
+              WHERE fo.simulation_id = s.id
+          )
+    """
+    gap_counts_params: dict[str, Any] = {"pid": project_id, "min_sq": 0.25}
+    if learning_eligible_only:
+        gap_counts_sql += "\n        AND COALESCE(s.signal_quality, 0) >= :min_sq"
+    gap_rows = (
+        db.execute(text(gap_counts_sql), gap_counts_params)
+        .mappings()
+        .all()
+    )
+    gap_row = gap_rows[0] if gap_rows else {}
+    unscored_total = int(gap_row.get("unscored_total") or 0)
+    learning_eligible_unscored = int(
+        gap_row.get("learning_eligible_unscored") or 0
+    )
+    oldest_unscored_created_at = gap_row.get("oldest_unscored_created_at")
+
+    items_sql = """
+        SELECT
+            s.id AS simulation_id,
+            s.created_at AS created_at,
+            s.signal_quality AS signal_quality,
+            s.results_json AS results_json,
+            (s.results_json IS NOT NULL) AS has_results
+        FROM simulations s
+        WHERE s.project_id = :pid
+          AND UPPER(s.status) = 'COMPLETED'
+          AND NOT EXISTS (
+              SELECT 1 FROM founder_outcomes fo
+              WHERE fo.simulation_id = s.id
+          )
+    """
+    items_params: dict[str, Any] = {"pid": project_id, "limit": limit}
+    if learning_eligible_only:
+        items_sql += (
+            "\n          AND COALESCE(s.signal_quality, 0) >= :min_sq"
+        )
+        items_params["min_sq"] = 0.25
+    items_sql += (
+        "\n        ORDER BY s.created_at ASC, s.id ASC\n        LIMIT :limit"
+    )
+    items_rows = (
+        db.execute(text(items_sql), items_params).mappings().all()
+    )
+
+    payload = build_outcome_gaps_digest(
+        project_id=project_id,
+        rows=[dict(row) for row in items_rows],
+        total_completed=total_completed,
+        scored_count=scored_count,
+        unscored_total=unscored_total,
+        learning_eligible_unscored=learning_eligible_unscored,
+        oldest_unscored_created_at=oldest_unscored_created_at,
+        limit=limit,
+        learning_eligible_only=learning_eligible_only,
+        now=datetime.now(UTC),
+    )
+    return ProjectOutcomeGapsOut(**payload)
 
 
 @router.get(
