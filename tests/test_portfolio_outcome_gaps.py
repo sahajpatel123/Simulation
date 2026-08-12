@@ -456,6 +456,53 @@ def test_route_learning_eligible_only_filters_sql_and_params() -> None:
     assert session.calls[2]["params"]["min_sq"] == 0.25
 
 
+def test_route_learning_eligible_only_keeps_full_portfolio_totals() -> None:
+    """Filtered mode must not drop projects with zero eligible gaps.
+
+    ``total_completed`` and ``scored`` always reflect every owned project,
+    even when the gap query only returns projects that still have
+    learning-eligible unscored runs.
+    """
+    session = _FakeSession(
+        responses=_responses(
+            full=[
+                {"project_id": 7, "total_completed": 3, "scored": 1},
+                {"project_id": 9, "total_completed": 2, "scored": 2},
+            ],
+            gaps=[
+                {
+                    "project_id": 7,
+                    "unscored": 1,
+                    "learning_eligible_unscored": 1,
+                    "high_priority_unscored": 1,
+                    "oldest_unscored_created_at": _NOW - timedelta(days=40),
+                },
+            ],
+            items=[
+                _item_row(
+                    project_id=7,
+                    simulation_id=7,
+                    created_at=_NOW - timedelta(days=40),
+                ),
+            ],
+        )
+    )
+    result = _call_route(
+        session=session,
+        learning_eligible_only=True,
+    )
+
+    assert result.summary.project_count == 2
+    assert result.summary.total_completed == 5
+    assert result.summary.scored == 3
+    assert result.summary.unscored == 1
+    assert result.summary.coverage_rate_pct == pytest.approx(60.0)
+    assert result.summary.projects_with_gaps == 1
+    assert [project.project_id for project in result.projects] == [7, 9]
+    assert result.projects[1].coverage_rate_pct == pytest.approx(100.0)
+    assert result.projects[1].oldest_unscored_age_days is None
+
+
 def test_route_is_registered_on_users_router() -> None:
     from app.api.v1 import users as users_mod
 

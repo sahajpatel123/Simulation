@@ -5212,11 +5212,19 @@ def get_my_outcome_gaps(
     full_by_project = {
         row["project_id"]: dict(row) for row in full_rows
     }
+    gap_by_project = {
+        row["project_id"]: dict(row) for row in gap_rows
+    }
     project_rows: list[dict[str, Any]] = []
-    for gap_row in gap_rows:
-        merged = dict(full_by_project.get(gap_row["project_id"], {}))
-        merged.update(dict(gap_row))
+    for project_id, full_row in full_by_project.items():
+        merged = dict(full_row)
+        merged.update(gap_by_project.get(project_id, {}))
         project_rows.append(merged)
+    # Defensive: a gap row without a full row is still surfaced so no
+    # unscored run is ever hidden by the merge.
+    for project_id, gap_row in gap_by_project.items():
+        if project_id not in full_by_project:
+            project_rows.append(dict(gap_row))
 
     payload = build_portfolio_outcome_gaps_digest(
         user_id=current_user.id,
