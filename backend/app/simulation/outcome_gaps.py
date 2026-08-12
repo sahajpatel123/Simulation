@@ -219,7 +219,7 @@ def _narrative(
             "No completed simulations yet — run one to get a prediction "
             "you can validate in the real world."
         )
-    if unscored == 0:
+    if scored >= total_completed:
         return (
             "All completed simulations have recorded outcome feedback — "
             "the calibration layer already has everything it can use "
@@ -231,6 +231,14 @@ def _narrative(
         if learning_eligible_only
         else ""
     )
+    if unscored == 0 and learning_eligible_only:
+        return (
+            prefix
+            + "No learning-eligible unscored runs remain — only "
+            f"{scored} of {total_completed} completed runs have outcome "
+            "feedback, and the remaining unscored runs are below the "
+            "0.25 learning-weight floor."
+        )
     base = (
         f"Only {scored} of {total_completed} completed runs have outcome "
         f"feedback ({coverage_rate_pct:.1f}%). Scoring the {unscored} "
@@ -262,10 +270,8 @@ def build_outcome_gaps_summary(
         if total_completed > 0
         else 0.0
     )
-    oldest_age = age_days(
-        _safe_datetime(oldest_unscored_created_at),
-        now,
-    )
+    oldest_safe = _safe_datetime(oldest_unscored_created_at)
+    oldest_age = age_days(oldest_safe, now)
     return {
         "total_completed": max(0, int(total_completed or 0)),
         "scored": max(0, int(scored or 0)),
@@ -275,7 +281,7 @@ def build_outcome_gaps_summary(
             0, int(learning_eligible_unscored or 0)
         ),
         "oldest_unscored_age_days": (
-            oldest_age if oldest_unscored_created_at is not None else None
+            oldest_age if oldest_safe is not None else None
         ),
         "narrative": _narrative(
             total_completed=max(0, int(total_completed or 0)),

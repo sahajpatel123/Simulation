@@ -112,6 +112,22 @@ def test_partial_coverage_summary_math_and_narrative() -> None:
     assert "2 of those runs have signal quality ≥ 0.25" in summary["narrative"]
 
 
+def test_summary_oldest_age_is_none_for_invalid_timestamp() -> None:
+    payload = build_outcome_gaps_digest(
+        project_id=10,
+        rows=[],
+        total_completed=3,
+        scored_count=1,
+        unscored_total=2,
+        learning_eligible_unscored=1,
+        oldest_unscored_created_at="not-a-date",
+        limit=50,
+        now=_NOW,
+    )
+
+    assert payload["summary"]["oldest_unscored_age_days"] is None
+
+
 def test_urgency_tiers_and_recommendations() -> None:
     rows = [
         _item_row(  # stale + learning-eligible → HIGH
@@ -219,6 +235,32 @@ def test_learning_eligible_only_narrative() -> None:
         "Showing learning-eligible unscored runs only."
     )
     assert "would feed calibration" not in payload["summary"]["narrative"]
+
+
+def test_learning_eligible_only_with_zero_eligible_gaps_narrative() -> None:
+    """Filtered mode must not claim every completed run is scored."""
+    payload = build_outcome_gaps_digest(
+        project_id=10,
+        rows=[],
+        total_completed=5,
+        scored_count=3,
+        unscored_total=0,
+        learning_eligible_unscored=0,
+        oldest_unscored_created_at=None,
+        limit=50,
+        learning_eligible_only=True,
+        now=_NOW,
+    )
+
+    summary = payload["summary"]
+    assert summary["unscored"] == 0
+    assert summary["coverage_rate_pct"] == 60.0
+    assert "All completed simulations have recorded outcome feedback" not in (
+        summary["narrative"]
+    )
+    assert "No learning-eligible unscored runs remain" in summary["narrative"]
+    assert "3 of 5" in summary["narrative"]
+    assert "below the 0.25 learning-weight floor" in summary["narrative"]
 
 
 # ── Route tests ─────────────────────────────────────────────────────
@@ -373,6 +415,7 @@ def test_route_query_is_scoped_and_uses_anti_join() -> None:
     assert "UPPER(s.status) = 'COMPLETED'" in joined
     assert "founder_outcomes fo" in joined
     assert "fo.simulation_id = s.id" in joined
+    assert "fo.project_id = s.project_id" in joined
     assert "ORDER BY s.created_at ASC, s.id ASC" in joined
     assert "LIMIT :limit" in joined
     assert session.calls[0]["params"] == {"pid": 10}

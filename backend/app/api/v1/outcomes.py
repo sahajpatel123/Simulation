@@ -2656,6 +2656,7 @@ def get_project_outcome_gaps(
           AND NOT EXISTS (
               SELECT 1 FROM founder_outcomes fo
               WHERE fo.simulation_id = s.id
+                AND fo.project_id = s.project_id
           )
     """
     gap_counts_params: dict[str, Any] = {"pid": project_id, "min_sq": 0.25}
@@ -2686,6 +2687,7 @@ def get_project_outcome_gaps(
           AND NOT EXISTS (
               SELECT 1 FROM founder_outcomes fo
               WHERE fo.simulation_id = s.id
+                AND fo.project_id = s.project_id
           )
     """
     items_params: dict[str, Any] = {"pid": project_id, "limit": limit}
