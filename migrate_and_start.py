@@ -278,6 +278,32 @@ def run_migrations():
 
         try:
             conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS funnel_stage_corrections (
+                    id SERIAL PRIMARY KEY,
+                    product_type VARCHAR(50) NOT NULL,
+                    stage VARCHAR(20) NOT NULL,
+                    cluster_id VARCHAR(100) NOT NULL DEFAULT 'ALL',
+                    from_state VARCHAR(20) NOT NULL,
+                    to_state VARCHAR(20) NOT NULL,
+                    correction_scalar FLOAT NOT NULL DEFAULT 1.0,
+                    confidence_weight FLOAT NOT NULL DEFAULT 0.0,
+                    effective_sample_count FLOAT DEFAULT 0.0,
+                    sample_count INTEGER DEFAULT 0,
+                    mean_bias FLOAT,
+                    scope VARCHAR(50) NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    last_updated TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(product_type, stage, cluster_id)
+                );
+            """))
+            conn.commit()
+            print("✅ funnel_stage_corrections ready")
+        except Exception as e:
+            conn.rollback()
+            print(f"⚠️ funnel_stage_corrections skip: {e}")
+
+        try:
+            conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS founder_outcomes (
                     id SERIAL PRIMARY KEY,
                     simulation_id INTEGER REFERENCES simulations(id),

@@ -671,6 +671,7 @@ def submit_outcome_feedback(
     from app.simulation.calibration_engine import CalibrationEngine
     from app.tasks.calibration_tasks import (
         run_cluster_trait_calibration,
+        run_funnel_stage_calibration,
         run_systematic_bias_update,
     )
 
@@ -822,6 +823,20 @@ def submit_outcome_feedback(
     except Exception as exc:
         logger.warning(
             "[OutcomeFeedback] Could not trigger cluster trait calibration: %s",
+            exc,
+        )
+
+    # ── Check whether Layer 6 has per-stage evidence → fire Celery task ──
+    try:
+        if eng.funnel_stage_calibration_ready(db):
+            run_funnel_stage_calibration.delay()
+            logger.info(
+                "[OutcomeFeedback] Triggered funnel stage calibration "
+                "(validated outcome carries per-stage drop-offs)"
+            )
+    except Exception as exc:
+        logger.warning(
+            "[OutcomeFeedback] Could not trigger funnel stage calibration: %s",
             exc,
         )
 

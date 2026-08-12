@@ -48,3 +48,17 @@ def run_cluster_trait_calibration() -> None:
         logger.exception("Cluster trait calibration error: %s", e)
     finally:
         db.close()
+
+
+@celery_app.task(name="calibration.run_funnel_stage_calibration")
+def run_funnel_stage_calibration() -> None:
+    """Learn per-stage funnel corrections from validated founder outcomes."""
+    db = SessionLocal()
+    eng = CalibrationEngine()
+    try:
+        eng.update_funnel_stage_calibration(db)
+        logger.info("Funnel stage calibration update complete")
+    except Exception as e:
+        logger.exception("Funnel stage calibration error: %s", e)
+    finally:
+        db.close()

@@ -107,6 +107,7 @@ def _base_responses(ready: int = 1) -> list[object]:
         None,  # INSERT user_simulation_accuracy_history
         SimpleNamespace(eff=0.0),  # Layer 2 effective-count query
         SimpleNamespace(ready=ready),  # Layer 5 readiness query
+        SimpleNamespace(ready=ready),  # Layer 6 readiness query
         SimpleNamespace(accuracy_trend="INSUFFICIENT_DATA"),  # latest trend
     ]
 
@@ -128,6 +129,9 @@ def test_outcome_feedback_enqueues_cluster_trait_calibration_when_ready(
         patch(
             "app.tasks.calibration_tasks.run_systematic_bias_update.delay"
         ) as bias_delay,
+        patch(
+            "app.tasks.calibration_tasks.run_funnel_stage_calibration.delay"
+        ) as stage_delay,
     ):
         out = out_mod.submit_outcome_feedback(
             project_id=10,
@@ -141,6 +145,7 @@ def test_outcome_feedback_enqueues_cluster_trait_calibration_when_ready(
 
     trait_delay.assert_called_once_with()
     bias_delay.assert_not_called()
+    stage_delay.assert_called_once_with()
     assert out["stored"] is True
     assert out["will_improve_model"] is True
     assert out["learning_weight"] == pytest.approx(0.48)
@@ -166,6 +171,9 @@ def test_outcome_feedback_skips_cluster_trait_calibration_when_not_ready(
         patch(
             "app.tasks.calibration_tasks.run_systematic_bias_update.delay"
         ) as bias_delay,
+        patch(
+            "app.tasks.calibration_tasks.run_funnel_stage_calibration.delay"
+        ) as stage_delay,
     ):
         from app.api.v1 import outcomes as out_mod
 
@@ -181,3 +189,4 @@ def test_outcome_feedback_skips_cluster_trait_calibration_when_not_ready(
 
     trait_delay.assert_not_called()
     bias_delay.assert_not_called()
+    stage_delay.assert_not_called()

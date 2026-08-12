@@ -11,6 +11,13 @@ from app.simulation.correction_application import (
     MAX_CORRECTION_SCALAR,
     MIN_CORRECTION_SCALAR,
 )
+from app.simulation.funnel_stage_calibration import (
+    CLUSTER_ALL,
+    MAX_OUTCOMES,
+    SCOPE_GLOBAL,
+    compute_stage_corrections,
+    predicted_drop_rates_from_results,
+)
 
 ALL_ARCHITECT_NAMES = [
     "AccessibilityInclusionArchitect",
@@ -511,6 +518,144 @@ class CalibrationEngine:
                 {"cid": cluster_id, "max_id": max_outcome_id},
             )
         db.commit()
+
+    # ── LAYER 6: FUNNEL STAGE CALIBRATION (per-stage drop-off feedback) ──
+
+    def funnel_stage_calibration_ready(self, db) -> bool:
+        """Return True when any validated outcome carries per-stage drops."""
+        row = db.execute(
+            text("""
+                SELECT COUNT(*)::int AS ready
+                FROM founder_outcomes fo
+                JOIN simulations s ON s.id = fo.simulation_id
+                WHERE fo.validated = true
+                  AND fo.learning_weight > 0
+                  AND (fo.actual_drop_at_browse_pct IS NOT NULL
+                       OR fo.actual_drop_at_consider_pct IS NOT NULL
+                       OR fo.actual_drop_at_decide_pct IS NOT NULL)
+            """)
+        ).fetchone()
+        return bool(row and int(row.ready or 0) > 0)
+
+    def update_funnel_stage_calibration(self, db) -> None:
+        """Learn per-stage pass-through corrections from founder outcomes.
+
+        Layer 6 pairs the drop-off each validated outcome *reported* with
+        the drop-off the outcome's simulation *predicted*, then upserts a
+        learning-weighted pass-through scalar per (product type, stage) into
+        ``funnel_stage_corrections``. The Conductor multiplies those scalars
+        into the forward Markov transitions of future runs, so a stage the
+        simulation consistently mis-predicts gets corrected instead of only
+        being diagnosed.
+
+        The update is idempotent (upsert) and deliberately bounded to the
+        most recent :data:`MAX_OUTCOMES` rows so stale evidence cannot
+        accumulate forever. A single commit at the end keeps the write batch
+        atomic.
+        """
+        rows = db.execute(
+            text("""
+                SELECT fo.id AS outcome_id,
+                       fo.actual_drop_at_browse_pct,
+                       fo.actual_drop_at_consider_pct,
+                       fo.actual_drop_at_decide_pct,
+                       fo.learning_weight,
+                       s.results_json
+                FROM founder_outcomes fo
+                JOIN simulations s ON s.id = fo.simulation_id
+                WHERE fo.validated = true
+                  AND fo.learning_weight > 0
+                  AND (fo.actual_drop_at_browse_pct IS NOT NULL
+                       OR fo.actual_drop_at_consider_pct IS NOT NULL
+                       OR fo.actual_drop_at_decide_pct IS NOT NULL)
+                ORDER BY fo.id DESC
+                LIMIT :limit
+            """),
+            {"limit": MAX_OUTCOMES},
+        ).mappings().all()
+
+        if not rows:
+            return
+
+        groups: dict[str, list[dict]] = defaultdict(list)
+        for row in rows:
+            raw_results = row.get("results_json")
+            if isinstance(raw_results, str):
+                try:
+                    raw_results = json.loads(raw_results or "{}")
+                except (ValueError, TypeError):
+                    raw_results = None
+            if not isinstance(raw_results, dict):
+                continue
+            product_type = str(raw_results.get("product_type_detected") or "saas")
+            groups[product_type].append(
+                {
+                    "predicted_drop_rates": predicted_drop_rates_from_results(
+                        raw_results
+                    ),
+                    "actual_drops": {
+                        "BROWSE": row.get("actual_drop_at_browse_pct"),
+                        "CONSIDER": row.get("actual_drop_at_consider_pct"),
+                        "DECIDE": row.get("actual_drop_at_decide_pct"),
+                    },
+                    "learning_weight": row.get("learning_weight"),
+                }
+            )
+
+        wrote_any = False
+        for product_type, pairs in groups.items():
+            for correction in compute_stage_corrections(
+                pairs,
+                product_type=product_type,
+            ):
+                self._upsert_funnel_stage_correction(db, correction)
+                wrote_any = True
+
+        if wrote_any:
+            db.commit()
+
+    def _upsert_funnel_stage_correction(
+        self,
+        db,
+        correction: dict,
+    ) -> None:
+        """Upsert one learned stage correction (no commit — caller batches)."""
+        db.execute(
+            text("""
+                INSERT INTO funnel_stage_corrections
+                    (product_type, stage, cluster_id, from_state, to_state,
+                     correction_scalar, confidence_weight,
+                     effective_sample_count, sample_count, mean_bias,
+                     scope, last_updated)
+                VALUES
+                    (:pt, :stage, :cluster_id, :from_state, :to_state,
+                     :scalar, :confidence, :eff_count, :sample_count,
+                     :mean_bias, :scope, NOW())
+                ON CONFLICT (product_type, stage, cluster_id) DO UPDATE SET
+                    from_state = EXCLUDED.from_state,
+                    to_state = EXCLUDED.to_state,
+                    correction_scalar = EXCLUDED.correction_scalar,
+                    confidence_weight = EXCLUDED.confidence_weight,
+                    effective_sample_count = EXCLUDED.effective_sample_count,
+                    sample_count = EXCLUDED.sample_count,
+                    mean_bias = EXCLUDED.mean_bias,
+                    scope = EXCLUDED.scope,
+                    last_updated = NOW()
+            """),
+            {
+                "pt": correction["product_type"],
+                "stage": correction["stage"],
+                "cluster_id": CLUSTER_ALL,
+                "from_state": correction["from_state"],
+                "to_state": correction["to_state"],
+                "scalar": correction["correction_scalar"],
+                "confidence": correction["confidence_weight"],
+                "eff_count": correction["effective_sample_count"],
+                "sample_count": correction["sample_count"],
+                "mean_bias": correction["mean_bias"],
+                "scope": SCOPE_GLOBAL,
+            },
+        )
 
     def _upsert_correction(
         self,

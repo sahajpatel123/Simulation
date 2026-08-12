@@ -17,6 +17,10 @@ from app.models.project import Project
 from app.models.simulation import Simulation
 from app.models.user import User
 from app.schemas.cluster_calibration_evidence import ClusterCalibrationDigestOut
+from app.schemas.funnel_stage_calibration import (
+    FunnelStageCorrectionListOut,
+    FunnelStageCorrectionOut,
+)
 from app.simulation.calibration import CalibrationEngine as PlatformCalibrationEngine
 from app.simulation.calibration_engine import CalibrationEngine as LayerCalibrationEngine
 from app.simulation.cluster_calibration_evidence import build_cluster_calibration_digest
@@ -148,6 +152,45 @@ def apply_markov_adjustments(
             for adj in metrics.markov_adjustments
         ],
     }
+
+
+@router.get(
+    "/funnel-stage",
+    response_model=FunnelStageCorrectionListOut,
+    summary="Current learned funnel stage corrections",
+    # Admin-only operator view of the Layer 6 learning state.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_funnel_stage_corrections(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FunnelStageCorrectionListOut:
+    _require_admin(current_user)
+    if not _table_exists(db, "funnel_stage_corrections"):
+        return FunnelStageCorrectionListOut(
+            generated_at=datetime.now(UTC),
+            count=0,
+            corrections=[],
+        )
+    rows = db.execute(
+        text("""
+            SELECT id, product_type, stage, cluster_id, from_state, to_state,
+                   correction_scalar, confidence_weight,
+                   effective_sample_count, sample_count, mean_bias, scope,
+                   last_updated
+            FROM funnel_stage_corrections
+            ORDER BY product_type ASC, stage ASC
+        """)
+    ).mappings().all()
+    corrections = [
+        FunnelStageCorrectionOut.model_validate(dict(row))
+        for row in rows
+    ]
+    return FunnelStageCorrectionListOut(
+        generated_at=datetime.now(UTC),
+        count=len(corrections),
+        corrections=corrections,
+    )
 
 
 # ── founder outcome (learning layer) ──

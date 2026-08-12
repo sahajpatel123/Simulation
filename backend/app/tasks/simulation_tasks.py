@@ -28,6 +28,7 @@ from app.simulation.funnel import (
     FunnelResult,
     StageMetrics,
 )
+from app.simulation.funnel_stage_calibration import transition_corrections
 from app.simulation.journey_analytics import serialise_per_cluster_matrices
 from app.simulation.markov import STATES
 from app.simulation.pipeline_timing import build_pipeline_timing
@@ -402,12 +403,25 @@ def _derive_chain_scalars(conductor_result: ConductorResult) -> tuple[float, flo
     if weighted_denom <= 0.0:
         # No usable per-cluster data — fall back to the base transition
         # scalars so downstream consumers still receive a coherent chain.
-        return tuple(base)
+        scalars = list(base)
+    else:
+        scalars = list(
+            max(0.0, min(1.0, numer / weighted_denom)) if weighted_denom > 0 else base[i]
+            for i, numer in enumerate(weighted_numer)
+        )
 
-    scalars = tuple(
-        max(0.0, min(1.0, numer / weighted_denom)) if weighted_denom > 0 else base[i]
-        for i, numer in enumerate(weighted_numer)
+    # Apply learned stage-level funnel corrections on top of the derived
+    # chain so the persisted stage counts agree with the corrected
+    # population-weighted conversion the conductor produced.
+    corrections = transition_corrections(
+        conductor_result.funnel_stage_corrections or {}
     )
+    for i, (from_s, to_s) in enumerate(pairs):
+        scalar = corrections.get((from_s.value, to_s.value))
+        if scalar is not None:
+            scalars[i] = max(0.0, min(1.0, scalars[i] * scalar))
+
+    scalars = tuple(scalars)
     return scalars  # type: ignore[return-value]
 
 
@@ -790,6 +804,9 @@ def run_full_simulation(self, simulation_id: int) -> dict:
         results_dict["cluster_breakdown"] = conductor_result.cluster_breakdown
         results_dict["per_cluster_matrices"] = serialise_per_cluster_matrices(
             conductor_result.per_cluster_matrices
+        )
+        results_dict["funnel_stage_corrections_applied"] = dict(
+            conductor_result.funnel_stage_corrections or {}
         )
         results_dict["cluster_weights"] = {
             cid: round(float(weight), 6)

@@ -28,6 +28,12 @@ from app.simulation.correction_application import (
     apply_correction_to_output,
     index_corrections,
 )
+from app.simulation.funnel_stage_calibration import (
+    corrected_forward_probability,
+    stage_corrections_to_scalar_map,
+    stage_to_transition,
+    transition_corrections,
+)
 from app.simulation.markov import MarkovBehaviourModel
 from app.simulation.product_type import ProductType
 
@@ -436,6 +442,7 @@ class ConductorResult:
     architect_accountability:       dict[str, float]
     per_cluster_matrices:           dict[str, dict[tuple[str, str], float]]
     cluster_funnel_dropoffs:        dict[str, dict[str, float]] = None  # type: ignore
+    funnel_stage_corrections:       dict[str, float] = field(default_factory=dict)
     signal_quality:                 float = 0.0
     cluster_weights:                dict[str, float] = field(default_factory=dict)
     diagnostics:                    ConductorDiagnostics = field(
@@ -796,6 +803,37 @@ class Conductor:
             return None
         return index_corrections(rows, product_type)
 
+    def _load_stage_corrections(
+        self,
+        db: Any,
+        product_type: str,
+    ) -> dict[str, float]:
+        """Load learned stage-level funnel corrections for one run.
+
+        Returns an empty mapping when there is nothing to apply and on any
+        read failure, so a calibration outage can never break a simulation —
+        the run simply proceeds with the uncalibrated stage chain.
+        """
+        if db is None:
+            return {}
+        try:
+            rows = db.execute(
+                text("""
+                    SELECT stage, correction_scalar, confidence_weight
+                    FROM funnel_stage_corrections
+                    WHERE product_type = :pt
+                      AND cluster_id = 'ALL'
+                """),
+                {"pt": product_type},
+            ).mappings().all()
+        except Exception:
+            logger.exception(
+                "Could not load funnel stage corrections for %s",
+                product_type,
+            )
+            return {}
+        return stage_corrections_to_scalar_map(rows)
+
     def run(
         self,
         agents: list[Any],
@@ -840,6 +878,7 @@ class Conductor:
         stack = ARCHITECT_STACKS.get(product_type, ARCHITECT_STACKS[ProductType.SAAS])
         all_clusters = self._registry.all_clusters()
         corrections = self._load_corrections(db, product_type.value)
+        stage_corrections = self._load_stage_corrections(db, product_type.value)
 
         total_agents = len(agents) if agents else 10000
         cluster_agent_counts = {
@@ -939,7 +978,10 @@ class Conductor:
             cluster_mutation_logs[cluster.cluster_id] = _mutation_log
             cluster_results[cluster.cluster_id] = cluster_outputs
 
-            conversion = self._estimate_cluster_conversion(cluster_outputs)
+            conversion = self._estimate_cluster_conversion(
+                cluster_outputs,
+                stage_corrections=stage_corrections,
+            )
             cluster_breakdown[cluster.cluster_id] = conversion
 
             overrides_acc: dict[tuple[str, str], float] = {}
@@ -1004,6 +1046,9 @@ class Conductor:
                 cluster=cluster,
                 architect_outputs=cluster_outputs,
                 env_params=env_params,
+                transition_corrections=transition_corrections(
+                    stage_corrections
+                ),
             )
             cluster_funnel_dropoffs[cluster.cluster_id] = ct_matrix.funnel_dropoffs
 
@@ -1016,6 +1061,7 @@ class Conductor:
             architect_accountability=architect_accountability,
             per_cluster_matrices=per_cluster_matrices,
             cluster_funnel_dropoffs=cluster_funnel_dropoffs,
+            funnel_stage_corrections=dict(stage_corrections),
             signal_quality=sq,
             cluster_weights=cluster_weights,
             diagnostics=diagnostics,
@@ -1051,6 +1097,7 @@ class Conductor:
     def _estimate_cluster_conversion(
         self,
         cluster_outputs: dict[str, ArchitectOutput],
+        stage_corrections: dict[str, float] | None = None,
     ) -> float:
         from app.simulation.markov import ClusterTransitionMatrix, MarkovBehaviourModel
 
@@ -1069,6 +1116,9 @@ class Conductor:
                     assumptions=[],
                     cluster=cluster_def,
                     architect_outputs=cluster_outputs,
+                    transition_corrections=transition_corrections(
+                        stage_corrections
+                    ),
                 )
                 if isinstance(result, ClusterTransitionMatrix):
                     return round(float(result.conversion_estimate), 6)
@@ -1111,6 +1161,29 @@ class Conductor:
             demo_mult = demo_out.metrics.get("overall_demographic_correction", 1.0)
             if isinstance(demo_mult, (int, float)):
                 arrive_browse *= float(demo_mult)
+
+        for raw_stage, raw_scalar in (stage_corrections or {}).items():
+            transition = stage_to_transition(raw_stage)
+            if transition is None:
+                continue
+            try:
+                parsed_scalar = float(raw_scalar)
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(parsed_scalar):
+                continue
+            if transition == ("BROWSE", "CONSIDER"):
+                browse_consider = corrected_forward_probability(
+                    browse_consider, parsed_scalar
+                )
+            elif transition == ("CONSIDER", "DECIDE"):
+                consider_decide = corrected_forward_probability(
+                    consider_decide, parsed_scalar
+                )
+            elif transition == ("DECIDE", "PURCHASE"):
+                decide_purchase = corrected_forward_probability(
+                    decide_purchase, parsed_scalar
+                )
 
         conversion = (
             max(0.01, min(0.95, arrive_browse)) *

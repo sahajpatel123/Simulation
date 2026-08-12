@@ -54,6 +54,7 @@ import app.tasks.retention_email_tasks  # noqa: E402, F401
 def setup_periodic_tasks(sender, **kwargs) -> None:
     from app.tasks.calibration_tasks import (
         run_cluster_trait_calibration,
+        run_funnel_stage_calibration,
         run_structural_pattern_update,
         run_systematic_bias_update,
     )
@@ -72,4 +73,9 @@ def setup_periodic_tasks(sender, **kwargs) -> None:
         crontab(day_of_week=1, hour=5),
         run_cluster_trait_calibration.s(),
         name="weekly-cluster-trait-calibration",
+    )
+    sender.add_periodic_task(
+        crontab(day_of_week=1, hour=6),
+        run_funnel_stage_calibration.s(),
+        name="weekly-funnel-stage-calibration",
     )

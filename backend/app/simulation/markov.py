@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass as _dc
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
@@ -253,11 +254,15 @@ class MarkovBehaviourModel:
         architect_outputs: dict[str, Any],
         env_params: dict[str, Any],
         seed: int = 42,
+        transition_corrections: dict[tuple[str, str], float] | None = None,
     ) -> ClusterTransitionMatrix:
         """
         Builds a per-cluster transition matrix using architect outputs.
         Architect transition_overrides() are applied multiplicatively
-        to BASE_TRANSITIONS. Row-normalised at end.
+        to BASE_TRANSITIONS. Learned stage-level funnel corrections
+        (``transition_corrections``, keyed by ``(from_state, to_state)``)
+        are applied multiplicatively on top of the architect overrides.
+        Row-normalised at end.
         """
         del env_params  # reserved for future env-based matrix tweaks
         if seed is not None:
@@ -298,6 +303,20 @@ class MarkovBehaviourModel:
                 )
                 inputs_used[f"{arch_name}:{from_s}->{to_s}"] = round(float(multiplier), 4)
 
+        for (from_s, to_s), multiplier in (transition_corrections or {}).items():
+            if from_s not in idx or to_s not in idx:
+                continue
+            current = float(matrix[idx[from_s]][idx[to_s]])
+            try:
+                parsed = float(multiplier)
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(parsed):
+                continue
+            matrix[idx[from_s]][idx[to_s]] = max(
+                0.001, min(0.999, current * parsed)
+            )
+
         for i in range(n):
             row_sum = matrix[i].sum()
             if row_sum > 0:
@@ -334,6 +353,7 @@ class MarkovBehaviourModel:
         seed: int = 42,
         cluster: ClusterDefinition | None = None,
         architect_outputs: dict[str, Any] | None = None,
+        transition_corrections: dict[tuple[str, str], float] | None = None,
     ) -> ClusterTransitionMatrix | np.ndarray:
         """
         Factory: uses build_for_cluster() when architect outputs available,
@@ -346,6 +366,7 @@ class MarkovBehaviourModel:
                 architect_outputs=architect_outputs,
                 env_params=env_params,
                 seed=seed,
+                transition_corrections=transition_corrections,
             )
         return instance.build_transition_matrix(env_params, assumptions, seed=seed)
 
