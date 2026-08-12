@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import time
 from datetime import UTC, datetime
 
@@ -376,6 +377,11 @@ def _derive_chain_scalars(conductor_result: ConductorResult) -> tuple[float, flo
     Returns (arrive_to_browse, browse_to_consider, consider_to_decide,
     decide_to_purchase) in [0, 1]. Falls back to a per-cluster conversion
     decomposition when the per-cluster override map is empty.
+
+    When the conductor has already built corrected per-cluster funnel
+    matrices, those drop-offs are the authoritative source: they already
+    include architect overrides and learned stage-level corrections, so no
+    correction is re-applied here.
     """
     from app.simulation.markov import BASE_TRANSITIONS, State
 
@@ -389,6 +395,39 @@ def _derive_chain_scalars(conductor_result: ConductorResult) -> tuple[float, flo
 
     cluster_breakdown = conductor_result.cluster_breakdown or {}
     per_cluster_matrices = conductor_result.per_cluster_matrices or {}
+    cluster_funnel_dropoffs = conductor_result.cluster_funnel_dropoffs or {}
+
+    if cluster_funnel_dropoffs:
+        weighted_numer: list[float] = [0.0, 0.0, 0.0, 0.0]
+        weighted_denoms: list[float] = [0.0, 0.0, 0.0, 0.0]
+        for cluster_id, conversion in cluster_breakdown.items():
+            weight = max(0.0, float(conversion)) if conversion else 0.0
+            if weight <= 0.0:
+                continue
+            dropoffs = cluster_funnel_dropoffs.get(cluster_id) or {}
+            for i, (from_s, to_s) in enumerate(pairs):
+                key = f"{from_s.value}_TO_{to_s.value}_DROPOFF"
+                raw = dropoffs.get(key)
+                if raw is None:
+                    continue
+                try:
+                    parsed = float(raw)
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(parsed):
+                    continue
+                drop = max(0.0, min(1.0, parsed))
+                weighted_numer[i] += weight * (1.0 - drop)
+                weighted_denoms[i] += weight
+        scalars = [
+            (
+                max(0.0, min(1.0, weighted_numer[i] / weighted_denoms[i]))
+                if weighted_denoms[i] > 0.0
+                else base[i]
+            )
+            for i in range(len(pairs))
+        ]
+        return tuple(scalars)  # type: ignore[return-value]
 
     weighted_numer: list[float] = [0.0, 0.0, 0.0, 0.0]
     weighted_denom: float = 0.0

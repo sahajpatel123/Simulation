@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from app.simulation.funnel_stage_calibration import corrected_forward_probability
+
 if TYPE_CHECKING:
     from app.simulation.clusters.definitions import ClusterDefinition
 
@@ -306,16 +308,38 @@ class MarkovBehaviourModel:
         for (from_s, to_s), multiplier in (transition_corrections or {}).items():
             if from_s not in idx or to_s not in idx:
                 continue
-            current = float(matrix[idx[from_s]][idx[to_s]])
+            fi = idx[from_s]
+            ti = idx[to_s]
             try:
                 parsed = float(multiplier)
             except (TypeError, ValueError):
                 continue
             if not math.isfinite(parsed):
                 continue
-            matrix[idx[from_s]][idx[to_s]] = max(
-                0.001, min(0.999, current * parsed)
+            row = matrix[fi]
+            row_sum = float(row.sum())
+            if row_sum <= 0.0:
+                continue
+            current = float(row[ti])
+            # The scalar is a multiplier on the *normalized* forward
+            # probability. Multiplying the raw entry and then row-normalising
+            # would dilute the correction whenever the row has other outgoing
+            # mass, so rescale the forward entry so the final normalised
+            # probability is exactly ``current / row_sum * scalar`` while the
+            # other outgoing probabilities keep their relative weights.
+            target = corrected_forward_probability(
+                current / row_sum,
+                parsed,
             )
+            other_mass = row_sum - current
+            if other_mass <= 0.0:
+                # Degenerate row with only the forward transition: rebuild it
+                # around the calibrated probability with ABANDON as the sink.
+                row[:] = 0.0
+                row[ti] = target
+                row[idx["ABANDON"]] = 1.0 - target
+            else:
+                row[ti] = target * other_mass / (1.0 - target)
 
         for i in range(n):
             row_sum = matrix[i].sum()

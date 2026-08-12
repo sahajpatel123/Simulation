@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
+import pytest
 
 from app.simulation.conductor import Conductor, ConductorResult
 from app.simulation.funnel_stage_calibration import (
@@ -76,6 +77,42 @@ def test_markov_applies_forward_transition_corrections() -> None:
     assert corrected.matrix[1, 2] > base.matrix[1, 2]
     assert corrected.matrix[2, 3] < base.matrix[2, 3]
     assert corrected.matrix[3, 4] > base.matrix[3, 4]
+
+
+def test_markov_corrections_preserve_exact_pass_through_ratio() -> None:
+    """Stage scalars multiply the normalized forward probability exactly.
+
+    Row-normalisation must not dilute the learned scalar: a 1.2× correction
+    on BROWSE → CONSIDER must produce a 1.2× larger normalized transition,
+    not a ~1.07× one.
+    """
+    model = MarkovBehaviourModel()
+    base = model.build_for_cluster(
+        cluster=_StubCluster(),  # type: ignore[arg-type]
+        architect_outputs={},
+        env_params={},
+        seed=42,
+    )
+    corrected = model.build_for_cluster(
+        cluster=_StubCluster(),  # type: ignore[arg-type]
+        architect_outputs={},
+        env_params={},
+        seed=42,
+        transition_corrections={
+            ("BROWSE", "CONSIDER"): 1.2,
+            ("CONSIDER", "DECIDE"): 0.8,
+            ("DECIDE", "PURCHASE"): 1.5,
+        },
+    )
+    assert corrected.matrix[1, 2] == pytest.approx(base.matrix[1, 2] * 1.2)
+    assert corrected.matrix[2, 3] == pytest.approx(base.matrix[2, 3] * 0.8)
+    assert corrected.matrix[3, 4] == pytest.approx(base.matrix[3, 4] * 1.5)
+    np.testing.assert_allclose(
+        corrected.matrix.sum(axis=1), np.ones(7), atol=1e-9
+    )
+    assert corrected.funnel_dropoffs["BROWSE_TO_CONSIDER_DROPOFF"] == round(
+        1.0 - base.matrix[1, 2] * 1.2, 4
+    )
 
 
 def test_markov_build_factory_passes_corrections_through() -> None:
@@ -189,6 +226,41 @@ def test_derive_chain_scalars_applies_corrections() -> None:
     assert scalars[0] == 0.9
     assert scalars[2] == 0.9
     assert scalars[3] == 0.9
+
+
+def test_derive_chain_scalars_prefers_corrected_cluster_dropoffs() -> None:
+    """Persisted chain probabilities must come from the corrected matrices.
+
+    When the conductor has built per-cluster funnel drop-offs (which already
+    include stage corrections), deriving the chain from them avoids
+    double-applying the scalar and keeps stage counts consistent with the
+    corrected population-weighted conversion.
+    """
+    dropoffs = {
+        "ARRIVE_TO_BROWSE_DROPOFF": 0.13,
+        "BROWSE_TO_CONSIDER_DROPOFF": 0.3381,
+        "CONSIDER_TO_DECIDE_DROPOFF": 0.54,
+        "DECIDE_TO_PURCHASE_DROPOFF": 0.69,
+    }
+    result = ConductorResult(
+        product_type=ProductType.SAAS,
+        cluster_results={},
+        population_weighted_conversion=0.1,
+        domain_reports=[],
+        cluster_breakdown={"c1": 0.2, "c2": 0.3},
+        architect_accountability={},
+        per_cluster_matrices={
+            "c1": {("BROWSE", "CONSIDER"): 0.9},
+            "c2": {("BROWSE", "CONSIDER"): 0.9},
+        },
+        cluster_funnel_dropoffs={"c1": dropoffs, "c2": dropoffs},
+        funnel_stage_corrections={"BROWSE": 1.2},
+    )
+    scalars = tasks_mod._derive_chain_scalars(result)
+    assert scalars[0] == pytest.approx(1.0 - 0.13)
+    assert scalars[1] == pytest.approx(1.0 - 0.3381)
+    assert scalars[2] == pytest.approx(1.0 - 0.54)
+    assert scalars[3] == pytest.approx(1.0 - 0.69)
 
 
 def test_stage_transitions_cover_three_reported_stages() -> None:
