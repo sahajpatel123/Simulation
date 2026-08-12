@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
@@ -26,6 +27,7 @@ from app.models.simulation import Simulation
 from app.models.user import User
 from app.schemas.audit_log import AuditLogListOut, AuditLogOut
 from app.schemas.auth import MessageResponse
+from app.schemas.portfolio_outcome_gaps import PortfolioOutcomeGapsOut
 from app.schemas.prediction_range_coverage import (
     PortfolioPredictionRangeCoverageOut,
 )
@@ -93,12 +95,19 @@ from app.simulation.notifications import build_notifications
 from app.simulation.oldest_open_item import (
     build_oldest_open_item,
 )
+from app.simulation.outcome_gaps import (
+    LEARNING_ELIGIBLE_SIGNAL_QUALITY,
+    STALE_DAYS,
+)
 from app.simulation.outcome_rate import build_outcome_rate
 from app.simulation.outcome_velocity import (
     build_outcome_velocity,
 )
 from app.simulation.portfolio_health_snapshot import (
     build_portfolio_health_snapshot,
+)
+from app.simulation.portfolio_outcome_gaps import (
+    build_portfolio_outcome_gaps_digest,
 )
 from app.simulation.portfolio_prediction_range_coverage import (
     build_portfolio_prediction_range_coverage,
@@ -5064,3 +5073,157 @@ def get_my_prediction_range_coverage(
         generated_at=datetime.now(UTC).isoformat(),
     )
     return PortfolioPredictionRangeCoverageOut(**payload)
+
+
+@router.get(
+    "/me/outcome-gaps",
+    response_model=PortfolioOutcomeGapsOut,
+    summary=(
+        "Portfolio-level outcome-feedback gaps digest - unscored completed "
+        "simulations across all owned projects, with per-project rollups"
+    ),
+    # Read-only, bounded by the user's owned projects; cap polling the same
+    # way as the other user-level analytics reads.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_my_outcome_gaps(
+    limit: int = Query(default=50, ge=1, le=200),
+    learning_eligible_only: bool = Query(
+        default=False,
+        description=(
+            "When true, only return unscored runs whose signal quality "
+            "is at least 0.25 (the calibration learning-weight floor)."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioOutcomeGapsOut:
+    """Return the current user's portfolio outcome-feedback gaps digest.
+
+    A completed run only teaches the calibration layer once the founder
+    records a real-world outcome against it (``founder_outcomes``). This
+    digest rolls the per-project unscored-run picture up across every owned
+    project: overall coverage, learning-eligible gaps, high-priority stale
+    gaps, the oldest open gap, per-project rollups, and the concrete list of
+    simulations still waiting for feedback.
+
+    ``learning_eligible_only`` restricts the unscored counts and the item
+    list to runs whose signal quality meets the 0.25 learning-weight floor;
+    ``scored`` and ``total_completed`` always reflect the full portfolio so
+    the coverage rate stays honest under filtering.
+    """
+    min_sq = LEARNING_ELIGIBLE_SIGNAL_QUALITY
+    stale_cutoff = datetime.now(UTC) - timedelta(days=STALE_DAYS)
+
+    full_rows = (
+        db.execute(
+            text(
+                """
+                SELECT
+                    s.project_id AS project_id,
+                    COUNT(DISTINCT s.id)::int AS total_completed,
+                    COUNT(DISTINCT fo.simulation_id)::int AS scored
+                FROM simulations s
+                LEFT JOIN founder_outcomes fo
+                  ON fo.simulation_id = s.id
+                 AND fo.project_id = s.project_id
+                JOIN projects p
+                  ON p.id = s.project_id
+                 AND p.user_id = :uid
+                WHERE UPPER(s.status) = 'COMPLETED'
+                GROUP BY s.project_id
+                """
+            ),
+            {"uid": current_user.id},
+        )
+        .mappings()
+        .all()
+    )
+
+    gap_sql = """
+        SELECT
+            s.project_id AS project_id,
+            COUNT(DISTINCT s.id) FILTER (
+                WHERE fo.simulation_id IS NULL
+            )::int AS unscored,
+            COUNT(DISTINCT s.id) FILTER (
+                WHERE fo.simulation_id IS NULL
+                  AND COALESCE(s.signal_quality, 0) >= :min_sq
+            )::int AS learning_eligible_unscored,
+            COUNT(DISTINCT s.id) FILTER (
+                WHERE fo.simulation_id IS NULL
+                  AND COALESCE(s.signal_quality, 0) >= :min_sq
+                  AND s.created_at <= :stale_cutoff
+            )::int AS high_priority_unscored,
+            MIN(s.created_at) FILTER (
+                WHERE fo.simulation_id IS NULL
+            ) AS oldest_unscored_created_at
+        FROM simulations s
+        LEFT JOIN founder_outcomes fo
+          ON fo.simulation_id = s.id
+         AND fo.project_id = s.project_id
+        JOIN projects p
+          ON p.id = s.project_id
+         AND p.user_id = :uid
+        WHERE UPPER(s.status) = 'COMPLETED'
+    """
+    gap_params: dict[str, Any] = {
+        "uid": current_user.id,
+        "min_sq": min_sq,
+        "stale_cutoff": stale_cutoff,
+    }
+    if learning_eligible_only:
+        gap_sql += "\n        AND COALESCE(s.signal_quality, 0) >= :min_sq"
+    gap_sql += "\n        GROUP BY s.project_id"
+    gap_rows = (
+        db.execute(text(gap_sql), gap_params).mappings().all()
+    )
+
+    items_sql = """
+        SELECT
+            s.id AS simulation_id,
+            s.project_id AS project_id,
+            s.created_at AS created_at,
+            s.signal_quality AS signal_quality,
+            s.results_json AS results_json,
+            (s.results_json IS NOT NULL) AS has_results
+        FROM simulations s
+        JOIN projects p
+          ON p.id = s.project_id
+         AND p.user_id = :uid
+        WHERE UPPER(s.status) = 'COMPLETED'
+          AND NOT EXISTS (
+              SELECT 1 FROM founder_outcomes fo
+              WHERE fo.simulation_id = s.id
+                AND fo.project_id = s.project_id
+          )
+    """
+    items_params: dict[str, Any] = {"uid": current_user.id, "limit": limit}
+    if learning_eligible_only:
+        items_sql += "\n        AND COALESCE(s.signal_quality, 0) >= :min_sq"
+        items_params["min_sq"] = min_sq
+    items_sql += (
+        "\n        ORDER BY s.created_at ASC, s.id ASC\n        LIMIT :limit"
+    )
+    items_rows = (
+        db.execute(text(items_sql), items_params).mappings().all()
+    )
+
+    full_by_project = {
+        row["project_id"]: dict(row) for row in full_rows
+    }
+    project_rows: list[dict[str, Any]] = []
+    for gap_row in gap_rows:
+        merged = dict(full_by_project.get(gap_row["project_id"], {}))
+        merged.update(dict(gap_row))
+        project_rows.append(merged)
+
+    payload = build_portfolio_outcome_gaps_digest(
+        user_id=current_user.id,
+        project_rows=project_rows,
+        rows=[dict(row) for row in items_rows],
+        limit=limit,
+        learning_eligible_only=learning_eligible_only,
+        now=datetime.now(UTC),
+    )
+    return PortfolioOutcomeGapsOut(**payload)
