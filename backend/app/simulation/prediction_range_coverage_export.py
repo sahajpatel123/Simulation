@@ -56,6 +56,9 @@ _ROW_HEADERS: list[str] = [
     "created_at",
 ]
 
+_FORMULA_STARTERS: tuple[str, ...] = ("=", "+", "-", "@")
+_CONTROL_STARTERS: tuple[str, ...] = ("\t", "\r", "\n")
+
 
 def _as_dict(payload: Any) -> dict[str, Any]:
     """Coerce a Pydantic model or plain dict into a plain dict."""
@@ -142,18 +145,20 @@ def _json_text(value: Any) -> str:
 def _safe_csv_cell(value: object) -> object:
     """Neutralise spreadsheet formula injection while leaving data intact.
 
-    Cells that begin with a formula character are quoted, and cells that
-    embed ``=`` inside a prefix (e.g. ``A:=HYPERLINK(...)``) are quoted too
-    so the whole cell can never be interpreted as an executable formula by
-    Excel.
+    Cells that begin with a formula starter (``=``, ``+``, ``-``, ``@``) or
+    with a tab / carriage return / newline are prefixed with a single quote
+    so Excel, LibreOffice, and Google Sheets treat them as literal text.
+    Formula starters hidden behind leading whitespace are also caught,
+    because spreadsheet parsers trim whitespace before evaluating a cell.
+    Text that merely embeds ``=`` (for example ``project=user``) is left
+    untouched — only a cell that *starts* with a formula token needs
+    neutralising.
     """
-    if isinstance(value, str):
-        stripped = value.lstrip()
-        if value[:1] in ("=", "+", "-", "@", "\t", "\r") or (
-            stripped[:1] in ("=", "+", "-", "@", "\t", "\r")
-            and stripped != value
-        ) or "=" in value:
-            return f"'{value}"
+    if not isinstance(value, str):
+        return value
+    stripped = value.lstrip()
+    if stripped[:1] in _FORMULA_STARTERS or value[:1] in _CONTROL_STARTERS:
+        return f"'{value}"
     return value
 
 

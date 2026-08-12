@@ -7,6 +7,8 @@ import io
 import json
 from typing import Any
 
+import pytest
+
 from app.schemas.prediction_range_coverage import (
     PredictionRangeCoverageOut,
     PredictionRangeCoverageRow,
@@ -171,14 +173,75 @@ def test_csv_neutralises_spreadsheet_formula_injection() -> None:
     )
 
     assert "'=NEEDS_ATTENTION" in csv_text
-    assert "'{" in csv_text
     assert "=HYPERLINK(https://example.com)" in csv_text
     assert "'-2+3" in csv_text
     assert "'=NOW()" in csv_text
     assert "' @project" in csv_text
-    assert not any(
-        row and row[0].startswith("=") for row in _rows_from_csv(csv_text)
+    parsed_rows = _rows_from_csv(csv_text)
+    # The nested formula stays intact inside the worst-miss JSON cell, but
+    # that cell starts with ``{`` so it is not an executable formula and is
+    # not prefixed.
+    assert any(
+        cell.startswith("{") and "=HYPERLINK" in cell
+        for row in parsed_rows
+        for cell in row
     )
+    assert not any(
+        cell.lstrip().startswith(("=", "+", "-", "@"))
+        or cell[:1] in ("\t", "\r", "\n")
+        for row in parsed_rows
+        for cell in row
+    )
+
+
+@pytest.mark.parametrize(
+    "malicious",
+    [
+        "=HYPERLINK('http://evil')",
+        "+cmd",
+        "-cmd",
+        "@cmd",
+        "\tcmd",
+        "\rcmd",
+        " =cmd",
+        " \t=cmd",
+        "\n=cmd",
+        " \n@cmd",
+    ],
+)
+def test_csv_neutralises_formula_hidden_behind_whitespace_and_controls(
+    malicious: str,
+) -> None:
+    payload = _payload()
+    payload.narrative = malicious
+
+    csv_text = prediction_range_coverage_to_csv(payload)
+    parsed_rows = _rows_from_csv(csv_text)
+
+    assert any(
+        malicious in cell
+        for row in parsed_rows
+        for cell in row
+    )
+    assert not any(
+        cell.lstrip().startswith(("=", "+", "-", "@"))
+        or cell[:1] in ("\t", "\r", "\n")
+        for row in parsed_rows
+        for cell in row
+    )
+
+
+def test_csv_leaves_embedded_equals_text_unquoted() -> None:
+    payload = _payload()
+    payload.narrative = "coverage = accuracy"
+    payload.rows[0].calibration_source = "project=user"
+
+    csv_text = prediction_range_coverage_to_csv(payload)
+
+    assert "coverage = accuracy" in csv_text
+    assert "project=user" in csv_text
+    assert "'coverage = accuracy" not in csv_text
+    assert "'project=user" not in csv_text
 
 
 def test_csv_handles_malformed_rows_without_raising() -> None:
