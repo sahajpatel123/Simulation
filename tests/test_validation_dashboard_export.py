@@ -1,4 +1,9 @@
-"""Route and serialization tests for validation-dashboard exports."""
+"""Route and serialization tests for validation-dashboard exports.
+
+Covers CSV, JSON, and Markdown rendering of the combined dashboard payload,
+format validation, and that the ``target_de_risked_pct`` query parameter
+flows through to the dashboard builder.
+"""
 
 from __future__ import annotations
 
@@ -242,3 +247,26 @@ def test_export_rejects_unknown_format_before_building_payload(
     assert exc_info.value.status_code == 400
     assert "unsupported export format" in exc_info.value.detail
     assert calls == []
+
+
+def test_export_route_returns_markdown_brief(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response = _call_route(monkeypatch, format="md")
+
+    assert response.media_type == "text/markdown; charset=utf-8"
+    assert (
+        'filename="validation-dashboard-7.md"'
+        in response.headers["Content-Disposition"]
+    )
+    assert response.headers["Cache-Control"] == "no-store"
+    body = _body(response).decode("utf-8")
+    assert "# Validation Dashboard" in body
+    assert "## Summary" in body
+    assert "## Validation Milestones" in body
+    assert "## Assumptions" in body
+    assert "first_de_risked_event_id" not in body
+    assert "First de-risked (PASS)" in body
+    assert "Total assumptions" in body
+    assert "De-risked" in body
+    assert int(response.headers["Content-Length"]) == len(body.encode("utf-8"))

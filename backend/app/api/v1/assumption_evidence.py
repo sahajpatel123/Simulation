@@ -14,12 +14,13 @@ founder record *what happened* and see the consequence:
 * ``GET /projects/{project_id}/assumption-validation-timeline`` replays
   every logged experiment chronologically with cumulative validation
   progress and first-occurrence milestones.
+* ``GET /projects/{project_id}/validation-dashboard`` composes the digest,
+  timeline milestones, and momentum forecast into one response.
+* ``GET /projects/{project_id}/validation-dashboard/export`` downloads the
+  dashboard as CSV, JSON, or a founder-facing Markdown brief.
 * ``GET /projects/{project_id}/validation-momentum`` measures evidence
   cadence and projects how many weeks remain until full coverage or a
   de-risked target.
-* ``GET /projects/{project_id}/validation-dashboard`` composes the evidence
-  digest, timeline milestones, and momentum forecast into a single response
-  for a one-call de-risking overview.
 
 Pure post-hoc analysis — no Celery dispatch, no LLM calls.
 """
@@ -59,12 +60,15 @@ from app.simulation.evidence_scorecard import (
     derive_confidence,
     evidence_to_out,
 )
-from app.simulation.validation_momentum import build_validation_momentum
 from app.simulation.validation_dashboard_export import (
     FORMAT_VERSION as VALIDATION_DASHBOARD_FORMAT_VERSION,
+)
+from app.simulation.validation_dashboard_export import (
     validation_dashboard_to_csv,
     validation_dashboard_to_json,
+    validation_dashboard_to_markdown,
 )
+from app.simulation.validation_momentum import build_validation_momentum
 from app.simulation.validation_timeline import build_validation_timeline
 
 router = APIRouter(prefix="/projects", tags=["assumption-evidence"])
@@ -472,7 +476,7 @@ def get_validation_dashboard(
     "/{project_id}/validation-dashboard/export",
     response_class=StreamingResponse,
     summary=(
-        "Export a project's validation dashboard as CSV or JSON"
+        "Export a project's validation dashboard as CSV, JSON, or Markdown"
     ),
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
@@ -484,7 +488,8 @@ def export_validation_dashboard(
         description=(
             "Output format. ``csv`` (default) returns a spreadsheet-friendly "
             "summary with assumption rows; ``json`` returns the full "
-            "dashboard envelope. Unsupported values return a 400 response."
+            "dashboard envelope; ``md`` returns a founder-facing Markdown "
+            "brief. Unsupported values return a 400 response."
         ),
     ),
     target_de_risked_pct: float = Query(
@@ -501,12 +506,12 @@ def export_validation_dashboard(
 ) -> StreamingResponse:
     """Download the same de-risking dashboard shown by the JSON endpoint."""
     fmt = (format or "csv").strip().lower()
-    if fmt not in {"csv", "json"}:
+    if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                f"unsupported export format {format!r}; expected 'csv' or "
-                "'json'"
+                f"unsupported export format {format!r}; expected 'csv', "
+                "'json', or 'md'"
             ),
         )
 
@@ -531,6 +536,13 @@ def export_validation_dashboard(
         ).encode("utf-8")
         filename = f"validation-dashboard-{project_id}.json"
         media_type = "application/json; charset=utf-8"
+    elif fmt == "md":
+        body = validation_dashboard_to_markdown(
+            payload,
+            metadata=metadata,
+        ).encode("utf-8")
+        filename = f"validation-dashboard-{project_id}.md"
+        media_type = "text/markdown; charset=utf-8"
     else:
         body = validation_dashboard_to_csv(
             payload,

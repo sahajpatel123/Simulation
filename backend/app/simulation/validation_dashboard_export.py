@@ -1,4 +1,4 @@
-"""CSV and JSON exports for the validation dashboard.
+"""CSV, JSON, and Markdown exports for the validation dashboard.
 
 The validation dashboard is intentionally compact for a polling UI, but its
 nested digest, milestones, and forecast are also useful in a founder's
@@ -10,6 +10,8 @@ milestones, assumption-level rows, result/method histograms, and metadata.
 Cells are guarded against spreadsheet formula injection so free-form
 assumption text and founder notes remain inert when opened in a spreadsheet.
 JSON is an envelope with stable metadata and the unmodified dashboard data.
+Markdown is a founder-facing brief suitable for docs, Notion, or a weekly
+validation report.
 """
 
 from __future__ import annotations
@@ -132,7 +134,6 @@ def _summary_rows(data: dict[str, Any]) -> list[tuple[str, object]]:
     """Flatten the nested dashboard into founder-friendly summary rows."""
     digest = _as_dict(data.get("evidence_digest"))
     momentum = _as_dict(data.get("momentum"))
-    counts = _as_dict(momentum.get("counts"))
     velocity = _as_dict(momentum.get("velocity"))
     forecast = _as_dict(momentum.get("forecast"))
 
@@ -258,8 +259,211 @@ def validation_dashboard_to_json(
     ) + "\n"
 
 
+_SUMMARY_LABELS: dict[str, str] = {
+    "total_assumptions": "Total assumptions",
+    "total_evidence_rows": "Evidence rows",
+    "assumptions_with_evidence": "Assumptions with evidence",
+    "evidence_coverage_pct": "Evidence coverage",
+    "de_risked_count": "De-risked",
+    "challenged_count": "Challenged",
+    "inconclusive_count": "Inconclusive",
+    "pending_count": "Pending",
+    "validation_score": "Validation score",
+    "momentum_trend": "Cadence trend",
+    "overall_events_per_week": "Overall experiments/week",
+    "recent_events_per_week": "Recent experiments/week",
+    "coverage_velocity_per_week": "Coverage velocity (/week)",
+    "de_risk_velocity_per_week": "De-risking velocity (/week)",
+    "remaining_for_coverage": "Remaining for full coverage",
+    "remaining_for_target": "Remaining for de-risked target",
+    "weeks_to_full_coverage": "Weeks to full coverage",
+    "projected_full_coverage_at": "Projected full coverage",
+    "weeks_to_de_risked_target": "Weeks to de-risked target",
+    "projected_de_risked_at": "Projected de-risk target",
+    "forecast_confident": "Forecast confident",
+    "next_action": "Next action",
+}
+
+_MILESTONE_LABELS: dict[str, str] = {
+    "first_evidence_event_id": "First evidence",
+    "last_evidence_event_id": "Last evidence",
+    "first_de_risked_event_id": "First de-risked (PASS)",
+    "first_challenged_event_id": "First challenged (FAIL)",
+    "first_inconclusive_event_id": "First inconclusive",
+}
+
+_MILESTONE_KEYS: tuple[str, ...] = tuple(_MILESTONE_LABELS.keys())
+
+
+def _escape_md_cell(value: Any) -> str:
+    """Escape pipe characters so cells can't break Markdown tables."""
+    if value is None:
+        return ""
+    text = str(value)
+    return text.replace("|", "\\|").replace("\n", " ")
+
+
+def _md_pct(value: Any) -> str:
+    """Format a 0–1 float as a percentage, or return a dash."""
+    if value is None:
+        return "—"
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return _escape_md_cell(value)
+    return f"{f * 100:.1f}%"
+
+
+def _md_date(value: Any) -> str:
+    """Format a timestamp for Markdown, trimming the time when it is midnight."""
+    if value is None:
+        return "—"
+    if hasattr(value, "strftime"):
+        text = value.strftime("%Y-%m-%d")
+    else:
+        text = _escape_md_cell(value)
+    return text
+
+
+def _md_bool(value: Any) -> str:
+    if value is None:
+        return "—"
+    return "yes" if value else "no"
+
+
+def _md_cell(value: Any) -> str:
+    """Generic Markdown cell renderer for scalar summary values."""
+    if value is None:
+        return "—"
+    if isinstance(value, bool):
+        return _md_bool(value)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if isinstance(value, float) and not math.isfinite(value):
+            return "—"
+        return str(value)
+    text = str(value)
+    return _escape_md_cell(text)
+
+
+def validation_dashboard_to_markdown(
+    payload: Any,
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    """Render a validation-dashboard payload as a founder-facing brief."""
+    data = _as_dict(payload)
+    digest = _as_dict(data.get("evidence_digest"))
+    milestones = _as_dict(data.get("timeline_milestones"))
+    summary_rows = dict(_summary_rows(data))
+
+    lines: list[str] = []
+    lines.append("# Validation Dashboard")
+    lines.append("")
+    lines.append(
+        "De-risking overview combining evidence coverage, first-occurrence "
+        "milestones, and the projected validation horizon."
+    )
+    lines.append("")
+
+    if metadata:
+        generated = _text(metadata.get("generated_at"))
+        if generated:
+            lines.append(f"*Generated: {_escape_md_cell(generated)}*")
+            lines.append("")
+
+    lines.append("## Summary")
+    lines.append("")
+    lines.append("| Metric | Value |")
+    lines.append("| --- | --- |")
+    for key in _SUMMARY_KEYS:
+        if key not in summary_rows:
+            continue
+        lines.append(
+            f"| {_escape_md_cell(_SUMMARY_LABELS.get(key, key))} "
+            f"| {_md_cell(summary_rows[key])} |"
+        )
+    lines.append("")
+
+    lines.append("## Validation Milestones")
+    lines.append("")
+    lines.append("| Milestone | Event ID |")
+    lines.append("| --- | --- |")
+    for key in _MILESTONE_KEYS:
+        event_id = milestones.get(key)
+        lines.append(
+            f"| {_MILESTONE_LABELS[key]} | "
+            f"{event_id if event_id is not None else '—'} |"
+        )
+    lines.append("")
+
+    assumptions = digest.get("assumptions") or []
+    if assumptions:
+        lines.append("## Assumptions")
+        lines.append("")
+        header = (
+            "| # | Assumption | Category | Sensitivity | Evidence | "
+            "Latest | Confidence | Status |"
+        )
+        lines.append(header)
+        lines.append("| ---: | --- | --- | --- | ---: | --- | --- | --- |")
+        for idx, raw in enumerate(assumptions, start=1):
+            assumption = _as_dict(raw)
+            if not assumption:
+                continue
+            lines.append(
+                f"| {idx} | {_escape_md_cell(assumption.get('assumption_text', ''))} "
+                f"| {_escape_md_cell(assumption.get('category', ''))} "
+                f"| {_escape_md_cell(assumption.get('sensitivity', ''))} "
+                f"| {assumption.get('evidence_count', 0)} "
+                f"| {_md_cell(assumption.get('latest_result'))} "
+                f"| {_md_cell(assumption.get('derived_confidence'))} "
+                f"| {_md_cell(assumption.get('status'))} |"
+            )
+        lines.append("")
+
+    result_counts = digest.get("result_counts")
+    if isinstance(result_counts, dict):
+        lines.append("## Result Counts")
+        lines.append("")
+        lines.append("| Result | Count |")
+        lines.append("| --- | ---: |")
+        for key, value in sorted(result_counts.items()):
+            lines.append(f"| {_escape_md_cell(key)} | {value or 0} |")
+        lines.append("")
+
+    method_counts = digest.get("method_counts")
+    if isinstance(method_counts, dict):
+        lines.append("## Method Counts")
+        lines.append("")
+        lines.append("| Method | Count |")
+        lines.append("| --- | ---: |")
+        for key, value in sorted(method_counts.items()):
+            lines.append(f"| {_escape_md_cell(key)} | {value or 0} |")
+        lines.append("")
+
+    next_action = _text(summary_rows.get("next_action"))
+    if next_action:
+        lines.append("## Next Action")
+        lines.append("")
+        lines.append(_escape_md_cell(next_action))
+        lines.append("")
+
+    lines.append("---")
+    lines.append("")
+    footer = ["Validation dashboard"]
+    project_id = _text(summary_rows.get("project_id"))
+    if project_id:
+        footer.append(f"Project {project_id}")
+    if metadata and metadata.get("generated_at"):
+        footer.append(f"Generated {_escape_md_cell(_text(metadata['generated_at']))}")
+    lines.append(f"*{' · '.join(footer)}*")
+    lines.append("")
+
+    return "\n".join(lines).strip() + "\n"
+
+
 __all__ = [
     "FORMAT_VERSION",
     "validation_dashboard_to_csv",
     "validation_dashboard_to_json",
+    "validation_dashboard_to_markdown",
 ]
