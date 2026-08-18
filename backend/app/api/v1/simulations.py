@@ -8418,7 +8418,9 @@ def export_validation_experiment_plan(
     summary and one row per planned experiment (method, cost tier, duration,
     sample target, success threshold, go/no-go rule) with a UTF-8 BOM so
     Excel decodes non-Latin text correctly; ``format=json`` returns the raw
-    plan payload for machine consumers.
+    plan payload for machine consumers; ``format=md`` returns a founder-facing
+    Markdown brief with the sprint summary, per-experiment table, go/no-go
+    rules, and meta.
     """
     fmt = (format or "csv").strip().lower()
     if fmt not in {"csv", "json"}:
