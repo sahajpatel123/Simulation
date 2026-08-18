@@ -366,6 +366,7 @@ from app.simulation.unit_economics_export import unit_economics_to_csv
 from app.simulation.validation_experiment_plan_export import (
     validation_experiment_plan_to_csv,
     validation_experiment_plan_to_json,
+    validation_experiment_plan_to_markdown,
 )
 from app.simulation.validation_experiment_planner import build_validation_experiment_plan
 from app.simulation.validation_roi import build_validation_roi
@@ -8389,7 +8390,7 @@ def get_validation_experiment_plan(
 @router.get(
     "/{simulation_id}/validation-experiment-plan/export",
     response_class=StreamingResponse,
-    summary="Export the validation sprint plan as CSV or JSON",
+    summary="Export the validation sprint plan as CSV, JSON, or Markdown",
     # Pure post-hoc composition of the completed simulation payload; cap
     # polling so a stray dashboard loop can't drive repeated ROI recomputes.
     dependencies=[Depends(rate_limit(limit=20, window_s=60))],
@@ -8402,7 +8403,8 @@ def export_validation_experiment_plan(
         description=(
             "Output format. ``csv`` (default) returns the multi-section "
             "spreadsheet; ``json`` returns the raw validation-experiment-plan "
-            "payload. Unsupported values return a 400 response."
+            "payload; ``md`` returns a founder-facing Markdown brief. "
+            "Unsupported values return a 400 response."
         ),
     ),
     db: Session = Depends(get_db),

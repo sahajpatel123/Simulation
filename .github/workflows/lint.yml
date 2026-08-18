@@ -39,7 +39,10 @@ jobs:
           python-version: "3.11"
 
       - name: Install ruff
-        run: pip install --quiet ruff
+        # Pin to a specific version to prevent CI breakage when newer ruff
+        # releases introduce stricter rules. Bump in lockstep with the
+        # ruff-pre-commit hook rev in .pre-commit-config.yaml.
+        run: pip install --quiet "ruff==0.16.0"
 
       - name: Run ruff check
         # Rule selection lives in pyproject.toml — the workflow

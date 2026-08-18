@@ -1,4 +1,4 @@
-"""CSV/JSON export helpers for the validation experiment plan.
+"""CSV/JSON/Markdown export helpers for the validation experiment plan.
 
 The validation-experiment-plan endpoint
 (``GET /api/v1/simulations/{id}/validation-experiment-plan``) turns a
@@ -6,7 +6,7 @@ completed simulation's validation-ROI ranking into a concrete, sequenced
 validation sprint: method, cost tier, duration, sample target, success
 threshold and go/no-go rule per assumption. This module renders that same
 payload for download so founders can track and share the de-risking backlog
-in Sheets/Excel or hand it to a validation partner.
+in Sheets/Excel, feed a planning pipeline, or read a human-friendly report.
 
 The CSV follows the lightweight multi-section convention used by the
 risk-register and launch-checklist exports: an optional metadata block, a
@@ -14,7 +14,9 @@ one-row-per-key sprint summary, one row per planned experiment, and a meta
 section. Missing optional fields render as blanks rather than crashing the
 export. The CSV starts with a UTF-8 BOM so Excel decodes non-Latin assumption
 text correctly; the JSON export emits UTF-8 with ``ensure_ascii=False`` and a
-trailing newline so the same text round-trips cleanly.
+trailing newline so the same text round-trips cleanly. The Markdown export
+renders a founder-facing brief with a sprint summary, per-experiment table,
+narrative, and metadata footer.
 """
 
 from __future__ import annotations
@@ -227,7 +229,188 @@ def validation_experiment_plan_to_json(
     ) + "\n"
 
 
+_SUMMARY_LABELS: dict[str, str] = {
+    "simulation_id": "Simulation",
+    "project_id": "Project",
+    "status": "Status",
+    "baseline_conversion": "Baseline conversion",
+    "signal_quality": "Signal quality",
+    "experiment_count": "Experiments",
+    "validate_first_count": "Validate-first",
+    "high_value_count": "High-value",
+    "free_count": "Free",
+    "low_cost_count": "Low cost",
+    "medium_cost_count": "Medium cost",
+    "sprint_days": "Sprint (parallel, days)",
+    "sequential_days": "Sequential (days)",
+    "budget_ceiling": "Budget ceiling",
+    "top_experiment": "Top experiment",
+    "narrative": "Narrative",
+}
+
+_EXP_HEADERS: tuple[str, ...] = (
+    "assumption_text",
+    "category",
+    "roi_tier",
+    "validation_roi",
+    "expected_conversion_swing",
+    "confidence_tier",
+    "method_label",
+    "cost_tier",
+    "estimated_duration_days",
+    "success_threshold",
+)
+
+
+def _escape_md(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).replace("|", "\\|").replace("\n", " ")
+
+
+def _md_pct(value: Any) -> str:
+    if value is None:
+        return "—"
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return _escape_md(value)
+    return f"{f * 100:.1f}%"
+
+
+def validation_experiment_plan_to_markdown(
+    payload: Any,
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    """Render a validation-experiment-plan payload as a founder-facing brief."""
+    data = _as_dict(payload)
+    summary = _summary_dict(data)
+    experiments = data.get("experiments") or []
+    meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+
+    lines: list[str] = []
+    lines.append("# Validation Sprint Plan")
+    lines.append("")
+    lines.append(
+        "Concrete experiments to de-risk the highest-ROI assumptions from your "
+        "simulation, ordered by impact."
+    )
+    lines.append("")
+
+    if metadata and metadata.get("generated_at"):
+        lines.append(f"*Generated: {_escape_md(metadata['generated_at'])}*")
+        lines.append("")
+
+    lines.append("## Sprint Summary")
+    lines.append("")
+    lines.append("| Field | Value |")
+    lines.append("| --- | --- |")
+    for key, label in _SUMMARY_LABELS.items():
+        value = summary.get(key)
+        if value is None:
+            cell = "—"
+        elif isinstance(value, str) and "%" in value or isinstance(value, str) and value.startswith("0."):
+            cell = _md_pct(value)
+        elif isinstance(value, str):
+            cell = _escape_md(value)
+        else:
+            cell = _escape_md(value)
+        lines.append(f"| {label} | {cell} |")
+    lines.append("")
+
+    narrative = data.get("narrative")
+    if narrative:
+        lines.append("## Narrative")
+        lines.append("")
+        lines.append(_escape_md(narrative))
+        lines.append("")
+
+    exp_list = list(experiments)
+    if exp_list:
+        lines.append("## Planned Experiments")
+        lines.append("")
+        header = (
+            "| # | Assumption | Category | ROI tier | ROI | Swing | "
+            "Confidence | Method | Cost | Dur (days) | Success |"
+        )
+        lines.append(header)
+        lines.append("| ---: | --- | --- | --- | ---: | ---: | --- | --- | --- | ---: | --- |")
+        for rank, raw in enumerate(exp_list, start=1):
+            exp = _as_dict(raw) if raw is not None else {}
+            if not exp:
+                continue
+            lines.append(
+                f"| {rank} "
+                f"| {_escape_md(exp.get('assumption_text', ''))} "
+                f"| {_escape_md(exp.get('category', ''))} "
+                f"| {_escape_md(exp.get('roi_tier', ''))} "
+                f"| {_md_pct(exp.get('validation_roi'))} "
+                f"| {_md_pct(exp.get('expected_conversion_swing'))} "
+                f"| {_escape_md(exp.get('confidence_tier', ''))} "
+                f"| {_escape_md(exp.get('method_label', ''))} "
+                f"| {_escape_md(exp.get('cost_tier', ''))} "
+                f"| {exp.get('estimated_duration_days', '—')} "
+                f"| {_escape_md(exp.get('success_threshold', ''))} |"
+            )
+        lines.append("")
+
+        lines.append("### Go/No-Go Rules")
+        lines.append("")
+        for rank, raw in enumerate(exp_list, start=1):
+            exp = _as_dict(raw) if raw is not None else {}
+            if not exp:
+                continue
+            rule = exp.get("go_no_go_rule", "")
+            if rule:
+                lines.append(
+                    f"{rank}. **{_escape_md(exp.get('method_label', 'Experiment'))}** "
+                    f"— {_escape_md(rule)}"
+                )
+        lines.append("")
+    else:
+        lines.append("## Planned Experiments")
+        lines.append("")
+        lines.append(
+            "_No assumptions currently need an experiment — the ones worth "
+            "testing are either already validated or have minimal conversion "
+            "impact._"
+        )
+        lines.append("")
+
+    if meta:
+        lines.append("## Meta")
+        lines.append("")
+        lines.append("| Key | Value |")
+        lines.append("| --- | --- |")
+        for key in sorted(meta):
+            value = meta[key]
+            if isinstance(value, (dict, list)):
+                cell = json.dumps(value, default=str, ensure_ascii=False)
+            else:
+                cell = _escape_md(value)
+            lines.append(f"| {key} | {cell} |")
+        lines.append("")
+
+    lines.append("---")
+    lines.append("")
+    footer = ["Validation sprint plan"]
+    if metadata:
+        user_id = metadata.get("user_id")
+        if user_id is not None:
+            footer.append(f"User {user_id}")
+        sim_id = metadata.get("simulation_id")
+        if sim_id is not None:
+            footer.append(f"Simulation {sim_id}")
+        if metadata.get("generated_at"):
+            footer.append(f"Generated {_escape_md(metadata['generated_at'])}")
+    lines.append(f"*{' · '.join(footer)}*")
+    lines.append("")
+
+    return "\n".join(lines).strip() + "\n"
+
+
 __all__ = [
     "validation_experiment_plan_to_csv",
     "validation_experiment_plan_to_json",
+    "validation_experiment_plan_to_markdown",
 ]
