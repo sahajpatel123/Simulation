@@ -2593,6 +2593,13 @@ def get_project_outcome_gaps(
             "is at least 0.25 (the calibration learning-weight floor)."
         ),
     ),
+    now: datetime | None = Query(
+        default=None,
+        description=(
+            "Reference time for age/urgency calculations. Defaults to the "
+            "current UTC time; mainly useful for testing."
+        ),
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ProjectOutcomeGapsOut:
@@ -2721,7 +2728,7 @@ def get_project_outcome_gaps(
         oldest_unscored_created_at=oldest_unscored_created_at,
         limit=limit,
         learning_eligible_only=learning_eligible_only,
-        now=datetime.now(UTC),
+        now=now or datetime.now(UTC),
     )
     return ProjectOutcomeGapsOut(**payload)
 

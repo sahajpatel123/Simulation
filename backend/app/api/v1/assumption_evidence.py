@@ -27,7 +27,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.v1.common import get_owned_project
@@ -59,6 +60,11 @@ from app.simulation.evidence_scorecard import (
     evidence_to_out,
 )
 from app.simulation.validation_momentum import build_validation_momentum
+from app.simulation.validation_dashboard_export import (
+    FORMAT_VERSION as VALIDATION_DASHBOARD_FORMAT_VERSION,
+    validation_dashboard_to_csv,
+    validation_dashboard_to_json,
+)
 from app.simulation.validation_timeline import build_validation_timeline
 
 router = APIRouter(prefix="/projects", tags=["assumption-evidence"])
@@ -458,5 +464,87 @@ def get_validation_dashboard(
             "generated_at": datetime.now(UTC).isoformat(),
             "model": DASHBOARD_MODEL,
             "source": ["evidence-digest", "assumption-validation-timeline", "validation-momentum"],
+        },
+    )
+
+
+@router.get(
+    "/{project_id}/validation-dashboard/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export a project's validation dashboard as CSV or JSON"
+    ),
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_validation_dashboard(
+    project_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns a spreadsheet-friendly "
+            "summary with assumption rows; ``json`` returns the full "
+            "dashboard envelope. Unsupported values return a 400 response."
+        ),
+    ),
+    target_de_risked_pct: float = Query(
+        default=1.0,
+        ge=0.5,
+        le=1.0,
+        description=(
+            "Share of assumptions that must be de-risked before the "
+            "projected horizon is reached (0.5–1.0)."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Download the same de-risking dashboard shown by the JSON endpoint."""
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; expected 'csv' or "
+                "'json'"
+            ),
+        )
+
+    dashboard = get_validation_dashboard(
+        project_id=project_id,
+        target_de_risked_pct=target_de_risked_pct,
+        db=db,
+        current_user=current_user,
+    )
+    payload = dashboard.model_dump()
+    metadata = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "user_id": current_user.id,
+        "project_id": project_id,
+        "format_version": VALIDATION_DASHBOARD_FORMAT_VERSION,
+    }
+
+    if fmt == "json":
+        body = validation_dashboard_to_json(
+            payload,
+            metadata=metadata,
+        ).encode("utf-8")
+        filename = f"validation-dashboard-{project_id}.json"
+        media_type = "application/json; charset=utf-8"
+    else:
+        body = validation_dashboard_to_csv(
+            payload,
+            metadata=metadata,
+        ).encode("utf-8")
+        filename = f"validation-dashboard-{project_id}.csv"
+        media_type = "text/csv; charset=utf-8"
+
+    return StreamingResponse(
+        iter([body]),
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
         },
     )

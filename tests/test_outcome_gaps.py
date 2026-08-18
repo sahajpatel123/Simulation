@@ -7,10 +7,17 @@ SQL scoping, filtering, registration).
 
 from __future__ import annotations
 
+import sys
+import types
 from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi import HTTPException
+
+if "razorpay" not in sys.modules:
+    stub = types.ModuleType("razorpay")
+    stub.Client = object  # type: ignore[attr-defined]
+    sys.modules["razorpay"] = stub
 
 from app.schemas.outcome_gaps import ProjectOutcomeGapsOut
 from app.simulation.outcome_gaps import (
@@ -355,6 +362,7 @@ def _call_route(
     project_id: int = 10,
     limit: int = 50,
     learning_eligible_only: bool = False,
+    now: datetime | None = _NOW,
 ) -> ProjectOutcomeGapsOut:
     from app.api.v1 import outcomes as out_mod
 
@@ -362,6 +370,7 @@ def _call_route(
         project_id=project_id,
         limit=limit,
         learning_eligible_only=learning_eligible_only,
+        now=now,
         db=db if db is not None else _FakeSession(),
         current_user=_user(),
     )
