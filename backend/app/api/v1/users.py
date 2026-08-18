@@ -19,6 +19,7 @@ from app.core.response_cache import (
 )
 from app.core.tier_enforcement import TIER_LIMITS
 from app.models.assumption import Assumption
+from app.models.assumption_evidence import AssumptionEvidence
 from app.models.audit_log import ApiAuditLog
 from app.models.decision import Decision
 from app.models.outcome import Outcome
@@ -28,6 +29,9 @@ from app.models.user import User
 from app.schemas.audit_log import AuditLogListOut, AuditLogOut
 from app.schemas.auth import MessageResponse
 from app.schemas.portfolio_outcome_gaps import PortfolioOutcomeGapsOut
+from app.schemas.portfolio_validation_momentum import (
+    PortfolioValidationMomentumOut,
+)
 from app.schemas.prediction_range_coverage import (
     PortfolioPredictionRangeCoverageOut,
 )
@@ -118,6 +122,9 @@ from app.simulation.portfolio_health_snapshot import (
 )
 from app.simulation.portfolio_outcome_gaps import (
     build_portfolio_outcome_gaps_digest,
+)
+from app.simulation.portfolio_validation_momentum import (
+    build_portfolio_validation_momentum,
 )
 from app.simulation.portfolio_prediction_range_coverage import (
     build_portfolio_prediction_range_coverage,
@@ -5026,6 +5033,96 @@ def get_audit_log(
             ttl_seconds=_USER_AUDIT_LOG_CACHE_TTL_S,
         )
     return response
+
+
+@router.get(
+    "/me/validation-momentum",
+    response_model=PortfolioValidationMomentumOut,
+    summary=(
+        "Portfolio validation momentum - rank owned projects by evidence "
+        "progress and forecast parallel de-risking pace"
+    ),
+    # Read-only, bounded by the user's owned projects; keep the same cap as
+    # the other user-level analytics reads.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_my_validation_momentum(
+    target_de_risked_pct: float = Query(
+        default=1.0,
+        ge=0.5,
+        le=1.0,
+        description=(
+            "Share of assumptions that should be de-risked in the portfolio "
+            "forecast (0.5-1.0)."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PortfolioValidationMomentumOut:
+    """Return validation progress and next focus across owned projects.
+
+    The project-level momentum builder remains the source of truth for each
+    project's status and forecast.  This route loads all owned validation
+    rows in three bounded queries, then composes them into a ranked digest;
+    it does not require a completed simulation.
+    """
+    projects = (
+        db.query(Project)
+        .filter(Project.user_id == current_user.id)
+        .order_by(Project.id.asc())
+        .all()
+    )
+    project_ids = [project.id for project in projects]
+    assumptions_by_project: dict[int, list[Any]] = {
+        project_id: [] for project_id in project_ids
+    }
+    evidence_by_project: dict[int, list[Any]] = {
+        project_id: [] for project_id in project_ids
+    }
+
+    if project_ids:
+        assumptions = (
+            db.query(Assumption)
+            .filter(
+                Assumption.project_id.in_(project_ids),
+                Assumption.is_hidden.is_(False),
+            )
+            .order_by(Assumption.project_id.asc(), Assumption.id.asc())
+            .all()
+        )
+        evidence = (
+            db.query(AssumptionEvidence)
+            .filter(AssumptionEvidence.project_id.in_(project_ids))
+            .order_by(
+                AssumptionEvidence.project_id.asc(),
+                AssumptionEvidence.created_at.asc(),
+                AssumptionEvidence.id.asc(),
+            )
+            .all()
+        )
+        for assumption in assumptions:
+            assumptions_by_project.setdefault(
+                assumption.project_id, []
+            ).append(assumption)
+        for row in evidence:
+            evidence_by_project.setdefault(row.project_id, []).append(row)
+
+    project_rows = [
+        {
+            "project_id": project.id,
+            "project_title": project.title,
+            "assumptions": assumptions_by_project.get(project.id, []),
+            "evidence": evidence_by_project.get(project.id, []),
+        }
+        for project in projects
+    ]
+    payload = build_portfolio_validation_momentum(
+        user_id=current_user.id,
+        project_rows=project_rows,
+        target_de_risked_pct=target_de_risked_pct,
+        now=datetime.now(UTC),
+    )
+    return PortfolioValidationMomentumOut(**payload)
 
 
 @router.get(
