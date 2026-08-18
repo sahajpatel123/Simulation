@@ -8423,10 +8423,10 @@ def export_validation_experiment_plan(
     rules, and meta.
     """
     fmt = (format or "csv").strip().lower()
-    if fmt not in {"csv", "json"}:
+    if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"unsupported export format {format!r}; expected 'csv' or 'json'",
+            detail=f"unsupported export format {format!r}; expected 'csv', 'json', or 'md'",
         )
 
     plan = get_validation_experiment_plan(
@@ -8454,6 +8454,22 @@ def export_validation_experiment_plan(
             headers={
                 "Content-Disposition": (
                     f'attachment; filename="validation-experiment-plan-{simulation_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    if fmt == "md":
+        body = validation_experiment_plan_to_markdown(
+            plan,
+            metadata=metadata,
+        ).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="validation-experiment-plan-{simulation_id}.md"'
                 ),
                 "Content-Length": str(len(body)),
             },

@@ -279,4 +279,5 @@ def test_export_module_all_contract() -> None:
     assert set(validation_experiment_plan_export.__all__) == {
         "validation_experiment_plan_to_csv",
         "validation_experiment_plan_to_json",
+        "validation_experiment_plan_to_markdown",
     }

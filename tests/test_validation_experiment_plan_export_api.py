@@ -192,6 +192,65 @@ def test_route_rejects_unsupported_format() -> None:
     assert "xml" in exc.value.detail
 
 
+def test_route_returns_markdown_export() -> None:
+    response = _call_route(
+        _FakeSession(
+            _FakeSimulation(),
+            assumptions=[
+                _FakeAssumption("price exceeds willingness to pay"),
+                _FakeAssumption("market demand is proven", "MarketSizeArchitect"),
+            ],
+        ),
+        format="md",
+    )
+
+    assert response.headers["content-type"].startswith("text/markdown")
+    assert "validation-experiment-plan-1.md" in response.headers["Content-Disposition"]
+    body = _body(response).decode("utf-8")
+    assert body.startswith("# Validation Sprint Plan")
+    assert "**Assumption**" in body or "## Planned Experiments" in body
+    assert "WILLINGNESS_TO_PAY_SURVEY" not in body  # method_label, not method id
+    assert "price exceeds willingness to pay" in body
+    assert int(response.headers["Content-Length"]) == len(body.encode("utf-8"))
+
+
+def test_route_markdown_empty_experiments_message() -> None:
+    response = _call_route(
+        _FakeSession(
+            _FakeSimulation(),
+            assumptions=[_FakeAssumption("irrelevant low-roi assumption")],
+        ),
+        format="md",
+    )
+
+    body = _body(response).decode("utf-8")
+    assert "# Validation Sprint Plan" in body
+    # When experiments list is empty, the Markdown renders a gentle message.
+    assert "No assumptions currently need an experiment" in body
+
+
+def test_route_markdown_includes_go_no_go_rules() -> None:
+    response = _call_route(
+        _FakeSession(
+            _FakeSimulation(),
+            assumptions=[
+                _FakeAssumption("price exceeds willingness to pay"),
+                _FakeAssumption("onboarding friction blocks signups", "OnboardingArchitect"),
+                _FakeAssumption("churn within first week", "RetentionArchitect"),
+            ],
+        ),
+        format="md",
+    )
+
+    body = _body(response).decode("utf-8")
+    assert "### Go/No-Go Rules" in body
+    # At least one numbered go/no-go rule should appear.
+    assert any(
+        line.strip().startswith(("1.", "2.", "3."))
+        for line in body.splitlines()
+    )
+
+
 def test_route_rejects_non_completed_simulation() -> None:
     with pytest.raises(HTTPException) as exc:
         _call_route(_FakeSession(_FakeSimulation(status="PENDING")))
