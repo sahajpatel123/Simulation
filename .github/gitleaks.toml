@@ -59,4 +59,18 @@ stopwords = [
     "sk-test-placeholder",  # Test placeholder in CI
     "ci-secret-key-not-used",  # CI secret placeholder
     "dev-secret-change-in-prod",  # Weak secret detection false positive
+    # Leaked NVIDIA API key committed in .openclaude-profile.json, then deleted
+    # and gitignored. The key has been revoked at the NVIDIA API portal. This
+    # stopword suppresses residual findings in git history scans so CI stays
+    # green; the key is inert (rotated) and must NOT be re-used.
+    "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",
+]
+# Commits where .openclaude-profile.json (containing a real nvapi- key) was
+# temporarily present before being deleted in commit 3a5d2edab. These SHAs are
+# suppressed so full-history gitleaks scans (secret-scan workflow) do not flag
+# the historical commit. After a future history rewrite these SHAs should be
+# removed from the allowlist (and the key confirmed gone from all refs).
+commits = [
+    "3a5d2edab275eee1b03ee33bd96496e52fa41d44",
+    "bf0c40b5a2b4a5bf07bea324a11d15289846a1b2",
 ]
