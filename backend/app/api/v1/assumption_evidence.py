@@ -17,10 +17,15 @@ founder record *what happened* and see the consequence:
 * ``GET /projects/{project_id}/validation-momentum`` measures evidence
   cadence and projects how many weeks remain until full coverage or a
   de-risked target.
+* ``GET /projects/{project_id}/validation-dashboard`` composes the evidence
+  digest, timeline milestones, and momentum forecast into a single response
+  for a one-call de-risking overview.
 
 Pure post-hoc analysis — no Celery dispatch, no LLM calls.
 """
 from __future__ import annotations
+
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -39,8 +44,12 @@ from app.schemas.assumption_evidence import (
     EvidenceCreate,
     EvidenceOut,
 )
+from app.schemas.validation_dashboard import DASHBOARD_MODEL, ValidationDashboardOut
 from app.schemas.validation_momentum import ValidationMomentumOut
-from app.schemas.validation_timeline import AssumptionValidationTimelineOut
+from app.schemas.validation_timeline import (
+    AssumptionValidationTimelineOut,
+    ValidationTimelineMilestonesOut,
+)
 from app.simulation.assumption_evidence_digest import (
     build_assumption_evidence_digest,
 )
@@ -370,4 +379,84 @@ def get_validation_momentum(
             project_id=project.id,
             target_de_risked_pct=target_de_risked_pct,
         )
+    )
+
+
+@router.get(
+    "/{project_id}/validation-dashboard",
+    response_model=ValidationDashboardOut,
+    summary="Combined validation dashboard: digest + milestones + momentum",
+    responses=_JSON_200,
+)
+def get_validation_dashboard(
+    project_id: int,
+    target_de_risked_pct: float = Query(
+        default=1.0,
+        ge=0.5,
+        le=1.0,
+        description=(
+            "Share of assumptions that must be de-risked before the "
+            "projected horizon is reached (0.5–1.0)."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ValidationDashboardOut:
+    """
+    Single-response de-risking overview that composes the evidence digest,
+    validation-timeline milestones, and validation-momentum forecast.
+
+    Loads assumptions and evidence once and passes them to all three
+    builders, so the dashboard is cheaper to compute than three separate
+    calls. Like the underlying endpoints, this does **not** require a
+    completed simulation — a founder can track de-risking progress from the
+    first logged experiment.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+    assumptions = (
+        db.query(Assumption)
+        .filter(
+            Assumption.project_id == project.id,
+            Assumption.is_hidden.is_(False),
+        )
+        .order_by(Assumption.id.asc())
+        .all()
+    )
+    evidence = (
+        db.query(AssumptionEvidence)
+        .filter(AssumptionEvidence.project_id == project.id)
+        .order_by(
+            AssumptionEvidence.created_at.asc(),
+            AssumptionEvidence.id.asc(),
+        )
+        .all()
+    )
+
+    digest = build_assumption_evidence_digest(
+        assumptions=assumptions,
+        evidence=evidence,
+        project_id=project.id,
+    )
+    timeline = build_validation_timeline(
+        assumptions=assumptions,
+        evidence=evidence,
+        project_id=project.id,
+    )
+    momentum = build_validation_momentum(
+        assumptions=assumptions,
+        evidence=evidence,
+        project_id=project.id,
+        target_de_risked_pct=target_de_risked_pct,
+    )
+
+    return ValidationDashboardOut(
+        project_id=project.id,
+        evidence_digest=AssumptionEvidenceDigestOut(**digest),
+        timeline_milestones=ValidationTimelineMilestonesOut(**timeline["milestones"]),
+        momentum=ValidationMomentumOut(**momentum),
+        meta={
+            "generated_at": datetime.now(UTC).isoformat(),
+            "model": DASHBOARD_MODEL,
+            "source": ["evidence-digest", "assumption-validation-timeline", "validation-momentum"],
+        },
     )

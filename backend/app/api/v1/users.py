@@ -123,11 +123,11 @@ from app.simulation.portfolio_health_snapshot import (
 from app.simulation.portfolio_outcome_gaps import (
     build_portfolio_outcome_gaps_digest,
 )
-from app.simulation.portfolio_validation_momentum import (
-    build_portfolio_validation_momentum,
-)
 from app.simulation.portfolio_prediction_range_coverage import (
     build_portfolio_prediction_range_coverage,
+)
+from app.simulation.portfolio_validation_momentum import (
+    build_portfolio_validation_momentum,
 )
 from app.simulation.premortem_digest import build_premortem_digest
 from app.simulation.product_type_outcome_gaps import (

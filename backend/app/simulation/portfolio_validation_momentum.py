@@ -236,10 +236,18 @@ def build_portfolio_validation_momentum(
     remaining_for_coverage = max(total_assumptions - assumptions_with_evidence, 0)
     remaining_for_target = max(target_count - de_risked_count, 0)
     coverage_velocity = _sum_optional(
-        [row["coverage_velocity_per_week"] for row in project_payloads]
+        [
+            row["coverage_velocity_per_week"]
+            for row in project_payloads
+            if row["remaining_for_coverage"] > 0
+        ]
     )
     de_risk_velocity = _sum_optional(
-        [row["de_risk_velocity_per_week"] for row in project_payloads]
+        [
+            row["de_risk_velocity_per_week"]
+            for row in project_payloads
+            if row["remaining_for_target"] > 0
+        ]
     )
     weeks_to_full_coverage = _parallel_horizon(
         remaining_for_coverage, coverage_velocity
@@ -305,6 +313,17 @@ def build_portfolio_validation_momentum(
         caveats.append(
             "Portfolio velocity excludes projects without enough dated evidence "
             "to estimate a weekly pace."
+        )
+    if (
+        remaining_for_coverage > 0
+        and coverage_velocity is None
+    ) or (
+        remaining_for_target > 0
+        and de_risk_velocity is None
+    ):
+        caveats.append(
+            "Some active projects do not yet have enough dated evidence for a "
+            "reliable weekly forecast."
         )
     if remaining_for_coverage > 0 or remaining_for_target > 0:
         caveats.append(
