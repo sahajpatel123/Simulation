@@ -14,12 +14,15 @@ founder record *what happened* and see the consequence:
 * ``GET /projects/{project_id}/assumption-validation-timeline`` replays
   every logged experiment chronologically with cumulative validation
   progress and first-occurrence milestones.
+* ``GET /projects/{project_id}/validation-momentum`` measures evidence
+  cadence and projects how many weeks remain until full coverage or a
+  de-risked target.
 
 Pure post-hoc analysis — no Celery dispatch, no LLM calls.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.v1.common import get_owned_project
@@ -36,6 +39,7 @@ from app.schemas.assumption_evidence import (
     EvidenceCreate,
     EvidenceOut,
 )
+from app.schemas.validation_momentum import ValidationMomentumOut
 from app.schemas.validation_timeline import AssumptionValidationTimelineOut
 from app.simulation.assumption_evidence_digest import (
     build_assumption_evidence_digest,
@@ -45,6 +49,7 @@ from app.simulation.evidence_scorecard import (
     derive_confidence,
     evidence_to_out,
 )
+from app.simulation.validation_momentum import build_validation_momentum
 from app.simulation.validation_timeline import build_validation_timeline
 
 router = APIRouter(prefix="/projects", tags=["assumption-evidence"])
@@ -305,5 +310,64 @@ def get_assumption_validation_timeline(
             assumptions=assumptions,
             evidence=evidence,
             project_id=project.id,
+        )
+    )
+
+
+@router.get(
+    "/{project_id}/validation-momentum",
+    response_model=ValidationMomentumOut,
+    summary="Validation momentum: evidence cadence and de-risking forecast",
+    responses=_JSON_200,
+)
+def get_validation_momentum(
+    project_id: int,
+    target_de_risked_pct: float = Query(
+        default=1.0,
+        ge=0.5,
+        le=1.0,
+        description=(
+            "Share of assumptions that must be de-risked before the "
+            "projected horizon is reached (0.5–1.0)."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ValidationMomentumOut:
+    """
+    Measure how fast a project's assumptions are being validated and
+    project when the remaining work will finish. Combines the current
+    coverage/de-risked counts with evidence cadence (experiments per week,
+    recent vs overall trend) and per-assumption first-evidence /
+    first-de-risked velocities, then projects weeks and calendar dates to
+    full coverage and to ``target_de_risked_pct`` de-risked. Like the
+    evidence digest and validation timeline, this endpoint does not require
+    a completed simulation.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+    assumptions = (
+        db.query(Assumption)
+        .filter(
+            Assumption.project_id == project.id,
+            Assumption.is_hidden.is_(False),
+        )
+        .order_by(Assumption.id.asc())
+        .all()
+    )
+    evidence = (
+        db.query(AssumptionEvidence)
+        .filter(AssumptionEvidence.project_id == project.id)
+        .order_by(
+            AssumptionEvidence.created_at.asc(),
+            AssumptionEvidence.id.asc(),
+        )
+        .all()
+    )
+    return ValidationMomentumOut(
+        **build_validation_momentum(
+            assumptions=assumptions,
+            evidence=evidence,
+            project_id=project.id,
+            target_de_risked_pct=target_de_risked_pct,
         )
     )
