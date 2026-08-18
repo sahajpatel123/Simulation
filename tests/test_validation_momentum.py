@@ -14,6 +14,7 @@ from typing import Any
 
 from app.schemas.validation_momentum import ValidationMomentumOut
 from app.simulation.validation_momentum import (
+    MAX_FORECAST_WEEKS,
     TREND_ACCELERATING,
     TREND_DECELERATING,
     TREND_INSUFFICIENT,
@@ -280,6 +281,29 @@ class TestCadenceAndForecast:
         assert out["velocity"]["de_risk_velocity_per_week"] is None
         assert out["forecast"]["weeks_to_de_risked_target"] is None
         assert any("de-risked" in c for c in out["forecast"]["caveats"])
+
+    def test_near_zero_velocity_caps_at_ten_years(self) -> None:
+        """A glacial pace must surface the 10-year cap caveat, not absurd dates.
+
+        Two evidence events spread across ~10 years yield a coverage velocity
+        near zero, so the projection for the remaining 8 assumptions would
+        exceed 520 weeks without the cap.
+        """
+        assumptions = [_assumption(i) for i in range(1, 11)]
+        out = _build(
+            assumptions=assumptions,
+            evidence=[
+                _evidence(1, assumption_id=1, day=1),
+                _evidence(2, assumption_id=2, day=3650),
+            ],
+            now=BASE + timedelta(days=3660),
+        )
+        forecast = out["forecast"]
+        assert forecast["weeks_to_full_coverage"] == MAX_FORECAST_WEEKS
+        assert forecast["remaining_for_coverage"] == 8
+        assert any(
+            "10 years" in c for c in forecast["caveats"]
+        ), "expected 10-year cap caveat"
 
 
 class TestSchemaRoundTrip:

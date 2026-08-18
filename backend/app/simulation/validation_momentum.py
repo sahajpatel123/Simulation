@@ -105,20 +105,24 @@ def _velocity(
 def _project_weeks(
     remaining: int,
     velocity: float | None,
-) -> tuple[float | None, datetime | None, list[str]]:
-    """Project weeks/dates to clear ``remaining`` at ``velocity``/week."""
+) -> tuple[float | None, list[str]]:
+    """Project weeks to clear ``remaining`` at ``velocity``/week.
+
+    Returns ``(weeks, caveats)``. A projected calendar date is computed by the
+    caller from ``weeks``; if the horizon is unknown it is ``None``.
+    """
     caveats: list[str] = []
     if remaining <= 0:
-        return 0.0, None, caveats
+        return 0.0, caveats
     if velocity is None or velocity <= 0:
-        return None, None, caveats
+        return None, caveats
     weeks = min(remaining / velocity, MAX_FORECAST_WEEKS)
     if weeks >= MAX_FORECAST_WEEKS:
         caveats.append(
             "Projected horizon exceeds 10 years — treat the date as a "
             "'too slow to plan around' signal rather than a schedule."
         )
-    return round(weeks, 2), None, caveats
+    return round(weeks, 2), caveats
 
 
 def _timestamp_by_event_id(events: list[dict[str, Any]]) -> dict[int, datetime]:
@@ -310,10 +314,10 @@ def build_validation_momentum(
     )
     remaining_for_target = max(0, target_count - de_risked_count)
 
-    weeks_to_full_coverage, _, coverage_caveats = _project_weeks(
+    weeks_to_full_coverage, coverage_caveats = _project_weeks(
         remaining_for_coverage, coverage_velocity
     )
-    weeks_to_de_risked_target, _, de_risk_caveats = _project_weeks(
+    weeks_to_de_risked_target, de_risk_caveats = _project_weeks(
         remaining_for_target, de_risk_velocity
     )
 
