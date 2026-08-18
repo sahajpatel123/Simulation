@@ -13,6 +13,7 @@ from app.schemas.validation_roi import (
 from app.simulation.validation_experiment_plan_export import (
     validation_experiment_plan_to_csv,
     validation_experiment_plan_to_json,
+    validation_experiment_plan_to_markdown,
 )
 from app.simulation.validation_experiment_planner import (
     MAX_EXPERIMENTS,
@@ -281,3 +282,78 @@ def test_export_module_all_contract() -> None:
         "validation_experiment_plan_to_json",
         "validation_experiment_plan_to_markdown",
     }
+
+
+def test_markdown_contains_metadata_and_summary() -> None:
+    md = validation_experiment_plan_to_markdown(
+        _sample_plan(),
+        metadata=_metadata(),
+    )
+
+    assert md.startswith("# Validation Sprint Plan")
+    assert "Generated: 2026-08-11T12:00:00+00:00" in md
+    assert "## Sprint Summary" in md
+    assert "| Field | Value |" in md
+    assert "| Experiments | 3 |" in md
+    assert "| Validate-first | 1 |" in md
+    assert "| High-value | 2 |" in md
+    assert "| Sprint (parallel, days) | 14 |" in md
+
+
+def test_markdown_renders_experiment_table_and_go_no_go() -> None:
+    md = validation_experiment_plan_to_markdown(_sample_plan())
+
+    assert "## Planned Experiments" in md
+    # Per-experiment table columns
+    header = "| # | Assumption | Category | ROI tier | ROI | Swing |"
+    assert header in md
+    # First experiment row
+    assert "1 | pricing claim | PricingArchitect | VALIDATE_FIRST | 40.0% | 30.0% |" in md
+    # Go/No-Go rules section with numbered rules
+    assert "### Go/No-Go Rules" in md
+    assert "1. **Willingness-to-pay survey**" in md
+    assert "2. **" in md or "3. **" in md
+
+
+def test_markdown_empty_plan_renders_gentle_message() -> None:
+    md = validation_experiment_plan_to_markdown(_plan([]))
+
+    assert "# Validation Sprint Plan" in md
+    assert "## Planned Experiments" in md
+    assert (
+        "No assumptions currently need an experiment" in md
+    )
+
+
+def test_markdown_escapes_pipe_in_assumption_text() -> None:
+    plan = _plan(
+        [
+            _row("price | cost | value", category="PricingArchitect"),
+        ]
+    )
+
+    md = validation_experiment_plan_to_markdown(plan)
+
+    assert "price \\| cost \\| value" in md
+    assert "price | cost | value" not in md.split("## Planned Experiments")[1]
+
+
+def test_markdown_preserves_unicode() -> None:
+    plan = _plan(
+        [
+            _row("⚠️ 高风险合规", category="PricingArchitect"),
+        ]
+    )
+
+    md = validation_experiment_plan_to_markdown(plan)
+
+    assert "⚠️ 高风险合规" in md
+
+
+def test_markdown_round_trips_through_dumped_payload() -> None:
+    """Markdown must work on a plain dict, not just Pydantic models."""
+    plan = _sample_plan()
+    md_csv = validation_experiment_plan_to_markdown(plan.model_dump())
+    md_model = validation_experiment_plan_to_markdown(plan)
+
+    assert md_csv == md_model

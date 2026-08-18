@@ -309,10 +309,12 @@ def validation_experiment_plan_to_markdown(
         value = summary.get(key)
         if value is None:
             cell = "—"
-        elif isinstance(value, str) and "%" in value or isinstance(value, str) and value.startswith("0."):
+        elif isinstance(value, bool):
+            cell = "yes" if value else "no"
+        elif isinstance(value, float) and 0.0 < value <= 1.0:
             cell = _md_pct(value)
-        elif isinstance(value, str):
-            cell = _escape_md(value)
+        elif isinstance(value, (int, float)):
+            cell = str(value)
         else:
             cell = _escape_md(value)
         lines.append(f"| {label} | {cell} |")
