@@ -226,3 +226,170 @@ def test_import_request_rejects_unknown_fields_and_results() -> None:
                 "result": "MAYBE",
             }
         )
+
+
+class _FakeCsvRequest:
+    """Minimal stand-in for starlette Request with a preloaded body."""
+
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    async def body(self) -> bytes:
+        return self._body
+
+
+def _call_csv_import(session: _ImportSession, csv_text: str):
+    import asyncio
+
+    from app.api.v1 import assumption_evidence as ev_mod
+
+    return asyncio.run(
+        ev_mod.import_assumption_evidence_csv(
+            project_id=10,
+            request=_FakeCsvRequest(csv_text.encode("utf-8")),
+            db=session,  # type: ignore[arg-type]
+            current_user=type("U", (), {"id": 42})(),
+        )
+    )
+
+
+_CSV_HEADER = "assumption_id,method,result,observed_metric,notes\n"
+
+
+def test_csv_import_route_registered() -> None:
+    from app.api.v1 import assumption_evidence as ev_mod
+
+    methods_by_path: dict[str, set[str]] = {}
+    for route in ev_mod.router.routes:
+        methods_by_path.setdefault(route.path, set()).update(
+            route.methods or set()
+        )
+    path = "/projects/{project_id}/assumptions/evidence/import/csv"
+    assert "POST" in methods_by_path.get(path, set())
+
+
+def test_csv_import_parses_valid_rows_and_normalises_case() -> None:
+    session = _ImportSession(assumptions=[_FakeAssumption(100)])
+
+    out = _call_csv_import(
+        session,
+        _CSV_HEADER + "100,USER_INTERVIEWS,pass,0.42,35 responses\n",
+    )
+
+    assert out.imported_count == 1
+    assert out.skipped_count == 0
+    assert out.assumption_ids_touched == [100]
+    inserted = session.added_rows[0]
+    assert inserted.result == "PASS"
+    assert inserted.observed_metric == 0.42
+    assert inserted.notes == "35 responses"
+    assert session.commit_count == 1
+
+
+def test_csv_import_skips_bad_cells_without_blocking_good_rows() -> None:
+    session = _ImportSession(assumptions=[_FakeAssumption(100)])
+
+    out = _call_csv_import(
+        session,
+        _CSV_HEADER
+        + "999,WILLINGNESS_TO_PAY_SURVEY,FAIL,,unknown assumption\n"
+        + "bad_id,USER_INTERVIEWS,FAIL,,\n"
+        + "100,NOT_A_METHOD,FAIL,,\n"
+        + "100,USER_INTERVIEWS,maybe,,\n"
+        + "100,USER_INTERVIEWS,FAIL,not_a_number,\n"
+        + "100,PRE_ORDER_WAITLIST,FAIL,,kept\n",
+    )
+
+    assert out.imported_count == 1
+    assert out.skipped_count == 5
+    reasons = [s.reason for s in out.skipped_rows]
+    assert any("does not exist" in reason for reason in reasons)
+    assert any("not a whole number" in reason for reason in reasons)
+    assert any("not a known experiment method" in reason for reason in reasons)
+    assert any("PASS/FAIL/INCONCLUSIVE" in reason for reason in reasons)
+    assert any("not a number" in reason for reason in reasons)
+    # The good row still landed.
+    assert session.added_rows[0].notes == "kept"
+    assert session.commit_count == 1
+
+
+def test_csv_import_missing_required_column_returns_400() -> None:
+    from fastapi import HTTPException
+
+    session = _ImportSession()
+    with pytest.raises(HTTPException) as exc:
+        _call_csv_import(session, "assumption_id,method\n100,USER_INTERVIEWS\n")
+
+    assert exc.value.status_code == 400
+    assert "missing required column" in exc.value.detail
+    assert "result" in exc.value.detail
+    assert session.commit_count == 0
+
+
+def test_csv_import_skips_blank_lines_without_shifting_indices() -> None:
+    session = _ImportSession(assumptions=[_FakeAssumption(100)])
+
+    out = _call_csv_import(
+        session,
+        _CSV_HEADER
+        + "\n"
+        + "100,USER_INTERVIEWS,FAIL,,\n"
+        + "\n"
+        + "100,USER_INTERVIEWS,FAIL,,\n",
+    )
+
+    assert out.imported_count == 2
+    assert out.skipped_count == 0
+
+
+def test_csv_import_handles_utf8_bom() -> None:
+    import asyncio
+
+    from app.api.v1 import assumption_evidence as ev_mod
+
+    session = _ImportSession(assumptions=[_FakeAssumption(100)])
+    body = (
+        "﻿"  # UTF-8 BOM
+        + _CSV_HEADER
+        + "100,USER_INTERVIEWS,FAIL,,\n"
+    ).encode("utf-8")
+
+    out = asyncio.run(
+        ev_mod.import_assumption_evidence_csv(
+            project_id=10,
+            request=_FakeCsvRequest(body),
+            db=session,  # type: ignore[arg-type]
+            current_user=type("U", (), {"id": 42})(),
+        )
+    )
+
+    assert out.imported_count == 1
+    assert out.skipped_count == 0
+
+
+def test_csv_import_over_cap_returns_400() -> None:
+    from fastapi import HTTPException
+
+    session = _ImportSession()
+    body = _CSV_HEADER + "100,USER_INTERVIEWS,FAIL,,\n" * 201
+
+    with pytest.raises(HTTPException) as exc:
+        _call_csv_import(session, body)
+
+    assert exc.value.status_code == 400
+    assert "200-row import limit" in exc.value.detail
+    assert session.commit_count == 0
+
+
+def test_csv_import_all_invalid_writes_nothing() -> None:
+    session = _ImportSession(assumptions=[_FakeAssumption(100)])
+
+    out = _call_csv_import(
+        session,
+        _CSV_HEADER + "100,USER_INTERVIEWS,maybe,,\n",
+    )
+
+    assert out.imported_count == 0
+    assert out.skipped_count == 1
+    assert session.added_rows == []
+    assert session.commit_count == 0

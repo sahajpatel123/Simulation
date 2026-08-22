@@ -9,6 +9,9 @@ founder record *what happened* and see the consequence:
 * ``POST /projects/{project_id}/assumptions/evidence/import`` logs many
   results in one call — invalid rows are skipped with reasons instead of
   blocking the valid ones.
+* ``POST /projects/{project_id}/assumptions/evidence/import/csv`` does the
+  same from raw CSV text — a downloaded export can be filled in offline
+  and pasted straight back.
 * ``GET /projects/{project_id}/assumptions/{assumption_id}/evidence-scorecard``
   returns the evidence history plus the before/after validation-ROI shift
   implied by the derived confidence tier.
@@ -41,6 +44,7 @@ from __future__ import annotations
 import csv
 import io
 from datetime import UTC, datetime
+from typing import get_args
 
 from fastapi import (
     APIRouter,
@@ -62,11 +66,14 @@ from app.models.environment import Environment
 from app.models.simulation import Simulation
 from app.models.user import User
 from app.schemas.assumption_evidence import (
+    EVIDENCE_IMPORT_MAX_ROWS,
+    EVIDENCE_RESULT_LITERAL,
     AssumptionEvidenceDigestOut,
     AssumptionEvidenceScorecardOut,
     EvidenceCreate,
     EvidenceImportOut,
     EvidenceImportRequest,
+    EvidenceImportRow,
     EvidenceImportSkippedRow,
     EvidenceOut,
 )
@@ -76,6 +83,7 @@ from app.schemas.evidence_staleness import (
     EvidenceStalenessSummaryOut,
 )
 from app.schemas.validation_dashboard import DASHBOARD_MODEL, ValidationDashboardOut
+from app.schemas.validation_experiment import METHOD_ID_LITERAL
 from app.schemas.validation_momentum import ValidationMomentumOut
 from app.schemas.validation_timeline import (
     AssumptionValidationTimelineOut,
@@ -144,6 +152,11 @@ from app.simulation.validation_timeline_export import (
 router = APIRouter(prefix="/projects", tags=["assumption-evidence"])
 
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
+
+# Acceptable spellings for CSV import cells, derived from the same
+# literals the JSON schemas enforce.
+VALID_METHOD_IDS: frozenset[str] = frozenset(get_args(METHOD_ID_LITERAL))
+VALID_RESULT_IDS: frozenset[str] = frozenset(get_args(EVIDENCE_RESULT_LITERAL))
 
 
 def _assumption_or_404(
@@ -215,6 +228,68 @@ def create_assumption_evidence(
     )
 
 
+def _apply_evidence_import(
+    db: Session,
+    project_id: int,
+    parsed_rows: list[EvidenceImportRow],
+    parse_skips: list[EvidenceImportSkippedRow],
+) -> EvidenceImportOut:
+    """Insert parsed evidence rows, skipping unknown assumptions.
+
+    Shared by the JSON and CSV import routes; the caller supplies any
+    parse-level skips so their indices line up with data-row positions.
+    """
+    assumptions_by_id = {
+        assumption.id: assumption
+        for assumption in db.query(Assumption)
+        .filter(Assumption.project_id == project_id)
+        .all()
+    }
+
+    rows_to_insert: list[AssumptionEvidence] = []
+    skipped_rows = list(parse_skips)
+    touched_ids: list[int] = []
+    for index, row in enumerate(parsed_rows):
+        assumption = assumptions_by_id.get(row.assumption_id)
+        if assumption is None:
+            skipped_rows.append(
+                EvidenceImportSkippedRow(
+                    index=index,
+                    assumption_id=row.assumption_id,
+                    reason=(
+                        f"assumption {row.assumption_id} does not exist "
+                        "in this project"
+                    ),
+                )
+            )
+            continue
+        rows_to_insert.append(
+            AssumptionEvidence(
+                project_id=project_id,
+                assumption_id=assumption.id,
+                method=row.method,
+                result=row.result,
+                observed_metric=row.observed_metric,
+                notes=row.notes,
+            )
+        )
+        if assumption.id not in touched_ids:
+            touched_ids.append(assumption.id)
+
+    # One commit for the whole batch — never per-row commits in a loop.
+    if rows_to_insert:
+        db.add_all(rows_to_insert)
+        db.commit()
+
+    return EvidenceImportOut(
+        project_id=project_id,
+        imported_count=len(rows_to_insert),
+        skipped_count=len(skipped_rows),
+        skipped_rows=skipped_rows,
+        assumption_ids_touched=touched_ids,
+    )
+
+
 @router.post(
     "/{project_id}/assumptions/evidence/import",
     response_model=EvidenceImportOut,
@@ -238,55 +313,147 @@ def import_assumption_evidence(
     of failing the whole import. Valid rows insert in a single commit.
     """
     project = get_owned_project(db, current_user.id, project_id)
-    assumptions_by_id = {
-        assumption.id: assumption
-        for assumption in db.query(Assumption)
-        .filter(Assumption.project_id == project.id)
-        .all()
-    }
+    return _apply_evidence_import(
+        db, project.id, payload.rows, []
+    )
 
-    rows_to_insert: list[AssumptionEvidence] = []
-    skipped_rows: list[EvidenceImportSkippedRow] = []
-    touched_ids: list[int] = []
-    for index, row in enumerate(payload.rows):
-        assumption = assumptions_by_id.get(row.assumption_id)
-        if assumption is None:
-            skipped_rows.append(
+
+_CSV_IMPORT_REQUIRED_HEADERS: tuple[str, ...] = (
+    "assumption_id",
+    "method",
+    "result",
+)
+
+
+@router.post(
+    "/{project_id}/assumptions/evidence/import/csv",
+    response_model=EvidenceImportOut,
+    summary="Bulk-log experiment results from raw CSV text",
+    responses=_JSON_200,
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+async def import_assumption_evidence_csv(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> EvidenceImportOut:
+    """
+    Paste a spreadsheet straight back into TheCee: accepts raw CSV text
+    with the columns ``assumption_id,method,result`` plus optional
+    ``observed_metric`` and ``notes`` — the same shape the validation
+    exports download.
+
+    Rows that fail parsing (unknown method or result, bad numbers) are
+    skipped with founder-readable reasons instead of failing the batch;
+    valid rows insert in a single commit.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+    try:
+        text = (await request.body()).decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"request body is not valid UTF-8 text: {exc}",
+        ) from exc
+
+    reader = csv.DictReader(io.StringIO(text))
+    headers = [header.strip() for header in (reader.fieldnames or [])]
+    missing = [
+        column
+        for column in _CSV_IMPORT_REQUIRED_HEADERS
+        if column not in headers
+    ]
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "CSV is missing required column(s): "
+                f"{', '.join(missing)}; expected header row with "
+                "assumption_id, method, result[, observed_metric, notes]"
+            ),
+        )
+
+    def _cell(row: dict[str, str | None], name: str) -> str:
+        value = row.get(name)
+        return "" if value is None else value.strip()
+
+    parsed_rows: list[EvidenceImportRow] = []
+    parse_skips: list[EvidenceImportSkippedRow] = []
+    data_index = -1
+    for raw in reader:
+        cells = {
+            (key.strip() if key else key): value
+            for key, value in raw.items()
+        }
+        if not any((value or "").strip() for value in cells.values()):
+            continue  # entirely blank line — not a data row
+        data_index += 1
+
+        def skip(reason: str) -> None:
+            parse_skips.append(
                 EvidenceImportSkippedRow(
-                    index=index,
-                    assumption_id=row.assumption_id,
-                    reason=(
-                        f"assumption {row.assumption_id} does not exist "
-                        "in this project"
-                    ),
+                    index=data_index,
+                    assumption_id=None,
+                    reason=reason,
                 )
             )
+
+        raw_id = _cell(cells, "assumption_id")
+        try:
+            assumption_id = int(raw_id)
+        except ValueError:
+            skip(f"assumption_id {raw_id!r} is not a whole number")
             continue
-        rows_to_insert.append(
-            AssumptionEvidence(
-                project_id=project.id,
-                assumption_id=assumption.id,
-                method=row.method,
-                result=row.result,
-                observed_metric=row.observed_metric,
-                notes=row.notes,
+
+        method = _cell(cells, "method").upper()
+        result = _cell(cells, "result").upper()
+        if method not in VALID_METHOD_IDS:
+            skip(f"method {method!r} is not a known experiment method")
+            continue
+        if result not in VALID_RESULT_IDS:
+            skip(f"result {result!r} is not one of PASS/FAIL/INCONCLUSIVE")
+            continue
+
+        observed_raw = _cell(cells, "observed_metric")
+        observed_metric: float | None = None
+        if observed_raw:
+            try:
+                observed_metric = float(observed_raw)
+            except ValueError:
+                skip(f"observed_metric {observed_raw!r} is not a number")
+                continue
+
+        notes = _cell(cells, "notes") or None
+        if notes is not None and len(notes) > 500:
+            skip("notes exceed the 500-character limit")
+            continue
+
+        try:
+            parsed_rows.append(
+                EvidenceImportRow.model_validate(
+                    {
+                        "assumption_id": assumption_id,
+                        "method": method,
+                        "result": result,
+                        "observed_metric": observed_metric,
+                        "notes": notes,
+                    }
+                )
             )
+        except ValueError as exc:
+            skip(f"row is not a valid experiment record: {exc}")
+
+    if len(parsed_rows) + len(parse_skips) > EVIDENCE_IMPORT_MAX_ROWS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"CSV exceeds the {EVIDENCE_IMPORT_MAX_ROWS}-row import "
+                "limit"
+            ),
         )
-        if assumption.id not in touched_ids:
-            touched_ids.append(assumption.id)
 
-    # One commit for the whole batch — never per-row commits in a loop.
-    if rows_to_insert:
-        db.add_all(rows_to_insert)
-        db.commit()
-
-    return EvidenceImportOut(
-        project_id=project.id,
-        imported_count=len(rows_to_insert),
-        skipped_count=len(skipped_rows),
-        skipped_rows=skipped_rows,
-        assumption_ids_touched=touched_ids,
-    )
+    return _apply_evidence_import(db, project.id, parsed_rows, parse_skips)
 
 
 @router.get(
