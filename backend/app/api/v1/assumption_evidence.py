@@ -38,9 +38,18 @@ Pure post-hoc analysis — no Celery dispatch, no LLM calls.
 """
 from __future__ import annotations
 
+import csv
+import io
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    status,
+)
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
