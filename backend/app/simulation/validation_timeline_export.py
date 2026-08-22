@@ -297,6 +297,19 @@ def _md_pct(value: Any) -> str:
     return f"{fraction * 100:.1f}%"
 
 
+def _md_date(value: Any) -> str:
+    """Render a timestamp as a founder-friendly date in the brief."""
+    if value is None or value == "":
+        return "—"
+    if hasattr(value, "date"):
+        try:
+            return value.date().isoformat()
+        except (TypeError, ValueError):
+            pass
+    text = str(value)
+    return _escape_md_cell(text.split("T", 1)[0].split(" ", 1)[0])
+
+
 def validation_timeline_to_markdown(
     payload: Any,
     metadata: dict[str, Any] | None = None,
@@ -356,7 +369,7 @@ def validation_timeline_to_markdown(
             event_data = _as_dict(event)
             lines.append(
                 "| {when} | {assumption} | {method} | {result} | {status} | {notes} |".format(
-                    when=_md_cell(event_data.get("created_at")),
+                    when=_md_date(event_data.get("created_at")),
                     assumption=_escape_md_cell(
                         str(event_data.get("assumption_text") or "")
                     )

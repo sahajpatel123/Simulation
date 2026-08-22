@@ -236,7 +236,12 @@ def test_export_route_returns_markdown_brief(
     # Only milestones that have occurred get a row.
     assert "First challenged (FAIL)" not in body
     assert "## Events" in body
-    assert "| User interview | PASS | DE_RISKED | 35 responses |" in body
+    # Event timestamps render as founder-friendly dates, not ISO noise.
+    assert (
+        "| 2026-08-01 | =SUM(A1:A2) | User interview | PASS | DE_RISKED "
+        "| 35 responses |" in body
+    )
+    assert "00:00:00" not in body
     assert int(response.headers["Content-Length"]) == len(body.encode("utf-8"))
 
 
@@ -288,3 +293,33 @@ def test_markdown_escapes_pipes_in_events() -> None:
     assert "\\|" in event_row
     # Ignoring escaped pipes, the 6-column table keeps exactly 7 separators.
     assert event_row.replace("\\|", "").count("|") == 7
+
+
+def test_markdown_event_dates_accept_datetime_objects() -> None:
+    """model_dump-style datetime values also render as dates."""
+    from datetime import UTC, datetime
+
+    from app.simulation.validation_timeline_export import (
+        validation_timeline_to_markdown,
+    )
+
+    body = validation_timeline_to_markdown(
+        {
+            "project_id": 7,
+            "events": [
+                {
+                    "event_id": 14,
+                    "assumption_id": 73,
+                    "assumption_text": "Onboarding completes",
+                    "method_label": "Usability test",
+                    "result": "PASS",
+                    "status_after": "DE_RISKED",
+                    "created_at": datetime(
+                        2026, 8, 9, 14, 30, tzinfo=UTC
+                    ),
+                },
+            ],
+        }
+    )
+    assert "| 2026-08-09 | Onboarding completes |" in body
+    assert "14:30" not in body
