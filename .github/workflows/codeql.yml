@@ -11,8 +11,6 @@ on:
 
 permissions:
   contents: read
-  security-events: write
-  actions: read
 
 concurrency:
   group: codeql-${{ github.ref }}
@@ -23,6 +21,11 @@ jobs:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Elevated permissions live at job scope, not workflow scope, so a
+    # modified future step can't inherit SARIF upload rights silently.
+    permissions:
+      security-events: write
+      actions: read
 
     strategy:
       fail-fast: false
