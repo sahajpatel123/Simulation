@@ -160,7 +160,54 @@ def test_dashboard_combines_all_three_sub_payloads() -> None:
     assert momentum.velocity.trend in ("STEADY", "DECELERATING", "ACCELERATING")
 
     # Meta
-    assert out.meta["model"] == "validation_dashboard_v1"
+    assert out.meta["model"] == "validation_dashboard_v2"
+
+
+def test_dashboard_composes_evidence_freshness() -> None:
+    """Freshness rollup joins the payload; never-tested leads the queue."""
+    session = _FakeSession(
+        assumptions=[_Assumption(100), _Assumption(101)],
+        evidence=[
+            _Evidence(1, assumption_id=100, result="PASS", day=1),
+            _Evidence(2, assumption_id=101, result="PASS", day=8),
+        ],
+    )
+    out = _call_dashboard(session=session)
+
+    summary = out.evidence_freshness
+    assert summary is not None
+    assert summary.total_assumptions == 2
+    assert summary.tested_assumptions == 2
+    assert "evidence-freshness" in out.meta["source"]
+
+
+def test_dashboard_retest_queue_leads_with_never_tested() -> None:
+    """The queue's head is clock-independent: never-tested always leads."""
+    session = _FakeSession(
+        assumptions=[_Assumption(100), _Assumption(101)],
+        evidence=[
+            _Evidence(1, assumption_id=100, result="PASS", day=1),
+        ],
+    )
+    out = _call_dashboard(session=session)
+
+    assert out.evidence_freshness is not None
+    assert out.evidence_freshness.never_tested_count == 1
+    assert len(out.retest_queue_top) >= 1
+    assert out.retest_queue_top[0].assumption_id == 101
+    assert out.retest_queue_top[0].freshness == "NEVER_TESTED"
+
+
+def test_dashboard_without_evidence_has_empty_queue() -> None:
+    session = _FakeSession(
+        assumptions=[],
+        evidence=[],
+    )
+    out = _call_dashboard(session=session)
+
+    assert out.evidence_freshness is not None
+    assert out.evidence_freshness.total_assumptions == 0
+    assert out.retest_queue_top == []
 
 
 def test_dashboard_honours_custom_target() -> None:

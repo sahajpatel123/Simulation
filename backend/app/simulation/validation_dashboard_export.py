@@ -209,6 +209,30 @@ def validation_dashboard_to_csv(
         _write_row(writer, [key, milestones.get(key, "")])
     _write_row(writer, [])
 
+    freshness = _as_dict(data.get("evidence_freshness"))
+    if freshness:
+        _write_row(writer, ["section", "Evidence Freshness"])
+        _write_row(writer, ["key", "value"])
+        for key in _FRESHNESS_LABELS:
+            value = freshness.get(key)
+            _write_row(
+                writer,
+                [key, _text(value) if value is not None else ""],
+            )
+        queue = data.get("retest_queue_top")
+        if isinstance(queue, list):
+            actionable = [item for item in queue if _as_dict(item)]
+            if actionable:
+                _write_row(writer, ["section", "Top Re-tests"])
+                _write_row(writer, list(_QUEUE_HEADERS))
+                for raw_row in actionable:
+                    item = _as_dict(raw_row)
+                    _write_row(
+                        writer,
+                        [item.get(header, "") for header in _QUEUE_HEADERS],
+                    )
+        _write_row(writer, [])
+
     _write_row(writer, ["section", "Assumptions"])
     _write_row(writer, list(_ASSUMPTION_HEADERS))
     for raw_assumption in digest.get("assumptions") or []:
@@ -307,6 +331,33 @@ _MILESTONE_LABELS: dict[str, str] = {
 
 _MILESTONE_KEYS: tuple[str, ...] = tuple(_MILESTONE_LABELS.keys())
 
+# Evidence-freshness rollup composed into the dashboard payload (summary
+# metrics plus the top of the re-test queue).
+_FRESHNESS_LABELS: dict[str, str] = {
+    "total_assumptions": "Total assumptions",
+    "tested_assumptions": "Tested assumptions",
+    "fresh_count": "Fresh",
+    "aging_count": "Aging",
+    "stale_count": "Stale",
+    "never_tested_count": "Never tested",
+    "unknown_count": "Unknown age",
+    "actionable_count": "Actionable (re-test queue)",
+    "fresh_share_of_tested_pct": "Fresh share of tested",
+    "stale_share_pct": "Stale share",
+    "oldest_days_since_evidence": "Oldest evidence (days)",
+}
+
+_FRESHNESS_PCT_KEYS: frozenset[str] = frozenset(
+    {"fresh_share_of_tested_pct", "stale_share_pct"}
+)
+
+_QUEUE_HEADERS: tuple[str, ...] = (
+    "assumption_id",
+    "assumption_text",
+    "days_since_last_evidence",
+    "freshness",
+)
+
 
 def _escape_md_cell(value: Any) -> str:
     """Escape pipe characters so cells can't break Markdown tables."""
@@ -400,6 +451,44 @@ def validation_dashboard_to_markdown(
         )
         lines.append(f"| {_MILESTONE_LABELS[key]} | {rendered} |")
     lines.append("")
+
+    freshness = _as_dict(data.get("evidence_freshness"))
+    if freshness:
+        lines.append("## Evidence Freshness")
+        lines.append("")
+        lines.append("| Metric | Value |")
+        lines.append("| --- | --- |")
+        for key in _FRESHNESS_LABELS:
+            value = freshness.get(key)
+            rendered = (
+                _md_pct(value)
+                if key in _FRESHNESS_PCT_KEYS
+                else _md_cell(value)
+            )
+            lines.append(
+                f"| {_escape_md_cell(_FRESHNESS_LABELS[key])} "
+                f"| {rendered} |"
+            )
+        lines.append("")
+
+        queue = data.get("retest_queue_top")
+        if isinstance(queue, list):
+            actionable = [item for item in queue if _as_dict(item)]
+            if actionable:
+                lines.append("### Top Re-tests")
+                lines.append("")
+                lines.append(
+                    "| Assumption | Days since evidence | Freshness |"
+                )
+                lines.append("| --- | ---: | --- |")
+                for raw_row in actionable:
+                    item = _as_dict(raw_row)
+                    lines.append(
+                        f"| {_escape_md_cell(item.get('assumption_text', ''))} "
+                        f"| {_md_cell(item.get('days_since_last_evidence'))} "
+                        f"| {_escape_md_cell(item.get('freshness', ''))} |"
+                    )
+                lines.append("")
 
     assumptions = digest.get("assumptions") or []
     if assumptions:

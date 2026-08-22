@@ -72,6 +72,29 @@ def _payload() -> ValidationDashboardOut:
                 "first_challenged_event_id": None,
                 "first_inconclusive_event_id": 13,
             },
+            "evidence_freshness": {
+                "total_assumptions": 2,
+                "tested_assumptions": 1,
+                "fresh_count": 0,
+                "aging_count": 0,
+                "stale_count": 1,
+                "never_tested_count": 1,
+                "unknown_count": 0,
+                "actionable_count": 2,
+                "fresh_share_of_tested_pct": 0.0,
+                "stale_share_pct": 0.5,
+                "oldest_days_since_evidence": 92.0,
+            },
+            "retest_queue_top": [
+                {
+                    "assumption_id": 71,
+                    "assumption_text": "Customers will return",
+                    "category": "Retention",
+                    "sensitivity": "MEDIUM",
+                    "evidence_count": 0,
+                    "freshness": "NEVER_TESTED",
+                },
+            ],
             "momentum": {
                 "project_id": 7,
                 "counts": {
@@ -179,7 +202,11 @@ def test_export_route_returns_csv_and_preserves_dashboard_detail(
     text = body.decode("utf-8")
     assert "section,Validation Dashboard Summary" in text
     assert "section,Validation Milestones" in text
+    assert "section,Evidence Freshness" in text
+    assert "section,Top Re-tests" in text
     assert "section,Assumptions" in text
+    assert "never_tested_count,1" in text
+    assert "71,Customers will return,,NEVER_TESTED" in text
     assert "momentum_trend,STEADY" in text
     assert "first_de_risked_event_id,12" in text
     assert "70,'=SUM(A1:A2),Demand,HIGH,2,PASS" in text
@@ -264,6 +291,10 @@ def test_export_route_returns_markdown_brief(
     assert "# Validation Dashboard" in body
     assert "## Summary" in body
     assert "## Validation Milestones" in body
+    assert "## Evidence Freshness" in body
+    assert "### Top Re-tests" in body
+    assert "| Stale share | 50.0% |" in body
+    assert "| Customers will return | — | NEVER_TESTED |" in body
     assert "## Assumptions" in body
     assert "first_de_risked_event_id" not in body
     assert "First de-risked (PASS)" in body

@@ -51,7 +51,11 @@ from app.schemas.assumption_evidence import (
     EvidenceCreate,
     EvidenceOut,
 )
-from app.schemas.evidence_staleness import EvidenceStalenessOut
+from app.schemas.evidence_staleness import (
+    EvidenceStalenessOut,
+    EvidenceStalenessRowOut,
+    EvidenceStalenessSummaryOut,
+)
 from app.schemas.validation_dashboard import DASHBOARD_MODEL, ValidationDashboardOut
 from app.schemas.validation_momentum import ValidationMomentumOut
 from app.schemas.validation_timeline import (
@@ -77,6 +81,8 @@ from app.simulation.evidence_scorecard_export import (
 from app.simulation.evidence_staleness import (
     DEFAULT_AGING_DAYS,
     DEFAULT_FRESH_DAYS,
+    FRESHNESS_NEVER_TESTED,
+    FRESHNESS_STALE,
     MAX_WINDOW_DAYS,
     MIN_WINDOW_DAYS,
     build_evidence_staleness,
@@ -668,16 +674,33 @@ def get_validation_dashboard(
         project_id=project.id,
         target_de_risked_pct=target_de_risked_pct,
     )
+    freshness = build_evidence_staleness(
+        assumptions=assumptions,
+        evidence=evidence,
+        project_id=project.id,
+    )
+    retest_queue_top = [
+        EvidenceStalenessRowOut(**row)
+        for row in freshness["rows"]
+        if row["freshness"] in (FRESHNESS_NEVER_TESTED, FRESHNESS_STALE)
+    ][:3]
 
     return ValidationDashboardOut(
         project_id=project.id,
         evidence_digest=AssumptionEvidenceDigestOut(**digest),
         timeline_milestones=ValidationTimelineMilestonesOut(**timeline["milestones"]),
         momentum=ValidationMomentumOut(**momentum),
+        evidence_freshness=EvidenceStalenessSummaryOut(**freshness["summary"]),
+        retest_queue_top=retest_queue_top,
         meta={
             "generated_at": datetime.now(UTC).isoformat(),
             "model": DASHBOARD_MODEL,
-            "source": ["evidence-digest", "assumption-validation-timeline", "validation-momentum"],
+            "source": [
+                "evidence-digest",
+                "assumption-validation-timeline",
+                "validation-momentum",
+                "evidence-freshness",
+            ],
         },
     )
 
