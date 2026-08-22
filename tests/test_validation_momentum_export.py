@@ -257,6 +257,52 @@ def test_markdown_escapes_pipe_in_insights() -> None:
     assert insight_line == "- Coverage \\| velocity gap is widening"
 
 
+def test_csv_includes_forecast_caveats(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Non-empty forecast caveats get their own CSV section."""
+    payload = _payload()
+    payload.forecast.caveats = ["Velocity estimated from 3 events"]
+    text = _body(_call_route(monkeypatch, payload=payload)).decode("utf-8")
+    assert "section,Forecast Caveats" in text
+    assert "Velocity estimated from 3 events" in text
+
+
+def test_csv_omits_caveat_section_when_empty() -> None:
+    """No caveats means no stray section header."""
+    from app.simulation.validation_momentum_export import (
+        validation_momentum_to_csv,
+    )
+
+    text = validation_momentum_to_csv(_payload())
+    assert "Forecast Caveats" not in text
+
+
+def test_markdown_lists_caveats_after_forecast() -> None:
+    """Caveats render as bullets directly under the Forecast table."""
+    from app.simulation.validation_momentum_export import (
+        validation_momentum_to_markdown,
+    )
+
+    payload = _payload()
+    payload.forecast.caveats = ["Cadence | thin sample"]
+    lines = validation_momentum_to_markdown(payload).splitlines()
+
+    forecast_idx = lines.index("## Forecast")
+    caveats_idx = lines.index("### Forecast Caveats")
+    insights_idx = lines.index("## Insights")
+    assert forecast_idx < caveats_idx < insights_idx
+    caveat_line = next(line for line in lines if "thin sample" in line)
+    assert caveat_line == "- Cadence \\| thin sample"
+
+
+def test_markdown_omits_caveats_heading_when_empty() -> None:
+    from app.simulation.validation_momentum_export import (
+        validation_momentum_to_markdown,
+    )
+
+    body = validation_momentum_to_markdown(_payload())
+    assert "Forecast Caveats" not in body
+
+
 def test_markdown_handles_missing_sections_gracefully() -> None:
     """An empty momentum still renders a complete brief."""
     from app.simulation.validation_momentum_export import (

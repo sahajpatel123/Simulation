@@ -6,10 +6,11 @@ pipeline, or weekly report.  Formatting is pure and reuses the exact
 response payload produced by ``GET /projects/{id}/validation-momentum``.
 
 CSV is a multi-section document: metadata header, coverage/de-risking
-counts, velocity metrics, forecast projection, and insights.  Cells are
-guarded against spreadsheet formula injection.  JSON is an envelope with
-stable metadata and the unmodified payload.  Markdown is a founder-facing
-brief with one table per section and insight bullets.
+counts, velocity metrics, forecast projection, insights, and any forecast
+caveats.  Cells are guarded against spreadsheet formula injection.  JSON
+is an envelope with stable metadata and the unmodified payload.  Markdown
+is a founder-facing brief with one table per section plus insight and
+caveat bullets.
 """
 
 from __future__ import annotations
@@ -209,6 +210,13 @@ def validation_momentum_to_csv(
             _write_row(writer, [text])
         _write_row(writer, [])
 
+    caveats = forecast.get("caveats") or []
+    if caveats:
+        _write_row(writer, ["section", "Forecast Caveats"])
+        for text in caveats:
+            _write_row(writer, [text])
+        _write_row(writer, [])
+
     meta = _as_dict(data.get("meta"))
     if meta:
         _write_row(writer, ["section", "Momentum Meta"])
@@ -309,6 +317,14 @@ def validation_momentum_to_markdown(
     _md_section(lines, "Counts", _COUNT_KEYS, counts)
     _md_section(lines, "Velocity", _VELOCITY_KEYS, velocity)
     _md_section(lines, "Forecast", _FORECAST_KEYS, forecast)
+
+    caveats = forecast.get("caveats") or []
+    if caveats:
+        lines.append("### Forecast Caveats")
+        lines.append("")
+        for text in caveats:
+            lines.append(f"- {_escape_md_cell(text)}")
+        lines.append("")
 
     if insights:
         lines.append("## Insights")
