@@ -129,6 +129,14 @@ from app.simulation.portfolio_prediction_range_coverage import (
 from app.simulation.portfolio_validation_momentum import (
     build_portfolio_validation_momentum,
 )
+from app.simulation.portfolio_validation_momentum_export import (
+    FORMAT_VERSION as PORTFOLIO_MOMENTUM_FORMAT_VERSION,
+)
+from app.simulation.portfolio_validation_momentum_export import (
+    portfolio_validation_momentum_to_csv,
+    portfolio_validation_momentum_to_json,
+    portfolio_validation_momentum_to_markdown,
+)
 from app.simulation.premortem_digest import build_premortem_digest
 from app.simulation.product_type_outcome_gaps import (
     build_product_type_outcome_gaps_digest,
@@ -5123,6 +5131,92 @@ def get_my_validation_momentum(
         now=datetime.now(UTC),
     )
     return PortfolioValidationMomentumOut(**payload)
+
+
+@router.get(
+    "/me/validation-momentum/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export portfolio validation momentum as CSV, JSON, or Markdown"
+    ),
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_my_validation_momentum(
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns a spreadsheet-friendly "
+            "document with the portfolio summary and one ranked row per "
+            "project; ``json`` returns the envelope payload; ``md`` returns "
+            "a founder-facing Markdown brief. Unsupported values return a "
+            "400 response."
+        ),
+    ),
+    target_de_risked_pct: float = Query(
+        default=1.0,
+        ge=0.5,
+        le=1.0,
+        description=(
+            "Share of assumptions that should be de-risked in the portfolio "
+            "forecast (0.5-1.0)."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Download the same portfolio digest shown by the JSON endpoint."""
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json", "md"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; expected 'csv', "
+                "'json', or 'md'"
+            ),
+        )
+
+    momentum = get_my_validation_momentum(
+        target_de_risked_pct=target_de_risked_pct,
+        db=db,
+        current_user=current_user,
+    )
+    payload = momentum.model_dump()
+    metadata = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "user_id": current_user.id,
+        "format_version": PORTFOLIO_MOMENTUM_FORMAT_VERSION,
+    }
+
+    if fmt == "json":
+        body = portfolio_validation_momentum_to_json(
+            payload, metadata=metadata
+        ).encode("utf-8")
+        filename = f"portfolio-validation-momentum-u{current_user.id}.json"
+        media_type = "application/json; charset=utf-8"
+    elif fmt == "md":
+        body = portfolio_validation_momentum_to_markdown(
+            payload,
+            metadata=metadata,
+        ).encode("utf-8")
+        filename = f"portfolio-validation-momentum-u{current_user.id}.md"
+        media_type = "text/markdown; charset=utf-8"
+    else:
+        body = portfolio_validation_momentum_to_csv(
+            payload, metadata=metadata
+        ).encode("utf-8")
+        filename = f"portfolio-validation-momentum-u{current_user.id}.csv"
+        media_type = "text/csv; charset=utf-8"
+
+    return StreamingResponse(
+        iter([body]),
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.get(
