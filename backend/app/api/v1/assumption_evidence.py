@@ -625,6 +625,24 @@ def get_validation_dashboard(
             "projected horizon is reached (0.5–1.0)."
         ),
     ),
+    fresh_days: int = Query(
+        default=DEFAULT_FRESH_DAYS,
+        ge=MIN_WINDOW_DAYS,
+        le=MAX_WINDOW_DAYS,
+        description=(
+            "Latest evidence within this many days counts as ``FRESH`` "
+            "in the freshness rollup."
+        ),
+    ),
+    aging_days: int = Query(
+        default=DEFAULT_AGING_DAYS,
+        ge=MIN_WINDOW_DAYS + 1,
+        le=MAX_WINDOW_DAYS,
+        description=(
+            "Latest evidence older than this many days counts as "
+            "``STALE``; in between is ``AGING``."
+        ),
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ValidationDashboardOut:
@@ -674,10 +692,21 @@ def get_validation_dashboard(
         project_id=project.id,
         target_de_risked_pct=target_de_risked_pct,
     )
+    if fresh_days >= aging_days:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"fresh_days ({fresh_days}) must be strictly less than "
+                f"aging_days ({aging_days})"
+            ),
+        )
+
     freshness = build_evidence_staleness(
         assumptions=assumptions,
         evidence=evidence,
         project_id=project.id,
+        fresh_days=fresh_days,
+        aging_days=aging_days,
     )
     retest_queue_top = [
         EvidenceStalenessRowOut(**row)
@@ -734,6 +763,24 @@ def export_validation_dashboard(
             "projected horizon is reached (0.5–1.0)."
         ),
     ),
+    fresh_days: int = Query(
+        default=DEFAULT_FRESH_DAYS,
+        ge=MIN_WINDOW_DAYS,
+        le=MAX_WINDOW_DAYS,
+        description=(
+            "Latest evidence within this many days counts as ``FRESH`` "
+            "in the freshness rollup."
+        ),
+    ),
+    aging_days: int = Query(
+        default=DEFAULT_AGING_DAYS,
+        ge=MIN_WINDOW_DAYS + 1,
+        le=MAX_WINDOW_DAYS,
+        description=(
+            "Latest evidence older than this many days counts as "
+            "``STALE``; in between is ``AGING``."
+        ),
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
@@ -747,10 +794,20 @@ def export_validation_dashboard(
                 "'json', or 'md'"
             ),
         )
+    if fresh_days >= aging_days:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"fresh_days ({fresh_days}) must be strictly less than "
+                f"aging_days ({aging_days})"
+            ),
+        )
 
     dashboard = get_validation_dashboard(
         project_id=project_id,
         target_de_risked_pct=target_de_risked_pct,
+        fresh_days=fresh_days,
+        aging_days=aging_days,
         db=db,
         current_user=current_user,
     )

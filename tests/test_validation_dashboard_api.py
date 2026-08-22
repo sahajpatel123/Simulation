@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import sys
 import types
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi import HTTPException
@@ -110,6 +110,8 @@ def _call_dashboard(
     *,
     project_id: int = 10,
     target_de_risked_pct: float = 1.0,
+    fresh_days: int = 14,
+    aging_days: int = 45,
     session: _FakeSession | None = None,
 ):
     from app.api.v1 import assumption_evidence as ev_mod
@@ -118,6 +120,8 @@ def _call_dashboard(
     return ev_mod.get_validation_dashboard(
         project_id=project_id,
         target_de_risked_pct=target_de_risked_pct,
+        fresh_days=fresh_days,
+        aging_days=aging_days,
         db=db,
         current_user=type("U", (), {"id": 42})(),
     )
@@ -208,6 +212,36 @@ def test_dashboard_without_evidence_has_empty_queue() -> None:
     assert out.evidence_freshness is not None
     assert out.evidence_freshness.total_assumptions == 0
     assert out.retest_queue_top == []
+
+
+def test_dashboard_freshness_windows_are_configurable() -> None:
+    """fresh_days/aging_days move the FRESH/AGING/STALE boundaries."""
+    evidence = _Evidence(1, assumption_id=100, result="PASS", day=1)
+    # Pinned relative to runtime so the age classification never flakes.
+    evidence.created_at = datetime.now(UTC) - timedelta(days=30)
+    session = _FakeSession(
+        assumptions=[_Assumption(100)],
+        evidence=[evidence],
+    )
+
+    out_default = _call_dashboard(session=session)
+    assert out_default.evidence_freshness is not None
+    assert out_default.evidence_freshness.aging_count == 1
+    assert out_default.evidence_freshness.stale_count == 0
+
+    out_wide = _call_dashboard(
+        fresh_days=31, aging_days=180, session=session
+    )
+    assert out_wide.evidence_freshness.fresh_count == 1
+    assert out_wide.evidence_freshness.aging_count == 0
+
+
+def test_dashboard_rejects_inverted_freshness_windows() -> None:
+    with pytest.raises(HTTPException) as exc:
+        _call_dashboard(fresh_days=45, aging_days=45)
+
+    assert exc.value.status_code == 400
+    assert "strictly less than" in exc.value.detail
 
 
 def test_dashboard_honours_custom_target() -> None:

@@ -156,6 +156,8 @@ def _call_route(
     *,
     format: str = "csv",
     target_de_risked_pct: float = 1.0,
+    fresh_days: int = 14,
+    aging_days: int = 45,
     payload: ValidationDashboardOut | None = None,
 ) -> Any:
     from app.api.v1 import assumption_evidence as ev_mod
@@ -170,6 +172,8 @@ def _call_route(
         project_id=7,
         format=format,
         target_de_risked_pct=target_de_risked_pct,
+        fresh_days=fresh_days,
+        aging_days=aging_days,
         db=object(),  # type: ignore[arg-type]
         current_user=type("U", (), {"id": 42})(),
     )
@@ -248,12 +252,39 @@ def test_export_forwards_target_to_dashboard_builder(
         project_id=7,
         format="csv",
         target_de_risked_pct=0.75,
+        fresh_days=14,
+        aging_days=45,
         db=object(),  # type: ignore[arg-type]
         current_user=type("U", (), {"id": 42})(),
     )
 
     assert seen["target_de_risked_pct"] == 0.75
     assert seen["project_id"] == 7
+
+
+def test_export_forwards_freshness_windows_to_dashboard_builder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api.v1 import assumption_evidence as ev_mod
+
+    seen: dict[str, Any] = {}
+
+    def fake_dashboard(**kwargs: Any) -> ValidationDashboardOut:
+        seen.update(kwargs)
+        return _payload()
+
+    monkeypatch.setattr(ev_mod, "get_validation_dashboard", fake_dashboard)
+    ev_mod.export_validation_dashboard(
+        project_id=7,
+        format="csv",
+        fresh_days=21,
+        aging_days=90,
+        db=object(),  # type: ignore[arg-type]
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+    assert seen["fresh_days"] == 21
+    assert seen["aging_days"] == 90
 
 
 def test_export_rejects_unknown_format_before_building_payload(
