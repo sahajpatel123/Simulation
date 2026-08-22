@@ -270,3 +270,63 @@ def test_export_route_returns_markdown_brief(
     assert "Total assumptions" in body
     assert "De-risked" in body
     assert int(response.headers["Content-Length"]) == len(body.encode("utf-8"))
+
+
+def test_markdown_summary_uses_human_labels_and_percentages() -> None:
+    """Fraction metrics read as percentages and every key has a label."""
+    from app.simulation.validation_dashboard_export import (
+        validation_dashboard_to_markdown,
+    )
+
+    body = validation_dashboard_to_markdown(_payload())
+
+    assert "| Evidence coverage | 50.0% |" in body
+    assert "| Validation score | 50.0% |" in body
+    assert "| De-risk target share | 100.0% |" in body
+    assert "| Project ID | 7 |" in body
+    # No snake_case keys leak into the founder-facing summary table.
+    for raw_key in (
+        "project_id",
+        "target_de_risked_pct",
+        "target_de_risked_count",
+    ):
+        assert f"| {raw_key} |" not in body
+
+
+def test_markdown_escapes_pipe_in_milestones_and_counts() -> None:
+    """A pipe inside a milestone id or count cannot break table columns."""
+    from app.simulation.validation_dashboard_export import (
+        validation_dashboard_to_markdown,
+    )
+
+    body = validation_dashboard_to_markdown(
+        {
+            "project_id": 7,
+            "evidence_digest": {
+                "assumptions": [
+                    {
+                        "assumption_id": 70,
+                        "assumption_text": "Will users convert?",
+                        "category": "Demand",
+                        "sensitivity": "HIGH",
+                        "evidence_count": "3|4",
+                        "latest_result": "PASS",
+                    }
+                ]
+            },
+            "timeline_milestones": {
+                "first_evidence_event_id": "11|bogus",
+            },
+        }
+    )
+
+    milestone_row = next(
+        line for line in body.splitlines() if "First evidence" in line
+    )
+    assert milestone_row == "| First evidence | 11\\|bogus |"
+    assumption_row = next(
+        line for line in body.splitlines() if "Will users convert?" in line
+    )
+    assert "3\\|4" in assumption_row
+    # Ignoring escaped pipes, the 8-column table keeps exactly 9 separators.
+    assert assumption_row.replace("\\|", "").count("|") == 9

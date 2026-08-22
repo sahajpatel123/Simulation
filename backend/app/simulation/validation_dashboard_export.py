@@ -259,11 +259,24 @@ def validation_dashboard_to_json(
     ) + "\n"
 
 
+# Summary metrics stored as 0–1 fractions but read best as percentages in
+# the founder-facing Markdown brief (CSV keeps the raw numbers).
+_PCT_SUMMARY_KEYS: frozenset[str] = frozenset(
+    {
+        "evidence_coverage_pct",
+        "validation_score",
+        "target_de_risked_pct",
+    }
+)
+
 _SUMMARY_LABELS: dict[str, str] = {
+    "project_id": "Project ID",
     "total_assumptions": "Total assumptions",
     "total_evidence_rows": "Evidence rows",
     "assumptions_with_evidence": "Assumptions with evidence",
     "evidence_coverage_pct": "Evidence coverage",
+    "target_de_risked_pct": "De-risk target share",
+    "target_de_risked_count": "De-risk target count",
     "de_risked_count": "De-risked",
     "challenged_count": "Challenged",
     "inconclusive_count": "Inconclusive",
@@ -312,17 +325,6 @@ def _md_pct(value: Any) -> str:
     except (TypeError, ValueError):
         return _escape_md_cell(value)
     return f"{f * 100:.1f}%"
-
-
-def _md_date(value: Any) -> str:
-    """Format a timestamp for Markdown, trimming the time when it is midnight."""
-    if value is None:
-        return "—"
-    if hasattr(value, "strftime"):
-        text = value.strftime("%Y-%m-%d")
-    else:
-        text = _escape_md_cell(value)
-    return text
 
 
 def _md_bool(value: Any) -> str:
@@ -377,9 +379,13 @@ def validation_dashboard_to_markdown(
     for key in _SUMMARY_KEYS:
         if key not in summary_rows:
             continue
+        value = summary_rows[key]
+        rendered = (
+            _md_pct(value) if key in _PCT_SUMMARY_KEYS else _md_cell(value)
+        )
         lines.append(
             f"| {_escape_md_cell(_SUMMARY_LABELS.get(key, key))} "
-            f"| {_md_cell(summary_rows[key])} |"
+            f"| {rendered} |"
         )
     lines.append("")
 
@@ -389,10 +395,10 @@ def validation_dashboard_to_markdown(
     lines.append("| --- | --- |")
     for key in _MILESTONE_KEYS:
         event_id = milestones.get(key)
-        lines.append(
-            f"| {_MILESTONE_LABELS[key]} | "
-            f"{event_id if event_id is not None else '—'} |"
+        rendered = (
+            _escape_md_cell(event_id) if event_id is not None else "—"
         )
+        lines.append(f"| {_MILESTONE_LABELS[key]} | {rendered} |")
     lines.append("")
 
     assumptions = digest.get("assumptions") or []
@@ -413,7 +419,7 @@ def validation_dashboard_to_markdown(
                 f"| {idx} | {_escape_md_cell(assumption.get('assumption_text', ''))} "
                 f"| {_escape_md_cell(assumption.get('category', ''))} "
                 f"| {_escape_md_cell(assumption.get('sensitivity', ''))} "
-                f"| {assumption.get('evidence_count', 0)} "
+                f"| {_md_cell(assumption.get('evidence_count', 0))} "
                 f"| {_md_cell(assumption.get('latest_result'))} "
                 f"| {_md_cell(assumption.get('derived_confidence'))} "
                 f"| {_md_cell(assumption.get('status'))} |"
