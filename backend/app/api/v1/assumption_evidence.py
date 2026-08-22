@@ -24,6 +24,8 @@ founder record *what happened* and see the consequence:
 * ``GET /projects/{project_id}/evidence-freshness`` ages every
   assumption's latest evidence (FRESH/AGING/STALE/NEVER_TESTED) and ranks
   a prioritised re-test queue.
+* ``GET /projects/{project_id}/evidence-freshness/export`` downloads the
+  re-test queue as CSV, JSON, or a founder-facing Markdown brief.
 
 Pure post-hoc analysis — no Celery dispatch, no LLM calls.
 """
@@ -78,6 +80,14 @@ from app.simulation.evidence_staleness import (
     MAX_WINDOW_DAYS,
     MIN_WINDOW_DAYS,
     build_evidence_staleness,
+)
+from app.simulation.evidence_staleness_export import (
+    FORMAT_VERSION as EVIDENCE_FRESHNESS_FORMAT_VERSION,
+)
+from app.simulation.evidence_staleness_export import (
+    evidence_staleness_to_csv,
+    evidence_staleness_to_json,
+    evidence_staleness_to_markdown,
 )
 from app.simulation.validation_dashboard_export import (
     FORMAT_VERSION as VALIDATION_DASHBOARD_FORMAT_VERSION,
@@ -484,6 +494,112 @@ def get_evidence_freshness(
         aging_days=aging_days,
     )
     return EvidenceStalenessOut(**payload)
+
+
+@router.get(
+    "/{project_id}/evidence-freshness/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export a project's evidence-freshness re-test queue as CSV, JSON, "
+        "or Markdown"
+    ),
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_evidence_freshness(
+    project_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns a spreadsheet-friendly "
+            "summary with the full re-test queue; ``json`` returns the "
+            "envelope payload; ``md`` returns a founder-facing Markdown "
+            "brief. Unsupported values return a 400 response."
+        ),
+    ),
+    fresh_days: int = Query(
+        default=DEFAULT_FRESH_DAYS,
+        ge=MIN_WINDOW_DAYS,
+        le=MAX_WINDOW_DAYS,
+        description=(
+            "Latest evidence within this many days counts as ``FRESH``."
+        ),
+    ),
+    aging_days: int = Query(
+        default=DEFAULT_AGING_DAYS,
+        ge=MIN_WINDOW_DAYS + 1,
+        le=MAX_WINDOW_DAYS,
+        description=(
+            "Latest evidence older than this many days counts as "
+            "``STALE``; in between is ``AGING``."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Download the same re-test queue shown by the JSON endpoint."""
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json", "md"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; expected 'csv', "
+                "'json', or 'md'"
+            ),
+        )
+    if fresh_days >= aging_days:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"fresh_days ({fresh_days}) must be strictly less than "
+                f"aging_days ({aging_days})"
+            ),
+        )
+
+    freshness = get_evidence_freshness(
+        project_id=project_id,
+        fresh_days=fresh_days,
+        aging_days=aging_days,
+        db=db,
+        current_user=current_user,
+    )
+    payload = freshness.model_dump()
+    metadata = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "user_id": current_user.id,
+        "project_id": project_id,
+        "format_version": EVIDENCE_FRESHNESS_FORMAT_VERSION,
+    }
+
+    if fmt == "json":
+        body = evidence_staleness_to_json(payload, metadata=metadata).encode(
+            "utf-8"
+        )
+        filename = f"evidence-freshness-{project_id}.json"
+        media_type = "application/json; charset=utf-8"
+    elif fmt == "md":
+        body = evidence_staleness_to_markdown(
+            payload,
+            metadata=metadata,
+        ).encode("utf-8")
+        filename = f"evidence-freshness-{project_id}.md"
+        media_type = "text/markdown; charset=utf-8"
+    else:
+        body = evidence_staleness_to_csv(payload, metadata=metadata).encode(
+            "utf-8"
+        )
+        filename = f"evidence-freshness-{project_id}.csv"
+        media_type = "text/csv; charset=utf-8"
+
+    return StreamingResponse(
+        iter([body]),
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.get(
