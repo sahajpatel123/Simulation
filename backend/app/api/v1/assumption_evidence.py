@@ -59,13 +59,6 @@ from app.schemas.validation_timeline import (
 from app.simulation.assumption_evidence_digest import (
     build_assumption_evidence_digest,
 )
-from app.simulation.evidence_staleness import (
-    DEFAULT_AGING_DAYS,
-    DEFAULT_FRESH_DAYS,
-    MAX_WINDOW_DAYS,
-    MIN_WINDOW_DAYS,
-    build_evidence_staleness,
-)
 from app.simulation.evidence_scorecard import (
     build_assumption_scorecard,
     derive_confidence,
@@ -78,6 +71,13 @@ from app.simulation.evidence_scorecard_export import (
     evidence_scorecard_to_csv,
     evidence_scorecard_to_json,
     evidence_scorecard_to_markdown,
+)
+from app.simulation.evidence_staleness import (
+    DEFAULT_AGING_DAYS,
+    DEFAULT_FRESH_DAYS,
+    MAX_WINDOW_DAYS,
+    MIN_WINDOW_DAYS,
+    build_evidence_staleness,
 )
 from app.simulation.validation_dashboard_export import (
     FORMAT_VERSION as VALIDATION_DASHBOARD_FORMAT_VERSION,
