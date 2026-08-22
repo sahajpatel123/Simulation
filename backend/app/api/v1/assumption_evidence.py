@@ -21,6 +21,9 @@ founder record *what happened* and see the consequence:
 * ``GET /projects/{project_id}/validation-momentum`` measures evidence
   cadence and projects how many weeks remain until full coverage or a
   de-risked target.
+* ``GET /projects/{project_id}/evidence-freshness`` ages every
+  assumption's latest evidence (FRESH/AGING/STALE/NEVER_TESTED) and ranks
+  a prioritised re-test queue.
 
 Pure post-hoc analysis — no Celery dispatch, no LLM calls.
 """
@@ -46,6 +49,7 @@ from app.schemas.assumption_evidence import (
     EvidenceCreate,
     EvidenceOut,
 )
+from app.schemas.evidence_staleness import EvidenceStalenessOut
 from app.schemas.validation_dashboard import DASHBOARD_MODEL, ValidationDashboardOut
 from app.schemas.validation_momentum import ValidationMomentumOut
 from app.schemas.validation_timeline import (
@@ -54,6 +58,13 @@ from app.schemas.validation_timeline import (
 )
 from app.simulation.assumption_evidence_digest import (
     build_assumption_evidence_digest,
+)
+from app.simulation.evidence_staleness import (
+    DEFAULT_AGING_DAYS,
+    DEFAULT_FRESH_DAYS,
+    MAX_WINDOW_DAYS,
+    MIN_WINDOW_DAYS,
+    build_evidence_staleness,
 )
 from app.simulation.evidence_scorecard import (
     build_assumption_scorecard,
@@ -398,6 +409,81 @@ def get_validation_momentum(
             target_de_risked_pct=target_de_risked_pct,
         )
     )
+
+
+@router.get(
+    "/{project_id}/evidence-freshness",
+    response_model=EvidenceStalenessOut,
+    summary="Per-assumption evidence freshness with a prioritised re-test queue",
+    responses=_JSON_200,
+)
+def get_evidence_freshness(
+    project_id: int,
+    fresh_days: int = Query(
+        default=DEFAULT_FRESH_DAYS,
+        ge=MIN_WINDOW_DAYS,
+        le=MAX_WINDOW_DAYS,
+        description=(
+            "Latest evidence within this many days counts as ``FRESH``."
+        ),
+    ),
+    aging_days: int = Query(
+        default=DEFAULT_AGING_DAYS,
+        ge=MIN_WINDOW_DAYS + 1,
+        le=MAX_WINDOW_DAYS,
+        description=(
+            "Latest evidence older than this many days counts as "
+            "``STALE``; in between is ``AGING``."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> EvidenceStalenessOut:
+    """
+    Age every non-hidden assumption's most recent logged experiment and
+    rank the results into a founder-facing re-test queue.
+
+    Never-tested assumptions lead the queue, followed by stale ones ordered
+    by sensitivity. Like the other validation endpoints this does **not**
+    require a completed simulation.
+    """
+    if fresh_days >= aging_days:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"fresh_days ({fresh_days}) must be strictly less than "
+                f"aging_days ({aging_days})"
+            ),
+        )
+
+    project = get_owned_project(db, current_user.id, project_id)
+    assumptions = (
+        db.query(Assumption)
+        .filter(
+            Assumption.project_id == project.id,
+            Assumption.is_hidden.is_(False),
+        )
+        .order_by(Assumption.id.asc())
+        .all()
+    )
+    evidence = (
+        db.query(AssumptionEvidence)
+        .filter(AssumptionEvidence.project_id == project.id)
+        .order_by(
+            AssumptionEvidence.created_at.asc(),
+            AssumptionEvidence.id.asc(),
+        )
+        .all()
+    )
+
+    payload = build_evidence_staleness(
+        assumptions=assumptions,
+        evidence=evidence,
+        project_id=project.id,
+        fresh_days=fresh_days,
+        aging_days=aging_days,
+    )
+    return EvidenceStalenessOut(**payload)
 
 
 @router.get(
