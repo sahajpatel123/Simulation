@@ -1,7 +1,9 @@
 rules:
-  # We deliberately pin first-party actions to full version tags (e.g. @v7.0.1)
-  # and enforce that in tools/validate_ci.py, rather than requiring commit
-  # hashes. zizmor's default blanket policy wants hash pinning, so disable that
-  # audit here while still catching the other workflow-security classes.
+  # Pinning policy, enforced by tools/validate_ci.py: first-party actions
+  # (actions/*, github/codeql-action) ride full version tags; community
+  # third-party actions must be SHA-pinned. That's stricter than tags-only
+  # but not the blanket hash-everywhere policy zizmor wants, so disable its
+  # unpinned-uses audit here while still catching the other workflow-
+  # security classes.
   unpinned-uses:
     disable: true

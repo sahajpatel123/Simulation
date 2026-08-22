@@ -7,7 +7,8 @@ can catch issues locally before pushing:
   - All YAML/TOML files under .github parse cleanly.
   - Security policy files exist (SECURITY.md, security report template, dependabot).
   - No .env* files are tracked by git.
-  - Every GitHub Action ref is pinned to a full version tag or full commit SHA.
+  - Every GitHub Action ref is pinned to a full version tag; community
+    (third-party) actions must be pinned to a full commit SHA.
   - Every checkout sets persist-credentials: false.
   - Every workflow declares least-privilege permissions; no actions: write;
     id-token: write only in scorecard.yml.
@@ -139,6 +140,16 @@ def validate_supply_chain() -> list[str]:
                     errors.append(
                         f"{rel} job {job_name} step {i}: {ref} is not pinned "
                         "to a full version tag"
+                    )
+                    continue
+                # First-party refs (GitHub's own orgs) may ride version tags;
+                # community actions must pin an immutable commit SHA so a
+                # repointed tag can't swap code under us.
+                repo = ref.partition("@")[0]
+                if not repo.startswith(("actions/", "github/codeql-action")):
+                    errors.append(
+                        f"{rel} job {job_name} step {i}: {repo} must be pinned "
+                        "to a full 40-hex commit SHA (third-party action)"
                     )
     return errors
 

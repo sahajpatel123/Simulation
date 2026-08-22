@@ -69,7 +69,7 @@ jobs:
           pip install --no-cache-dir pytest pytest-asyncio pytest-cov
 
       - name: Check for secrets in codebase
-        uses: gitleaks/gitleaks-action@v3.0.0
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .github/gitleaks.toml
