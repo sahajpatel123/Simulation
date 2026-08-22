@@ -12,6 +12,8 @@ updates:
       time: "06:00"
       timezone: "UTC"
     open-pull-requests-limit: 10
+    reviewers:
+      - "sahajpatel123"
     commit-message:
       prefix: "deps"
       prefix-development: "deps"
@@ -52,6 +54,8 @@ updates:
       time: "06:00"
       timezone: "UTC"
     open-pull-requests-limit: 5
+    reviewers:
+      - "sahajpatel123"
     commit-message:
       prefix: "ci"
       prefix-development: "ci"
@@ -72,6 +76,8 @@ updates:
       time: "06:00"
       timezone: "UTC"
     open-pull-requests-limit: 3
+    reviewers:
+      - "sahajpatel123"
     commit-message:
       prefix: "deps"
       prefix-development: "deps"
@@ -92,6 +98,8 @@ updates:
       time: "06:00"
       timezone: "UTC"
     open-pull-requests-limit: 5
+    reviewers:
+      - "sahajpatel123"
     commit-message:
       prefix: "deps"
       prefix-development: "deps"
