@@ -17,6 +17,9 @@ founder record *what happened* and see the consequence:
   within the batch so re-imports are idempotent.
 * ``POST /projects/{project_id}/assumptions/import/csv`` does the same
   from raw CSV text with per-row skip reasons.
+* ``GET /projects/{project_id}/assumptions/export`` downloads the
+  project's assumptions in exactly that CSV shape, so export → edit
+  offline → re-import is a lossless, duplicate-free round trip.
 * ``GET /projects/{project_id}/assumptions/{assumption_id}/evidence-scorecard``
   returns the evidence history plus the before/after validation-ROI shift
   implied by the derived confidence tier.
@@ -470,6 +473,89 @@ async def import_assumption_evidence_csv(
         )
 
     return _apply_evidence_import(db, project.id, parsed_rows, parse_skips)
+
+
+_ASSUMPTION_EXPORT_HEADERS: tuple[str, ...] = (
+    "text",
+    "category",
+    "sensitivity",
+    "impact_score",
+)
+
+
+def _csv_guard(value: object) -> object:
+    """Neutralise spreadsheet formulas in exported CSV cells."""
+    if isinstance(value, str) and (
+        value.lstrip()[:1] in ("=", "+", "-", "@")
+        or value[:1] in ("\t", "\r", "\n")
+    ):
+        return f"'{value}"
+    return value
+
+
+@router.get(
+    "/{project_id}/assumptions/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Download a project's assumptions in the bulk-import CSV shape"
+    ),
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_assumptions_csv(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """
+    Emit the project's non-hidden assumptions as CSV with exactly the
+    columns ``text,category,sensitivity,impact_score`` that
+    ``POST /{project_id}/assumptions/import/csv`` consumes — so a founder
+    can download, edit offline, and re-import; duplicate rows skip
+    themselves.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+    assumptions = (
+        db.query(Assumption)
+        .filter(
+            Assumption.project_id == project.id,
+            Assumption.is_hidden.is_(False),
+        )
+        .order_by(Assumption.id.asc())
+        .all()
+    )
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+    writer.writerow(list(_ASSUMPTION_EXPORT_HEADERS))
+    for assumption in assumptions:
+        writer.writerow(
+            [
+                _csv_guard(value)
+                for value in (
+                    assumption.text or "",
+                    assumption.category or "",
+                    assumption.sensitivity or "",
+                    (
+                        ""
+                        if assumption.impact_score is None
+                        else assumption.impact_score
+                    ),
+                )
+            ]
+        )
+
+    body = buffer.getvalue().encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="assumptions-{project.id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 def _apply_assumption_import(

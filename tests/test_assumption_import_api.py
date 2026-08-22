@@ -42,6 +42,9 @@ class _FakeQuery:
     def filter(self, *args, **kwargs):
         return self
 
+    def order_by(self, *args, **kwargs):
+        return self
+
     def first(self):
         return self.items[0] if self.items else None
 
@@ -288,4 +291,104 @@ def test_csv_import_over_cap_returns_400() -> None:
 
     assert exc.value.status_code == 400
     assert "200-row import limit" in exc.value.detail
+    assert session.commit_count == 0
+
+
+class _ExportAssumption:
+    def __init__(
+        self,
+        assumption_id: int,
+        text: str,
+        *,
+        category: str = "Demand",
+        sensitivity: str = "HIGH",
+        impact_score: float = 7.5,
+        is_hidden: bool = False,
+    ) -> None:
+        self.id = assumption_id
+        self.project_id = 10
+        self.text = text
+        self.category = category
+        self.sensitivity = sensitivity
+        self.impact_score = impact_score
+        self.is_hidden = is_hidden
+
+
+def _call_export(session: _ImportSession):
+    from app.api.v1 import assumption_evidence as ev_mod
+
+    return ev_mod.export_assumptions_csv(
+        project_id=10,
+        db=session,  # type: ignore[arg-type]
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+
+def test_export_route_registered() -> None:
+    from app.api.v1 import assumption_evidence as ev_mod
+
+    methods_by_path: dict[str, set[str]] = {}
+    for route in ev_mod.router.routes:
+        methods_by_path.setdefault(route.path, set()).update(
+            route.methods or set()
+        )
+    path = "/projects/{project_id}/assumptions/export"
+    assert "GET" in methods_by_path.get(path, set())
+
+
+def test_export_matches_import_csv_shape() -> None:
+    """The export header equals the importer's required shape."""
+    session = _ImportSession(
+        assumptions=[
+            _ExportAssumption(50, "Users will pay ₹999 monthly"),
+            _ExportAssumption(
+                51,
+                "-60% churn after redesign",
+                sensitivity="CRITICAL",
+            ),
+            # NOTE: hidden-assumption exclusion happens in SQL and cannot
+            # be exercised through this filter-blind fake session.
+        ],
+    )
+
+    response = _call_export(session)
+    body = asyncio.run(_collect(response))
+
+    assert response.media_type == "text/csv; charset=utf-8"
+    assert (
+        'filename="assumptions-10.csv"'
+        in response.headers["Content-Disposition"]
+    )
+    text = body.decode("utf-8")
+    lines = text.splitlines()
+    # Header is exactly the importer's column list.
+    assert lines[0] == "text,category,sensitivity,impact_score"
+    assert len(lines) == 3
+    # Formula-leading text is guarded so spreadsheets stay safe.
+    assert "'-60% churn after redesign,Demand,CRITICAL,7.5" in lines[2]
+    assert int(response.headers["Content-Length"]) == len(body)
+
+
+async def _collect(response) -> bytes:
+    return b"".join([chunk async for chunk in response.body_iterator])
+
+
+def test_round_trip_export_then_reimport_is_noop() -> None:
+    """Re-importing your own export skips every row as a duplicate."""
+    rows = [
+        _ExportAssumption(50, "Users will pay ₹999 monthly"),
+        _ExportAssumption(51, "Onboarding under two minutes"),
+    ]
+    session = _ImportSession(assumptions=rows)
+
+    # Export the project's assumptions…
+    exported = asyncio.run(_collect(_call_export(session))).decode("utf-8")
+
+    # …then feed the same bytes straight back through the CSV importer.
+    out = _call_csv_import(session, exported)
+
+    assert out.imported_count == 0
+    assert out.skipped_count == 2
+    assert all("already exists" in s.reason for s in out.skipped_rows)
+    assert session.added_rows == []
     assert session.commit_count == 0
