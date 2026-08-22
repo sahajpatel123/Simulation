@@ -2,6 +2,11 @@ name: dependency-review
 
 # Reviews dependency changes in pull requests against the public
 # vulnerability database and fails on high-severity introductions.
+#
+# NOTE: The Dependency Graph must be enabled in the repository settings
+# (Settings → Code security and analysis → Dependency graph) for this
+# action to work.  When it is not enabled the job is *skipped* (not
+# failed) so CI stays green until an admin turns the feature on.
 
 on:
   pull_request:
@@ -10,6 +15,7 @@ on:
 
 permissions:
   contents: read
+  actions: read  # needed by gh api to read repo security settings
 
 concurrency:
   group: dependency-review-${{ github.ref }}
@@ -27,7 +33,28 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Check Dependency Graph availability
+        id: dep-graph
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # The actions/dependency-review-action requires the Dependency
+          # Graph to be enabled in repository settings.  Query the REST API
+          # and inspect the security_and_analysis field.  When the graph
+          # is disabled, skip the review instead of failing CI with
+          # "Dependency review is not supported on this repository".
+          status=$(gh api "repos/${GITHUB_REPOSITORY}" \
+            --jq '.security_and_analysis.dependency_graph' 2>/dev/null \
+            || echo "disabled")
+          echo "dependency_graph=$status" >> "$GITHUB_OUTPUT"
+          if [ "$status" = "enabled" ]; then
+            echo "✅ Dependency Graph is enabled — proceeding with review"
+          else
+            echo "::notice title=Dependency Review skipped::The Dependency Graph is not enabled for this repository. Enable it under Settings → Code security and analysis → 'Dependency graph', then re-run this workflow."
+          fi
+
       - name: Dependency review
+        if: steps.dep-graph.outputs.dependency_graph == 'enabled'
         uses: actions/dependency-review-action@v5.0.0
         with:
           fail-on-severity: high

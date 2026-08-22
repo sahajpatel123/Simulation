@@ -136,3 +136,6 @@ thecee-backend/
 
 # Empty migrations placeholder (real migrations via migrate_and_start.py)
 /migrations/
+
+# OpenCode local agent state
+.opencode/
