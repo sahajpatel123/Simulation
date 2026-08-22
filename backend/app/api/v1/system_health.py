@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -36,6 +37,7 @@ from app.core.request_health import (
     MAX_LIMIT,
     build_request_health,
 )
+from app.core.safe_errors import safe_error_label
 from app.core.system_overview import build_system_overview
 from app.core.websocket import ws_manager
 from app.core.websocket_health import (
@@ -57,6 +59,8 @@ from app.schemas.system_health import (
 from app.worker import celery_app
 
 router = APIRouter(prefix="/system", tags=["system"])
+
+logger = logging.getLogger(__name__)
 
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 
@@ -88,7 +92,8 @@ def _db_status(db: Session) -> dict[str, Any]:
     try:
         db.execute(text("SELECT 1"))
     except Exception as exc:
-        return {"status": "error", "error": str(exc)[:200]}
+        logger.warning("system-health: database probe failed: %s", exc)
+        return {"status": "error", "error": safe_error_label(exc)}
     latency_ms = (time.perf_counter() - started) * 1000.0
     return {"status": "ok", "latency_ms": round(max(0.0, latency_ms), 3)}
 
@@ -101,7 +106,8 @@ def _redis_status() -> dict[str, Any]:
     try:
         client.ping()
     except Exception as exc:
-        return {"status": "error", "error": str(exc)[:200]}
+        logger.warning("system-health: redis probe failed: %s", exc)
+        return {"status": "error", "error": safe_error_label(exc)}
     latency_ms = (time.perf_counter() - started) * 1000.0
     return {"status": "ok", "latency_ms": round(max(0.0, latency_ms), 3)}
 
@@ -115,7 +121,12 @@ def _worker_status() -> dict[str, Any]:
             "workers_online": len(active_workers),
         }
     except Exception as exc:
-        return {"worker_reachable": False, "workers_online": 0, "error": str(exc)[:200]}
+        logger.warning("system-health: worker probe failed: %s", exc)
+        return {
+            "worker_reachable": False,
+            "workers_online": 0,
+            "error": safe_error_label(exc),
+        }
 
 
 @router.get(

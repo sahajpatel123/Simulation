@@ -25,6 +25,7 @@ from typing import Any
 from sqlalchemy import text
 
 from app.core.metrics import metrics
+from app.core.safe_errors import safe_error_label
 
 logger = logging.getLogger(__name__)
 
@@ -214,7 +215,8 @@ def collect_pool_snapshot(engine: Any) -> dict[str, Any]:
         return {
             "status": POOL_STATUS_ERROR,
             "pool_class": type(pool).__name__,
-            "error": str(exc)[:200],
+            # Full detail is logged above; clients get the class name only.
+            "error": safe_error_label(exc),
         }
 
 
@@ -286,7 +288,9 @@ def collect_server_snapshot(
             "max_connections": None,
             "connection_ratio": None,
             "latency_ms": None,
-            "error": str(exc)[:200],
+            # Full detail is logged above; clients get the class name only —
+            # psycopg messages can embed SQL fragments and host names.
+            "error": safe_error_label(exc),
         }
 
 

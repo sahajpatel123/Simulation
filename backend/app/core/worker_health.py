@@ -24,6 +24,7 @@ import redis
 
 from app.core.config import settings
 from app.core.metrics import metrics
+from app.core.safe_errors import safe_error_label
 
 logger = logging.getLogger(__name__)
 
@@ -212,7 +213,9 @@ def _probe_broker(
         return {
             "status": _BROKER_STATUS_ERROR,
             **metadata,
-            "error": str(exc)[:200],
+            # Full detail is logged above; clients get the class name only —
+            # broker messages can embed endpoints and credentials.
+            "error": safe_error_label(exc),
         }
     return {"status": _BROKER_STATUS_OK, **metadata}
 

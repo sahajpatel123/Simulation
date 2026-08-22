@@ -14,7 +14,8 @@ from typing import Any
 
 import pytest
 from fastapi.routing import APIRoute
-from sqlalchemy import create_engine, pool as sqla_pool
+from sqlalchemy import create_engine
+from sqlalchemy import pool as sqla_pool
 
 if "razorpay" not in sys.modules:
     _razorpay_stub = types.ModuleType("razorpay")
@@ -275,7 +276,10 @@ def test_collect_pool_snapshot_error_on_broken_pool() -> None:
     snapshot = collect_pool_snapshot(_BrokenEngine())
 
     assert snapshot["status"] == POOL_STATUS_ERROR
-    assert "pool exploded" in (snapshot.get("error") or "")
+    # Client-facing error carries the exception class only — the raw
+    # message must never leak through a health digest.
+    assert snapshot.get("error") == "RuntimeError"
+    assert "pool exploded" not in (snapshot.get("error") or "")
 
 
 # ---------------------------------------------------------------------------
@@ -384,7 +388,10 @@ def test_collect_server_snapshot_error_on_db_failure() -> None:
     assert snapshot["status"] == SERVER_STATUS_ERROR
     assert snapshot["reason"] == "probe_exception"
     assert snapshot["connection_ratio"] is None
-    assert "connection refused" in (snapshot.get("error") or "")
+    # Client-facing error carries the exception class only — the raw
+    # message (which can embed host names / SQL fragments) must not leak.
+    assert snapshot.get("error") == "RuntimeError"
+    assert "connection refused" not in (snapshot.get("error") or "")
 
 
 # ---------------------------------------------------------------------------
