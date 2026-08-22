@@ -129,6 +129,12 @@ def validate_supply_chain() -> list[str]:
                             f"{rel} job {job_name} step {i}: checkout must set "
                             "persist-credentials: false"
                         )
+                    version = ref.split("@", 1)[1]
+                    if not re.fullmatch(r"[0-9a-f]{40}", version):
+                        errors.append(
+                            f"{rel} job {job_name} step {i}: {ref} must be "
+                            "pinned to a full 40-hex commit SHA"
+                        )
                     continue
                 if ref.startswith("docker://"):
                     if ref.count(":") < 2:

@@ -39,7 +39,8 @@ def _write_workflow(root: Path, body: str, name: str = "ci.yml") -> None:
     (wf / name).write_text(textwrap.dedent(body))
 
 
-MINIMAL_WORKFLOW = """\
+MINIMAL_WORKFLOW = textwrap.dedent(
+    """\
     name: t
     on:
       workflow_dispatch:
@@ -56,7 +57,8 @@ MINIMAL_WORKFLOW = """\
           - uses: actions/checkout@1111111111111111111111111111111111111111 # v4.0.0
             with:
               persist-credentials: false
-"""
+    """
+)
 
 
 class TestPinnedInstalls:
