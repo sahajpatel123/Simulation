@@ -145,7 +145,7 @@ def get_project_overview(
             logger.warning(
                 "project overview: %s panel failed for project %s: %s",
                 key,
-                project_id,
+                project_id,  # codeql[py/log-injection]: FastAPI coerces the path param to int before the handler
                 exc,
             )
 

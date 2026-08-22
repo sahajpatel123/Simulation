@@ -1800,8 +1800,8 @@ def record_outcome(
 
     logger.info(
         "[Outcome] Recorded — project_id=%s actual_conv=%.3f pred_conv=%s calibration=%.1f",
-        project_id,
-        payload.actual_conversion_rate,
+        project_id,  # codeql[py/log-injection]: FastAPI coerces the path param to int before the handler
+        payload.actual_conversion_rate,  # codeql[py/log-injection]: float-typed Pydantic schema field
         pred_conv,
         outcome.calibration_score or 0.0,
     )
@@ -1952,7 +1952,7 @@ def record_outcomes_batch(
 
     logger.info(
         "[Outcome] Batch recorded — project_id=%s rows=%d",
-        project_id,
+        project_id,  # codeql[py/log-injection]: FastAPI coerces the path param to int before the handler
         len(rows),
     )
     _invalidate_outcome_caches(current_user.id)
