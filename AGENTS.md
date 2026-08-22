@@ -72,6 +72,13 @@ Rules that keep CI green and secure:
   canceled; `tools/validate_ci.py` enforces this.
 - Do not grant `actions: write`; use `actions: read` or omit the scope.
 - Do not grant `id-token: write` outside `scorecard.yml`.
+- API error hygiene: `except ValueError` → HTTP 400 with the curated message
+  (`detail=str(exc)`) is fine — those messages are app-authored. Any other
+  exception class reaching an HTTPException must go through
+  `app.core.safe_errors.safe_error_label(exc)` (returns the class name only)
+  with the full exception logged server-side first. Raw `str(exc)` from
+  non-ValueError exceptions can embed SQL, hosts, or provider credentials —
+  see `tests/test_hardware_error_hygiene.py` for the enforced contract.
 - Set `persist-credentials: false` on every checkout step.
 - Use `if-no-files-found: error` when uploading scanner/audit reports.
 - Set a positive `timeout-minutes` on every CI job so workflows cannot hang

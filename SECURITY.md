@@ -158,7 +158,11 @@ against `pip install` lines are accepted, documented risk.
 - Proper authentication and authorization
 - Rate limiting on sensitive endpoints
 - Parameterized queries to prevent SQL injection
-- Proper error handling without exposing internals
+- Proper error handling without exposing internals: curated
+  `ValueError` messages may be returned as 400 details; every other
+  exception must be logged server-side and surfaced only as its class name
+  via `app.core.safe_errors.safe_error_label` (regression tests:
+  `tests/test_hardware_error_hygiene.py`, `tests/test_safe_errors.py`)
 
 ## Security Contact
 
