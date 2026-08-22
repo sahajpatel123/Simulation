@@ -7,8 +7,10 @@ can catch issues locally before pushing:
   - All YAML/TOML files under .github parse cleanly.
   - Security policy files exist (SECURITY.md, security report template, dependabot).
   - No .env* files are tracked by git.
-  - Every GitHub Action ref is pinned to a full version tag; community
-    (third-party) actions must be pinned to a full commit SHA.
+  - Every GitHub Action ref is pinned to a full commit SHA — first-party
+    and third-party alike — with the version kept as a trailing comment.
+    Mutable tags are rejected so a repointed tag can never swap code
+    into CI.
   - Every checkout sets persist-credentials: false.
   - Every workflow declares least-privilege permissions; no actions: write;
     id-token: write only in scorecard.yml.
@@ -135,22 +137,11 @@ def validate_supply_chain() -> list[str]:
                     continue
                 _, _, version = ref.partition("@")
                 if re.fullmatch(r"[0-9a-f]{40}", version or ""):
-                    continue  # full commit SHA is acceptable
-                if not version or version.count(".") < 2:
-                    errors.append(
-                        f"{rel} job {job_name} step {i}: {ref} is not pinned "
-                        "to a full version tag"
-                    )
-                    continue
-                # First-party refs (GitHub's own orgs) may ride version tags;
-                # community actions must pin an immutable commit SHA so a
-                # repointed tag can't swap code under us.
-                repo = ref.partition("@")[0]
-                if not repo.startswith(("actions/", "github/codeql-action")):
-                    errors.append(
-                        f"{rel} job {job_name} step {i}: {repo} must be pinned "
-                        "to a full 40-hex commit SHA (third-party action)"
-                    )
+                    continue  # immutable commit SHA — the only accepted form
+                errors.append(
+                    f"{rel} job {job_name} step {i}: {ref} must be pinned "
+                    "to a full 40-hex commit SHA"
+                )
     return errors
 
 
@@ -225,10 +216,10 @@ def validate_zizmor_config() -> list[str]:
         data = yaml.safe_load(fh) or {}
     rules = data.get("rules") or {}
     unpinned = rules.get("unpinned-uses") or {}
-    if unpinned.get("disable") is not True:
+    if unpinned.get("disable") is True:
         errors.append(
-            ".github/zizmor.yml: unpinned-uses must be disabled because this "
-            "repo pins actions to full version tags"
+            ".github/zizmor.yml: unpinned-uses must NOT be disabled — every "
+            "action is SHA-pinned now, so zizmor's default audit applies"
         )
     return errors
 

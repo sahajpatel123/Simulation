@@ -1,9 +1,7 @@
-rules:
-  # Pinning policy, enforced by tools/validate_ci.py: first-party actions
-  # (actions/*, github/codeql-action) ride full version tags; community
-  # third-party actions must be SHA-pinned. That's stricter than tags-only
-  # but not the blanket hash-everywhere policy zizmor wants, so disable its
-  # unpinned-uses audit here while still catching the other workflow-
-  # security classes.
-  unpinned-uses:
-    disable: true
+# Pinning policy, enforced by tools/validate_ci.py: EVERY action ref —
+# first-party and third-party alike — is pinned to an immutable commit SHA,
+# with the release version kept as a trailing comment. That is exactly the
+# policy zizmor's unpinned-uses audit enforces, so no rule overrides are
+# needed here anymore; the file stays as the documented home for future
+# audit tuning.
+rules: {}
