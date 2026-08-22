@@ -283,6 +283,26 @@ def stress_scenarios_to_markdown(
         lines.append(f"| {label} | {_md_cell(value)} |")
     lines.append("")
 
+    vulnerable = _text(data.get("most_vulnerable_scenario"))
+    if vulnerable:
+        match: dict[str, Any] | None = None
+        for raw in impacts:
+            impact = _as_dict(raw)
+            if vulnerable in (
+                _text(impact.get("scenario_key")),
+                _text(impact.get("scenario_name")),
+            ):
+                match = impact
+                break
+        if match:
+            name = _text(match.get("scenario_name")) or vulnerable
+            summary_text = _text(match.get("impact_summary"))
+            lines.append(
+                f"**Most vulnerable: {_escape_md_cell(name)}**"
+                f" — {_escape_md_cell(summary_text)}"
+            )
+            lines.append("")
+
     lines.append("## Scenario Impacts")
     lines.append("")
     if not impacts:

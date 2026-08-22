@@ -8,6 +8,7 @@ envelope, and the founder-facing Markdown brief.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 import types
@@ -217,3 +218,92 @@ def test_route_rejects_unsupported_format() -> None:
 
     assert exc.value.status_code == 400
     assert "unsupported export format" in exc.value.detail
+
+
+def _call_export_route(format: str):
+    """Call the export route with the analysis builder stubbed out."""
+    from app.api.v1 import simulations as sim_mod
+
+    sent: dict = {}
+
+    def _fake_builder(**kwargs):
+        sent.update(kwargs)
+        return _payload()
+
+    original = sim_mod.get_simulation_stress_scenarios
+    sim_mod.get_simulation_stress_scenarios = _fake_builder
+    try:
+        response = sim_mod.export_simulation_stress_scenarios(
+            simulation_id=77,
+            format=format,
+            db=object(),  # type: ignore[arg-type]
+            current_user=type("U", (), {"id": 42})(),
+        )
+    finally:
+        sim_mod.get_simulation_stress_scenarios = original
+
+    # The route forwards ownership context to the analysis route.
+    assert sent["simulation_id"] == 77
+    return response
+
+
+async def _drain(response) -> bytes:
+    return b"".join([chunk async for chunk in response.body_iterator])
+
+
+def _body(response) -> bytes:
+    return asyncio.run(_drain(response))
+
+
+def test_route_export_json_round_trip() -> None:
+    response = _call_export_route("json")
+
+    assert response.media_type == "application/json; charset=utf-8"
+    disposition = response.headers["Content-Disposition"]
+    assert 'filename="stress-scenarios-77.json"' in disposition
+    body = _body(response)
+    assert int(response.headers["Content-Length"]) == len(body)
+    parsed = json.loads(body.decode("utf-8"))
+    assert parsed["stress_scenarios"]["simulation_id"] == 77
+    assert parsed["metadata"]["user_id"] == 42
+    assert parsed["metadata"]["format_version"] == "1"
+
+
+def test_route_export_csv_round_trip() -> None:
+    response = _call_export_route("csv")
+
+    assert response.media_type == "text/csv; charset=utf-8"
+    assert 'filename="stress-scenarios-77.csv"' in (
+        response.headers["Content-Disposition"]
+    )
+    assert response.headers["Cache-Control"] == "no-store"
+    text = _body(response).decode("utf-8")
+    assert "section,Resilience Summary" in text.splitlines()
+
+
+def test_route_export_md_round_trip() -> None:
+    response = _call_export_route("md")
+
+    assert response.media_type == "text/markdown; charset=utf-8"
+    assert 'filename="stress-scenarios-77.md"' in (
+        response.headers["Content-Disposition"]
+    )
+    body = _body(response).decode("utf-8")
+    assert body.startswith("# Stress Scenarios")
+
+
+def test_markdown_brief_flags_most_vulnerable_scenario() -> None:
+    body = stress_scenarios_to_markdown(_payload())
+
+    assert (
+        "**Most vulnerable: Recession** — Price-sensitive clusters abandon cart."
+        in body
+    )
+
+
+def test_markdown_brief_skips_callout_without_matching_impact() -> None:
+    body = stress_scenarios_to_markdown(
+        _payload(most_vulnerable_scenario="UNKNOWN_KEY"),
+    )
+
+    assert "Most vulnerable:" not in body
