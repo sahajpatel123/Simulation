@@ -26,3 +26,6 @@ playwright==1.62.0
 sentry-sdk[fastapi]==2.66.1
 pytest==9.1.1
 tiktoken==0.13.0
+# Parsed by tools/validate_ci.py (CI hygiene enforcer) and its tests;
+# workflow-validation.yml installs this same pin for the standalone job.
+pyyaml==6.0.3
