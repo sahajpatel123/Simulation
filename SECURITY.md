@@ -48,9 +48,10 @@ This repository runs automated security scans:
 - **Actionlint + YAML/TOML validation + zizmor**: GitHub Actions workflow syntax, security-policy, and workflow-security static-analysis checks; actionlint is downloaded from a pinned release and checksum-verified (`workflow-validation.yml` runs `tools/validate_ci.py` plus `zizmor`)
 
 The `workflow-validation.yml` job also enforces that every GitHub Action ref is pinned
-to a full version tag, that every workflow declares least-privilege permissions,
-and that no workflow grants `actions: write`. YAML files are parsed and invalid
-workflow files fail the validator.
+to a full 40-hex commit SHA (with the release version kept as a trailing comment),
+that every pip install in a workflow pins an exact version, that every workflow
+declares least-privilege permissions, and that no workflow grants `actions: write`.
+YAML files are parsed and invalid workflow files fail the validator.
 
 Run `python3 tools/validate_ci.py` locally to check the same supply-chain,
 permissions, YAML/TOML, security-policy, env-file tracking, and job-timeout
@@ -58,7 +59,8 @@ rules before pushing.
 
 #### GitHub Actions hardening checklist
 
-- Every action ref is pinned to a full version tag or commit SHA.
+- Every action ref is pinned to a full 40-hex commit SHA (version kept as a
+  trailing comment).
 - Every workflow declares a top-level least-privilege `permissions` block.
 - No workflow grants `actions: write`; `id-token: write` is only allowed in
   `scorecard.yml`.
@@ -66,8 +68,8 @@ rules before pushing.
 - Every job sets a positive `timeout-minutes`.
 - Every workflow has a `workflow_dispatch` trigger.
 - Artifact uploads fail with `if-no-files-found: error`.
-- Workflows pass `zizmor` with `.github/zizmor.yml` (hash-pinning disabled
-  because tag pinning is enforced separately).
+- Workflows pass `zizmor` with `.github/zizmor.yml` (all rules enabled —
+  SHA-everywhere satisfies the `unpinned-uses` audit).
 
 ### Running Security Checks Locally
 
@@ -99,6 +101,28 @@ uvx zizmor@1.28.0 --config .github/zizmor.yml .github/workflows
 - Dependabot watches Python, npm, GitHub Actions, and the Docker base image
 - All dependencies are pinned to specific versions in `requirements.txt`
 - Regular audits are recommended
+
+#### Dependency hash-pinning deferral (deliberate exception)
+
+OpenSSF Scorecard's `PinnedDependencies` check prefers `pip install
+--require-hashes` with a fully hash-locked requirements file (a per-artifact
+SHA-256 for every wheel/sdist). This repo pins **exact versions**
+(`package==X.Y.Z`) for every direct dependency and every CI pip install,
+enforced by `tools/validate_ci.py`, with Dependabot keeping the pins fresh
+weekly — but we deliberately defer per-artifact hash-locking:
+
+1. Generating a correct lockfile requires resolving wheels on the **target
+   platform** (Linux x86_64, the CI runner). Hashes resolved on macOS pick
+   different wheel artifacts and would fail or silently diverge in CI.
+2. The residual risk hash-pinning closes — a compromised index serving a
+   trojaned wheel under a correct version number — is largely mitigated here
+   by exact-version pins plus three independent advisory scanners
+   (pip-audit, Safety, Trivy) running on every push and weekly.
+
+If/when the project adopts a Linux-based lockfile step (e.g. `pip-compile
+--generate-hashes` in a container), this exception should be revisited and
+hash-locking enabled. Until then, the Scorecard `PinnedDependencies` findings
+against `pip install` lines are accepted, documented risk.
 
 ### Secrets Management
 
@@ -191,4 +215,10 @@ For security concerns, please contact the project maintainers.
   summarizing the enforced CI invariants.
 - 2026-08-10 - Extended `tools/validate_ci.py` to require a `concurrency`
   block on every workflow so overlapping runs are canceled promptly.
+- 2026-08-23 - Hardened the action-pinning policy from version tags to full
+  40-hex commit SHAs across every workflow, enforced by `tools/validate_ci.py`;
+  re-enabled zizmor's `unpinned-uses` audit; extended the validator to require
+  exact-version pins on every workflow pip install; and documented the
+  deliberate deferral of `--require-hashes` hash-locking (requires Linux-native
+  wheel resolution) as an accepted risk.
 - [VERSION] - Initial security policy

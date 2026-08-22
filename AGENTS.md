@@ -55,8 +55,13 @@ The repo ships several GitHub Actions workflows in `.github/workflows/`:
 Rules that keep CI green and secure:
 
 - Never commit `.env*` files (only `.env.example`); CI fails if one is tracked.
-- Pin every GitHub Action to a full version tag (e.g. `@v6.0.2`), never `@master`
-  or a floating `@vN` — `workflow-validation.yml` enforces this.
+- Pin every GitHub Action to a full 40-hex commit SHA (e.g.
+  `actions/checkout@<sha> # v7.0.1`), never `@master`, a floating `@vN`, or a
+  mutable tag — `tools/validate_ci.py` enforces this; the trailing comment
+  keeps the release version human-readable.
+- Pin every pip install in a workflow to an exact version (`pkg==X.Y.Z`);
+  `-r requirements.txt` includes are exempt — the referenced file is the pin
+  source and every entry there is exact-pinned too.
 - When a workflow downloads a tool (actionlint, scanners, etc.), pin the exact
   release and verify the artifact checksum before using it.
 - If a security scanner cannot run, fix the runner; do not silence it with `|| true`.
