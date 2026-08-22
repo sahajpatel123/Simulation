@@ -12,6 +12,11 @@ founder record *what happened* and see the consequence:
 * ``POST /projects/{project_id}/assumptions/evidence/import/csv`` does the
   same from raw CSV text — a downloaded export can be filled in offline
   and pasted straight back.
+* ``POST /projects/{project_id}/assumptions/import`` bulk-creates
+  assumptions (JSON rows), skipping duplicates against the project and
+  within the batch so re-imports are idempotent.
+* ``POST /projects/{project_id}/assumptions/import/csv`` does the same
+  from raw CSV text with per-row skip reasons.
 * ``GET /projects/{project_id}/assumptions/{assumption_id}/evidence-scorecard``
   returns the evidence history plus the before/after validation-ROI shift
   implied by the derived confidence tier.
@@ -76,6 +81,14 @@ from app.schemas.assumption_evidence import (
     EvidenceImportRow,
     EvidenceImportSkippedRow,
     EvidenceOut,
+)
+from app.schemas.assumption_import import (
+    ASSUMPTION_IMPORT_MAX_ROWS,
+    SENSITIVITY_LITERAL,
+    AssumptionImportOut,
+    AssumptionImportRequest,
+    AssumptionImportRow,
+    AssumptionImportSkippedRow,
 )
 from app.schemas.evidence_staleness import (
     EvidenceStalenessOut,
@@ -157,6 +170,9 @@ _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}
 # literals the JSON schemas enforce.
 VALID_METHOD_IDS: frozenset[str] = frozenset(get_args(METHOD_ID_LITERAL))
 VALID_RESULT_IDS: frozenset[str] = frozenset(get_args(EVIDENCE_RESULT_LITERAL))
+VALID_SENSITIVITY_IDS: frozenset[str] = frozenset(
+    get_args(SENSITIVITY_LITERAL)
+)
 
 
 def _assumption_or_404(
@@ -454,6 +470,210 @@ async def import_assumption_evidence_csv(
         )
 
     return _apply_evidence_import(db, project.id, parsed_rows, parse_skips)
+
+
+def _apply_assumption_import(
+    db: Session,
+    project_id: int,
+    parsed_rows: list[AssumptionImportRow],
+    parse_skips: list[AssumptionImportSkippedRow],
+) -> AssumptionImportOut:
+    """Create parsed assumption rows, skipping duplicates.
+
+    Shared by the JSON and CSV assumption-import routes. A row is skipped
+    when its text (case-insensitively) already exists in the project or
+    repeats earlier in the same batch, making re-imports idempotent.
+    """
+    existing_keys = {
+        (assumption.text or "").strip().casefold()
+        for assumption in db.query(Assumption)
+        .filter(Assumption.project_id == project_id)
+        .all()
+    }
+
+    rows_to_insert: list[Assumption] = []
+    skipped_rows = list(parse_skips)
+    for index, row in enumerate(parsed_rows):
+        key = row.text.strip().casefold()
+        if key in existing_keys:
+            skipped_rows.append(
+                AssumptionImportSkippedRow(
+                    index=index,
+                    reason=(
+                        "an assumption with this text already exists in "
+                        "this project"
+                    ),
+                )
+            )
+            continue
+        existing_keys.add(key)
+        rows_to_insert.append(
+            Assumption(
+                project_id=project_id,
+                text=row.text.strip(),
+                category=row.category.strip() or "Market",
+                sensitivity=row.sensitivity,
+                impact_score=min(10.0, max(1.0, row.impact_score)),
+            )
+        )
+
+    # One commit for the whole batch — never per-row commits in a loop.
+    if rows_to_insert:
+        db.add_all(rows_to_insert)
+        db.commit()
+
+    return AssumptionImportOut(
+        project_id=project_id,
+        imported_count=len(rows_to_insert),
+        skipped_count=len(skipped_rows),
+        skipped_rows=skipped_rows,
+    )
+
+
+@router.post(
+    "/{project_id}/assumptions/import",
+    response_model=AssumptionImportOut,
+    summary="Bulk-create assumptions on a project (idempotent)",
+    responses=_JSON_200,
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def import_assumptions(
+    project_id: int,
+    payload: AssumptionImportRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AssumptionImportOut:
+    """
+    Create many assumptions in one call — the write-side complement to the
+    assumption-bearing exports. Rows whose text already exists in the
+    project (or repeats within the batch) are skipped with reasons instead
+    of creating duplicates, so re-running an import is safe. Valid rows
+    insert in a single commit.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+    return _apply_assumption_import(db, project.id, payload.rows, [])
+
+
+_ASSUMPTION_CSV_REQUIRED_HEADERS: tuple[str, ...] = ("text",)
+
+
+@router.post(
+    "/{project_id}/assumptions/import/csv",
+    response_model=AssumptionImportOut,
+    summary="Bulk-create assumptions from raw CSV text",
+    responses=_JSON_200,
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+async def import_assumptions_csv(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AssumptionImportOut:
+    """
+    Paste an assumption list straight into TheCee: raw CSV text with the
+    columns ``text`` plus optional ``category``, ``sensitivity``, and
+    ``impact_score``. Case-normalised sensitivity; rows failing parsing
+    are skipped with reasons; valid rows insert in a single commit.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+    try:
+        text = (await request.body()).decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"request body is not valid UTF-8 text: {exc}",
+        ) from exc
+
+    reader = csv.DictReader(io.StringIO(text))
+    headers = [header.strip() for header in (reader.fieldnames or [])]
+    if "text" not in headers:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "CSV is missing required column(s): text; expected header "
+                "row with text[, category, sensitivity, impact_score]"
+            ),
+        )
+
+    def _cell(row: dict[str, str | None], name: str) -> str:
+        value = row.get(name)
+        return "" if value is None else value.strip()
+
+    parsed_rows: list[AssumptionImportRow] = []
+    parse_skips: list[AssumptionImportSkippedRow] = []
+    data_index = -1
+    for raw in reader:
+        cells = {
+            (key.strip() if key else key): value
+            for key, value in raw.items()
+        }
+        if not any((value or "").strip() for value in cells.values()):
+            continue  # entirely blank line — not a data row
+        data_index += 1
+
+        def skip(reason: str) -> None:
+            parse_skips.append(
+                AssumptionImportSkippedRow(
+                    index=data_index,
+                    reason=reason,
+                )
+            )
+
+        row_text = _cell(cells, "text")
+        if not row_text:
+            skip("text is empty")
+            continue
+        if len(row_text) > 2000:
+            skip("text exceeds the 2000-character limit")
+            continue
+
+        sensitivity = _cell(cells, "sensitivity").upper() or "MEDIUM"
+        if sensitivity not in VALID_SENSITIVITY_IDS:
+            skip(
+                f"sensitivity {sensitivity!r} is not one of "
+                "LOW/MEDIUM/HIGH/CRITICAL"
+            )
+            continue
+
+        category = _cell(cells, "category") or "Market"
+        if len(category) > 100:
+            skip("category exceeds the 100-character limit")
+            continue
+
+        impact_raw = _cell(cells, "impact_score")
+        impact_score = 5.0
+        if impact_raw:
+            try:
+                impact_score = float(impact_raw)
+            except ValueError:
+                skip(f"impact_score {impact_raw!r} is not a number")
+                continue
+            if not 1.0 <= impact_score <= 10.0:
+                skip("impact_score must be between 1.0 and 10.0")
+                continue
+
+        parsed_rows.append(
+            AssumptionImportRow.model_validate(
+                {
+                    "text": row_text,
+                    "category": category,
+                    "sensitivity": sensitivity,
+                    "impact_score": impact_score,
+                }
+            )
+        )
+
+    if len(parsed_rows) + len(parse_skips) > ASSUMPTION_IMPORT_MAX_ROWS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"CSV exceeds the {ASSUMPTION_IMPORT_MAX_ROWS}-row import "
+                "limit"
+            ),
+        )
+
+    return _apply_assumption_import(db, project.id, parsed_rows, parse_skips)
 
 
 @router.get(
