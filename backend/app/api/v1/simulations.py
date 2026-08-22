@@ -220,6 +220,14 @@ from app.simulation.cluster_trend import (
     normalise_bin as normalise_trend_bin,
 )
 from app.simulation.clusters.registry import ClusterRegistry
+from app.simulation.cohort_retention_export import (
+    FORMAT_VERSION as cohort_retention_export_FORMAT_VERSION,
+)
+from app.simulation.cohort_retention_export import (
+    cohort_retention_to_csv,
+    cohort_retention_to_json,
+    cohort_retention_to_markdown,
+)
 from app.simulation.competitive_moat import build_competitive_moat
 from app.simulation.conductor import ARCHITECT_STACKS, Conductor
 from app.simulation.coverage_gaps import build_coverage_gaps
@@ -5349,6 +5357,112 @@ def get_cohort_retention(
         cluster_registry=registry,
         aov=aov,
         limit=limit,
+    )
+
+
+@router.get(
+    "/{simulation_id}/cohort-retention/export",
+    response_class=StreamingResponse,
+    summary="Export the cohort-retention projection as CSV, JSON, or Markdown",
+)
+def export_cohort_retention(
+    simulation_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly tables; ``json`` returns the raw "
+            "projection payload; ``md`` returns a founder-facing brief."
+        ),
+    ),
+    cluster_limit: int = Query(
+        default=52,
+        ge=1,
+        le=52,
+        description="Maximum number of cluster profiles to include.",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Export the cohort-retention projection for a simulation.
+
+    Reuses the same projection as
+    ``GET /{simulation_id}/cohort-retention`` — the response body is just a
+    different serialization of that result, so founders can drop survival
+    curves, churn risk, and LTV estimates into a spreadsheet or share them
+    with a team.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json", "md"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; "
+                "expected 'csv', 'json', or 'md'"
+            ),
+        )
+
+    result = get_cohort_retention(
+        simulation_id=simulation_id,
+        db=db,
+        current_user=current_user,
+        cluster_limit=cluster_limit,
+    )
+    result_data = (
+        result.model_dump() if hasattr(result, "model_dump") else dict(result)
+    )
+
+    metadata = {
+        "generated_at": datetime.now(tz=UTC).isoformat(),
+        "user_id": current_user.id,
+        "simulation_id": simulation_id,
+        "project_id": result_data.get("project_id"),
+        "format_version": cohort_retention_export_FORMAT_VERSION,
+    }
+
+    if fmt == "json":
+        body = cohort_retention_to_json(result, metadata=metadata).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="cohort-retention-{simulation_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    if fmt == "md":
+        body = cohort_retention_to_markdown(result, metadata=metadata).encode(
+            "utf-8"
+        )
+        return StreamingResponse(
+            iter([body]),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="cohort-retention-{simulation_id}.md"'
+                ),
+                "Content-Length": str(len(body)),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    csv_text = cohort_retention_to_csv(result, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="cohort-retention-{simulation_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
+        },
     )
 
 
