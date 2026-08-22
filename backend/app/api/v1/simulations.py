@@ -356,6 +356,14 @@ from app.simulation.simulation_export import (
     build_simulation_export,
     simulation_to_csv,
 )
+from app.simulation.stress_scenarios_export import (
+    FORMAT_VERSION as stress_scenarios_export_FORMAT_VERSION,
+)
+from app.simulation.stress_scenarios_export import (
+    stress_scenarios_to_csv,
+    stress_scenarios_to_json,
+    stress_scenarios_to_markdown,
+)
 from app.simulation.support_friction import build_support_friction
 from app.simulation.sustainability_positioning import (
     build_sustainability_positioning,
@@ -4941,6 +4949,100 @@ def get_simulation_stress_scenarios(
     )
 
     return analyzer.to_dict(stress_result)
+
+
+@router.get(
+    "/{simulation_id}/stress-scenarios/export",
+    response_class=StreamingResponse,
+    summary="Export stress-scenario resilience analysis as CSV, JSON, or Markdown",
+)
+def export_simulation_stress_scenarios(
+    simulation_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the "
+            "spreadsheet-friendly tables; ``json`` returns the raw "
+            "resilience payload; ``md`` returns a founder-facing brief."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Export the stress-scenario resilience analysis for a simulation.
+
+    Reuses the same projection as
+    ``GET /{simulation_id}/stress-scenarios`` — the response body is just a
+    different serialization of that result, so founders can drop the
+    recession / price-war / viral-catalyst / channel-bottleneck comparison
+    into a spreadsheet or share it with a team.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json", "md"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; "
+                "expected 'csv', 'json', or 'md'"
+            ),
+        )
+
+    result = get_simulation_stress_scenarios(
+        simulation_id=simulation_id,
+        db=db,
+        current_user=current_user,
+    )
+
+    metadata = {
+        "generated_at": datetime.now(tz=UTC).isoformat(),
+        "user_id": current_user.id,
+        "simulation_id": simulation_id,
+        "project_id": result.get("project_id"),
+        "format_version": stress_scenarios_export_FORMAT_VERSION,
+    }
+
+    if fmt == "json":
+        body = stress_scenarios_to_json(result, metadata=metadata).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="stress-scenarios-{simulation_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    if fmt == "md":
+        body = stress_scenarios_to_markdown(result, metadata=metadata).encode("utf-8")
+        return StreamingResponse(
+            iter([body]),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="stress-scenarios-{simulation_id}.md"'
+                ),
+                "Content-Length": str(len(body)),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    csv_text = stress_scenarios_to_csv(result, metadata=metadata)
+    body = csv_text.encode("utf-8")
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="stress-scenarios-{simulation_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.post(
