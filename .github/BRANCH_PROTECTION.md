@@ -10,12 +10,32 @@ This document describes how to configure branch protection rules for the TheCee 
    - Dismiss stale pull request approvals when new commits are pushed: ✓
 
 2. **Require status checks to pass before merging**
-   - Enable: ✓ Require status checks to pass before merging
-   - Required checks:
-     - `backend-ci/test` (pytest)
-     - `lint/ruff` (Python linting)
-     - `security-scan/bandit` (Python security)
-     - `security-scan/pip-audit`, `security-scan/safety` (dependency security)
+
+   Check names must match the *displayed* check-run name (`name:` if set,
+   otherwise the job id). Current names by workflow:
+
+   | Workflow | Check name |
+   |----------|------------|
+   | backend-ci.yml | `pytest` |
+   | lint.yml | `ruff (Python lint)` |
+   | workflow-validation.yml | `Validate workflow syntax` |
+   | workflow-validation.yml | `Validate CI hygiene (local parity script)` |
+   | workflow-validation.yml | `Validate workflows with zizmor` |
+   | security-scan.yml | `bandit (Python security)` |
+   | security-scan.yml | `pip-audit (dependency CVEs)` |
+   | security-scan.yml | `safety (Python advisory DB)` |
+   | codeql.yml | `Analyze (python)`, `Analyze (javascript)` |
+   | scorecard.yml | `Scorecard analysis` |
+
+   Minimum required set (fast, blocking-worthy):
+   `pytest`, `ruff (Python lint)`, `Validate CI hygiene (local parity script)`,
+   `bandit (Python security)`, `pip-audit (dependency CVEs)`,
+   `safety (Python advisory DB)`.
+
+   > In this repo's solo/direct-push mode these gates matter most for
+   > **Dependabot and automated PRs** — a red check blocks an auto-merge of a
+   > bad dependency bump. Direct pushes by the maintainer bypass PR gating
+   > by design.
 
 3. **Require branches to be up to date before merging**
    - Enable: ✓ Require branches to be up to date before merging
@@ -30,16 +50,32 @@ This document describes how to configure branch protection rules for the TheCee 
 ## GitHub CLI Commands to Set Up Branch Protection
 
 ```bash
-# Set up branch protection for main
-gh api \
-  --method PUT \
-  -H "Accept: application/vnd.github+json" \
-  /repos/{owner}/{repo}/branches/main/protection \
-  -f required_status_checks.required_status_checks='["backend-ci/test", "lint/ruff", "security-scan/bandit", "security-scan/pip-audit"]' \
-  -f required_status_checks.strict=true \
-  -f required_pull_request_reviews.dismiss_stale_reviews=true \
-  -f required_pull_request_reviews.required_approving_review_count=1 \
-  -f enforce_admins=true
+# Set up branch protection for main.
+# gh's -f flag cannot express nested arrays here reliably — pass JSON via --input.
+cat <<'JSON' | gh api --method PUT --input - \
+  repos/sahajpatel123/Simulation/branches/main/protection
+{
+  "required_status_checks": {
+    "strict": true,
+    "contexts": [
+      "pytest",
+      "ruff (Python lint)",
+      "Validate CI hygiene (local parity script)",
+      "bandit (Python security)",
+      "pip-audit (dependency CVEs)",
+      "safety (Python advisory DB)"
+    ]
+  },
+  "required_pull_request_reviews": {
+    "dismiss_stale_reviews": true,
+    "required_approving_review_count": 1
+  },
+  "enforce_admins": true,
+  "restrictions": null,
+  "allow_force_pushes": false,
+  "allow_deletions": false
+}
+JSON
 ```
 
 ## GitHub App for Automated Security
@@ -52,9 +88,14 @@ Consider installing:
 
 ## Security Integration Steps
 
-1. Enable **Secret scanning** in repository settings
-2. Enable **Code scanning** with CodeQL
-3. Enable **Dependabot security updates** (already configured)
+1. Enable **Secret scanning** (+ push protection, validity checks,
+   non-provider patterns) in repository settings — see SECURITY.md
+   ("GitHub Repository Security Features"); verify with
+   `gh api repos/<owner>/<repo> --jq .security_and_analysis`
+2. Enable **Code scanning** with CodeQL (workflow already committed)
+3. Enable **Dependabot security updates** in repository settings — the
+   dependabot.yml version-bump config is separate from this toggle and does
+   not enable it by itself
 4. Set up **security advisories** for any discovered vulnerabilities
 5. Configure **security overview** to track vulnerability status
 
@@ -67,11 +108,13 @@ from fastapi.middleware import Middleware
 from fastapi.middleware.security import SecurityMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 
-# In your main app configuration
+# In your main app configuration.
+# NOTE: allow_credentials stays False per the project decision log — JWT is
+# sent via the Authorization header, never cookies.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://yourdomain.com"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
