@@ -63,8 +63,14 @@ def generate_api_token() -> str:
 
 
 def hash_api_token(token: str) -> str:
-    """Return the SHA-256 hex digest persisted instead of the plaintext token."""
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+    """Return the SHA-256 hex digest persisted instead of the plaintext token.
+
+    SHA-256 is the right primitive here: the input is a 256-bit high-entropy
+    opaque token (``secrets.token_urlsafe``), not a human-chosen password, so
+    brute-forcing the digest is infeasible and a slow KDF would only add
+    per-request latency. Human passwords use bcrypt via ``pwd_context``.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()  # codeql[py/weak-sensitive-data-hashing]: high-entropy opaque token, not a password — bcrypt covers passwords above
 
 
 def api_token_expiry(expires_in_days: int | None = None) -> datetime:
