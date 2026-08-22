@@ -64,9 +64,13 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip --quiet
+          # Every install pins an exact version — unpinned installs are a
+          # supply-chain hole (scorecard PinnedDependencies) and make CI
+          # non-reproducible. Dependabot's pip ecosystem keeps the
+          # requirements.txt pins fresh weekly.
+          python -m pip install --quiet "pip==25.2"
           pip install --no-cache-dir -r requirements.txt
-          pip install --no-cache-dir pytest pytest-asyncio pytest-cov
+          pip install --no-cache-dir "pytest==9.1.1" "pytest-asyncio==1.4.0" "pytest-cov==7.1.0"
 
       - name: Check for secrets in codebase
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0

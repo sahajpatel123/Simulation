@@ -65,7 +65,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install PyYAML
-        run: pip install --quiet pyyaml
+        run: pip install --quiet "pyyaml==6.0.3"
 
       - name: Run CI hygiene checks
         run: |

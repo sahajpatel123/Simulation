@@ -18,6 +18,7 @@ can catch issues locally before pushing:
   - Every workflow includes a workflow_dispatch trigger for manual runs.
   - The zizmor config disables hash-pinning (this repo pins to full tags instead).
   - Artifact uploads fail when no files are found instead of passing silently.
+  - Every pip install in a workflow run block pins an exact version.
   - Every workflow declares a concurrency block to cancel superseded runs.
 
 Usage:
@@ -254,6 +255,49 @@ def validate_concurrency() -> list[str]:
     return errors
 
 
+def validate_pinned_installs() -> list[str]:
+    """Every pip install inside a workflow ``run`` block pins exact versions.
+
+    Unpinned installs float to whatever the index serves at run time —
+    a supply-chain hole (scorecard PinnedDependencies) and a
+    reproducibility hazard. ``-r requirements.txt`` style includes are
+    exempt; the referenced file is the pin source.
+    """
+    errors: list[str] = []
+    exempt_tokens = {"pip", "install", "python", "-m", "--quiet", "--no-cache-dir", "--upgrade", "--upgrade-strategy"}
+    for path in sorted(glob.glob(str(ROOT / ".github" / "workflows" / "*.yml"))):
+        with open(path) as fh:
+            data = yaml.safe_load(fh) or {}
+        rel = Path(path).relative_to(ROOT)
+        for job_name, job in (data.get("jobs") or {}).items():
+            for i, step in enumerate((job.get("steps") or []), 1):
+                run = step.get("run") or ""
+                for line in run.splitlines():
+                    stripped = line.strip()
+                    if not (
+                        stripped.startswith("pip install")
+                        or stripped.startswith("python -m pip install")
+                    ):
+                        continue
+                    tokens = stripped.split()
+                    if any(t in ("-r", "--requirement") for t in tokens):
+                        continue
+                    specs = [
+                        t
+                        for t in tokens
+                        if re.match(r"^[A-Za-z0-9_]", t)
+                        and t not in exempt_tokens
+                        and not t.startswith("-")
+                    ]
+                    unpinned = [s for s in specs if "==" not in s]
+                    if unpinned:
+                        errors.append(
+                            f"{rel} job {job_name} step {i}: pip install "
+                            f"without exact pin: {', '.join(unpinned)}"
+                        )
+    return errors
+
+
 def validate_security_events_permission() -> list[str]:
     """SARIF/CodeQL uploaders must declare `security-events: write`."""
     errors: list[str] = []
@@ -299,6 +343,7 @@ def main() -> int:
         ("artifact uploads", validate_artifacts),
         ("concurrency", validate_concurrency),
         ("SARIF permissions", validate_security_events_permission),
+        ("pinned installs", validate_pinned_installs),
     ]
     errors: list[str] = []
     for label, func in checks:
