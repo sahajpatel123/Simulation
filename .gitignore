@@ -139,3 +139,4 @@ thecee-backend/
 
 # OpenCode local agent state
 .opencode/
+.venv_test/
