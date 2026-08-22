@@ -95,7 +95,9 @@ jobs:
 
       - name: Run pytest with coverage
         run: |
-          pytest tests/ -v --maxfail=5 --tb=short --cov=app --cov-report=term-missing --cov-fail-under=0
+          # term-missing keeps the human-readable table in the log; xml is what
+          # the upload step below packages (it errors on missing files).
+          pytest tests/ -v --maxfail=5 --tb=short --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=0
 
       - name: Upload test coverage
         uses: actions/upload-artifact@v7.0.1
