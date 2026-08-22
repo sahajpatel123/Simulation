@@ -303,6 +303,14 @@ def _md_date(value: Any) -> str:
     return _escape_md_cell(text.split("T", 1)[0].split(" ", 1)[0])
 
 
+def _trigger_count(value: Any) -> int:
+    """Coerce a churn-trigger histogram count for sorting."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 def cohort_retention_to_markdown(
     payload: Any,
     metadata: dict[str, Any] | None = None,
@@ -361,6 +369,28 @@ def cohort_retention_to_markdown(
     worst = _text(data.get("worst_retention_cluster"))
     if worst:
         lines.append(f"**Weakest cohort: {_escape_md_cell(worst)}**")
+        lines.append("")
+
+    viable_count = sum(
+        1 for raw in profiles if _as_dict(raw).get("reengagement_viable")
+    )
+    if profiles and viable_count:
+        lines.append(
+            f"*{viable_count} of {len(profiles)} clusters remain "
+            "re-engagement viable.*"
+        )
+        lines.append("")
+
+    triggers = _as_dict(data.get("churn_trigger_distribution"))
+    if triggers:
+        lines.append("## Churn Triggers")
+        lines.append("")
+        lines.append("| Trigger | Clusters |")
+        lines.append("| --- | --- |")
+        for trigger, count in sorted(
+            triggers.items(), key=lambda kv: (-_trigger_count(kv[1]), str(kv[0]))
+        ):
+            lines.append(f"| {_escape_md_cell(trigger)} | {_md_cell(count)} |")
         lines.append("")
 
     if segments:

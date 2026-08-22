@@ -241,6 +241,31 @@ def test_markdown_brief_empty_fallback() -> None:
     assert "## Recommendations" not in body
 
 
+def test_markdown_brief_ranks_churn_triggers_and_tallies_reengagement() -> None:
+    body = cohort_retention_to_markdown(_payload())
+
+    triggers_at = body.index("## Churn Triggers")
+    segments_at = body.index("## Segments")
+    assert triggers_at < segments_at  # trigger table sits before segments
+    # Sorted by count descending.
+    price_at = body.index("| PRICE | 7 |")
+    trust_at = body.index("| TRUST | 3 |")
+    assert price_at < trust_at
+
+    # One of the two fixture clusters is re-engagement viable.
+    assert "*1 of 2 clusters remain re-engagement viable.*" in body
+
+
+def test_markdown_brief_skips_reengagement_when_none_viable() -> None:
+    payload = _payload()
+    for profile in payload["cluster_profiles"]:
+        profile["reengagement_viable"] = False
+
+    body = cohort_retention_to_markdown(payload)
+
+    assert "re-engagement viable" not in body
+
+
 def test_export_route_registered() -> None:
     from app.api.v1 import simulations as sim_mod
 
