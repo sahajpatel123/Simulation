@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
@@ -12,6 +13,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.rate_limiter import rate_limit
+from app.core.safe_errors import safe_error_label
 from app.hardware.competitive_analysis import HardwareCompetitiveAnalyser
 from app.hardware.engineering_plate import compute_engineering_plate_labels
 from app.hardware.manufacturing_cost import ManufacturingCostAnalyser
@@ -41,6 +43,8 @@ from app.tasks.hardware_consumer_simulation import run_hardware_consumer_simulat
 from app.tasks.hardware_tasks import run_hardware_tests
 
 router = APIRouter(tags=["hardware"])
+
+logger = logging.getLogger(__name__)
 
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
 _JSON_202 = {202: {"description": "Accepted", "content": {"application/json": {}}}}
@@ -146,9 +150,12 @@ def generate_hardware_spec(
             detail=str(e),
         ) from e
     except RuntimeError as e:
+        # RuntimeError text can embed upstream provider error details — log
+        # server-side and return only the exception class name.
+        logger.error("hardware spec generation failed: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(e),
+            detail=safe_error_label(e),
         ) from e
 
     weight = spec.get("dimensions", {}).get("weight_grams")
@@ -246,9 +253,11 @@ def refine_hardware_spec(
             detail=str(e),
         ) from e
     except RuntimeError as e:
+        # Same trust-boundary rule: log full detail, return the class name.
+        logger.error("hardware spec refinement failed: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(e),
+            detail=safe_error_label(e),
         ) from e
 
     new_model = Hardware3DModel(

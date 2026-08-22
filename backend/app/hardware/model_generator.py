@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any
 
@@ -11,6 +12,8 @@ from app.core.prompts import (
     HARDWARE_SPEC_REFINE_TAIL,
     validate_hardware_spec,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _extract_json_object(raw: str) -> dict[str, Any]:
@@ -42,12 +45,19 @@ class HardwareModelGenerator:
                 timeout=120,
             )
             if out.get("error"):
-                raise RuntimeError(str(out.get("error", "Claude unavailable")))
+                # The upstream error field can embed provider request IDs and
+                # account details — log it server-side, raise a safe label so
+                # no provider text reaches API error responses.
+                logger.error(
+                    "Claude fallback error (hardware spec): %s", out.get("error")
+                )
+                raise RuntimeError("ClaudeUnavailable")
             raw = out.get("content") or ""
         except RuntimeError:
             raise
         except Exception as e:
-            raise RuntimeError(f"Claude call failed: {e}") from e
+            logger.error("Claude call failed (hardware spec): %s", e, exc_info=True)
+            raise RuntimeError("ClaudeCallFailed") from e
         try:
             spec = _extract_json_object(raw)
         except json.JSONDecodeError as e:
