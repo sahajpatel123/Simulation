@@ -31,6 +31,26 @@ We take security seriously. If you discover a security vulnerability in TheCee, 
 
 ## Security Practices
 
+### GitHub Repository Security Features
+
+This public repository enables every free GitHub-native security feature
+(verified/enforced via the API; re-check with
+`gh api repos/<owner>/<repo> --jq .security_and_analysis`):
+
+- **Secret scanning** — detects known credential formats pushed anywhere in
+  the repo, including the full git history.
+- **Secret scanning push protection** — blocks a push containing a recognized
+  secret before it lands, rather than alerting after the fact.
+- **Validity checks** — tests detected secrets against the provider to flag
+  ones that are still live.
+- **Non-provider patterns** — also matches generic high-entropy patterns not
+  tied to a specific provider.
+- **Dependabot security updates** — automatic PRs for dependencies with known
+  CVEs, complementing the weekly pip-audit/Safety/Trivy scans.
+
+If any of these show `disabled`, re-enable them — they are part of the
+project's security posture, not optional extras.
+
 ### CI/CD Security Checks
 
 This repository runs automated security scans:
@@ -222,6 +242,10 @@ For security concerns, please contact the project maintainers.
   exact-version pins on every workflow pip install; and documented the
   deliberate deferral of `--require-hashes` hash-locking (requires Linux-native
   wheel resolution) as an accepted risk.
+- 2026-08-23 - Enabled all free GitHub-native repository security features
+  for this public repo: secret scanning (+ push protection, validity checks,
+  non-provider patterns) and Dependabot security updates. Documented in
+  SECURITY.md as part of the required security posture.
 - 2026-08-23 - Extended `tools/validate_ci.py` to require every Dockerfile
   `FROM` to pin its base image by sha256 digest, and digest-pinned
   `python:3.11-slim` — closing the last mutable-ref supply-chain surface
