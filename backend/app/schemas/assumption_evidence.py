@@ -35,6 +35,55 @@ class EvidenceCreate(BaseModel):
     notes: str | None = Field(default=None, max_length=500)
 
 
+EVIDENCE_IMPORT_MAX_ROWS: int = 200
+
+
+class EvidenceImportRow(BaseModel):
+    """One experiment result inside a bulk evidence import."""
+
+    model_config = {"extra": "forbid"}
+
+    assumption_id: int
+    method: METHOD_ID_LITERAL
+    result: EVIDENCE_RESULT_LITERAL
+    observed_metric: float | None = Field(default=None, ge=0.0)
+    notes: str | None = Field(default=None, max_length=500)
+
+
+class EvidenceImportRequest(BaseModel):
+    """Body for bulk-logging validation experiment results."""
+
+    model_config = {"extra": "forbid"}
+
+    rows: list[EvidenceImportRow] = Field(
+        min_length=1,
+        max_length=EVIDENCE_IMPORT_MAX_ROWS,
+    )
+
+
+class EvidenceImportSkippedRow(BaseModel):
+    """One rejected import row, with why it was rejected."""
+
+    index: int = Field(ge=0)
+    assumption_id: int | None = None
+    reason: str
+
+
+class EvidenceImportOut(BaseModel):
+    """Result summary of a bulk evidence import.
+
+    Valid rows are inserted atomically; invalid rows never block valid
+    ones — each is reported in ``skipped_rows`` with a founder-readable
+    reason so a spreadsheet paste can be corrected and re-run.
+    """
+
+    project_id: int
+    imported_count: int = Field(default=0, ge=0)
+    skipped_count: int = Field(default=0, ge=0)
+    skipped_rows: list[EvidenceImportSkippedRow] = Field(default_factory=list)
+    assumption_ids_touched: list[int] = Field(default_factory=list)
+
+
 class EvidenceOut(BaseModel):
     """One recorded experiment, with the confidence tier it implies."""
 

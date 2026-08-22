@@ -6,6 +6,9 @@ founder record *what happened* and see the consequence:
 
 * ``POST /projects/{project_id}/assumptions/{assumption_id}/evidence``
   logs one experiment result (method + PASS/FAIL/INCONCLUSIVE).
+* ``POST /projects/{project_id}/assumptions/evidence/import`` logs many
+  results in one call — invalid rows are skipped with reasons instead of
+  blocking the valid ones.
 * ``GET /projects/{project_id}/assumptions/{assumption_id}/evidence-scorecard``
   returns the evidence history plus the before/after validation-ROI shift
   implied by the derived confidence tier.
@@ -53,6 +56,9 @@ from app.schemas.assumption_evidence import (
     AssumptionEvidenceDigestOut,
     AssumptionEvidenceScorecardOut,
     EvidenceCreate,
+    EvidenceImportOut,
+    EvidenceImportRequest,
+    EvidenceImportSkippedRow,
     EvidenceOut,
 )
 from app.schemas.evidence_staleness import (
@@ -197,6 +203,80 @@ def create_assumption_evidence(
         notes=row.notes,
         created_at=row.created_at,
         derived_confidence=derived.value if derived is not None else None,
+    )
+
+
+@router.post(
+    "/{project_id}/assumptions/evidence/import",
+    response_model=EvidenceImportOut,
+    summary="Bulk-log validation experiment results for many assumptions",
+    responses=_JSON_200,
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def import_assumption_evidence(
+    project_id: int,
+    payload: EvidenceImportRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> EvidenceImportOut:
+    """
+    Record many validation experiment results in one call — the write-side
+    complement to the CSV exports, so a founder can fill in a downloaded
+    spreadsheet offline and paste the outcomes back.
+
+    Each row names its ``assumption_id``; rows referencing an assumption
+    that does not exist in this project are skipped with a reason instead
+    of failing the whole import. Valid rows insert in a single commit.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+    assumptions_by_id = {
+        assumption.id: assumption
+        for assumption in db.query(Assumption)
+        .filter(Assumption.project_id == project.id)
+        .all()
+    }
+
+    rows_to_insert: list[AssumptionEvidence] = []
+    skipped_rows: list[EvidenceImportSkippedRow] = []
+    touched_ids: list[int] = []
+    for index, row in enumerate(payload.rows):
+        assumption = assumptions_by_id.get(row.assumption_id)
+        if assumption is None:
+            skipped_rows.append(
+                EvidenceImportSkippedRow(
+                    index=index,
+                    assumption_id=row.assumption_id,
+                    reason=(
+                        f"assumption {row.assumption_id} does not exist "
+                        "in this project"
+                    ),
+                )
+            )
+            continue
+        rows_to_insert.append(
+            AssumptionEvidence(
+                project_id=project.id,
+                assumption_id=assumption.id,
+                method=row.method,
+                result=row.result,
+                observed_metric=row.observed_metric,
+                notes=row.notes,
+            )
+        )
+        if assumption.id not in touched_ids:
+            touched_ids.append(assumption.id)
+
+    # One commit for the whole batch — never per-row commits in a loop.
+    if rows_to_insert:
+        db.add_all(rows_to_insert)
+        db.commit()
+
+    return EvidenceImportOut(
+        project_id=project.id,
+        imported_count=len(rows_to_insert),
+        skipped_count=len(skipped_rows),
+        skipped_rows=skipped_rows,
+        assumption_ids_touched=touched_ids,
     )
 
 
