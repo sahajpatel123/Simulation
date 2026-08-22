@@ -312,3 +312,23 @@ def test_markdown_handles_missing_sections_gracefully() -> None:
     body = validation_momentum_to_markdown({"project_id": 9})
     assert "# Validation Momentum" in body
     assert "| Metric | Value |" in body
+
+
+def test_markdown_generated_line_renders_date_only() -> None:
+    """The Generated line reads as a date, not an ISO timestamp."""
+    from app.simulation.validation_momentum_export import (
+        validation_momentum_to_markdown,
+    )
+
+    body = validation_momentum_to_markdown(
+        {"project_id": 7},
+        metadata={
+            "generated_at": "2026-08-23T14:30:05.123456+00:00",
+            "project_id": 7,
+        },
+    )
+    assert "*Generated: 2026-08-23*" in body
+    assert "*Generated: 2026-08-23*" == next(
+        line for line in body.splitlines() if line.startswith("*Generated")
+    )
+    assert "14:30" not in body

@@ -264,3 +264,17 @@ def test_markdown_escapes_pipes_in_project_cells() -> None:
     assert "\\|" in project_row
     # Ignoring escaped pipes, the 7-column table keeps exactly 8 separators.
     assert project_row.replace("\\|", "").count("|") == 8
+
+
+def test_markdown_generated_line_renders_date_only() -> None:
+    """The Generated line reads as a date, not an ISO timestamp."""
+    from app.simulation.portfolio_validation_momentum_export import (
+        portfolio_validation_momentum_to_markdown,
+    )
+
+    body = portfolio_validation_momentum_to_markdown(
+        _payload(),
+        metadata={"generated_at": "2026-08-23T14:30:05.123456+00:00"},
+    )
+    assert "*Generated: 2026-08-23*" in body
+    assert "14:30" not in body

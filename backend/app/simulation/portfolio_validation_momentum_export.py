@@ -279,6 +279,19 @@ def _md_pct(value: Any) -> str:
     return f"{fraction * 100:.1f}%"
 
 
+def _md_date(value: Any) -> str:
+    """Render a timestamp as a founder-friendly date in the brief."""
+    if value is None or value == "":
+        return "—"
+    if hasattr(value, "date"):
+        try:
+            return value.date().isoformat()
+        except (TypeError, ValueError):
+            pass
+    text = str(value)
+    return _escape_md_cell(text.split("T", 1)[0].split(" ", 1)[0])
+
+
 def portfolio_validation_momentum_to_markdown(
     payload: Any,
     metadata: dict[str, Any] | None = None,
@@ -299,11 +312,9 @@ def portfolio_validation_momentum_to_markdown(
     )
     lines.append("")
 
-    if metadata:
-        generated = _text(metadata.get("generated_at"))
-        if generated:
-            lines.append(f"*Generated: {_escape_md_cell(generated)}*")
-            lines.append("")
+    if metadata and metadata.get("generated_at"):
+        lines.append(f"*Generated: {_md_date(metadata['generated_at'])}*")
+        lines.append("")
 
     focus_title = summary.get("focus_project_title")
     focus_reason = summary.get("focus_reason")
@@ -382,9 +393,7 @@ def portfolio_validation_momentum_to_markdown(
     if user_id:
         footer.append(f"User {user_id}")
     if metadata and metadata.get("generated_at"):
-        footer.append(
-            f"Generated {_escape_md_cell(_text(metadata['generated_at']))}"
-        )
+        footer.append(f"Generated {_md_date(metadata['generated_at'])}")
     lines.append(f"*{' · '.join(footer)}*")
     lines.append("")
 
