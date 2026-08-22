@@ -14,9 +14,8 @@ This document describes how to configure branch protection rules for the TheCee 
    - Required checks:
      - `backend-ci/test` (pytest)
      - `lint/ruff` (Python linting)
-     - `lint/python-deps-audit`, `linter/safety-check` (dependency security)
      - `security-scan/bandit` (Python security)
-     - `security-scan/pip-audit` (dependency CVEs)
+     - `security-scan/pip-audit`, `security-scan/safety` (dependency security)
 
 3. **Require branches to be up to date before merging**
    - Enable: ✓ Require branches to be up to date before merging
@@ -36,7 +35,7 @@ gh api \
   --method PUT \
   -H "Accept: application/vnd.github+json" \
   /repos/{owner}/{repo}/branches/main/protection \
-  -f required_status_checks.required_status_checks='["backend-ci/test", "lint/ruff", "lint/python-deps-audit", "security-scan/bandit", "security-scan/pip-audit"]' \
+  -f required_status_checks.required_status_checks='["backend-ci/test", "lint/ruff", "security-scan/bandit", "security-scan/pip-audit"]' \
   -f required_status_checks.strict=true \
   -f required_pull_request_reviews.dismiss_stale_reviews=true \
   -f required_pull_request_reviews.required_approving_review_count=1 \
