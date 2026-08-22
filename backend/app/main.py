@@ -18,6 +18,7 @@ from app.core.metrics import metrics
 from app.core.progress_bridge import progress_bridge
 from app.core.redis_client import get_redis_client
 from app.core.request_id_middleware import RequestIdMiddleware
+from app.core.safe_errors import safe_error_label
 from app.core.timing_middleware import TimingMiddleware
 from app.worker import celery_app as _celery_app
 
@@ -265,7 +266,11 @@ async def readyz() -> JSONResponse:
         checks["database"] = {"status": "ok"}
         db_ok = True
     except Exception as exc:
-        checks["database"] = {"status": "error", "error": str(exc)[:200]}
+        logger.error("readiness database check failed: %s", exc, exc_info=True)
+        checks["database"] = {
+            "status": "error",
+            "error": safe_error_label(exc),
+        }
         db_ok = False
 
     # Redis — unconfigured (no REDIS_URL) is treated as ready because the
@@ -281,7 +286,11 @@ async def readyz() -> JSONResponse:
             checks["redis"] = {"status": "ok"}
             redis_ok = True
         except Exception as exc:
-            checks["redis"] = {"status": "error", "error": str(exc)[:200]}
+            logger.error("readiness Redis check failed: %s", exc, exc_info=True)
+            checks["redis"] = {
+                "status": "error",
+                "error": safe_error_label(exc),
+            }
             redis_ok = False
 
     body = {
