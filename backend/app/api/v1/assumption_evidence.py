@@ -14,6 +14,8 @@ founder record *what happened* and see the consequence:
 * ``GET /projects/{project_id}/assumption-validation-timeline`` replays
   every logged experiment chronologically with cumulative validation
   progress and first-occurrence milestones.
+* ``GET /projects/{project_id}/assumption-validation-timeline/export``
+  downloads that replay as CSV, JSON, or a founder-facing Markdown brief.
 * ``GET /projects/{project_id}/validation-dashboard`` composes the digest,
   timeline milestones, and momentum forecast into one response.
 * ``GET /projects/{project_id}/validation-dashboard/export`` downloads the
@@ -115,6 +117,14 @@ from app.simulation.validation_momentum_export import (
     validation_momentum_to_markdown,
 )
 from app.simulation.validation_timeline import build_validation_timeline
+from app.simulation.validation_timeline_export import (
+    FORMAT_VERSION as VALIDATION_TIMELINE_FORMAT_VERSION,
+)
+from app.simulation.validation_timeline_export import (
+    validation_timeline_to_csv,
+    validation_timeline_to_json,
+    validation_timeline_to_markdown,
+)
 
 router = APIRouter(prefix="/projects", tags=["assumption-evidence"])
 
@@ -375,6 +385,85 @@ def get_assumption_validation_timeline(
             evidence=evidence,
             project_id=project.id,
         )
+    )
+
+
+@router.get(
+    "/{project_id}/assumption-validation-timeline/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export a project's validation timeline as CSV, JSON, or Markdown"
+    ),
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_assumption_validation_timeline(
+    project_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns a spreadsheet-friendly "
+            "document with every event, cumulative progress snapshots, and "
+            "per-assumption rollups; ``json`` returns the envelope payload; "
+            "``md`` returns a founder-facing Markdown brief. Unsupported "
+            "values return a 400 response."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Download the same timeline shown by the JSON endpoint."""
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json", "md"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; expected 'csv', "
+                "'json', or 'md'"
+            ),
+        )
+
+    timeline = get_assumption_validation_timeline(
+        project_id=project_id,
+        db=db,
+        current_user=current_user,
+    )
+    payload = timeline.model_dump()
+    metadata = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "user_id": current_user.id,
+        "project_id": project_id,
+        "format_version": VALIDATION_TIMELINE_FORMAT_VERSION,
+    }
+
+    if fmt == "json":
+        body = validation_timeline_to_json(payload, metadata=metadata).encode(
+            "utf-8"
+        )
+        filename = f"validation-timeline-{project_id}.json"
+        media_type = "application/json; charset=utf-8"
+    elif fmt == "md":
+        body = validation_timeline_to_markdown(
+            payload,
+            metadata=metadata,
+        ).encode("utf-8")
+        filename = f"validation-timeline-{project_id}.md"
+        media_type = "text/markdown; charset=utf-8"
+    else:
+        body = validation_timeline_to_csv(payload, metadata=metadata).encode(
+            "utf-8"
+        )
+        filename = f"validation-timeline-{project_id}.csv"
+        media_type = "text/csv; charset=utf-8"
+
+    return StreamingResponse(
+        iter([body]),
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
+        },
     )
 
 

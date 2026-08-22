@@ -61,6 +61,7 @@ rules before pushing.
 
 - Every action ref is pinned to a full 40-hex commit SHA (version kept as a
   trailing comment).
+- The Dockerfile pins its base image by sha256 digest (`FROM python:3.11-slim@sha256:…`).
 - Every workflow declares a top-level least-privilege `permissions` block.
 - No workflow grants `actions: write`; `id-token: write` is only allowed in
   `scorecard.yml`.
@@ -221,4 +222,8 @@ For security concerns, please contact the project maintainers.
   exact-version pins on every workflow pip install; and documented the
   deliberate deferral of `--require-hashes` hash-locking (requires Linux-native
   wheel resolution) as an accepted risk.
+- 2026-08-23 - Extended `tools/validate_ci.py` to require every Dockerfile
+  `FROM` to pin its base image by sha256 digest, and digest-pinned
+  `python:3.11-slim` — closing the last mutable-ref supply-chain surface
+  (mutable base-image tags repoint when maintainers push).
 - [VERSION] - Initial security policy

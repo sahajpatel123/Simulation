@@ -20,6 +20,7 @@ can catch issues locally before pushing:
   - Artifact uploads fail when no files are found instead of passing silently.
   - Every pip install in a workflow run block pins an exact version.
   - Every workflow declares a concurrency block to cancel superseded runs.
+  - Every Dockerfile FROM pins its base image by sha256 digest.
 
 Usage:
     python3 tools/validate_ci.py
@@ -298,6 +299,49 @@ def validate_pinned_installs() -> list[str]:
     return errors
 
 
+def validate_dockerfile_base_image() -> list[str]:
+    """Every Dockerfile ``FROM`` pins its base image by sha256 digest.
+
+    A mutable tag (``python:3.11-slim``) silently repoints whenever the
+    maintainer pushes — the same supply-chain hole full-SHA pinning closed
+    for GitHub Actions. Digests keep the tag for readability::
+
+        FROM python:3.11-slim@sha256:<64-hex>
+    """
+    errors: list[str] = []
+    candidates = [ROOT / "Dockerfile"]
+    for p in glob.glob(str(ROOT / "**" / "Dockerfile"), recursive=True):
+        if ".venv" not in p and "node_modules" not in p:
+            candidates.append(Path(p))
+    seen: set[str] = set()
+    for path in candidates:
+        if not path.exists():
+            continue
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        rel = path.relative_to(ROOT)
+        with open(path) as fh:
+            for i, line in enumerate(fh, 1):
+                stripped = line.strip()
+                if not stripped.upper().startswith("FROM"):
+                    continue
+                tokens = stripped.split()[1:]
+                image = next(
+                    (t for t in tokens if not t.startswith("--")), ""
+                )
+                if image == "scratch":
+                    continue
+                if re.search(r"@sha256:[0-9a-f]{64}$", image):
+                    continue
+                errors.append(
+                    f"{rel}:{i}: FROM {image} must be pinned by sha256 "
+                    f"digest (FROM {image}@sha256:<64-hex>)"
+                )
+    return errors
+
+
 def validate_security_events_permission() -> list[str]:
     """SARIF/CodeQL uploaders must declare `security-events: write`."""
     errors: list[str] = []
@@ -344,6 +388,7 @@ def main() -> int:
         ("concurrency", validate_concurrency),
         ("SARIF permissions", validate_security_events_permission),
         ("pinned installs", validate_pinned_installs),
+        ("Dockerfile base images", validate_dockerfile_base_image),
     ]
     errors: list[str] = []
     for label, func in checks:
