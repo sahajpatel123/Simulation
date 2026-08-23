@@ -442,7 +442,13 @@ def _backfill_display_precis_lazy(db: Session, project: Project) -> None:
         if line:
             project.precis = line
     except Exception:
-        pass
+        # Backfill is best-effort; the row still gets its fingerprint so
+        # this never re-runs.
+        logger.warning(
+            "precis backfill failed for project %s",
+            project.id,
+            exc_info=True,
+        )
     project.precis_title_fingerprint = _title_fingerprint(project.title)
     db.add(project)
     db.commit()
