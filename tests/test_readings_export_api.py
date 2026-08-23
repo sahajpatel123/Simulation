@@ -120,6 +120,7 @@ def test_export_readings_format_json_returns_payload() -> None:
 def test_export_readings_format_json_normalizes_legacy_array() -> None:
     class LegacyProject(_Project):
         def __init__(self) -> None:
+            super().__init__()
             self.id = 11
             self.readings_json = '[{"label": "WHAT IT IS", "body": "Lean"}]'
 
@@ -169,6 +170,7 @@ def test_export_readings_count_format_json_returns_payload() -> None:
 def test_export_readings_count_counts_normalized_readings() -> None:
     class TwoReadingProject(_Project):
         def __init__(self) -> None:
+            super().__init__()
             self.id = 12
             self.readings_json = (
                 '[{"label": "WHAT IT IS", "body": "Lean"},'
@@ -187,6 +189,7 @@ def test_export_readings_count_counts_normalized_readings() -> None:
 def test_export_readings_count_ignores_blank_entries() -> None:
     class MixedProject(_Project):
         def __init__(self) -> None:
+            super().__init__()
             self.id = 14
             self.readings_json = (
                 '{"readings": [{"label": "WHAT IT IS", "body": "Lean"},'
@@ -214,6 +217,7 @@ def test_export_readings_count_ignores_blank_entries() -> None:
 def test_export_readings_format_json_drops_blank_entries() -> None:
     class MixedProject(_Project):
         def __init__(self) -> None:
+            super().__init__()
             self.id = 15
             self.readings_json = (
                 '[{"label": "WHAT IT IS", "body": "Lean"},'
@@ -234,6 +238,7 @@ def test_export_readings_format_json_drops_blank_entries() -> None:
 def test_export_readings_count_tolerates_malformed_json() -> None:
     class EmptyReadingsProject(_Project):
         def __init__(self) -> None:
+            super().__init__()
             self.id = 13
             self.readings_json = "{not valid json"
 

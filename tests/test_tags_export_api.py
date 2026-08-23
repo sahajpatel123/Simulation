@@ -22,6 +22,7 @@ class _Project:
 
 class _EmptyProject(_Project):
     def __init__(self) -> None:
+        super().__init__()
         self.id = 10
         self.tags = []
 
