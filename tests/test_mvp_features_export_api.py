@@ -20,10 +20,11 @@ class _Project:
         self.mvp_feature_list = ["Auth", "Billing"]
 
 
-class _EmptyProject(_Project):
+class _EmptyProject:
     def __init__(self) -> None:
-        # Independent initializer: this fake intentionally differs
-        # from _Project only in its payload attribute.
+        # Standalone fake mirroring _Project's attribute interface
+        # with an empty payload — deliberately not a subclass, so
+        # there is no inherited initializer to call or overwrite.
         self.id = 10
         self.mvp_feature_list = None
 
