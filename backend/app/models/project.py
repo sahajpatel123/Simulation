@@ -10,18 +10,25 @@ from app.models.base import Base, TimestampMixin
 if TYPE_CHECKING:
     # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
     from app.models.ab_test_experiment import AbTestExperiment
+
     # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
     from app.models.assumption import Assumption
+
     # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
     from app.models.decision import Decision
+
     # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
     from app.models.environment import Environment
+
     # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
     from app.models.outcome import Outcome
+
     # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
     from app.models.outcome_tracker import OutcomeTracker
+
     # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
     from app.models.simulation import Simulation
+
     # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
     from app.models.user import User
 

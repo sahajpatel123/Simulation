@@ -11,6 +11,7 @@ from app.models.base import Base, TimestampMixin
 if TYPE_CHECKING:
     # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
     from app.models.api_token import ApiToken
+
     # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
     from app.models.project import Project
 
