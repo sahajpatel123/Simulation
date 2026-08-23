@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -170,6 +171,8 @@ from app.simulation.user_outcomes_export import user_outcomes_to_csv
 from app.simulation.user_projects_export import user_projects_to_csv
 from app.simulation.user_simulations_export import user_simulations_to_csv
 from app.simulation.weekly_digest import build_weekly_digest
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -1048,7 +1051,11 @@ def get_account_health(
                     if sig.get("severity") == "critical":
                         critical_signal_count += 1
             except Exception:
-                pass
+                # Best-effort enrichment; never fail the snapshot over it.
+                logger.debug(
+                    "calibration-health enrichment failed",
+                    exc_info=True,
+                )
 
     # ---- Blindspot count --------------------------------------------
     blindspot_cutoff = datetime.now(UTC) - timedelta(hours=72)
@@ -1700,7 +1707,10 @@ def get_digest_snapshot(
                     if sig.get("severity") == "critical":
                         critical_signal_count += 1
             except Exception:
-                pass
+                logger.debug(
+                    "calibration-health enrichment failed",
+                    exc_info=True,
+                )
 
     blindspot_cutoff = datetime.now(UTC) - timedelta(hours=72)
     blindspot_count = (
@@ -3263,7 +3273,8 @@ def get_portfolio_health_snapshot(
             if prev_row and prev_row[0] is not None:
                 previous_score = float(prev_row[0]) * 100  # Convert to 0-100 scale
         except Exception:
-            pass
+            # Trend lookup is optional context for the snapshot.
+            logger.debug("previous-score lookup failed", exc_info=True)
 
     if previous_score is not None:
         # Recompute with trend info
