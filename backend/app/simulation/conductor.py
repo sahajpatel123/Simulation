@@ -1123,7 +1123,15 @@ class Conductor:
                 if isinstance(result, ClusterTransitionMatrix):
                     return round(float(result.conversion_estimate), 6)
             except Exception:
-                pass
+                # Legitimate fallback (scalar chain below), but if the
+                # primary Markov path keeps failing the fallback IS the
+                # production path — make its engagement observable.
+                logger.warning(
+                    "MarkovBehaviourModel.build failed for cluster_id=%s — "
+                    "using scalar-chain fallback",
+                    getattr(cluster_def, "cluster_id", "?"),
+                    exc_info=True,
+                )
 
         # Fallback: chain product with architect overrides applied to
         # BASE_TRANSITIONS scalars. The previous hardcoded 0.5/0.8/0.7/0.6
