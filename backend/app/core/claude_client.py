@@ -79,6 +79,19 @@ def _api_error_reason(status_code: Any) -> str:
     return "api_error_unknown"
 
 
+def _record_call_failure(model: str, task: str, reason: str) -> None:
+    """Best-effort failure metric — instrumentation must never break the call path.
+
+    A metrics-layer exception (registry shutdown, label collision) must not
+    mask the real API error the caller has already logged; swallow it at
+    debug level so it stays visible in verbose logs instead of vanishing.
+    """
+    try:
+        metrics.claude_call_failure(model=model, task=task, reason=reason)
+    except Exception:  # noqa: BLE001 — deliberate swallow, see docstring.
+        logger.debug("claude_call_failure recording failed", exc_info=True)
+
+
 _client: OpenAI | None = None
 
 
@@ -196,36 +209,15 @@ def claude_call_with_fallback(
         return {"content": text, "error": None}
     except APITimeoutError:
         logger.warning("Grok timeout on %s (model=%s)", fallback_key, grok_model)
-        try:
-            metrics.claude_call_failure(
-                model=grok_model,
-                task=fallback_key,
-                reason="timeout",
-            )
-        except Exception:
-            pass
+        _record_call_failure(grok_model, fallback_key, "timeout")
         return TIMEOUT_FALLBACK.get(fallback_key, {"error": "timeout"})
     except APIError as e:
         sc = getattr(e, "status_code", None)
         logger.error("Grok API error on %s: status=%s err=%s", fallback_key, sc, e)
         error_msg = f"API error {sc}: {e}" if sc is not None else str(e)
-        try:
-            metrics.claude_call_failure(
-                model=grok_model,
-                task=fallback_key,
-                reason=_api_error_reason(sc),
-            )
-        except Exception:
-            pass
+        _record_call_failure(grok_model, fallback_key, _api_error_reason(sc))
         return _error_fallback(fallback_key, error_msg)
     except Exception as e:  # noqa: BLE001 — last-resort: never let the LLM crash a request.
         logger.exception("Grok unexpected error on %s: %s", fallback_key, e)
-        try:
-            metrics.claude_call_failure(
-                model=grok_model,
-                task=fallback_key,
-                reason="unexpected",
-            )
-        except Exception:
-            pass
+        _record_call_failure(grok_model, fallback_key, "unexpected")
         return _error_fallback(fallback_key, str(e))
