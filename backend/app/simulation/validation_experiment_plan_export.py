@@ -27,8 +27,6 @@ import json
 import math
 from typing import Any
 
-FORMAT_VERSION: str = "1"
-
 CSV_HEADERS: list[str] = [
     "rank",
     "assumption_text",
@@ -247,19 +245,6 @@ _SUMMARY_LABELS: dict[str, str] = {
     "top_experiment": "Top experiment",
     "narrative": "Narrative",
 }
-
-_EXP_HEADERS: tuple[str, ...] = (
-    "assumption_text",
-    "category",
-    "roi_tier",
-    "validation_roi",
-    "expected_conversion_swing",
-    "confidence_tier",
-    "method_label",
-    "cost_tier",
-    "estimated_duration_days",
-    "success_threshold",
-)
 
 
 def _escape_md(value: Any) -> str:
