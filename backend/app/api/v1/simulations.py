@@ -371,6 +371,8 @@ from app.simulation.simulation_compare import (
 )
 from app.simulation.simulation_compare_export import (
     FORMAT_VERSION as simulation_compare_export_FORMAT_VERSION,
+)
+from app.simulation.simulation_compare_export import (
     simulation_compare_to_csv,
     simulation_compare_to_json,
     simulation_compare_to_markdown,
