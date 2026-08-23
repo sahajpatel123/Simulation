@@ -4379,13 +4379,6 @@ def get_projects_needing_attention(
                 delta = datetime.now(UTC) - ts
                 days_since_latest_assumption = max(0, delta.days)
 
-        sim_confidence = None
-        if latest_sim is not None:
-            sim_confidence = getattr(
-                latest_sim, "confidence_score", None,
-            )
-            if sim_confidence is not None:
-                sim_confidence = float(sim_confidence) / 100.0
         has_completed_sim = latest_sim is not None
 
         banner_payload = build_status_banner(
