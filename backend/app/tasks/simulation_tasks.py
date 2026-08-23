@@ -7,6 +7,7 @@ import time
 from datetime import UTC, datetime
 
 from celery import Task
+from celery.exceptions import MaxRetriesExceededError
 from sqlalchemy import text, update
 from sqlalchemy.orm import Session
 
@@ -1093,10 +1094,21 @@ def deliver_simulation_webhook(
     )
 
     if not result["ok"]:
+        # self.retry() raises celery.exceptions.Retry to signal the worker
+        # to re-deliver. Swallowing it (the old ``except Exception: pass``)
+        # defeated the max_retries=3 config above — failed deliveries
+        # returned normally and subscribers never got redelivery. Only
+        # MaxRetriesExceededError (final attempt failed) falls through,
+        # so the caller still receives the failure result.
         try:
-            raise self.retry(exc=RuntimeError(result.get("error", "webhook delivery failed")))
-        except Exception:
-            pass
+            self.retry(exc=RuntimeError(result.get("error", "webhook delivery failed")))
+        except MaxRetriesExceededError:
+            logger.warning(
+                "[Webhook] retries exhausted (webhook_id=%s simulation_id=%s): %s",
+                webhook_id,
+                simulation_id,
+                result.get("error"),
+            )
     return result
 
 

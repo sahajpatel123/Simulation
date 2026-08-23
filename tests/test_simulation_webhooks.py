@@ -1014,6 +1014,84 @@ def test_deliver_simulation_webhook_task_success() -> None:
     assert result["ok"] is True
 
 
+def test_deliver_simulation_webhook_failure_propagates_retry() -> None:
+    """A failed delivery must let Celery's Retry escape so the worker
+    actually re-delivers. The old ``except Exception: pass`` swallowed
+    the Retry exception, making the task's max_retries=3 config dead
+    code — subscribers silently missed redelivery on transient 5xx."""
+    from celery.exceptions import Retry
+
+    from app.tasks import simulation_tasks as tasks
+
+    sub = _Subscription()
+
+    class DeliverySession(_FakeSession):
+        def query(self, model, *args, **kwargs):
+            if getattr(model, "__name__", "") == "SimulationWebhookSubscription":
+                return _FakeQuery([sub])
+            return super().query(model, *args, **kwargs)
+
+    session = DeliverySession(subscriptions=[sub])
+
+    def _raise_retry(_self: object, exc: BaseException, **kwargs: object) -> None:
+        raise Retry(exc=exc)
+
+    task = type("Task", (), {"db": session, "retry": _raise_retry})()
+    raw_fn = tasks.deliver_simulation_webhook.__wrapped__.__func__
+    bound_task = MethodType(raw_fn, task)
+    with patch.object(
+        tasks,
+        "deliver_webhook_event",
+        return_value={"ok": False, "error": "webhook endpoint returned HTTP 503"},
+    ), patch.object(tasks, "record_webhook_delivery"):
+        with pytest.raises(Retry):
+            bound_task(
+                webhook_id=1,
+                simulation_id=5,
+                status="COMPLETED",
+                conversion_rate=0.05,
+            )
+
+
+def test_deliver_simulation_webhook_returns_result_when_retries_exhausted() -> None:
+    """When Celery raises MaxRetriesExceededError on the final attempt,
+    the task must return its failure result instead of crashing — the
+    recorded delivery history stands and the enqueueing caller gets a
+    structured outcome rather than an exception."""
+    from celery.exceptions import MaxRetriesExceededError
+
+    from app.tasks import simulation_tasks as tasks
+
+    sub = _Subscription()
+
+    class DeliverySession(_FakeSession):
+        def query(self, model, *args, **kwargs):
+            if getattr(model, "__name__", "") == "SimulationWebhookSubscription":
+                return _FakeQuery([sub])
+            return super().query(model, *args, **kwargs)
+
+    session = DeliverySession(subscriptions=[sub])
+
+    def _retries_exhausted(_self: object, exc: BaseException, **kwargs: object) -> None:
+        raise MaxRetriesExceededError()
+
+    task = type("Task", (), {"db": session, "retry": _retries_exhausted})()
+    raw_fn = tasks.deliver_simulation_webhook.__wrapped__.__func__
+    bound_task = MethodType(raw_fn, task)
+    with patch.object(
+        tasks,
+        "deliver_webhook_event",
+        return_value={"ok": False, "error": "webhook endpoint returned HTTP 503"},
+    ), patch.object(tasks, "record_webhook_delivery"):
+        result = bound_task(
+            webhook_id=1,
+            simulation_id=5,
+            status="COMPLETED",
+            conversion_rate=0.05,
+        )
+    assert result["ok"] is False
+
+
 def test_record_webhook_delivery_creates_history_and_updates_subscription() -> None:
     from app.simulation import webhook_delivery_history as history
 
