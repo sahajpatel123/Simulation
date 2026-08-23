@@ -4388,30 +4388,6 @@ def get_projects_needing_attention(
                 sim_confidence = float(sim_confidence) / 100.0
         has_completed_sim = latest_sim is not None
 
-        if assumption_count > 0:
-            from app.simulation.assumption_digest import (
-                build_assumption_digest,
-            )
-            assumption_rows = (
-                db.query(Assumption)
-                .filter(
-                    Assumption.project_id == pid,
-                    Assumption.is_hidden.is_(False),
-                )
-                .all()
-            )
-            digest = build_assumption_digest([
-                {
-                    "id": a.id,
-                    "sensitivity": a.sensitivity,
-                    "specificity_score": a.specificity_score,
-                    "impact_score": a.impact_score,
-                    "is_hidden": a.is_hidden,
-                }
-                for a in assumption_rows
-            ])
-            digest["weak_link_count"]
-
         banner_payload = build_status_banner(
             brief_completed=getattr(
                 project, "brief_completed_at", None,

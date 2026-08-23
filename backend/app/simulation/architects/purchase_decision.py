@@ -38,9 +38,6 @@ class PurchaseDecisionArchitect(BaseArchitect):
         price_s    = t["price_sensitivity"]
         risk_av    = t["risk_aversion"]
         literacy   = t["digital_literacy"]
-        t["patience_score"]
-        t["motivation"]
-        t["trust"]
         age        = cluster.demographic_profile.get("age_bracket", "25-35")
         geo        = geo_tier(cluster.demographic_profile.get("geography", "metro"))
         AOV        = float(env_params.get("average_order_value", 3000))

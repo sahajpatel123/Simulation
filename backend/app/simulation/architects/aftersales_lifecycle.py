@@ -33,7 +33,6 @@ class AftersalesLifecycleArchitect(BaseArchitect):
         t            = cluster.base_traits
         income       = t["income_level"]
         social       = t["social_orientation"]
-        t["patience_score"]
         trust        = t["trust"]
         literacy     = t["digital_literacy"]
         age          = cluster.demographic_profile.get("age_bracket", "25-35")
