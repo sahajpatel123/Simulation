@@ -182,9 +182,9 @@ router = APIRouter(prefix="/users", tags=["users"])
 _USER_DASHBOARD_CACHE_TTL_S: int = 30
 _USER_DASHBOARD_CACHE_NAMESPACE: str = "user-dashboard"
 
-# Qualitative health verdict (0-100 score). Slightly
-# longer TTL since it composes heavier queries.
-_USER_ACCOUNT_HEALTH_CACHE_TTL_S: int = 60
+# Qualitative health verdict (0-100 score), cached under
+# its own namespace so it invalidates independently of the
+# dashboard snapshot.
 _USER_ACCOUNT_HEALTH_CACHE_NAMESPACE: str = "user-account-health"
 
 # Coverage gaps - recomputed on extract-assumptions +
