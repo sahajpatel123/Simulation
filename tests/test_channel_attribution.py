@@ -595,11 +595,11 @@ def test_generate_handles_nan_and_bad_weights_without_poisoning() -> None:
     )
     assert len(result.cluster_profiles) == 4
     assert all(
-        weight == weight and weight != float("inf") and weight >= 0.0
+        math.isfinite(weight) and weight >= 0.0
         for weight in (p.population_weight for p in result.cluster_profiles)
     )
     assert all(
-        score == score and score != float("inf")
+        math.isfinite(score)
         for _, score in result.market_channel_ranking
     )
     # "0.25" string still parses; NaN/Inf fall back to 0.02 default.
