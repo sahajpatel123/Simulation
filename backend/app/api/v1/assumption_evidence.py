@@ -128,6 +128,14 @@ from app.simulation.assumption_evidence_digest import (
     build_assumption_evidence_digest,
 )
 from app.simulation.evidence_quality import build_evidence_quality
+from app.simulation.evidence_quality_export import (
+    FORMAT_VERSION as EVIDENCE_QUALITY_FORMAT_VERSION,
+)
+from app.simulation.evidence_quality_export import (
+    evidence_quality_to_csv,
+    evidence_quality_to_json,
+    evidence_quality_to_markdown,
+)
 from app.simulation.evidence_scorecard import (
     build_assumption_scorecard,
     derive_confidence,
@@ -1272,6 +1280,85 @@ def get_evidence_quality(
             evidence=evidence,
             project_id=project.id,
         )
+    )
+
+
+@router.get(
+    "/{project_id}/evidence-quality/export",
+    response_class=StreamingResponse,
+    summary=(
+        "Export a project's evidence-quality report as CSV, JSON, or "
+        "Markdown"
+    ),
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def export_evidence_quality(
+    project_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns a spreadsheet-friendly "
+            "quality table with native numeric cells; ``json`` returns the "
+            "envelope payload; ``md`` returns a founder-facing Markdown "
+            "brief. Unsupported values return a 400 response."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Download the same quality report shown by the JSON endpoint."""
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json", "md"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"unsupported export format {format!r}; expected 'csv', "
+                "'json', or 'md'"
+            ),
+        )
+
+    report = get_evidence_quality(
+        project_id=project_id,
+        db=db,
+        current_user=current_user,
+    )
+    payload = report.model_dump()
+    metadata = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "user_id": current_user.id,
+        "project_id": project_id,
+        "format_version": EVIDENCE_QUALITY_FORMAT_VERSION,
+    }
+
+    if fmt == "json":
+        body = evidence_quality_to_json(payload, metadata=metadata).encode(
+            "utf-8"
+        )
+        filename = f"evidence-quality-{project_id}.json"
+        media_type = "application/json; charset=utf-8"
+    elif fmt == "md":
+        body = evidence_quality_to_markdown(
+            payload,
+            metadata=metadata,
+        ).encode("utf-8")
+        filename = f"evidence-quality-{project_id}.md"
+        media_type = "text/markdown; charset=utf-8"
+    else:
+        body = evidence_quality_to_csv(payload, metadata=metadata).encode(
+            "utf-8"
+        )
+        filename = f"evidence-quality-{project_id}.csv"
+        media_type = "text/csv; charset=utf-8"
+
+    return StreamingResponse(
+        iter([body]),
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
+        },
     )
 
 
