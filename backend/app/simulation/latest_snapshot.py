@@ -61,7 +61,10 @@ def _compact(row: dict | None, keys: list[str]) -> dict | None:
                 try:
                     value = value.isoformat()
                 except Exception:
-                    pass
+                    # Mirror _iso(): degrade to str() rather than leave the
+                    # raw object in the card — that would only blow up later
+                    # at JSON serialization time, far from this code.
+                    value = str(value)
             out[key] = value
     return out or None
 
