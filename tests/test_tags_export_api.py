@@ -22,9 +22,10 @@ class _Project:
 
 class _EmptyProject(_Project):
     def __init__(self) -> None:
-        super().__init__()
+        # Independent initializer: this fake intentionally differs
+        # from _Project only in its payload attribute.
         self.id = 10
-        self.tags = []
+        self.tags = None
 
 
 class _FakeQuery:
