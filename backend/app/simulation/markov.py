@@ -295,6 +295,14 @@ class MarkovBehaviourModel:
             try:
                 overrides = architect.transition_overrides(output)
             except Exception:
+                # A broken override must not corrupt the funnel run — but
+                # silently dropping it would hide a buggy architect, so
+                # record which one failed and why.
+                logger.warning(
+                    "transition_overrides failed for %s — overrides skipped",
+                    arch_name,
+                    exc_info=True,
+                )
                 continue
             for (from_s, to_s), multiplier in overrides.items():
                 if from_s not in idx or to_s not in idx:
