@@ -34,6 +34,7 @@ from app.simulation.funnel_stage_calibration import (
     stage_to_transition,
     transition_corrections,
 )
+# codeql[py/cyclic-import]: markov.py imports conductor only lazily inside methods, so this module-level edge never forms a runtime cycle
 from app.simulation.markov import MarkovBehaviourModel
 from app.simulation.product_type import ProductType
 
@@ -1099,6 +1100,7 @@ class Conductor:
         cluster_outputs: dict[str, ArchitectOutput],
         stage_corrections: dict[str, float] | None = None,
     ) -> float:
+        # codeql[py/cyclic-import]: deferred import deliberately breaks the conductor↔markov module-level cycle
         from app.simulation.markov import ClusterTransitionMatrix, MarkovBehaviourModel
 
         # Find the cluster definition for this set of outputs
@@ -1137,6 +1139,7 @@ class Conductor:
         # BASE_TRANSITIONS scalars. The previous hardcoded 0.5/0.8/0.7/0.6
         # magic numbers diverged from BASE_TRANSITIONS by 60%+ and produced
         # a 0.168 default that contradicted the canonical 0.077 chain.
+        # codeql[py/cyclic-import]: deferred import deliberately breaks the conductor↔markov module-level cycle
         from app.simulation.markov import BASE_TRANSITIONS, State
 
         decide_purchase = float(BASE_TRANSITIONS[State.DECIDE][State.PURCHASE])

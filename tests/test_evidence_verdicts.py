@@ -173,6 +173,33 @@ def test_inconclusive_only_history() -> None:
     assert "decisive" in row["explanation"]
 
 
+def test_inconclusive_latest_fields_use_newest_row() -> None:
+    """latest_* must follow (id, created_at) order, not append order."""
+    card = _scorecard(
+        [_asm(1)],
+        [
+            _ev(
+                1,
+                id_=7,
+                result="INCONCLUSIVE",
+                method="USER_INTERVIEWS",
+                observed_metric=None,
+            ),
+            _ev(
+                1,
+                id_=3,
+                result="INCONCLUSIVE",
+                method="CONCIERGE_MVP",
+                observed_metric=None,
+            ),
+        ],
+    )
+    row = _row_of(card, 1)
+    assert row["evidence_count"] == 2
+    assert row["latest_method"] == "USER_INTERVIEWS"
+    assert row["method_label"] == "User interviews"
+
+
 def test_pending_without_evidence() -> None:
     card = _scorecard([_asm(1)], [])
     row = _row_of(card, 1)

@@ -15,6 +15,7 @@ from typing import Any
 
 import numpy as np
 
+# codeql[py/cyclic-import]: schemas/what_if.py imports back only lazily inside methods, so this module-level edge never forms a runtime cycle
 from app.schemas.what_if import (
     StageImpact,
     WhatIfAssumption,

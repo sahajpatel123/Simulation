@@ -270,6 +270,7 @@ class MarkovBehaviourModel:
         if seed is not None:
             np.random.seed(seed)
 
+        # codeql[py/cyclic-import]: deferred import deliberately breaks the conductor↔markov module-level cycle
         from app.simulation.conductor import _ARCHITECTS
 
         STATE_ORDER = ["ARRIVE", "BROWSE", "CONSIDER", "DECIDE", "PURCHASE", "ABANDON", "RETURN"]

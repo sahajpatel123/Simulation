@@ -204,19 +204,20 @@ def build_evidence_verdicts(
             }
         elif latest is None:
             verdict = "INCONCLUSIVE"
+            newest = max(history, key=lambda pair: pair[0])[1]
             row_out = {
                 "assumption_id": assumption_id,
                 "assumption_text": getattr(assumption, "text", "") or "",
                 "category": getattr(assumption, "category", None),
                 "evidence_count": len(history),
                 "latest_result": str(
-                    getattr(history[-1][1], "result", "") or ""
+                    getattr(newest, "result", "") or ""
                 ).upper() or None,
                 "latest_method": str(
-                    getattr(history[-1][1], "method", "") or ""
+                    getattr(newest, "method", "") or ""
                 ) or None,
                 "method_label": _method_label(
-                    getattr(history[-1][1], "method", None)
+                    getattr(newest, "method", None)
                 ),
                 "threshold": None,
                 "observed_metric": None,
