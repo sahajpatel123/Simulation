@@ -1,4 +1,5 @@
 import hmac
+import json
 import logging
 import re
 import secrets
@@ -787,11 +788,15 @@ async def diff_ui_versions(
     changes = []
     if m:
         try:
-            import json as _json
-            raw = _json.loads(m.group(1))
+            raw = json.loads(m.group(1))
             changes = [{"selector": c.get("selector", ""), "action": c.get("action", ""), "from_": c.get("from", ""), "to": c.get("to", "")} for c in raw]
         except Exception:
-            pass
+            # A malformed CHANGES manifest degrades to an empty diff list.
+            logger.debug(
+                "CHANGES manifest unparseable for version %s",
+                to_version,
+                exc_info=True,
+            )
 
     return UIDiffResponse(from_version=from_version, to_version=to_version, changes=changes)
 
