@@ -44,6 +44,10 @@ founder record *what happened* and see the consequence:
   a prioritised re-test queue.
 * ``GET /projects/{project_id}/evidence-freshness/export`` downloads the
   re-test queue as CSV, JSON, or a founder-facing Markdown brief.
+* ``GET /projects/{project_id}/evidence-verdicts`` judges each assumption's
+  latest decisive experiment against its method's success bar (ON_TRACK /
+  KILLED / INCONSISTENT_*), surfacing records that contradict their own
+  metric.
 
 Pure post-hoc analysis — no Celery dispatch, no LLM calls.
 """
@@ -100,6 +104,7 @@ from app.schemas.evidence_staleness import (
     EvidenceStalenessRowOut,
     EvidenceStalenessSummaryOut,
 )
+from app.schemas.evidence_verdicts import EvidenceVerdictsOut
 from app.schemas.validation_dashboard import DASHBOARD_MODEL, ValidationDashboardOut
 from app.schemas.validation_experiment import METHOD_ID_LITERAL
 from app.schemas.validation_momentum import ValidationMomentumOut
@@ -140,6 +145,7 @@ from app.simulation.evidence_staleness_export import (
     evidence_staleness_to_json,
     evidence_staleness_to_markdown,
 )
+from app.simulation.evidence_verdicts import build_evidence_verdicts
 from app.simulation.validation_dashboard_export import (
     FORMAT_VERSION as VALIDATION_DASHBOARD_FORMAT_VERSION,
 )
@@ -931,6 +937,53 @@ def get_assumption_evidence_digest(
     )
     return AssumptionEvidenceDigestOut(
         **build_assumption_evidence_digest(
+            assumptions=assumptions,
+            evidence=evidence,
+            project_id=project.id,
+        )
+    )
+
+
+@router.get(
+    "/{project_id}/evidence-verdicts",
+    response_model=EvidenceVerdictsOut,
+    summary="Judge each assumption's evidence against its method's success bar",
+    responses=_JSON_200,
+)
+def get_evidence_verdicts(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> EvidenceVerdictsOut:
+    """
+    Close the validation loop: the planner set every method a success bar
+    ("≥ 30% would pay"), founders logged metrics — this scorecard compares
+    them. The latest decisive experiment per assumption becomes ON_TRACK or
+    KILLED; records that contradict their own metric (a PASS below the bar,
+    a FAIL above it) are surfaced as INCONSISTENT rather than trusted. Pure
+    post-hoc analysis — no Celery dispatch, no LLM calls.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+    assumptions = (
+        db.query(Assumption)
+        .filter(
+            Assumption.project_id == project.id,
+            Assumption.is_hidden.is_(False),
+        )
+        .order_by(Assumption.id.asc())
+        .all()
+    )
+    evidence = (
+        db.query(AssumptionEvidence)
+        .filter(AssumptionEvidence.project_id == project.id)
+        .order_by(
+            AssumptionEvidence.created_at.desc(),
+            AssumptionEvidence.id.desc(),
+        )
+        .all()
+    )
+    return EvidenceVerdictsOut(
+        **build_evidence_verdicts(
             assumptions=assumptions,
             evidence=evidence,
             project_id=project.id,
