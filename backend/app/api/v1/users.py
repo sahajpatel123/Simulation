@@ -4404,7 +4404,7 @@ def get_projects_needing_attention(
                 ))
             ),
             pending_decision_count=pending_decision_count,
-            days_since_latest_assumption=(
+            days_since_latest_assumption_extraction=(
                 days_since_latest_assumption
             ),
         )
