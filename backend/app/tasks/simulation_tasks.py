@@ -360,7 +360,13 @@ def _mark_cancelled(db: Session, sim: Simulation | None, simulation_id: int) -> 
         try:
             db.rollback()
         except Exception:
-            pass
+            # Nothing further can be done — the primary failure is already
+            # logged above. Keep the rollback failure visible at debug so
+            # a broken session/connection isn't silently masked.
+            logger.debug(
+                "[Simulation] rollback after failed CANCELLED persist also failed",
+                exc_info=True,
+            )
 
     metrics.sim_cancelled()
     sync_broadcast(
@@ -701,9 +707,8 @@ def run_full_simulation(self, simulation_id: int) -> dict:
                 "category": "hook",
             })
         if project.brief_features_json:
-            import json as _json
             try:
-                features = _json.loads(project.brief_features_json)
+                features = json.loads(project.brief_features_json)
                 for i, feat in enumerate(features[:3]):
                     env_params[f"brief_feature_{i}"] = feat
                     assumption_dicts.append({
@@ -712,7 +717,15 @@ def run_full_simulation(self, simulation_id: int) -> dict:
                         "category": "feature",
                     })
             except Exception:
-                pass
+                # Brief features are optional enrichment; malformed stored
+                # JSON must not kill the simulation — but it should be
+                # visible in logs instead of vanishing (data-quality signal).
+                logger.warning(
+                    "[Simulation] Malformed brief_features_json for "
+                    "project_id=%s — skipping killer-feature injection",
+                    getattr(project, "id", "?"),
+                    exc_info=True,
+                )
 
         stage_timings["load_project_data"] = time.perf_counter() - _stage_t0
 
