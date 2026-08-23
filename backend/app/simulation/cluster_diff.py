@@ -25,6 +25,8 @@ the cluster drill-down once per cluster before composing.
 """
 from __future__ import annotations
 
+import math
+
 # The 8 required trait keys. Mirrors ClusterDefinition.REQUIRED_TRAITS
 # so the diff always covers the full trait surface even when one
 # side is missing a few keys.
@@ -68,7 +70,7 @@ def _safe_float(raw: object) -> float | None:
             value = float(raw)
         except (TypeError, ValueError):
             return None
-    if value != value:  # NaN check
+    if math.isnan(value):
         return None
     if value < 0.0 or value > 1.0:
         return None

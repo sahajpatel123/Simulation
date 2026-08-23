@@ -499,7 +499,7 @@ def _process_uptime_seconds() -> float:
 
 def _fmt_number(v: float) -> str:
     # Prometheus accepts regular floats; trim to keep output compact.
-    if v != v:  # NaN
+    if math.isnan(v):
         return "NaN"
     if v == float("inf"):
         return "+Inf"

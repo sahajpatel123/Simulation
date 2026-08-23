@@ -19,6 +19,7 @@ payloads and pass them in.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 # Overall verdicts.
@@ -93,7 +94,7 @@ def _safe_float(raw: Any) -> float | None:
         parsed = float(raw)
     except (TypeError, ValueError, OverflowError):
         return None
-    return parsed if parsed == parsed else None
+    return parsed if not math.isnan(parsed) else None
 
 
 def _normalise_severity(raw: Any) -> str:

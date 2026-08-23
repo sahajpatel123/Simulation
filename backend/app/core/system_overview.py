@@ -16,6 +16,7 @@ status degraded.
 
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime
 from typing import Any
 
@@ -75,7 +76,7 @@ def _safe_float(value: Any) -> float | None:
         parsed = float(value)
     except (TypeError, ValueError, OverflowError):
         return None
-    if parsed != parsed or parsed in (float("inf"), float("-inf")):
+    if math.isnan(parsed) or parsed in (float("inf"), float("-inf")):
         return None
     return parsed
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any
 
 # Thresholds for cohort drift severity
@@ -17,7 +18,7 @@ def _safe_float(val: Any, default: float = 0.0) -> float:
         return default
     try:
         f = float(val)
-        if f != f or f == float("inf") or f == float("-inf"):
+        if math.isnan(f) or f == float("inf") or f == float("-inf"):
             return default
         return f
     except (ValueError, TypeError):

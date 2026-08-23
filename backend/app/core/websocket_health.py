@@ -16,6 +16,7 @@ per-process: multi-worker deployments scrape each replica individually.
 
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime
 from typing import Any
 
@@ -65,7 +66,7 @@ def _safe_float(value: Any) -> float | None:
         parsed = float(value)
     except (TypeError, ValueError, OverflowError):
         return None
-    if parsed != parsed or parsed < 0.0 or parsed in (
+    if math.isnan(parsed) or parsed < 0.0 or parsed in (
         float("inf"),
         float("-inf"),
     ):

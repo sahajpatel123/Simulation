@@ -16,6 +16,8 @@ dashboard accidentally passes every cluster id.
 """
 from __future__ import annotations
 
+import math
+
 from app.simulation.cluster_diff import REQUIRED_TRAITS
 
 # Cap on the number of clusters in a single matrix. 25
@@ -52,7 +54,7 @@ def _safe_float(raw: object) -> float | None:
             value = float(raw)
         except (TypeError, ValueError):
             return None
-    if value != value:  # NaN check
+    if math.isnan(value):
         return None
     if value < 0.0 or value > 1.0:
         return None

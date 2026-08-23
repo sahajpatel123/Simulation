@@ -26,6 +26,7 @@ or PostgreSQL.
 """
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime
 from typing import Any
 
@@ -148,7 +149,7 @@ def _safe_float(value: Any) -> float | None:
         parsed = float(value)
     except (TypeError, ValueError, OverflowError):
         return None
-    if parsed != parsed:  # NaN
+    if math.isnan(parsed):
         return None
     if parsed in (float("inf"), float("-inf")):
         return None
