@@ -23,11 +23,10 @@ import math
 import pytest
 
 from app.simulation.cluster_reweighting import (
-    ClusterReweightingEngine,
     REWEIGHTING_RULES,
+    ClusterReweightingEngine,
 )
 from app.simulation.product_type import ProductType
-
 
 # ---------------------------------------------------------------------------
 # Rule bundle selection
@@ -348,11 +347,6 @@ def test_geo_tier2_does_not_promote_tier3_clusters() -> None:
         segment="",
         age_target="",
     )
-    from app.simulation.clusters.registry import ClusterRegistry
-
-    baseline = {
-        c.cluster_id: c.population_weight for c in ClusterRegistry().all_clusters()
-    }
     # tier3 clusters are NOT in the TIER2 amplification list.
     # Compare to a no-geo run for fairness.
     base_weights = engine.compute_weights(

@@ -322,7 +322,6 @@ class CompetitiveSoftwareAnalyser:
     ) -> ClusterCompetitiveSoftwareProfile:
         _ = aov
         conversion = float(cluster_data.get("conversion_rate", 0.05))
-        _pop_fraction = float(cluster_data.get("population_fraction", 0.02))
 
         # Switching friction from CompetitiveDynamics architect output
         comp_metrics = arch_outputs.get("CompetitiveDynamicsArchitect", {}).get("metrics", {})

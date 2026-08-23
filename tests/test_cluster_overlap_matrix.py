@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Public surface
 # ---------------------------------------------------------------------------
@@ -279,7 +278,6 @@ def test_matrix_pair_summary_label_thresholds() -> None:
     ]
     traits_strong = {t: 0.50 for t in all_traits}
     traits_mid = {t: 0.25 for t in all_traits}
-    traits_weak = {t: 0.0 for t in all_traits}
     # The (mid, weak) pair differs on all 8 traits by 0.25
     # → score 0.75 → MODERATE. The (strong, weak) pair differs
     # by 0.50 → score 0.50 → MODERATE boundary. We need a

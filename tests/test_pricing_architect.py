@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # Cluster fixture
 # ---------------------------------------------------------------------------
@@ -73,8 +72,8 @@ def test_pricing_architect_name_constant() -> None:
 
 
 def test_pricing_architect_product_types_includes_all() -> None:
-    from app.simulation.architects.pricing import PricingArchitect
     from app.simulation.architects.base import BaseArchitect
+    from app.simulation.architects.pricing import PricingArchitect
 
     a = PricingArchitect()
     # pricing applies to every known product type.
@@ -316,7 +315,6 @@ def test_compute_returns_two_narrative_findings() -> None:
 
 def test_transition_overrides_decide_to_purchase_uses_will_pay_clamped() -> None:
     from app.simulation.architects.pricing import PricingArchitect
-    from app.simulation.architects.base import ArchitectOutput
 
     a = PricingArchitect()
     out = a.compute(
@@ -325,6 +323,7 @@ def test_transition_overrides_decide_to_purchase_uses_will_pay_clamped() -> None
     )
     overrides = a.transition_overrides(out)
     wp = out.metrics["will_pay_probability"]
+    assert 0.0 <= wp <= 1.0
     assert 0.05 <= overrides[("DECIDE", "PURCHASE")] <= 0.95
 
 
@@ -349,7 +348,6 @@ def test_transition_overrides_consider_to_decide_uses_anchoring_boost() -> None:
 
 def test_generate_report_no_critical_when_outputs_have_no_kill_shot() -> None:
     from app.simulation.architects.pricing import PricingArchitect
-    from app.simulation.architects.base import ArchitectOutput
 
     a = PricingArchitect()
     out = a.compute(
@@ -366,7 +364,6 @@ def test_generate_report_no_critical_when_outputs_have_no_kill_shot() -> None:
 
 def test_generate_report_counts_critical_clusters() -> None:
     from app.simulation.architects.pricing import PricingArchitect
-    from app.simulation.architects.base import ArchitectOutput
 
     a = PricingArchitect()
     out_good = a.compute(

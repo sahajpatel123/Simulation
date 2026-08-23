@@ -101,18 +101,15 @@ def build_oldest_open_item(
     oldest_created, oldest_type, oldest_project_id = oldest
     age = _age_days(oldest_created, now=now)
 
-    if age is None:
-        severity = SIGNAL_OK
-    elif age > 30:
-        severity = SIGNAL_CRITICAL
-    elif age > 14:
-        severity = SIGNAL_WATCH
-    else:
-        severity = SIGNAL_OK
-
     # ---- Key signals ----------------------------------------------
     key_signals: list[dict] = []
     if age is not None:
+        if age > 30:
+            severity = SIGNAL_CRITICAL
+        elif age > 14:
+            severity = SIGNAL_WATCH
+        else:
+            severity = SIGNAL_OK
         key_signals.append({
             "label": "oldest_age_days",
             "value": age,

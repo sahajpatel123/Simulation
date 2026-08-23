@@ -248,6 +248,11 @@ def test_build_findings_summary_by_architect_ranked_by_impact() -> None:
     summary = build_findings_summary(_sample_findings())
     ranks = [(a.architect_name, a.rank, a.total_impact, a.finding_count) for a in summary.by_architect]
 
+    # Architects must be ranked by descending total impact.
+    impacts = [r[2] for r in ranks]
+    assert impacts == sorted(impacts, reverse=True)
+    assert [r[1] for r in ranks] == list(range(1, len(ranks) + 1))
+
     # Total impact per architect (sum of conversion_impact):
     #   Onboarding: 0.0360 + 0.0150 = 0.0510
     #   Pricing:    0.0400
@@ -365,7 +370,7 @@ def test_domain_finding_from_raw_accepts_legacy_delta_from_benchmark() -> None:
 
 
 def test_findings_list_out_model_serialisation() -> None:
-    from app.schemas.accountability import FindingsListOut, DomainFindingOut
+    from app.schemas.accountability import DomainFindingOut, FindingsListOut
 
     finding = DomainFindingOut.from_raw(_sample_findings()[0])
     out = FindingsListOut(
@@ -387,8 +392,8 @@ def test_findings_list_out_model_serialisation() -> None:
 
 
 def test_findings_summary_out_model_serialisation() -> None:
-    from app.simulation.accountability_summary import build_findings_summary
     from app.schemas.accountability import FindingsSummaryOut
+    from app.simulation.accountability_summary import build_findings_summary
 
     summary: FindingsSummaryOut = build_findings_summary(_sample_findings())
     summary.project_id = 7

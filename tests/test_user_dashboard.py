@@ -7,10 +7,9 @@ razorpay stub (same pattern as the other route tests).
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Public surface
@@ -117,8 +116,8 @@ def test_dashboard_quota_critical_at_cap() -> None:
 def test_dashboard_account_age_label_week() -> None:
     from app.simulation.user_dashboard import build_user_dashboard
 
-    now = datetime(2026, 1, 10, tzinfo=timezone.utc)
-    created = datetime(2026, 1, 5, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 10, tzinfo=UTC)
+    created = datetime(2026, 1, 5, tzinfo=UTC)
     out = build_user_dashboard(
         account_created_at=created,
         tier="FREE",
@@ -138,8 +137,8 @@ def test_dashboard_account_age_label_quarter() -> None:
     # upper-bound semantics ("less than X old"), so an
     # account past day 90 is "less than a year old",
     # not "less than a quarter old".
-    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
-    created = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 1, tzinfo=UTC)
+    created = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_user_dashboard(
         account_created_at=created,
         tier="FREE",
@@ -161,8 +160,8 @@ def test_dashboard_account_age_inclusive_boundaries() -> None:
     from app.simulation.user_dashboard import build_user_dashboard
 
     # Day-7 boundary: "less than a week old" (not month).
-    now = datetime(2026, 1, 8, tzinfo=timezone.utc)
-    created = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 8, tzinfo=UTC)
+    created = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_user_dashboard(
         account_created_at=created, tier="FREE",
         monthly_sim_used=0, now=now,
@@ -174,8 +173,8 @@ def test_dashboard_account_age_inclusive_boundaries() -> None:
     # "less than a quarter old", NOT "less than a year old".
     # The previous ``<`` comparison at line 89 missed this
     # boundary — day-90 silently fell into the year band.
-    now = datetime(2026, 4, 1, tzinfo=timezone.utc)
-    created = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 1, tzinfo=UTC)
+    created = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_user_dashboard(
         account_created_at=created, tier="FREE",
         monthly_sim_used=0, now=now,
@@ -188,7 +187,7 @@ def test_dashboard_account_age_handles_naive_datetime() -> None:
     """Naive datetimes are coerced to UTC."""
     from app.simulation.user_dashboard import build_user_dashboard
 
-    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 1, tzinfo=UTC)
     created = datetime(2026, 5, 15)
     out = build_user_dashboard(
         account_created_at=created,
@@ -201,7 +200,7 @@ def test_dashboard_account_age_handles_iso_string() -> None:
     """Account_created_at can also be passed as an ISO string."""
     from app.simulation.user_dashboard import build_user_dashboard
 
-    now = datetime(2026, 1, 10, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 10, tzinfo=UTC)
     out = build_user_dashboard(
         account_created_at="2026-01-05T00:00:00+00:00",
         tier="FREE",
@@ -317,6 +316,7 @@ def test_dashboard_narrative_warns_near_cap() -> None:
         account_created_at=None, tier="FREE",
         monthly_sim_used=2, monthly_sim_cap=2,
     )
+    assert "exhausted" in out["narrative"].lower()
     # Already-exhausted case takes priority; check at >80%
     # under cap boundary separately.
     out2 = build_user_dashboard(
@@ -394,7 +394,7 @@ def test_user_dashboard_out_round_trips_helper_payload() -> None:
 
     payload = build_user_dashboard(
         account_created_at=datetime(
-            2026, 1, 1, tzinfo=timezone.utc,
+            2026, 1, 1, tzinfo=UTC,
         ),
         tier="PRO",
         monthly_sim_used=5, monthly_sim_cap=50,

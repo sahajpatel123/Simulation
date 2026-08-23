@@ -196,6 +196,8 @@ def test_transition_overrides_compress_for_religious_sensitivity():
     )
     benign_decide = benign.metrics["cultural_alignment_score"]
     risky_decide  = risky.metrics["cultural_alignment_score"]
+    # Religiously charged copy must never align better than benign copy.
+    assert risky_decide <= benign_decide
     # Religious sensitivity should not raise decide→purchase replacement
     assert (
         arch.transition_overrides(risky)[("DECIDE", "PURCHASE")]

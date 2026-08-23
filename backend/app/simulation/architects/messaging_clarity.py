@@ -400,7 +400,6 @@ class MessagingClarityArchitect(BaseArchitect):
         if not evidence:
             clarity = 1.0
             risk = 0.0
-            base_clarity = 1.0
             suppressor = 1.0
             active = False
         else:

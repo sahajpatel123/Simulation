@@ -5,12 +5,13 @@ import pytest
 pytest.importorskip("numpy", reason="Full stack: pip install -r requirements.txt (numpy)")
 
 import time
-from app.simulation.clusters.registry import ClusterRegistry
-from app.simulation.conductor import Conductor, ProductType, ARCHITECT_STACKS
+
+from app.core.prompts import INTERVENTION_PROMPT, PREMORTEM_PROMPT
 from app.simulation.accountability import AccountabilityEngine
+from app.simulation.calibration_engine import ALL_ARCHITECT_NAMES, CalibrationEngine
+from app.simulation.clusters.registry import ClusterRegistry
+from app.simulation.conductor import ARCHITECT_STACKS, Conductor, ProductType
 from app.simulation.markov import MarkovBehaviourModel
-from app.simulation.calibration_engine import CalibrationEngine, ALL_ARCHITECT_NAMES
-from app.core.prompts import PREMORTEM_PROMPT, INTERVENTION_PROMPT
 
 r   = ClusterRegistry()
 c   = Conductor()
@@ -95,7 +96,7 @@ def test_saas_student_low_conversion():
     student_cr = result.cluster_breakdown.get("high_literacy_student_freemium_ceiling", 1.0)
     metro_cr   = result.cluster_breakdown.get("metro_power_professional", 0.0)
     assert student_cr < 0.10, f"Student should have near-zero conversion at ₹999, got {student_cr}"
-    assert metro_cr > student_cr, f"Metro should convert higher than student"
+    assert metro_cr > student_cr, "Metro should convert higher than student"
 
 def test_tier3_distribution_collapse():
     # No offline distribution → Tier-3 should collapse
@@ -112,6 +113,7 @@ def test_health_hardware_clinical_gate():
     skeptic_cr    = result.cluster_breakdown.get("health_hardware_skeptic", 1.0)
     enthusiast_cr = result.cluster_breakdown.get("health_hardware_enthusiast", 0.0)
     assert skeptic_cr < 0.15, f"Skeptic should be suppressed without clinical validation: {skeptic_cr}"
+    assert enthusiast_cr < 0.15, f"Enthusiast should be suppressed without clinical validation: {enthusiast_cr}"
 
 def test_52_clusters_in_breakdown():
     result = _run(ProductType.SAAS, "SaaS tool", [])
@@ -219,8 +221,12 @@ def test_calibration_architect_count():
 
 def test_calibration_trend_improving():
     from unittest.mock import MagicMock
+
     class MockRow:
-        def __init__(self, g, sq): self.absolute_gap=g; self.signal_quality_at_run=sq
+        def __init__(self, g, sq):
+            self.absolute_gap = g
+            self.signal_quality_at_run = sq
+
     db = MagicMock()
     db.execute.return_value.fetchall.return_value = [
         MockRow(0.25,0.6), MockRow(0.22,0.7), MockRow(0.18,0.8),

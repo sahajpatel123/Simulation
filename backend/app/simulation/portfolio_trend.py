@@ -352,14 +352,7 @@ def compute_portfolio_trend(
         ),
     ]
     # Note: outcomes_summary is shared across both metrics
-    # except critical_findings (findings). The closures pull
-    # from the right summary dict via the module-level lookup.
-    def _find_metric(spec, payload):
-        key, e_fn, l_fn, hib = spec
-        return e_fn(payload) if key in {
-            "mae", "mape", "data_quality_score",
-        } else None
-
+    # except critical_findings (findings).
     deltas: list[dict] = []
     for spec in metric_specs:
         key = spec[0]

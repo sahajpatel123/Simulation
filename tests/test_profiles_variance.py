@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from app.simulation.profiles import AgentProfileGenerator
 
@@ -35,6 +36,9 @@ def test_sample_beta_variance_multiplier():
     assert var_2 > var_1
     # Check that variance roughly doubled (allowing for sampling error and clipping effects)
     assert var_2 / var_1 > 1.5  # At least 50% increase
+
+    # Multiplier 1.0 stays near the theoretical Beta(2,5) variance.
+    assert var_1 == pytest.approx(baseline_variance, rel=0.25)
 
 
 def test_sample_beta_variance_multiplier_clipping():

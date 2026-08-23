@@ -309,9 +309,6 @@ def feature_prioritization_to_markdown(
 ) -> str:
     """Render a feature-prioritization payload as a founder-facing brief."""
     data = _as_dict(payload)
-    meta = data.get("meta") or {}
-    if not isinstance(meta, dict):
-        meta = {}
 
     title = (project_name or "TheCee").strip() or "TheCee"
     lines: list[str] = []
