@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import ast
 import os
+from pathlib import Path
 
 # Routes live in backend/app/api/v1/. We scan every .py
 # file there except shared modules and __init__.
@@ -57,7 +58,7 @@ _DB_TOUCH_PATTERNS = (
 def _route_functions(path: str) -> list[tuple[str, ast.FunctionDef]]:
     """Yield every (name, function) pair that lives under a
     ``@router.{get,post,put,patch,delete}`` decorator."""
-    src = open(path).read()
+    src = Path(path).read_text()
     tree = ast.parse(src)
     out: list[tuple[str, ast.FunctionDef]] = []
     for node in ast.walk(tree):

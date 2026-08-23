@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import ast
 import os
+from pathlib import Path
 
 PROJECTS_PY = os.path.normpath(os.path.join(
     os.path.dirname(__file__),
@@ -56,7 +57,7 @@ def _function_invalidates_namespace(fn: ast.FunctionDef, ns: str) -> bool:
 
 
 def test_put_project_tags_invalidates_tag_taxonomy_cache():
-    src = open(PROJECTS_PY).read()
+    src = Path(PROJECTS_PY).read_text()
     fn = _find_function(src, "put_project_tags")
     assert _function_invalidates_namespace(fn, EXPECTED_NS), (
         f"put_project_tags must invalidate {EXPECTED_NS} on "
@@ -67,7 +68,7 @@ def test_put_project_tags_invalidates_tag_taxonomy_cache():
 
 
 def test_delete_project_tag_invalidates_tag_taxonomy_cache():
-    src = open(PROJECTS_PY).read()
+    src = Path(PROJECTS_PY).read_text()
     fn = _find_function(src, "delete_project_tag")
     assert _function_invalidates_namespace(fn, EXPECTED_NS), (
         f"delete_project_tag must invalidate {EXPECTED_NS} on "
@@ -85,7 +86,7 @@ def test_delete_project_tag_only_invalidates_on_actual_mutation():
     a no-op remove (tag wasn't on the project) would
     evict the cache needlessly, hurting cache hit rate
     for users who didn't change anything."""
-    src = open(PROJECTS_PY).read()
+    src = Path(PROJECTS_PY).read_text()
     fn = _find_function(src, "delete_project_tag")
     cache_invalidate_lines = []
     for node in ast.walk(fn):
@@ -101,8 +102,8 @@ def test_delete_project_tag_only_invalidates_on_actual_mutation():
                 cache_invalidate_lines.append(node.lineno)
     if not cache_invalidate_lines:
         raise AssertionError(
-            f"delete_project_tag doesn't call cache_invalidate "
-            f"at all — see test_delete_project_tag_invalidates..."
+            "delete_project_tag doesn't call cache_invalidate "
+            "at all — see test_delete_project_tag_invalidates..."
         )
     # The function body should be at least a few lines; the
     # invalidation must NOT be on line 1 (the function header

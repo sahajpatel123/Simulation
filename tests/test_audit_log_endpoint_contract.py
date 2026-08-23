@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import ast
 import os
+from pathlib import Path
 
 USERS_PY = os.path.normpath(os.path.join(
     os.path.dirname(__file__),
@@ -46,7 +47,7 @@ def test_get_audit_log_uses_cache_get_json():
     """The route must call cache_get_json somewhere — the
     first page (no before_id) is the cached path; paginated
     reads (with before_id) bypass the cache."""
-    src = open(USERS_PY).read()
+    src = Path(USERS_PY).read_text()
     fn = _find_get_audit_log(src)
     assert _fn_calls_cache_get_json(fn), (
         "get_audit_log must call cache_get_json so the first "
@@ -60,7 +61,7 @@ def test_get_audit_log_uses_before_id_query_param():
     cursor-based pagination. A bug that dropped it would
     force offset-based pagination, which silently skips /
     duplicates rows on concurrent inserts."""
-    src = open(USERS_PY).read()
+    src = Path(USERS_PY).read_text()
     fn = _find_get_audit_log(src)
     found = False
     for arg in fn.args.args:
@@ -94,10 +95,9 @@ def test_get_audit_log_branch_gates_cache_on_before_id():
     reads (with a before_id) bypass the cache. A bug that
     cached ALL responses would serve a stale snapshot of page
     1 even after the user has scrolled into the history."""
-    src = open(USERS_PY).read()
+    src = Path(USERS_PY).read_text()
     fn = _find_get_audit_log(src)
     cache_call_in_unconditional_branch = False
-    in_unconditional_block = False
     for node in ast.walk(fn):
         if isinstance(node, ast.Call):
             func = node.func
@@ -111,7 +111,6 @@ def test_get_audit_log_branch_gates_cache_on_before_id():
                 continue
             # Walk up the AST ancestors — is this call inside
             # any `if` whose test mentions before_id?
-            parent = getattr(node, "parent", None)
             gated = False
             # Without stored parents, scan source line range:
             call_line = node.lineno

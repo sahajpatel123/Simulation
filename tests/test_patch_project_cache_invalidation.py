@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import ast
 import os
-import re
+from pathlib import Path
 
 PROJECTS_PY = os.path.normpath(os.path.join(
     os.path.dirname(__file__),
@@ -91,7 +91,7 @@ def _find_cache_invalidate_calls(fn: ast.FunctionDef) -> list[tuple[str, str]]:
 
 
 def test_patch_project_invalidates_six_user_caches():
-    src = open(PROJECTS_PY).read()
+    src = Path(PROJECTS_PY).read_text()
     fn = _find_patch_project(src)
     calls = _find_cache_invalidate_calls(fn)
 
@@ -123,7 +123,7 @@ def test_patch_project_invalidations_gated_on_title_or_description_change():
     but other forms are acceptable as long as both field
     changes are covered.
     """
-    src = open(PROJECTS_PY).read()
+    src = Path(PROJECTS_PY).read_text()
     fn = _find_patch_project(src)
 
     # Find the call that busts DASHBOARD (the first invalidation
@@ -137,9 +137,9 @@ def test_patch_project_invalidations_gated_on_title_or_description_change():
                 in_gated_block = True
                 break
     assert in_gated_block, (
-        f"patch_project must invalidate caches inside an if "
-        f"that checks title_changed OR description. Couldn't "
-        f"find such a condition in the function."
+        "patch_project must invalidate caches inside an if "
+        "that checks title_changed OR description. Couldn't "
+        "find such a condition in the function."
     )
 
 
@@ -149,7 +149,7 @@ def test_patch_project_invalidates_using_calling_user_id():
     hardcoded a value or used a wrong variable would let
     user A bust user B's cached data (multi-tenant privacy
     leak)."""
-    src = open(PROJECTS_PY).read()
+    src = Path(PROJECTS_PY).read_text()
     fn = _find_patch_project(src)
     for node in ast.walk(fn):
         if not isinstance(node, ast.Call):

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import os
 import re
+from pathlib import Path
 
 # Resolve the path to backend/app/api/v1/users.py without
 # importing the module — that would transitively pull in
@@ -37,7 +38,7 @@ USERS_PY = os.path.normpath(os.path.join(
 
 
 def test_every_user_cache_namespace_invalidated_by_clear_archive() -> None:
-    src = open(USERS_PY).read()
+    src = Path(USERS_PY).read_text()
 
     # Every declared _USER_*_CACHE_NAMESPACE constant in
     # the module. The convention is <NAME>: str = "<value>"
