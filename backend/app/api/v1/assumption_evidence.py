@@ -507,6 +507,7 @@ async def import_assumption_evidence_csv(
 
 
 _ASSUMPTION_EXPORT_HEADERS: tuple[str, ...] = (
+    "assumption_id",
     "text",
     "category",
     "sensitivity",
@@ -563,6 +564,7 @@ def export_assumptions_csv(
             [
                 _csv_guard(value)
                 for value in (
+                    assumption.id,
                     assumption.text or "",
                     assumption.category or "",
                     assumption.sensitivity or "",

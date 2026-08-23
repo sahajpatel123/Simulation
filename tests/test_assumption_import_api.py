@@ -361,11 +361,16 @@ def test_export_matches_import_csv_shape() -> None:
     )
     text = body.decode("utf-8")
     lines = text.splitlines()
-    # Header is exactly the importer's column list.
-    assert lines[0] == "text,category,sensitivity,impact_score"
+    # Leading assumption_id column plus exactly the importer's column list,
+    # so one download carries both key forms for the evidence paste-back.
+    # The importer tolerates the extra leading column and round-trips.
+    assert lines[0] == "assumption_id,text,category,sensitivity,impact_score"
     assert len(lines) == 3
+    assert lines[1].startswith("50,Users will pay ₹999 monthly,Demand,HIGH")
     # Formula-leading text is guarded so spreadsheets stay safe.
-    assert "'-60% churn after redesign,Demand,CRITICAL,7.5" in lines[2]
+    assert (
+        "51,'-60% churn after redesign,Demand,CRITICAL,7.5" in lines[2]
+    )
     assert int(response.headers["Content-Length"]) == len(body)
 
 
@@ -392,3 +397,34 @@ def test_round_trip_export_then_reimport_is_noop() -> None:
     assert all("already exists" in s.reason for s in out.skipped_rows)
     assert session.added_rows == []
     assert session.commit_count == 0
+
+
+def test_exported_ids_feed_evidence_paste_back() -> None:
+    """The export's assumption_id column plugs straight into evidence CSV."""
+    from app.api.v1 import assumption_evidence as ev_mod
+
+    rows = [_ExportAssumption(50, "Users will pay ₹999 monthly")]
+    session = _ImportSession(assumptions=rows)
+
+    exported = asyncio.run(_collect(_call_export(session))).decode("utf-8")
+    assumption_id = exported.splitlines()[1].split(",", 1)[0]
+    assert assumption_id == "50"
+
+    evidence_out = asyncio.run(
+        ev_mod.import_assumption_evidence_csv(
+            project_id=10,
+            request=_FakeCsvRequest(
+                (
+                    "assumption_id,method,result,observed_metric,notes\n"
+                    f"{assumption_id},USER_INTERVIEWS,PASS,0.6,called 12 users\n"
+                ).encode()
+            ),
+            db=session,  # type: ignore[arg-type]
+            current_user=type("U", (), {"id": 42})(),
+        )
+    )
+
+    assert evidence_out.imported_count == 1
+    assert evidence_out.skipped_count == 0
+    assert evidence_out.assumption_ids_touched == [50]
+    assert session.commit_count == 1
