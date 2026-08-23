@@ -76,7 +76,6 @@ class BaseArchitect(ABC):
     @abstractmethod
     def name(self) -> str:
         """Unique string identifier, e.g. 'PricingArchitect'."""
-        ...
 
     @property
     @abstractmethod
@@ -86,7 +85,6 @@ class BaseArchitect(ABC):
         Return an empty list to activate for all product types.
         Example: ['saas', 'marketplace']
         """
-        ...
 
     @abstractmethod
     def compute(
@@ -113,7 +111,6 @@ class BaseArchitect(ABC):
         Returns:
             ArchitectOutput with metrics, flags, narrative_findings, severity.
         """
-        ...
 
     @abstractmethod
     def generate_report(
@@ -134,7 +131,6 @@ class BaseArchitect(ABC):
         Returns:
             DomainReport summarising cross-cluster findings.
         """
-        ...
 
     def transition_overrides(
         self,
