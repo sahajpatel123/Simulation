@@ -729,9 +729,6 @@ def import_assumptions(
     return _apply_assumption_import(db, project.id, payload.rows, [])
 
 
-_ASSUMPTION_CSV_REQUIRED_HEADERS: tuple[str, ...] = ("text",)
-
-
 @router.post(
     "/{project_id}/assumptions/import/csv",
     response_model=AssumptionImportOut,
