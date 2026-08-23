@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import WebSocket
 
 from app.core.progress_bridge import progress_bridge
+from app.core.security import log_safe
 
 logger = logging.getLogger(__name__)
 
@@ -62,11 +63,11 @@ class ConnectionManager:
                     _exc,
                 )
         self._connections[simulation_id] = websocket
-        logger.info(f"[WS] Client connected - simulation_id={simulation_id}")
+        logger.info("[WS] Client connected - simulation_id=%s", log_safe(simulation_id))
 
     def disconnect(self, simulation_id: int) -> None:
         self._connections.pop(simulation_id, None)
-        logger.info(f"[WS] Client disconnected - simulation_id={simulation_id}")
+        logger.info("[WS] Client disconnected - simulation_id=%s", log_safe(simulation_id))
 
     async def send_update(self, simulation_id: int, payload: dict[str, Any]) -> bool:
         ws = self._connections.get(simulation_id)
@@ -76,7 +77,11 @@ class ConnectionManager:
             await ws.send_text(json.dumps(payload, default=str))
             return True
         except Exception as exc:
-            logger.warning(f"[WS] Send failed simulation_id={simulation_id}: {exc}")
+            logger.warning(
+                "[WS] Send failed simulation_id=%s: %s",
+                log_safe(simulation_id),
+                log_safe(exc),
+            )
             self.disconnect(simulation_id)
             return False
 

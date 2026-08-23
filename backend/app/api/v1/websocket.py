@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.deps import user_from_access_sub
 from app.core.progress_bridge import progress_bridge
-from app.core.security import decode_token
+from app.core.security import decode_token, log_safe
 from app.core.websocket import ws_manager
 from app.models.project import Project
 from app.models.simulation import Simulation
@@ -84,7 +84,7 @@ async def websocket_simulation_progress(
     if not _origin_allowed(origin):
         logger.warning(
             "[WS] Rejected handshake: origin=%r not in allowlist",
-            origin,
+            log_safe(origin),
         )
         await websocket.close(code=4003)
         return
@@ -133,7 +133,7 @@ async def websocket_simulation_progress(
                 if len(data) > 65536:
                     logger.warning(
                         "[WS] Oversized frame rejected simulation_id=%s len=%s",
-                        simulation_id,
+                        log_safe(simulation_id),
                         len(data),
                     )
                     await websocket.send_text(
@@ -145,7 +145,11 @@ async def websocket_simulation_progress(
             except WebSocketDisconnect:
                 break
             except Exception as exc:
-                logger.warning(f"[WS] Receive error simulation_id={simulation_id}: {exc}")
+                logger.warning(
+                    "[WS] Receive error simulation_id=%s: %s",
+                    log_safe(simulation_id),
+                    log_safe(exc),
+                )
                 break
     finally:
         ws_manager.disconnect(simulation_id)

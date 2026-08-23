@@ -1,4 +1,5 @@
 import hashlib
+import re
 import secrets
 import string
 from datetime import UTC, datetime, timedelta
@@ -9,6 +10,21 @@ from passlib.context import CryptContext
 from app.core.config import settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Matches CR/LF (log-forging line breaks) and other C0 control chars that
+# corrupt single-line log records.
+_LOG_UNSAFE_RE = re.compile(r"[\x00-\x1f\x7f]+")
+
+
+def log_safe(value: object) -> str:
+    """Make untrusted data safe to interpolate into a log entry.
+
+    Strips CR/LF and control characters so a request-supplied string (an
+    Origin header, an error message echoing client input, ...) cannot forge
+    additional log lines or spoof earlier entries. Ints and other benign
+    values pass through unchanged in content.
+    """
+    return _LOG_UNSAFE_RE.sub(" ", str(value))
 
 
 def verify_password(plain: str, hashed: str) -> bool:
