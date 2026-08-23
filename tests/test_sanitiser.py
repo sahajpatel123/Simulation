@@ -16,7 +16,6 @@ behaviour:
 """
 from __future__ import annotations
 
-import pytest
 
 from app.core.sanitiser import (
     MAX_ASSUMPTION_LENGTH,

@@ -15,7 +15,6 @@ from app.schemas.assumption_postmortem import (
     VERDICT_INVALIDATED,
     VERDICT_MIXED,
     VERDICT_VALIDATED,
-    AssumptionPostmortemItem,
     AssumptionPostmortemOut,
 )
 from app.simulation.assumption_postmortem import (

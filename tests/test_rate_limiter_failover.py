@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
 from fastapi import HTTPException
 
 from app.core import rate_limiter

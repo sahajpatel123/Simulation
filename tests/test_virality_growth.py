@@ -28,7 +28,6 @@ from app.simulation.virality_growth import (
 )
 from app.simulation.architects.virality import ViralityArchitect
 from app.simulation.conductor import ARCHITECT_STACKS
-from app.simulation.product_type import ProductType
 
 
 def _registry(clusters: list[dict[str, Any]]) -> list[dict[str, Any]]:

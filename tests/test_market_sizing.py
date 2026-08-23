@@ -8,7 +8,6 @@ import json
 import math
 from typing import Any
 
-import pytest
 
 from app.simulation.market_sizing import (
     CONVERSION_BENCHMARK,

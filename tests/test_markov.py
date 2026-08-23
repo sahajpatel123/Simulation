@@ -26,7 +26,6 @@ import math
 from typing import Any
 
 import numpy as np
-import pytest
 
 
 # ---------------------------------------------------------------------------
@@ -504,7 +503,7 @@ class _StubArchitectOutput:
 
 
 def test_build_for_cluster_computes_funnel_dropoffs() -> None:
-    from app.simulation.markov import ClusterTransitionMatrix, MarkovBehaviourModel
+    from app.simulation.markov import MarkovBehaviourModel
 
     class _StubCluster:
         cluster_id = "metro_power_professional"

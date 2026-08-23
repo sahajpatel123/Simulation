@@ -1,8 +1,6 @@
-import pytest
 from app.simulation.cluster_cohort_drift import (
     compute_cluster_cohort_drift,
     SIGNAL_OK,
-    SIGNAL_WATCH,
     SIGNAL_CRITICAL,
 )
 

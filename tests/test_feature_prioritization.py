@@ -9,10 +9,8 @@ from typing import Any
 from app.schemas.feature_prioritization import (
     FeaturePrioritizationOut,
     TIER_BUILD_FIRST,
-    TIER_DEPRIORITIZE,
     TIER_GROW,
     TIER_UNMAPPED,
-    TIER_WATCH,
     VALID_TIERS,
     VALID_VERDICTS,
     VERDICT_FOCUSED,

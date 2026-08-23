@@ -6,11 +6,8 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
 
 from app.simulation.cohort_retention import (
-    BENCHMARK_SURVIVAL,
-    CHURN_TRIGGER_MAP,
     RETENTION_DAYS,
     _churn_risk_label,
     _churn_risk_score,

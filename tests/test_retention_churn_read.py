@@ -32,7 +32,6 @@ from app.simulation.retention_churn_read import (
 )
 from app.simulation.architects.retention import RetentionArchitect
 from app.simulation.conductor import ARCHITECT_STACKS
-from app.simulation.product_type import ProductType
 
 
 def _registry(clusters: list[dict[str, Any]]) -> list[dict[str, Any]]:

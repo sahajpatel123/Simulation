@@ -1,7 +1,6 @@
 """Tests for the per-project confidence-explainer helper."""
 from __future__ import annotations
 
-import pytest
 
 
 def test_public_allowlist_matches_callers():

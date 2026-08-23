@@ -16,7 +16,6 @@ the engine's pure helpers that don't need a process pool:
 """
 from __future__ import annotations
 
-from typing import Any
 
 import pytest
 

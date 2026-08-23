@@ -4,7 +4,6 @@ Tests for the pure support-friction builder
 """
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from app.schemas.support_friction import (

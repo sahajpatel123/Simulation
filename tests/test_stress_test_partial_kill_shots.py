@@ -12,10 +12,8 @@ These tests lock in:
 """
 from __future__ import annotations
 
-import json
 from typing import Any
 
-import pytest
 
 
 def test_partial_kill_shot_predicate_at_boundary() -> None:

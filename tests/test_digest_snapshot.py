@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import pytest
 
 
 def test_public_allowlist_matches_callers() -> None:

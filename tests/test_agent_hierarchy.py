@@ -12,7 +12,6 @@ SUPERVISOR tiers per cluster. Locks down:
 """
 from __future__ import annotations
 
-from typing import Any
 
 
 # ---------------------------------------------------------------------------

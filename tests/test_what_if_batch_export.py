@@ -4,7 +4,6 @@ from __future__ import annotations
 import csv
 import io
 import json
-from typing import Any
 
 from app.schemas.what_if import WhatIfOut, WhatIfSummary
 from app.schemas.what_if_batch import (

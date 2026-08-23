@@ -26,7 +26,6 @@ from app.simulation.architects.competitive_dynamics import (
 )
 from app.simulation.competitive_moat import (
     COMPETITIVE_MOAT_PRODUCT_TYPES,
-    LEVER_ORDER,
     build_competitive_moat,
 )
 from app.simulation.clusters.registry import ClusterRegistry

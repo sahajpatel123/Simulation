@@ -8,11 +8,9 @@ import functools
 from typing import Any
 
 from app.schemas.setup_friction import (
-    BLOCKER_ACCOUNT_ABANDONMENT,
     BLOCKER_COMPANION_APP,
     BLOCKER_FIRMWARE_UPDATE,
     BLOCKER_PAIRING,
-    BLOCKER_PHYSICAL_ASSEMBLY,
     BLOCKER_SETUP_COMPLETION,
     BLOCKER_TIME_TO_VALUE,
     LEVER_ACCOUNT_OPTIONAL,
@@ -30,7 +28,6 @@ from app.schemas.setup_friction import (
     TIER_SLOW,
     VALID_BLOCKERS,
     VALID_LEVERS,
-    VALID_TIERS,
     VALID_VERDICTS,
     VERDICT_ACCEPTABLE,
     VERDICT_BLOCKED,

@@ -1,7 +1,6 @@
 """Tests for the per-user portfolio-health-snapshot helper."""
 from __future__ import annotations
 
-import pytest
 
 
 def test_public_allowlist_matches_callers():

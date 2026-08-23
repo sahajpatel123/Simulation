@@ -1,6 +1,4 @@
 import numpy as np
-import pytest
-from scipy.stats import beta
 
 from app.simulation.profiles import AgentProfileGenerator
 

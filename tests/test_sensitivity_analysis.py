@@ -10,13 +10,10 @@ import pytest
 
 from app.simulation.sensitivity_analysis import (
     IMPACT_LEVELS,
-    SENSITIVITY_TIER_THRESHOLDS,
-    _forward_conversion,
     _sensitivity_tier,
     build_sensitivity_analysis,
 )
 from app.schemas.sensitivity import (
-    AssumptionSensitivity,
     SensitivityOut,
     SensitivityPoint,
 )

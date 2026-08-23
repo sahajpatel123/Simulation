@@ -1,7 +1,6 @@
 """Tests for the what-if recommendation list cap + dedupe helper."""
 from __future__ import annotations
 
-from typing import Any
 
 from app.simulation.what_if import _dedupe_and_cap_recommendations, build_what_if_scenario
 from app.schemas.what_if import WhatIfRecommendation

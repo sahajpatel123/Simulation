@@ -1,7 +1,6 @@
 """Tests for the per-project status-banner helper."""
 from __future__ import annotations
 
-import pytest
 
 
 def test_public_allowlist_matches_callers():

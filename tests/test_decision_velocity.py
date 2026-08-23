@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-import pytest
 
 
 def test_public_allowlist_matches_callers():
@@ -143,7 +142,6 @@ def test_fastest_and_slowest():
 
 
 def test_handles_iso_string_pairs():
-    from datetime import datetime
     from app.simulation.decision_velocity import (
         build_decision_velocity,
     )

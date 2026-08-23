@@ -1,4 +1,3 @@
-import pytest
 from app.simulation.sensitivity_matrix import (
     compute_simulation_sensitivity_matrix,
     SENSITIVITY_TRAITS,

@@ -1,8 +1,5 @@
-import pytest
 from app.simulation.anomaly_detector import (
     detect_simulation_anomalies,
-    SIGNAL_OK,
-    SIGNAL_WATCH,
     SIGNAL_CRITICAL,
 )
 
