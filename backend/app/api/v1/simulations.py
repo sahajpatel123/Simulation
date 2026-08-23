@@ -8626,6 +8626,12 @@ def get_validation_experiment_schedule(
         default="LOW",
         description="Maximum allowed experiment cost tier (FREE < LOW < MEDIUM).",
     ),
+    max_parallel: int = Query(
+        default=1,
+        ge=1,
+        le=4,
+        description="Concurrent experiment tracks the founder can run.",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ValidationSprintScheduleOut:
@@ -8633,10 +8639,11 @@ def get_validation_experiment_schedule(
     Constrained validation schedule for a completed simulation.
 
     Takes the full experiment plan and re-fits it to an explicit envelope:
-    ``max_days`` of sequential run time and a ``budget_tier`` ceiling.
-    Experiments are kept greedily in validation-ROI order while they clear
-    both constraints; everything else is deferred with a founder-readable
-    reason. Pure post-hoc analysis — no Celery dispatch, no LLM calls.
+    ``max_days`` of run time across up to ``max_parallel`` tracks and a
+    ``budget_tier`` ceiling. Experiments are kept greedily in
+    validation-ROI order while they clear all three constraints; everything
+    else is deferred with a founder-readable reason. Pure post-hoc
+    analysis — no Celery dispatch, no LLM calls.
     """
     plan = get_validation_experiment_plan(
         simulation_id=simulation_id,
@@ -8647,6 +8654,7 @@ def get_validation_experiment_schedule(
         plan,
         max_days=max_days,
         budget_tier=budget_tier,
+        max_parallel=max_parallel,
     )
 
 

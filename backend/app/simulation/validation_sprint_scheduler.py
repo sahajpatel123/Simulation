@@ -74,10 +74,15 @@ def _build_narrative(
         if summary.coverage_retained is not None
         else "unknown share of"
     )
+    window = (
+        f"{summary.max_days}-day sprint at a "
+        f"{summary.budget_tier.lower()} budget"
+    )
+    if summary.max_parallel > 1:
+        window += f" on {summary.max_parallel} parallel tracks"
     text = (
         f"{summary.scheduled_count} of {summary.planned_count} planned "
-        f"experiments fit a {summary.max_days}-day sprint at a "
-        f"{summary.budget_tier.lower()} budget, retaining {coverage} of the "
+        f"experiments fit a {window}, retaining {coverage} of the "
         f"available de-risking. Start with {top.method_label.lower()} for "
         f"'{top.assumption_text[:80]}' (days {top.scheduled_day}-"
         f"{top.finishes_by_day})."
@@ -97,17 +102,22 @@ def schedule_validation_sprint(
     *,
     max_days: int = 14,
     budget_tier: COST_TIER_LITERAL = "LOW",
+    max_parallel: int = 1,
 ) -> ValidationSprintScheduleOut:
     """
     Fit a validation experiment plan into a real calendar and budget.
 
     Experiments are considered in the plan's ROI order. Each is scheduled
-    back-to-back when its cost tier is at or under ``budget_tier`` and its
-    duration fits the days left in ``max_days``; otherwise it is deferred
-    with a founder-readable reason. Returns the sequenced schedule, the
-    deferred list, and how much of the plan's total validation-ROI survived.
+    when its cost tier is at or under ``budget_tier`` and it fits the days
+    left in ``max_days``; otherwise it is deferred with a founder-readable
+    reason. ``max_parallel`` concurrent tracks let founders overlap tests
+    (a landing page collects signups while interviews run); each experiment
+    takes the track that finishes it earliest. Returns the sequenced
+    schedule, the deferred list, and how much of the plan's total
+    validation-ROI survived.
     """
     limit_days = max(1, int(max_days))
+    lane_count = max(1, int(max_parallel))
     ceiling_rank = _cost_rank(budget_tier)
 
     candidates = list(plan.experiments)
@@ -115,7 +125,8 @@ def schedule_validation_sprint(
 
     scheduled: list[ScheduledExperiment] = []
     deferred: list[DeferredExperiment] = []
-    day_cursor = 0
+    # Next free day per parallel track; 0 means the track starts on day 1.
+    lanes: list[int] = [0] * lane_count
 
     for exp in candidates:
         if _cost_rank(exp.cost_tier) > ceiling_rank:
@@ -129,21 +140,33 @@ def schedule_validation_sprint(
                 )
             )
             continue
-        if exp.estimated_duration_days > limit_days - day_cursor:
+        feasible = [
+            (lane_free + exp.estimated_duration_days, i)
+            for i, lane_free in enumerate(lanes)
+            if limit_days - lane_free >= exp.estimated_duration_days
+        ]
+        if not feasible:
+            soonest_free = min(lanes)
+            remaining = limit_days - soonest_free
             deferred.append(
                 _deferred(
                     exp,
                     reason=(
                         f"needs {exp.estimated_duration_days} days but only "
-                        f"{limit_days - day_cursor} remain in the "
-                        f"{limit_days}-day sprint"
+                        f"{remaining} remain in the {limit_days}-day sprint"
+                        if remaining < exp.estimated_duration_days
+                        else (
+                            f"needs {exp.estimated_duration_days} free days "
+                            f"on one track but all {lane_count} tracks are "
+                            f"busy until day {soonest_free + 1}"
+                        )
                     ),
                 )
             )
             continue
-        start = day_cursor + 1
-        end = day_cursor + exp.estimated_duration_days
-        day_cursor = end
+        end, lane_index = min(feasible)
+        start = lanes[lane_index] + 1
+        lanes[lane_index] = end
         scheduled.append(
             ScheduledExperiment(
                 **exp.model_dump(),
@@ -151,6 +174,8 @@ def schedule_validation_sprint(
                 finishes_by_day=end,
             )
         )
+
+    day_cursor = max(lanes) if scheduled else 0
 
     kept_roi = sum(exp.validation_roi for exp in scheduled)
     coverage = kept_roi / total_roi if total_roi > 0 else None
@@ -165,6 +190,7 @@ def schedule_validation_sprint(
         deferred_count=len(deferred),
         max_days=limit_days,
         budget_tier=budget_tier,
+        max_parallel=lane_count,
         days_used=day_cursor,
         days_remaining=limit_days - day_cursor,
         free_count=counts["FREE"],
@@ -186,7 +212,8 @@ def schedule_validation_sprint(
             "generated_at": datetime.now(UTC).isoformat(),
             "model": "validation_sprint_scheduler_v1",
             "constraint_semantics": (
-                "sequential days (one founder running tests back-to-back)"
+                "days run across up to max_parallel tracks; each experiment "
+                "takes the track that finishes it earliest"
             ),
             "selection": "greedy first-fit in validation-ROI order",
             "coverage_definition": (

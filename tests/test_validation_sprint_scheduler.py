@@ -174,6 +174,85 @@ def test_empty_plan_yields_empty_schedule() -> None:
     assert "nothing to fit into a sprint window" in out.narrative
 
 
+# ---------------------------------------------------------------------------
+# Parallel tracks
+# ---------------------------------------------------------------------------
+
+
+def test_parallel_tracks_overlap_experiments() -> None:
+    # Sequential: WTP (7d) then desk research (5d) = 12 days used.
+    # Two tracks: they overlap, so the sprint ends when WTP does — day 7.
+    two_free_plan = _plan(
+        [
+            _row("Users will pay ₹999 monthly", category="Pricing", roi=0.50),
+            _row("Competitors price higher", category="Competition", roi=0.30),
+        ]
+    )
+    out = schedule_validation_sprint(
+        two_free_plan, max_days=90, budget_tier="MEDIUM", max_parallel=2
+    )
+
+    wtp = next(e for e in out.experiments if e.method_label == "Willingness-to-pay survey")
+    desk = next(e for e in out.experiments if e.method_label == "Competitive desk research")
+    assert (wtp.scheduled_day, wtp.finishes_by_day) == (1, 7)
+    assert desk.scheduled_day == 1  # starts on the second track immediately
+    assert out.summary.days_used == 7
+    assert out.summary.days_remaining == 83
+    assert out.summary.max_parallel == 2
+
+
+def test_parallel_tracks_fill_earliest_finishing_lane() -> None:
+    # Two tracks, all four experiments fit. ROI order drives placement and
+    # each experiment takes the track that finishes it earliest:
+    # WTP (7d) -> track 1; paid (14d) -> track 2; landing (14d) -> track 1
+    # (free day 7 beats track 2's day 14); desk (5d) -> track 2.
+    out = schedule_validation_sprint(
+        _four_row_plan(), max_days=90, budget_tier="MEDIUM", max_parallel=2
+    )
+
+    spans = {
+        e.method_label: (e.scheduled_day, e.finishes_by_day)
+        for e in out.experiments
+    }
+    assert spans["Willingness-to-pay survey"] == (1, 7)
+    assert spans["Paid acquisition test"] == (1, 14)
+    assert spans["Landing-page smoke test"] == (8, 21)
+    assert spans["Competitive desk research"] == (15, 19)
+    # The sprint ends when the last track does — day 21, not 40.
+    assert out.summary.days_used == 21
+    assert out.summary.days_remaining == 69
+
+
+def test_parallel_tracks_do_not_resurrect_blocked_experiments() -> None:
+    # A MEDIUM-cost experiment stays deferred under a LOW ceiling even with
+    # two tracks available.
+    out = schedule_validation_sprint(
+        _four_row_plan(), max_days=90, budget_tier="LOW", max_parallel=3
+    )
+
+    assert [d.method_label for d in out.deferred] == ["Paid acquisition test"]
+    assert out.summary.scheduled_count == 3
+
+
+def test_single_track_matches_sequential_behavior() -> None:
+    # max_parallel=1 must reproduce the original sequential schedule exactly.
+    sequential = schedule_validation_sprint(_four_row_plan(), max_days=20)
+    explicit = schedule_validation_sprint(_four_row_plan(), max_days=20, max_parallel=1)
+
+    assert [(e.scheduled_day, e.finishes_by_day) for e in explicit.experiments] == [
+        (e.scheduled_day, e.finishes_by_day) for e in sequential.experiments
+    ]
+    assert explicit.summary.days_used == 12
+
+
+def test_narrative_names_parallel_tracks() -> None:
+    out = schedule_validation_sprint(
+        _four_row_plan(), max_days=30, budget_tier="MEDIUM", max_parallel=2
+    )
+
+    assert "on 2 parallel tracks" in out.narrative
+
+
 def test_all_cut_narrative_names_both_knobs() -> None:
     out = schedule_validation_sprint(_four_row_plan(), max_days=3, budget_tier="FREE")
 
@@ -221,6 +300,7 @@ def test_schedule_endpoint_round_trip(monkeypatch) -> None:
         simulation_id=7,
         max_days=10,
         budget_tier="FREE",
+        max_parallel=1,
         db=None,  # type: ignore[arg-type]
         current_user=type("U", (), {"id": 42})(),
     )

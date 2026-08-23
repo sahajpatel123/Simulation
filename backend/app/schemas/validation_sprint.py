@@ -46,6 +46,11 @@ class ValidationSprintSummary(BaseModel):
     deferred_count: int = Field(default=0, ge=0)
     max_days: int = Field(default=0, ge=0)
     budget_tier: COST_TIER_LITERAL = "FREE"
+    max_parallel: int = Field(
+        default=1,
+        ge=1,
+        description="Concurrent experiment tracks the founder can run.",
+    )
     days_used: int = Field(default=0, ge=0)
     days_remaining: int = Field(default=0, ge=0)
     free_count: int = Field(default=0, ge=0)
