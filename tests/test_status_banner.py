@@ -1,6 +1,25 @@
 """Tests for the per-project status-banner helper."""
 from __future__ import annotations
 
+import inspect
+
+
+def test_signature_matches_route_call_sites():
+    """Route code (users.py, projects.py) passes every argument by
+    keyword, so renaming a parameter here without mirroring it there
+    raises TypeError at request time. Pin the exact kwarg names so
+    that drift fails here first instead.
+    """
+    from app.simulation.status_banner import build_status_banner
+
+    assert set(inspect.signature(build_status_banner).parameters) == {
+        "brief_completed",
+        "assumption_count",
+        "has_completed_sim",
+        "days_since_latest_sim",
+        "pending_decision_count",
+        "days_since_latest_assumption_extraction",
+    }
 
 
 def test_public_allowlist_matches_callers():
