@@ -55,6 +55,9 @@ founder record *what happened* and see the consequence:
   hypothesis plus a concrete re-test from the planner's METHOD_SPECS.
 * ``GET /projects/{project_id}/assumption-recovery-plan/export``
   downloads that plan as CSV, JSON, or a founder-facing Markdown brief.
+* ``GET /projects/{project_id}/evidence-quality`` grades how trustworthy
+  each logged experiment is — method reliability, decisiveness, metric
+  presence, recency — and names the project's weakest link.
 
 Pure post-hoc analysis — no Celery dispatch, no LLM calls.
 """
@@ -113,6 +116,7 @@ from app.schemas.evidence_staleness import (
 )
 from app.schemas.evidence_verdicts import EvidenceVerdictsOut
 from app.schemas.recovery_plan import RecoveryPlanOut
+from app.schemas.evidence_quality import EvidenceQualityOut
 from app.schemas.validation_dashboard import DASHBOARD_MODEL, ValidationDashboardOut
 from app.schemas.validation_experiment import METHOD_ID_LITERAL
 from app.schemas.validation_momentum import ValidationMomentumOut
@@ -153,6 +157,7 @@ from app.simulation.evidence_staleness_export import (
     evidence_staleness_to_json,
     evidence_staleness_to_markdown,
 )
+from app.simulation.evidence_quality import build_evidence_quality
 from app.simulation.evidence_verdicts import build_evidence_verdicts
 from app.simulation.evidence_verdicts_export import (
     FORMAT_VERSION as EVIDENCE_VERDICTS_FORMAT_VERSION,
@@ -1219,6 +1224,54 @@ def export_assumption_recovery_plan(
             "Content-Length": str(len(body)),
             "Cache-Control": "no-store",
         },
+    )
+
+
+@router.get(
+    "/{project_id}/evidence-quality",
+    response_model=EvidenceQualityOut,
+    summary="Grade how trustworthy each logged experiment's evidence is",
+    responses=_JSON_200,
+)
+def get_evidence_quality(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> EvidenceQualityOut:
+    """
+    Verdicts say what the records *say*; quality says how much to *trust*
+    them. Every experiment row is scored on method reliability (observed
+    commitment outranks stated intent and desk research), decisiveness
+    (PASS/FAIL vs INCONCLUSIVE), metric presence, and recency; assumption
+    scores blend the latest row with older history and roll up to a
+    project index. The weakest link names where the validation story is
+    thinnest.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+    assumptions = (
+        db.query(Assumption)
+        .filter(
+            Assumption.project_id == project.id,
+            Assumption.is_hidden.is_(False),
+        )
+        .order_by(Assumption.id.asc())
+        .all()
+    )
+    evidence = (
+        db.query(AssumptionEvidence)
+        .filter(AssumptionEvidence.project_id == project.id)
+        .order_by(
+            AssumptionEvidence.created_at.desc(),
+            AssumptionEvidence.id.desc(),
+        )
+        .all()
+    )
+    return EvidenceQualityOut(
+        **build_evidence_quality(
+            assumptions=assumptions,
+            evidence=evidence,
+            project_id=project.id,
+        )
     )
 
 
