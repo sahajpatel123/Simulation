@@ -114,7 +114,10 @@ def assist(
                 if isinstance(parsed, list):
                     return {"mode": mode, "result": [str(s) for s in parsed[:3]]}
             except json.JSONDecodeError:
-                pass
+                logger.debug(
+                    "brief_assistance: suggest payload not valid JSON: %.200s",
+                    cleaned,
+                )
             return {}
 
         return {"mode": mode, "result": text}
