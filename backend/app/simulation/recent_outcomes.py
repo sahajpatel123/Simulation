@@ -91,6 +91,7 @@ def build_recent_outcomes(
 
     # ---- Key signals ----------------------------------------------
     key_signals: list[dict] = []
+    narrative = ""
     if outcome_count > 0:
         # Worst is the entry with the lowest actual_cr.
         worst = min(
@@ -114,13 +115,7 @@ def build_recent_outcomes(
             "display": f"Recent outcomes: {outcome_count}",
         })
 
-    # ---- Narrative ------------------------------------------------
-    if outcome_count == 0:
-        narrative = (
-            "No recent outcomes yet - record a few to "
-            "populate this tile."
-        )
-    else:
+        # ---- Narrative --------------------------------------------
         worst_cr = worst["actual_conversion_rate"]
         best_cr = best["actual_conversion_rate"]
         if best is worst:
@@ -136,6 +131,11 @@ def build_recent_outcomes(
                 f"{worst_cr} (project "
                 f"{worst['project_id']})."
             )
+    else:
+        narrative = (
+            "No recent outcomes yet - record a few to "
+            "populate this tile."
+        )
 
     return {
         "outcomes": recent,
