@@ -1350,6 +1350,12 @@ def _seed_cluster_parameters():
 
 if __name__ == "__main__":
     run_migrations()
+    # CI (backend-ci.yml) calls this with --migrate-only: applying
+    # migrations must not block on a dev server that would never be
+    # stopped, burning the job's whole timeout budget.
+    if "--migrate-only" in sys.argv[1:]:
+        print("✅ Migrations applied (--migrate-only); skipping server start.")
+        sys.exit(0)
     print("🚀 Starting TheCee backend on http://localhost:8000")
     import os
 

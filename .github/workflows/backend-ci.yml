@@ -95,7 +95,10 @@ jobs:
 
       - name: Run database migrations
         run: |
-          python migrate_and_start.py
+          # --migrate-only applies the schema and exits; without it the
+          # script starts uvicorn and this step would hang until the
+          # job timeout cancels the run before pytest ever executes.
+          python migrate_and_start.py --migrate-only
 
       - name: Run pytest with coverage
         run: |
