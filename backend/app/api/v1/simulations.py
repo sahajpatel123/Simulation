@@ -154,8 +154,12 @@ from app.schemas.support_friction import SupportFrictionOut
 from app.schemas.sustainability_positioning import SustainabilityPositioningOut
 from app.schemas.trust_barriers import TrustBarriersOut
 from app.schemas.unit_economics import UnitEconomicsOut
-from app.schemas.validation_experiment import ValidationExperimentPlanOut
+from app.schemas.validation_experiment import (
+    COST_TIER_LITERAL,
+    ValidationExperimentPlanOut,
+)
 from app.schemas.validation_roi import ValidationRoiOut
+from app.schemas.validation_sprint import ValidationSprintScheduleOut
 from app.schemas.virality_growth import ViralityGrowthOut
 from app.schemas.what_if import WhatIfOut, WhatIfRequest
 from app.schemas.what_if_batch import WhatIfBatchOut, WhatIfBatchRequest
@@ -386,6 +390,7 @@ from app.simulation.validation_experiment_plan_export import (
 )
 from app.simulation.validation_experiment_planner import build_validation_experiment_plan
 from app.simulation.validation_roi import build_validation_roi
+from app.simulation.validation_sprint_scheduler import schedule_validation_sprint
 from app.simulation.virality_growth import build_virality_growth
 from app.simulation.what_if_batch_export import (
     what_if_batch_to_csv,
@@ -8601,6 +8606,48 @@ def get_validation_experiment_plan(
         current_user=current_user,
     )
     return build_validation_experiment_plan(roi)
+
+
+@router.get(
+    "/{simulation_id}/validation-experiment-plan/schedule",
+    response_model=ValidationSprintScheduleOut,
+    summary="Fit the validation sprint into a real calendar and budget",
+    responses=_JSON_200,
+)
+def get_validation_experiment_schedule(
+    simulation_id: int,
+    max_days: int = Query(
+        default=14,
+        ge=1,
+        le=90,
+        description="Sequential days available for running experiments.",
+    ),
+    budget_tier: COST_TIER_LITERAL = Query(
+        default="LOW",
+        description="Maximum allowed experiment cost tier (FREE < LOW < MEDIUM).",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ValidationSprintScheduleOut:
+    """
+    Constrained validation schedule for a completed simulation.
+
+    Takes the full experiment plan and re-fits it to an explicit envelope:
+    ``max_days`` of sequential run time and a ``budget_tier`` ceiling.
+    Experiments are kept greedily in validation-ROI order while they clear
+    both constraints; everything else is deferred with a founder-readable
+    reason. Pure post-hoc analysis — no Celery dispatch, no LLM calls.
+    """
+    plan = get_validation_experiment_plan(
+        simulation_id=simulation_id,
+        db=db,
+        current_user=current_user,
+    )
+    return schedule_validation_sprint(
+        plan,
+        max_days=max_days,
+        budget_tier=budget_tier,
+    )
 
 
 @router.get(
