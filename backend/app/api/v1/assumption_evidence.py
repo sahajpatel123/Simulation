@@ -257,31 +257,53 @@ def _apply_evidence_import(
 
     Shared by the JSON and CSV import routes; the caller supplies any
     parse-level skips so their indices line up with data-row positions.
+    Rows name their assumption by ``assumption_id`` or, when the id is
+    absent, by case-insensitive ``assumption_text`` match.
     """
-    assumptions_by_id = {
-        assumption.id: assumption
-        for assumption in db.query(Assumption)
-        .filter(Assumption.project_id == project_id)
-        .all()
+    project_assumptions = (
+        db.query(Assumption).filter(Assumption.project_id == project_id).all()
+    )
+    assumptions_by_id = {assumption.id: assumption for assumption in project_assumptions}
+    ids_by_text = {
+        (assumption.text or "").strip().casefold(): assumption.id
+        for assumption in project_assumptions
     }
 
     rows_to_insert: list[AssumptionEvidence] = []
     skipped_rows = list(parse_skips)
     touched_ids: list[int] = []
     for index, row in enumerate(parsed_rows):
-        assumption = assumptions_by_id.get(row.assumption_id)
-        if assumption is None:
-            skipped_rows.append(
-                EvidenceImportSkippedRow(
-                    index=index,
-                    assumption_id=row.assumption_id,
-                    reason=(
-                        f"assumption {row.assumption_id} does not exist "
-                        "in this project"
-                    ),
+        if row.assumption_id > 0:
+            assumption = assumptions_by_id.get(row.assumption_id)
+            if assumption is None:
+                skipped_rows.append(
+                    EvidenceImportSkippedRow(
+                        index=index,
+                        assumption_id=row.assumption_id,
+                        reason=(
+                            f"assumption {row.assumption_id} does not exist "
+                            "in this project"
+                        ),
+                    )
                 )
+                continue
+        else:
+            matched_id = ids_by_text.get(
+                (row.assumption_text or "").strip().casefold()
             )
-            continue
+            if matched_id is None:
+                skipped_rows.append(
+                    EvidenceImportSkippedRow(
+                        index=index,
+                        assumption_id=None,
+                        reason=(
+                            "no assumption matches text "
+                            f"{row.assumption_text!r} in this project"
+                        ),
+                    )
+                )
+                continue
+            assumption = assumptions_by_id[matched_id]
         rows_to_insert.append(
             AssumptionEvidence(
                 project_id=project_id,

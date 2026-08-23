@@ -16,7 +16,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.validation_experiment import METHOD_ID_LITERAL
 from app.schemas.validation_roi import CONFIDENCE_TIER_LITERAL, ROI_TIER_LITERAL
@@ -39,15 +39,32 @@ EVIDENCE_IMPORT_MAX_ROWS: int = 200
 
 
 class EvidenceImportRow(BaseModel):
-    """One experiment result inside a bulk evidence import."""
+    """One experiment result inside a bulk evidence import.
+
+    A row names its assumption either by ``assumption_id`` or by
+    ``assumption_text`` (case-insensitive match against the project's
+    assumptions) — the text path lets founders paste evidence straight
+    from an assumptions export without looking up internal IDs.
+    """
 
     model_config = {"extra": "forbid"}
 
-    assumption_id: int
+    assumption_id: int = Field(default=0, ge=0)
+    assumption_text: str | None = Field(default=None, max_length=2000)
     method: METHOD_ID_LITERAL
     result: EVIDENCE_RESULT_LITERAL
     observed_metric: float | None = Field(default=None, ge=0.0)
     notes: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def _require_id_or_text(self) -> "EvidenceImportRow":
+        if self.assumption_id <= 0 and not (
+            self.assumption_text or ""
+        ).strip():
+            raise ValueError(
+                "provide either assumption_id or assumption_text"
+            )
+        return self
 
 
 class EvidenceImportRequest(BaseModel):
