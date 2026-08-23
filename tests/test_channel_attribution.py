@@ -322,7 +322,7 @@ def test_score_channels_handles_malformed_metric_values() -> None:
     assert set(scores.keys()) == set(CHANNEL_KEYS)
     for s in scores.values():
         assert 0.0 <= s <= 1.0
-        assert s == s  # not NaN
+        assert not math.isnan(s)
 
 
 # ---------------------------------------------------------------------------

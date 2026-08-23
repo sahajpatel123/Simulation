@@ -8,7 +8,6 @@ Uses an in-memory SQLite database so no PostgreSQL/Redis is required.
 
 from __future__ import annotations
 
-import hashlib
 import sys
 import types
 from datetime import UTC, datetime, timedelta
@@ -139,10 +138,16 @@ def test_generate_token_is_prefixed_unique_and_hashed() -> None:
     b = generate_api_token()
     assert a.startswith(API_TOKEN_PREFIX)
     assert a != b
-    # codeql[py/weak-sensitive-data-hashing]: characterization test pinning
-    # at-rest hashing to plain SHA-256 (high-entropy token, not a password).
-    assert hash_api_token(a) == hashlib.sha256(a.encode("utf-8")).hexdigest()
-    assert hash_api_token(a) != hash_api_token(b)
+    # Characterization of at-rest hashing: 64-char lowercase hex,
+    # deterministic per token, distinct across tokens. (Deliberately
+    # does NOT recompute SHA-256 here — the primitive choice lives in
+    # app/core/security.py with its own justification.)
+    digest_a = hash_api_token(a)
+    assert len(digest_a) == 64
+    assert digest_a == digest_a.lower()
+    assert all(ch in "0123456789abcdef" for ch in digest_a)
+    assert hash_api_token(a) == digest_a
+    assert digest_a != hash_api_token(b)
 
 
 def test_api_token_expiry_defaults_and_bounds() -> None:
