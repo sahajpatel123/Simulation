@@ -53,8 +53,6 @@ def test_empty_results_yield_zero_state() -> None:
 
 
 def test_json_string_and_garbage_inputs() -> None:
-    import json
-
     ok = build_cluster_opportunity_matrix(
         json.dumps(_results()), simulation_id=1, project_id=1
     )
