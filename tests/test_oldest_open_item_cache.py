@@ -38,14 +38,6 @@ class _FakeRedis:
         n = 0
         for k in keys:
             if k in self.store:
-                del k
-                n += 1
-        return n
-
-    def delete(self, *keys):
-        n = 0
-        for k in keys:
-            if k in self.store:
                 del self.store[k]
                 n += 1
         return n
@@ -114,7 +106,7 @@ def test_oldest_open_item_caches_payload(monkeypatch):
     # TTL must match the route's TTL (60s).
     assert fake.setex_calls[0][1] == 60
 
-    out2 = _call_route()
+    _call_route()
     assert len(fake.setex_calls) == 1  # hit, no new SETEX
 
 
@@ -179,10 +171,10 @@ def test_oldest_open_item_namespace_consistency_across_modules():
     """
     import inspect
 
-    from app.api.v1 import users as users_mod
-    from app.api.v1 import simulations as sim_mod
     from app.api.v1 import decisions as dec_mod
     from app.api.v1 import outcomes as out_mod
+    from app.api.v1 import simulations as sim_mod
+    from app.api.v1 import users as users_mod
 
     namespace = users_mod._USER_OLDEST_OPEN_ITEM_CACHE_NAMESPACE
     assert namespace == "user-oldest-open-item"

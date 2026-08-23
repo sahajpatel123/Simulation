@@ -11,7 +11,6 @@ import json
 from datetime import datetime
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # build_status_breakdown
 # ---------------------------------------------------------------------------
@@ -240,9 +239,6 @@ def test_stress_test_coverage_handles_string_payloads() -> None:
         "partial_kill_shots": [],
         "overall_risk_level": "HIGH",
     })
-    rows = [{"data": payload}, {"data": "{not-json"}]  # second is malformed
-    # If the producer passes dict rows, we ignore string rows — only
-    # ``stress_test_json`` (dict) is inspected. Pass dicts to confirm.
     rows = [
         {"stress_test_json": json.loads(payload)},
         {"stress_test_json": {"status": "COMPLETED"}},
