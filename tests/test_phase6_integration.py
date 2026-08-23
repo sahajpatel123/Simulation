@@ -283,6 +283,8 @@ def test_prompt_token_budgets_are_lower_than_pre_step_48_templates():
     try:
         old_pre = _prompt_body(historical, "PREMORTEM_PROMPT")
         old_int = _prompt_body(historical, "INTERVENTION_PROMPT")
+        old_pre_tokens = len(ENCODING.encode(old_pre))
+        old_int_tokens = len(ENCODING.encode(old_int))
     except AssertionError:
         pytest.skip(
             "PREMORTEM_PROMPT/INTERVENTION_PROMPT not present in historical baseline."
@@ -290,8 +292,6 @@ def test_prompt_token_budgets_are_lower_than_pre_step_48_templates():
 
     current_pre = len(ENCODING.encode(PREMORTEM_PROMPT))
     current_int = len(ENCODING.encode(INTERVENTION_PROMPT))
-    old_pre_tokens = len(ENCODING.encode(old_pre))
-    old_int_tokens = len(ENCODING.encode(old_int))
 
     assert current_pre < old_pre_tokens
     assert current_int < old_int_tokens
