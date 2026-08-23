@@ -52,14 +52,13 @@ MICRO_CLUSTERS = {
 }
 
 
-_VALIDATED_HIERARCHY_IDS: set[str] | None = None
-
-
+@lru_cache(maxsize=1)
 def _validate_hierarchy_ids() -> None:
-    """Warn if any hardcoded cluster ID in hierarchy maps is unknown."""
-    global _VALIDATED_HIERARCHY_IDS
-    if _VALIDATED_HIERARCHY_IDS is not None:
-        return
+    """Warn if any hardcoded cluster ID in hierarchy maps is unknown.
+
+    Memoized with ``lru_cache`` so the registry lookup and the
+    warning pass run at most once per process.
+    """
     try:
         from app.simulation.clusters.registry import ClusterRegistry
 
@@ -74,7 +73,6 @@ def _validate_hierarchy_ids() -> None:
             "may be renamed in registry but not updated here.",
             uid,
         )
-    _VALIDATED_HIERARCHY_IDS = all_ids
 
 
 class AgentHierarchyRouter:
