@@ -494,7 +494,6 @@ def main() -> int:
     final_status = "UNKNOWN"
     final_rc = 0
     last_summary = ""
-    last_action = mode
     attempt = 0
 
     try:
