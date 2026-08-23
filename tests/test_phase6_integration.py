@@ -280,12 +280,20 @@ def test_prompt_token_budgets_are_lower_than_pre_step_48_templates():
             "Historical prompts.py baseline unavailable; token-budget regression "
             "test requires a full clone."
         )
+    # Initialize up front so the token reads below are provably bound;
+    # pytest.skip() inside an except block is invisible to static flow
+    # analysis (it raises, but nothing declares it).
+    old_pre_tokens: int | None = None
+    old_int_tokens: int | None = None
     try:
         old_pre = _prompt_body(historical, "PREMORTEM_PROMPT")
         old_int = _prompt_body(historical, "INTERVENTION_PROMPT")
         old_pre_tokens = len(ENCODING.encode(old_pre))
         old_int_tokens = len(ENCODING.encode(old_int))
     except AssertionError:
+        pass
+
+    if old_pre_tokens is None or old_int_tokens is None:
         pytest.skip(
             "PREMORTEM_PROMPT/INTERVENTION_PROMPT not present in historical baseline."
         )
