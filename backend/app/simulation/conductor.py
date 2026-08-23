@@ -34,6 +34,7 @@ from app.simulation.funnel_stage_calibration import (
     stage_to_transition,
     transition_corrections,
 )
+
 # codeql[py/cyclic-import]: markov.py imports conductor only lazily inside methods, so this module-level edge never forms a runtime cycle
 from app.simulation.markov import MarkovBehaviourModel
 from app.simulation.product_type import ProductType

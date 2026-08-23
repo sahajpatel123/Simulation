@@ -5,6 +5,7 @@ import logging
 from app.core.database import SessionLocal
 from app.simulation.calibration_engine import CalibrationEngine
 from app.simulation.product_type import ProductType
+
 # codeql[py/cyclic-import]: celery_app is required at decoration time for @celery_app.task; worker.py imports task modules lazily, so the cycle never executes at runtime
 from app.worker import celery_app
 
