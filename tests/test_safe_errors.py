@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import socket
 
-import pytest
 from sqlalchemy.exc import OperationalError
 
 from app.core.safe_errors import safe_error_label
@@ -26,9 +25,6 @@ def test_safe_error_label_distinguishes_exception_types() -> None:
 def test_safe_error_label_handles_library_exceptions() -> None:
     # SQLAlchemy exceptions carry SQL fragments in their args; the label
     # exposes none of that.
-    with pytest.raises(OperationalError):
-        raise OperationalError("SELECT * FROM secrets", {}, Exception("boom"))
-
     try:
         raise OperationalError("SELECT * FROM secrets", {}, Exception("boom"))
     except OperationalError as exc:
