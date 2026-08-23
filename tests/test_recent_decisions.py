@@ -128,7 +128,7 @@ def test_severity_watch_when_1_pending():
          "title": "T", "status": "PENDING",
          "created_at": None},
     ])
-    sig = out["key_signitals" if False else "key_signals"][0]
+    sig = out["key_signals"][0]
     assert sig["severity"] == SIGNAL_WATCH
 
 
