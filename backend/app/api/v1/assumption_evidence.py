@@ -51,8 +51,10 @@ from __future__ import annotations
 
 import csv
 import io
+import re
+import zipfile
 from datetime import UTC, datetime
-from typing import get_args
+from typing import Any, get_args
 
 from fastapi import (
     APIRouter,
@@ -1718,6 +1720,125 @@ def export_assumption_evidence_scorecard(
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
             "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+_WORKBOOK_FILENAME_RE = re.compile(r'filename="([^"]+)"')
+
+
+async def _workbook_part(builder, **kwargs) -> tuple[bytes, str]:
+    """Call one export builder and return ``(body_bytes, filename)``."""
+    response = builder(**kwargs)
+    body = b"".join([chunk async for chunk in response.body_iterator])
+    disposition = response.headers.get("Content-Disposition", "")
+    match = _WORKBOOK_FILENAME_RE.search(disposition)
+    filename = match.group(1) if match else "sheet.csv"
+    return body, filename
+
+
+@router.get(
+    "/{project_id}/validation-workbook/export",
+    response_class=StreamingResponse,
+    summary="Download every validation export as one ZIP workbook",
+    dependencies=[Depends(rate_limit(limit=10, window_s=60))],
+)
+async def export_validation_workbook(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Bundle the project's validation exports into a single ZIP.
+
+    One download carries the assumptions sheet (import-shaped), the
+    validation timeline, momentum forecast, evidence-freshness re-test
+    queue, and the validation dashboard — each in its CSV form — plus a
+    ``README.txt`` manifest. A sheet that fails to build never sinks the
+    bundle: it is reported in ``errors.txt`` instead.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+
+    sheets: list[tuple[str, bytes]] = []
+    failures: list[str] = []
+
+    builders: list[tuple[str, Any]] = [
+        ("assumptions", export_assumptions_csv),
+        ("validation-timeline", export_assumption_validation_timeline),
+        ("validation-momentum", export_validation_momentum),
+        ("evidence-freshness", export_evidence_freshness),
+        ("validation-dashboard", export_validation_dashboard),
+    ]
+    for label, builder in builders:
+        try:
+            kwargs: dict[str, Any] = {
+                "project_id": project.id,
+                "db": db,
+                "current_user": current_user,
+            }
+            if builder is not export_assumptions_csv:
+                kwargs["format"] = "csv"
+            if builder is export_validation_momentum:
+                kwargs["target_de_risked_pct"] = 1.0
+            elif builder is export_evidence_freshness:
+                kwargs["fresh_days"] = DEFAULT_FRESH_DAYS
+                kwargs["aging_days"] = DEFAULT_AGING_DAYS
+            elif builder is export_validation_dashboard:
+                kwargs["target_de_risked_pct"] = 1.0
+                kwargs["fresh_days"] = DEFAULT_FRESH_DAYS
+                kwargs["aging_days"] = DEFAULT_AGING_DAYS
+
+            body, filename = await _workbook_part(builder, **kwargs)
+            sheets.append((filename, body))
+        except HTTPException as exc:
+            failures.append(f"{label}: {exc.status_code} {exc.detail}")
+        except Exception as exc:  # noqa: BLE001 — one bad sheet must not sink the bundle
+            failures.append(f"{label}: {exc}")
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        generated = datetime.now(tz=UTC).isoformat()
+        lines = [
+            "TheCee Validation Workbook",
+            f"Generated: {generated}",
+            f"Project: {project.id}",
+            "",
+            "Contents:",
+        ]
+        for filename, body in sheets:
+            lines.append(f"- {filename} ({len(body)} bytes)")
+        if failures:
+            lines.append("")
+            lines.append(
+                "Sheets that could not be built are listed in errors.txt."
+            )
+        lines.append("")
+        lines.append(
+            "assumptions.csv is import-shaped: edit offline and paste it back "
+            "through POST /projects/{id}/assumptions/import/csv (duplicates "
+            "self-skip); evidence results can be logged per assumption via "
+            "POST /projects/{id}/assumptions/evidence/import/csv."
+        )
+        archive.writestr("README.txt", "\n".join(lines) + "\n")
+        for filename, body in sheets:
+            archive.writestr(filename, body)
+        if failures:
+            archive.writestr(
+                "errors.txt",
+                "Some sheets failed to render:\n\n"
+                + "\n".join(failures)
+                + "\n",
+            )
+
+    zip_body = buffer.getvalue()
+    return StreamingResponse(
+        iter([zip_body]),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="validation-workbook-{project.id}.zip"'
+            ),
+            "Content-Length": str(len(zip_body)),
             "Cache-Control": "no-store",
         },
     )
