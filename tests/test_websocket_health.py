@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import sys
 import types
+from functools import partial
 from typing import Any
 
 import pytest
@@ -283,7 +284,7 @@ def test_websocket_health_route_composes_digest(
     from app.api.v1 import system_health as system_health_module
 
     monkeypatch.setattr(
-        system_health_module, "get_redis_client", lambda: _FakeRedisOk()
+        system_health_module, "get_redis_client", partial(_FakeRedisOk)
     )
     monkeypatch.setattr(
         system_health_module.progress_bridge,
@@ -339,7 +340,7 @@ def test_websocket_health_route_redis_unreachable(
     from app.api.v1 import system_health as system_health_module
 
     monkeypatch.setattr(
-        system_health_module, "get_redis_client", lambda: _FakeRedisDown()
+        system_health_module, "get_redis_client", partial(_FakeRedisDown)
     )
     monkeypatch.setattr(
         system_health_module.progress_bridge,

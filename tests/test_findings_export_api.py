@@ -15,6 +15,11 @@ if "razorpay" not in sys.modules:
     sys.modules["razorpay"] = stub
 
 
+def _fake_user():
+    """Fresh minimal stand-in user for FastAPI dependency overrides."""
+    return type("U", (), {"id": 42})()
+
+
 class _FakeSimulation:
     def __init__(
         self,
@@ -201,9 +206,7 @@ def test_findings_count_invalid_format_rejected_with_422() -> None:
     mini_app = FastAPI()
     mini_app.include_router(sim_mod.router)
     mini_app.dependency_overrides[get_db] = lambda: _FakeSession(_FakeSimulation())
-    mini_app.dependency_overrides[get_current_user] = lambda: type(
-        "U", (), {"id": 42}
-    )()
+    mini_app.dependency_overrides[get_current_user] = _fake_user
 
     with TestClient(mini_app) as client:
         resp = client.get(

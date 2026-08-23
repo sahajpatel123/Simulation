@@ -239,6 +239,16 @@ def test_json_renders_metadata_and_payload() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _fake_db():
+    """Fresh throwaway db stub for dependency overrides."""
+    return object()
+
+
+def _fake_user():
+    """Fresh minimal stand-in user for FastAPI dependency overrides."""
+    return type("U", (), {"id": 42})()
+
+
 def _import_projects_module():
     pytest.importorskip("scipy", reason="Route registration requires scipy")
     if "razorpay" not in sys.modules:
@@ -450,10 +460,8 @@ def test_count_route_invalid_format_rejected_with_422(
 
     mini_app = FastAPI()
     mini_app.include_router(proj_mod.router)
-    mini_app.dependency_overrides[get_db] = lambda: object()
-    mini_app.dependency_overrides[get_current_user] = lambda: type(
-        "U", (), {"id": 42}
-    )()
+    mini_app.dependency_overrides[get_db] = _fake_db
+    mini_app.dependency_overrides[get_current_user] = _fake_user
 
     with TestClient(mini_app) as client:
         resp = client.get(

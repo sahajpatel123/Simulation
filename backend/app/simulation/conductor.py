@@ -435,24 +435,6 @@ DEPENDENCY_MAP: dict[str, dict[str, tuple[str, str]]] = {
 
 
 @dataclass
-class ConductorResult:
-    product_type:                   ProductType
-    cluster_results:                dict[str, dict[str, ArchitectOutput]]
-    population_weighted_conversion: float
-    domain_reports:                 list[DomainReport]
-    cluster_breakdown:              dict[str, float]
-    architect_accountability:       dict[str, float]
-    per_cluster_matrices:           dict[str, dict[tuple[str, str], float]]
-    cluster_funnel_dropoffs:        dict[str, dict[str, float]] = None  # type: ignore
-    funnel_stage_corrections:       dict[str, float] = field(default_factory=dict)
-    signal_quality:                 float = 0.0
-    cluster_weights:                dict[str, float] = field(default_factory=dict)
-    diagnostics:                    ConductorDiagnostics = field(
-        default_factory=lambda: ConductorDiagnostics()
-    )
-
-
-@dataclass
 class ArchitectDiagnostics:
     """Per-architect execution accounting for one simulation run.
 
@@ -610,6 +592,24 @@ def _mean_metric(output: ArchitectOutput) -> float:
     if not nums:
         return 0.5
     return float(sum(nums) / len(nums))
+
+
+@dataclass
+class ConductorResult:
+    product_type:                   ProductType
+    cluster_results:                dict[str, dict[str, ArchitectOutput]]
+    population_weighted_conversion: float
+    domain_reports:                 list[DomainReport]
+    cluster_breakdown:              dict[str, float]
+    architect_accountability:       dict[str, float]
+    per_cluster_matrices:           dict[str, dict[tuple[str, str], float]]
+    cluster_funnel_dropoffs:        dict[str, dict[str, float]] = None  # type: ignore
+    funnel_stage_corrections:       dict[str, float] = field(default_factory=dict)
+    signal_quality:                 float = 0.0
+    cluster_weights:                dict[str, float] = field(default_factory=dict)
+    diagnostics:                    ConductorDiagnostics = field(
+        default_factory=ConductorDiagnostics
+    )
 
 
 def _build_architect_registry() -> dict[str, Any]:

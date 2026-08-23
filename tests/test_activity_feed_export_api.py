@@ -15,6 +15,11 @@ if "razorpay" not in sys.modules:
     sys.modules["razorpay"] = stub
 
 
+def _fake_user():
+    """Fresh minimal stand-in user for FastAPI dependency overrides."""
+    return type("U", (), {"id": 42})()
+
+
 class _Row:
     def __init__(self, **kwargs) -> None:
         for k, v in kwargs.items():
@@ -100,6 +105,11 @@ class _FakeSession:
             )
         return _FakeQuery([])
 
+
+
+def _fake_session():
+    """Fresh db stub for FastAPI dependency overrides."""
+    return _FakeSession()
 
 def _call_route(
     *,
@@ -252,10 +262,8 @@ def test_export_activity_feed_count_invalid_format_rejected_with_422() -> None:
 
     mini_app = FastAPI()
     mini_app.include_router(proj_mod.router)
-    mini_app.dependency_overrides[get_db] = lambda: _FakeSession()
-    mini_app.dependency_overrides[get_current_user] = lambda: type(
-        "U", (), {"id": 42}
-    )()
+    mini_app.dependency_overrides[get_db] = _fake_session
+    mini_app.dependency_overrides[get_current_user] = _fake_user
 
     with TestClient(mini_app) as client:
         resp = client.get(

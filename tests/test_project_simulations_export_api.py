@@ -16,6 +16,11 @@ if "razorpay" not in sys.modules:
     sys.modules["razorpay"] = stub
 
 
+def _fake_user():
+    """Fresh minimal stand-in user for FastAPI dependency overrides."""
+    return type("U", (), {"id": 42})()
+
+
 class _Simulation:
     def __init__(self, simulation_id: int = 1) -> None:
         self.id = simulation_id
@@ -210,9 +215,7 @@ def test_export_simulation_count_invalid_format_rejected_with_422() -> None:
     mini_app.dependency_overrides[get_db] = lambda: _FakeSession(
         simulations=[_Simulation()]
     )
-    mini_app.dependency_overrides[get_current_user] = lambda: type(
-        "U", (), {"id": 42}
-    )()
+    mini_app.dependency_overrides[get_current_user] = _fake_user
 
     with TestClient(mini_app) as client:
         resp = client.get(
@@ -247,9 +250,7 @@ def test_export_decision_count_invalid_format_rejected_with_422() -> None:
     mini_app = FastAPI()
     mini_app.include_router(proj_mod.router)
     mini_app.dependency_overrides[get_db] = lambda: _FakeSession(simulations=[])
-    mini_app.dependency_overrides[get_current_user] = lambda: type(
-        "U", (), {"id": 42}
-    )()
+    mini_app.dependency_overrides[get_current_user] = _fake_user
 
     with TestClient(mini_app) as client:
         resp = client.get(
@@ -284,9 +285,7 @@ def test_export_outcome_count_invalid_format_rejected_with_422() -> None:
     mini_app = FastAPI()
     mini_app.include_router(proj_mod.router)
     mini_app.dependency_overrides[get_db] = lambda: _FakeSession(simulations=[])
-    mini_app.dependency_overrides[get_current_user] = lambda: type(
-        "U", (), {"id": 42}
-    )()
+    mini_app.dependency_overrides[get_current_user] = _fake_user
 
     with TestClient(mini_app) as client:
         resp = client.get(
@@ -321,9 +320,7 @@ def test_export_assumption_count_invalid_format_rejected_with_422() -> None:
     mini_app = FastAPI()
     mini_app.include_router(proj_mod.router)
     mini_app.dependency_overrides[get_db] = lambda: _FakeSession(simulations=[])
-    mini_app.dependency_overrides[get_current_user] = lambda: type(
-        "U", (), {"id": 42}
-    )()
+    mini_app.dependency_overrides[get_current_user] = _fake_user
 
     with TestClient(mini_app) as client:
         resp = client.get(
@@ -358,9 +355,7 @@ def test_export_tag_count_invalid_format_rejected_with_422() -> None:
     mini_app = FastAPI()
     mini_app.include_router(proj_mod.router)
     mini_app.dependency_overrides[get_db] = lambda: _FakeSession(simulations=[])
-    mini_app.dependency_overrides[get_current_user] = lambda: type(
-        "U", (), {"id": 42}
-    )()
+    mini_app.dependency_overrides[get_current_user] = _fake_user
 
     with TestClient(mini_app) as client:
         resp = client.get(
@@ -395,9 +390,7 @@ def test_export_prototype_count_invalid_format_rejected_with_422() -> None:
     mini_app = FastAPI()
     mini_app.include_router(proj_mod.router)
     mini_app.dependency_overrides[get_db] = lambda: _FakeSession(simulations=[])
-    mini_app.dependency_overrides[get_current_user] = lambda: type(
-        "U", (), {"id": 42}
-    )()
+    mini_app.dependency_overrides[get_current_user] = _fake_user
 
     with TestClient(mini_app) as client:
         resp = client.get(
@@ -432,9 +425,7 @@ def test_export_evidence_count_invalid_format_rejected_with_422() -> None:
     mini_app = FastAPI()
     mini_app.include_router(proj_mod.router)
     mini_app.dependency_overrides[get_db] = lambda: _FakeSession(simulations=[])
-    mini_app.dependency_overrides[get_current_user] = lambda: type(
-        "U", (), {"id": 42}
-    )()
+    mini_app.dependency_overrides[get_current_user] = _fake_user
 
     with TestClient(mini_app) as client:
         resp = client.get(
@@ -469,9 +460,7 @@ def test_export_outcome_tracker_count_invalid_format_rejected_with_422() -> None
     mini_app = FastAPI()
     mini_app.include_router(proj_mod.router)
     mini_app.dependency_overrides[get_db] = lambda: _FakeSession(simulations=[])
-    mini_app.dependency_overrides[get_current_user] = lambda: type(
-        "U", (), {"id": 42}
-    )()
+    mini_app.dependency_overrides[get_current_user] = _fake_user
 
     with TestClient(mini_app) as client:
         resp = client.get(
@@ -506,9 +495,7 @@ def test_export_premortem_count_invalid_format_rejected_with_422() -> None:
     mini_app = FastAPI()
     mini_app.include_router(proj_mod.router)
     mini_app.dependency_overrides[get_db] = lambda: _FakeSession(simulations=[])
-    mini_app.dependency_overrides[get_current_user] = lambda: type(
-        "U", (), {"id": 42}
-    )()
+    mini_app.dependency_overrides[get_current_user] = _fake_user
 
     with TestClient(mini_app) as client:
         resp = client.get(
@@ -543,9 +530,7 @@ def test_export_intervention_count_invalid_format_rejected_with_422() -> None:
     mini_app = FastAPI()
     mini_app.include_router(proj_mod.router)
     mini_app.dependency_overrides[get_db] = lambda: _FakeSession(simulations=[])
-    mini_app.dependency_overrides[get_current_user] = lambda: type(
-        "U", (), {"id": 42}
-    )()
+    mini_app.dependency_overrides[get_current_user] = _fake_user
 
     with TestClient(mini_app) as client:
         resp = client.get(
@@ -580,9 +565,7 @@ def test_export_competitive_count_invalid_format_rejected_with_422() -> None:
     mini_app = FastAPI()
     mini_app.include_router(proj_mod.router)
     mini_app.dependency_overrides[get_db] = lambda: _FakeSession(simulations=[])
-    mini_app.dependency_overrides[get_current_user] = lambda: type(
-        "U", (), {"id": 42}
-    )()
+    mini_app.dependency_overrides[get_current_user] = _fake_user
 
     with TestClient(mini_app) as client:
         resp = client.get(
@@ -617,9 +600,7 @@ def test_export_mvp_feature_count_invalid_format_rejected_with_422() -> None:
     mini_app = FastAPI()
     mini_app.include_router(proj_mod.router)
     mini_app.dependency_overrides[get_db] = lambda: _FakeSession(simulations=[])
-    mini_app.dependency_overrides[get_current_user] = lambda: type(
-        "U", (), {"id": 42}
-    )()
+    mini_app.dependency_overrides[get_current_user] = _fake_user
 
     with TestClient(mini_app) as client:
         resp = client.get(
@@ -654,9 +635,7 @@ def test_export_readings_count_invalid_format_rejected_with_422() -> None:
     mini_app = FastAPI()
     mini_app.include_router(proj_mod.router)
     mini_app.dependency_overrides[get_db] = lambda: _FakeSession(simulations=[])
-    mini_app.dependency_overrides[get_current_user] = lambda: type(
-        "U", (), {"id": 42}
-    )()
+    mini_app.dependency_overrides[get_current_user] = _fake_user
 
     with TestClient(mini_app) as client:
         resp = client.get(
@@ -691,9 +670,7 @@ def test_export_brief_completed_count_invalid_format_rejected_with_422() -> None
     mini_app = FastAPI()
     mini_app.include_router(proj_mod.router)
     mini_app.dependency_overrides[get_db] = lambda: _FakeSession(simulations=[])
-    mini_app.dependency_overrides[get_current_user] = lambda: type(
-        "U", (), {"id": 42}
-    )()
+    mini_app.dependency_overrides[get_current_user] = _fake_user
 
     with TestClient(mini_app) as client:
         resp = client.get(
@@ -755,9 +732,7 @@ def test_export_landing_url_count_invalid_format_rejected_with_422() -> None:
     mini_app = FastAPI()
     mini_app.include_router(proj_mod.router)
     mini_app.dependency_overrides[get_db] = lambda: _FakeSession(simulations=[])
-    mini_app.dependency_overrides[get_current_user] = lambda: type(
-        "U", (), {"id": 42}
-    )()
+    mini_app.dependency_overrides[get_current_user] = _fake_user
 
     with TestClient(mini_app) as client:
         resp = client.get(
@@ -874,9 +849,7 @@ def test_export_existing_product_count_invalid_format_rejected_with_422() -> Non
     mini_app = FastAPI()
     mini_app.include_router(proj_mod.router)
     mini_app.dependency_overrides[get_db] = lambda: _FakeSession(simulations=[])
-    mini_app.dependency_overrides[get_current_user] = lambda: type(
-        "U", (), {"id": 42}
-    )()
+    mini_app.dependency_overrides[get_current_user] = _fake_user
 
     with TestClient(mini_app) as client:
         resp = client.get(
@@ -1014,9 +987,7 @@ def test_export_description_count_invalid_format_rejected_with_422() -> None:
     mini_app = FastAPI()
     mini_app.include_router(proj_mod.router)
     mini_app.dependency_overrides[get_db] = lambda: _FakeSession(simulations=[])
-    mini_app.dependency_overrides[get_current_user] = lambda: type(
-        "U", (), {"id": 42}
-    )()
+    mini_app.dependency_overrides[get_current_user] = _fake_user
 
     with TestClient(mini_app) as client:
         resp = client.get(
