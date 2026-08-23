@@ -26,6 +26,8 @@ Output shape
 """
 from __future__ import annotations
 
+from datetime import datetime
+
 # Verdict bands (hours).
 FAST_MAX_HOURS: float = 24.0
 NORMAL_MAX_HOURS: float = 168.0  # 7 days
@@ -86,13 +88,11 @@ def build_outcome_velocity(
         if sim_dt is None or out_dt is None:
             continue
         if isinstance(sim_dt, str):
-            from datetime import datetime
             try:
                 sim_dt = datetime.fromisoformat(sim_dt)
             except Exception:
                 continue
         if isinstance(out_dt, str):
-            from datetime import datetime
             try:
                 out_dt = datetime.fromisoformat(out_dt)
             except Exception:
