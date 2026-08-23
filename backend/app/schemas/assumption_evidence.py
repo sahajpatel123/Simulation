@@ -57,7 +57,7 @@ class EvidenceImportRow(BaseModel):
     notes: str | None = Field(default=None, max_length=500)
 
     @model_validator(mode="after")
-    def _require_id_or_text(self) -> "EvidenceImportRow":
+    def _require_id_or_text(self) -> EvidenceImportRow:
         if self.assumption_id <= 0 and not (
             self.assumption_text or ""
         ).strip():

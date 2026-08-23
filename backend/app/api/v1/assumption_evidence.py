@@ -349,9 +349,11 @@ def import_assumption_evidence(
     complement to the CSV exports, so a founder can fill in a downloaded
     spreadsheet offline and paste the outcomes back.
 
-    Each row names its ``assumption_id``; rows referencing an assumption
-    that does not exist in this project are skipped with a reason instead
-    of failing the whole import. Valid rows insert in a single commit.
+    Each row names its assumption by ``assumption_id`` or, failing that,
+    by case-insensitive ``assumption_text`` match against the project's
+    assumptions. Rows referencing an assumption that does not exist are
+    skipped with a reason instead of failing the whole import. Valid rows
+    insert in a single commit.
     """
     project = get_owned_project(db, current_user.id, project_id)
     return _apply_evidence_import(
@@ -360,7 +362,6 @@ def import_assumption_evidence(
 
 
 _CSV_IMPORT_REQUIRED_HEADERS: tuple[str, ...] = (
-    "assumption_id",
     "method",
     "result",
 )
@@ -381,9 +382,9 @@ async def import_assumption_evidence_csv(
 ) -> EvidenceImportOut:
     """
     Paste a spreadsheet straight back into TheCee: accepts raw CSV text
-    with the columns ``assumption_id,method,result`` plus optional
-    ``observed_metric`` and ``notes`` — the same shape the validation
-    exports download.
+    with the columns ``assumption_id,method,result`` (or ``assumption_text``
+    instead of the id) plus optional ``observed_metric`` and ``notes`` —
+    the same shape the validation exports download.
 
     Rows that fail parsing (unknown method or result, bad numbers) are
     skipped with founder-readable reasons instead of failing the batch;
@@ -411,7 +412,8 @@ async def import_assumption_evidence_csv(
             detail=(
                 "CSV is missing required column(s): "
                 f"{', '.join(missing)}; expected header row with "
-                "assumption_id, method, result[, observed_metric, notes]"
+                "assumption_id (or assumption_text), method, result"
+                "[, observed_metric, notes]"
             ),
         )
 
@@ -441,11 +443,17 @@ async def import_assumption_evidence_csv(
             )
 
         raw_id = _cell(cells, "assumption_id")
-        try:
-            assumption_id = int(raw_id)
-        except ValueError:
-            skip(f"assumption_id {raw_id!r} is not a whole number")
-            continue
+        assumption_text: str | None = None
+        assumption_id = 0
+        if raw_id:
+            try:
+                assumption_id = int(raw_id)
+            except ValueError:
+                skip(f"assumption_id {raw_id!r} is not a whole number")
+                continue
+        else:
+            # No id — resolve by exact (case-insensitive) text instead.
+            assumption_text = _cell(cells, "assumption_text") or None
 
         method = _cell(cells, "method").upper()
         result = _cell(cells, "result").upper()
@@ -475,6 +483,7 @@ async def import_assumption_evidence_csv(
                 EvidenceImportRow.model_validate(
                     {
                         "assumption_id": assumption_id,
+                        "assumption_text": assumption_text,
                         "method": method,
                         "result": result,
                         "observed_metric": observed_metric,

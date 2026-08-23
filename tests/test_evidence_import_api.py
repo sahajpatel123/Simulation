@@ -8,6 +8,7 @@ unknown assumptions, and that an all-invalid batch writes nothing.
 
 from __future__ import annotations
 
+import asyncio
 import sys
 import types
 
@@ -393,3 +394,168 @@ def test_csv_import_all_invalid_writes_nothing() -> None:
     assert out.skipped_count == 1
     assert session.added_rows == []
     assert session.commit_count == 0
+
+
+class _TextAssumption:
+    """Assumption fixture carrying realistic text for text-resolution."""
+
+    def __init__(self, assumption_id: int, text: str) -> None:
+        self.id = assumption_id
+        self.project_id = 10
+        self.text = text
+        self.is_hidden = False
+
+
+def test_json_import_resolves_rows_by_assumption_text() -> None:
+    from app.api.v1 import assumption_evidence as ev_mod
+
+    session = _ImportSession(
+        assumptions=[
+            _TextAssumption(100, "Users will pay ₹999 monthly"),
+            _TextAssumption(101, "Onboarding completes in two minutes"),
+        ]
+    )
+
+    payload = ev_mod.EvidenceImportRequest.model_validate(
+        {
+            "rows": [
+                {
+                    "assumption_text": "users will pay ₹999 MONTHLY ",
+                    "method": "USER_INTERVIEWS",
+                    "result": "PASS",
+                },
+                {
+                    "assumption_text": "Nobody wants this",
+                    "method": "USER_INTERVIEWS",
+                    "result": "FAIL",
+                },
+            ]
+        }
+    )
+    out = ev_mod.import_assumption_evidence(
+        project_id=10,
+        payload=payload,
+        db=session,  # type: ignore[arg-type]
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+    assert out.imported_count == 1
+    assert out.skipped_count == 1
+    assert out.assumption_ids_touched == [100]
+    inserted = session.added_rows[0]
+    assert inserted.assumption_id == 100
+    reason = out.skipped_rows[0].reason
+    assert "no assumption matches text" in reason
+    assert session.commit_count == 1
+
+
+def test_json_import_row_without_id_or_text_is_rejected() -> None:
+    from app.api.v1 import assumption_evidence as ev_mod
+
+    with pytest.raises(ValidationError) as exc:
+        ev_mod.EvidenceImportRequest.model_validate(
+            {
+                "rows": [
+                    {"method": "USER_INTERVIEWS", "result": "PASS"},
+                ]
+            }
+        )
+    assert "assumption_id or assumption_text" in str(exc.value)
+
+
+def test_json_import_prefers_id_when_both_given() -> None:
+    from app.api.v1 import assumption_evidence as ev_mod
+
+    session = _ImportSession(
+        assumptions=[
+            _TextAssumption(100, "Users will pay ₹999 monthly"),
+            _TextAssumption(200, "A different claim entirely"),
+        ]
+    )
+
+    payload = ev_mod.EvidenceImportRequest.model_validate(
+        {
+            "rows": [
+                {
+                    # ID wins even though the text points elsewhere.
+                    "assumption_id": 200,
+                    "assumption_text": "Users will pay ₹999 monthly",
+                    "method": "USER_INTERVIEWS",
+                    "result": "PASS",
+                }
+            ]
+        }
+    )
+    out = ev_mod.import_assumption_evidence(
+        project_id=10,
+        payload=payload,
+        db=session,  # type: ignore[arg-type]
+        current_user=type("U", (), {"id": 42})(),
+    )
+
+    assert out.imported_count == 1
+    assert out.assumption_ids_touched == [200]
+
+
+def test_csv_import_resolves_blank_ids_by_text_column() -> None:
+    from app.api.v1 import assumption_evidence as ev_mod
+
+    session = _ImportSession(
+        assumptions=[_TextAssumption(100, "Users will pay ₹999 monthly")]
+    )
+
+    body = (
+        "assumption_text,method,result,observed_metric,notes\n"
+        "users will pay ₹999 monthly,USER_INTERVIEWS,PASS,0.4,text match\n"
+        "Missing claim,LANDING_PAGE_SMOKE_TEST,FAIL,,not found\n"
+    )
+    out = asyncio.run(
+        ev_mod.import_assumption_evidence_csv(
+            project_id=10,
+            request=_FakeCsvRequest(body.encode("utf-8")),
+            db=session,  # type: ignore[arg-type]
+            current_user=type("U", (), {"id": 42})(),
+        )
+    )
+
+    assert out.imported_count == 1
+    assert out.skipped_count == 1
+    assert session.added_rows[0].assumption_id == 100
+    assert session.added_rows[0].notes == "text match"
+    assert "no assumption matches text" in out.skipped_rows[0].reason
+
+
+def test_csv_import_requires_method_and_result_headers_only() -> None:
+    """The id column is optional now; method/result stay mandatory."""
+    from app.api.v1 import assumption_evidence as ev_mod
+
+    session = _ImportSession()
+
+    # assumption_text alone satisfies the per-row key requirement.
+    body = (
+        "assumption_text,method,result\n"
+        "Some claim,USER_INTERVIEWS,FAIL\n"
+    )
+    out = asyncio.run(
+        ev_mod.import_assumption_evidence_csv(
+            project_id=10,
+            request=_FakeCsvRequest(body.encode("utf-8")),
+            db=session,  # type: ignore[arg-type]
+            current_user=type("U", (), {"id": 42})(),
+        )
+    )
+    assert out.skipped_count == 1  # no matching assumption — skip, not crash
+
+    # Neither key column on a data row → that row skips with a reason
+    # naming both accepted keys; the batch itself still parses.
+    out = asyncio.run(
+        ev_mod.import_assumption_evidence_csv(
+            project_id=10,
+            request=_FakeCsvRequest(b"method,result\nUSER_INTERVIEWS,PASS\n"),
+            db=session,  # type: ignore[arg-type]
+            current_user=type("U", (), {"id": 42})(),
+        )
+    )
+    assert out.imported_count == 0
+    assert out.skipped_count == 1
+    assert "assumption_id or assumption_text" in out.skipped_rows[0].reason
