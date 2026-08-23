@@ -127,6 +127,7 @@ from app.schemas.validation_timeline import (
 from app.simulation.assumption_evidence_digest import (
     build_assumption_evidence_digest,
 )
+from app.simulation.evidence_quality import build_evidence_quality
 from app.simulation.evidence_scorecard import (
     build_assumption_scorecard,
     derive_confidence,
@@ -152,7 +153,6 @@ from app.simulation.evidence_staleness import (
 from app.simulation.evidence_staleness_export import (
     FORMAT_VERSION as EVIDENCE_FRESHNESS_FORMAT_VERSION,
 )
-from app.simulation.evidence_quality import build_evidence_quality
 from app.simulation.evidence_staleness_export import (
     evidence_staleness_to_csv,
     evidence_staleness_to_json,
