@@ -120,6 +120,7 @@ from app.schemas.recovery_plan import RecoveryPlanOut
 from app.schemas.validation_dashboard import DASHBOARD_MODEL, ValidationDashboardOut
 from app.schemas.validation_experiment import METHOD_ID_LITERAL
 from app.schemas.validation_momentum import ValidationMomentumOut
+from app.schemas.validation_risk_map import ValidationRiskMapOut
 from app.schemas.validation_timeline import (
     AssumptionValidationTimelineOut,
     ValidationTimelineMilestonesOut,
@@ -201,6 +202,7 @@ from app.simulation.validation_momentum_export import (
     validation_momentum_to_json,
     validation_momentum_to_markdown,
 )
+from app.simulation.validation_risk_map import build_validation_risk_map
 from app.simulation.validation_timeline import build_validation_timeline
 from app.simulation.validation_timeline_export import (
     FORMAT_VERSION as VALIDATION_TIMELINE_FORMAT_VERSION,
@@ -1359,6 +1361,52 @@ def export_evidence_quality(
             "Content-Length": str(len(body)),
             "Cache-Control": "no-store",
         },
+    )
+
+
+@router.get(
+    "/{project_id}/validation-risk-map",
+    response_model=ValidationRiskMapOut,
+    summary="Rank assumption categories by validation risk",
+    responses=_JSON_200,
+)
+def get_validation_risk_map(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ValidationRiskMapOut:
+    """
+    The per-assumption endpoints answer one claim at a time; this map
+    answers the portfolio question: which area of the business model has
+    the weakest validation story? Assumptions are grouped by category
+    and ranked by a transparent risk score combining killed verdicts,
+    self-contradicting records, untested claims, and low-trust evidence.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+    assumptions = (
+        db.query(Assumption)
+        .filter(
+            Assumption.project_id == project.id,
+            Assumption.is_hidden.is_(False),
+        )
+        .order_by(Assumption.id.asc())
+        .all()
+    )
+    evidence = (
+        db.query(AssumptionEvidence)
+        .filter(AssumptionEvidence.project_id == project.id)
+        .order_by(
+            AssumptionEvidence.created_at.desc(),
+            AssumptionEvidence.id.desc(),
+        )
+        .all()
+    )
+    return ValidationRiskMapOut(
+        **build_validation_risk_map(
+            assumptions=assumptions,
+            evidence=evidence,
+            project_id=project.id,
+        )
     )
 
 
