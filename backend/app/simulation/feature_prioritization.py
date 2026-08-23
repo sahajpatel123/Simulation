@@ -470,9 +470,8 @@ def build_feature_prioritization(
         if row["feature_depth"] < SHALLOW_DEPTH_THRESHOLD
     ]
     shallow_weight = sum(row["population_weight"] for row in shallow_rows)
-    shallow_share = (
-        shallow_weight / covered_weight if covered_weight > 0.0 else 0.0
-    )
+    # covered_weight > 0.0 is guaranteed by the early return above.
+    shallow_share = shallow_weight / covered_weight
 
     flags: list[str] = []
     if shallow_share > SHALLOW_DEPTH_SHARE_THRESHOLD:
