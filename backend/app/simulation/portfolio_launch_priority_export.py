@@ -26,8 +26,6 @@ import io
 import math
 from typing import Any
 
-FORMAT_VERSION = "1"
-
 # Canonical bucket order — same labels as the digest schema so the
 # spreadsheet stays stable if a new bucket is ever added.
 BUCKET_ORDER: tuple[str, ...] = (
