@@ -109,6 +109,7 @@ from app.schemas.assumption_import import (
     AssumptionImportRow,
     AssumptionImportSkippedRow,
 )
+from app.schemas.evidence_quality import EvidenceQualityOut
 from app.schemas.evidence_staleness import (
     EvidenceStalenessOut,
     EvidenceStalenessRowOut,
@@ -116,7 +117,6 @@ from app.schemas.evidence_staleness import (
 )
 from app.schemas.evidence_verdicts import EvidenceVerdictsOut
 from app.schemas.recovery_plan import RecoveryPlanOut
-from app.schemas.evidence_quality import EvidenceQualityOut
 from app.schemas.validation_dashboard import DASHBOARD_MODEL, ValidationDashboardOut
 from app.schemas.validation_experiment import METHOD_ID_LITERAL
 from app.schemas.validation_momentum import ValidationMomentumOut
@@ -152,12 +152,12 @@ from app.simulation.evidence_staleness import (
 from app.simulation.evidence_staleness_export import (
     FORMAT_VERSION as EVIDENCE_FRESHNESS_FORMAT_VERSION,
 )
+from app.simulation.evidence_quality import build_evidence_quality
 from app.simulation.evidence_staleness_export import (
     evidence_staleness_to_csv,
     evidence_staleness_to_json,
     evidence_staleness_to_markdown,
 )
-from app.simulation.evidence_quality import build_evidence_quality
 from app.simulation.evidence_verdicts import build_evidence_verdicts
 from app.simulation.evidence_verdicts_export import (
     FORMAT_VERSION as EVIDENCE_VERDICTS_FORMAT_VERSION,
