@@ -109,6 +109,7 @@ def test_runs_this_month_caches_payload(monkeypatch):
     assert fake.setex_calls[0][1] == 30
 
     out2 = _call_route()
+    assert out2 == out1
     assert len(fake.setex_calls) == 1  # hit, no new SETEX
 
 
@@ -174,8 +175,8 @@ def test_runs_this_month_namespace_consistency_across_modules():
     """
     import inspect
 
-    from app.api.v1 import users as users_mod
     from app.api.v1 import simulations as sim_mod
+    from app.api.v1 import users as users_mod
 
     namespace = users_mod._USER_RUNS_THIS_MONTH_CACHE_NAMESPACE
     assert namespace == "user-runs-this-month"

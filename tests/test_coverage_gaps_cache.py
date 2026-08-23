@@ -120,6 +120,7 @@ def test_coverage_gaps_caches_payload(monkeypatch) -> None:
     assert fake.setex_calls[0][1] == 300
 
     out2 = _call_coverage_gaps()
+    assert out2 == out1
     assert len(fake.setex_calls) == 1  # hit, no new SETEX
 
 
@@ -187,8 +188,8 @@ def test_coverage_gaps_namespace_consistency_across_modules() -> None:
     invalidation site (in projects.py)."""
     import inspect
 
-    from app.api.v1 import users as users_mod
     from app.api.v1 import projects as proj_mod
+    from app.api.v1 import users as users_mod
 
     namespace = users_mod._USER_COVERAGE_GAPS_CACHE_NAMESPACE
     assert namespace == "user-coverage-gaps"

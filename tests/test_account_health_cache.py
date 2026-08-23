@@ -126,6 +126,7 @@ def test_account_health_caches_payload(monkeypatch) -> None:
     assert fake.setex_calls[0][1] == 60
 
     out2 = _call_account_health()
+    assert out2 == out1
     assert len(fake.setex_calls) == 1  # hit, no new SETEX
 
 
@@ -195,10 +196,10 @@ def test_account_health_namespace_consistency_across_modules() -> None:
     renames propagate."""
     import inspect
 
-    from app.api.v1 import users as users_mod
-    from app.api.v1 import simulations as sim_mod
     from app.api.v1 import decisions as dec_mod
     from app.api.v1 import outcomes as out_mod
+    from app.api.v1 import simulations as sim_mod
+    from app.api.v1 import users as users_mod
 
     namespace = users_mod._USER_ACCOUNT_HEALTH_CACHE_NAMESPACE
     assert namespace == "user-account-health"

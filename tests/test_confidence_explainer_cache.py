@@ -120,6 +120,7 @@ def test_confidence_explainer_caches_payload(monkeypatch):
     assert fake.setex_calls[0][1] == 60
 
     out2 = _call_route()
+    assert out2 == out1
     assert len(fake.setex_calls) == 1  # hit, no new SETEX
 
 
@@ -196,9 +197,9 @@ def test_confidence_explainer_namespace_consistency_across_modules():
     """
     import inspect
 
+    from app.api.v1 import outcomes as out_mod
     from app.api.v1 import projects as proj_mod
     from app.api.v1 import simulations as sim_mod
-    from app.api.v1 import outcomes as out_mod
 
     namespace = proj_mod._CONFIDENCE_EXPLAINER_CACHE_NAMESPACE
     assert namespace == "project-confidence-explainer"

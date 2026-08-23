@@ -199,9 +199,9 @@ def test_adoption_milestones_namespace_consistency() -> None:
     """
     import inspect
 
+    from app.api.v1 import decisions as dec_mod
     from app.api.v1 import projects as proj_mod
     from app.api.v1 import simulations as sim_mod
-    from app.api.v1 import decisions as dec_mod
 
     namespace = proj_mod._ADOPTION_MILESTONES_CACHE_NAMESPACE
     assert namespace == "project-adoption-milestones"

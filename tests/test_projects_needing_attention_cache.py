@@ -107,6 +107,7 @@ def test_projects_needing_attention_caches_payload(monkeypatch):
     assert fake.setex_calls[0][1] == 60
 
     out2 = _call_route()
+    assert out2 == out1
     assert len(fake.setex_calls) == 1  # hit, no new SETEX
 
 
@@ -170,11 +171,11 @@ def test_projects_needing_attention_namespace_consistency_across_modules():
     """
     import inspect
 
-    from app.api.v1 import users as users_mod
-    from app.api.v1 import simulations as sim_mod
     from app.api.v1 import decisions as dec_mod
     from app.api.v1 import outcomes as out_mod
     from app.api.v1 import projects as proj_mod
+    from app.api.v1 import simulations as sim_mod
+    from app.api.v1 import users as users_mod
 
     namespace = users_mod._USER_PROJECTS_NEEDING_ATTENTION_CACHE_NAMESPACE
     assert namespace == "user-projects-needing-attention"

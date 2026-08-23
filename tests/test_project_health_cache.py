@@ -115,6 +115,7 @@ def test_project_health_caches_payload(monkeypatch) -> None:
     assert fake.setex_calls[0][1] == 60
 
     out2 = _call_route()
+    assert out2 == out1
     assert len(fake.setex_calls) == 1  # hit, no new SETEX
 
 
@@ -209,10 +210,10 @@ def test_project_health_namespace_consistency_across_modules() -> None:
     """
     import inspect
 
-    from app.api.v1 import projects as proj_mod
-    from app.api.v1 import simulations as sim_mod
     from app.api.v1 import decisions as dec_mod
     from app.api.v1 import outcomes as out_mod
+    from app.api.v1 import projects as proj_mod
+    from app.api.v1 import simulations as sim_mod
 
     namespace = proj_mod._PROJECT_HEALTH_CACHE_NAMESPACE
     assert namespace == "project-health"

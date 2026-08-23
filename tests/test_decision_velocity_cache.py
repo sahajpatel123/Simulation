@@ -106,6 +106,7 @@ def test_decision_velocity_caches_payload(monkeypatch):
     assert fake.setex_calls[0][1] == 60
 
     out2 = _call_route()
+    assert out2 == out1
     assert len(fake.setex_calls) == 1  # hit, no new SETEX
 
 
@@ -170,9 +171,9 @@ def test_decision_velocity_namespace_consistency_across_modules():
     """
     import inspect
 
-    from app.api.v1 import users as users_mod
-    from app.api.v1 import simulations as sim_mod
     from app.api.v1 import decisions as dec_mod
+    from app.api.v1 import simulations as sim_mod
+    from app.api.v1 import users as users_mod
 
     namespace = users_mod._USER_DECISION_VELOCITY_CACHE_NAMESPACE
     assert namespace == "user-decision-velocity"

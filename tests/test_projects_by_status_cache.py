@@ -117,6 +117,7 @@ def test_projects_by_status_caches_payload(monkeypatch) -> None:
     assert fake.setex_calls[0][1] == 60
 
     out2 = _call_route()
+    assert out2 == out1
     assert len(fake.setex_calls) == 1  # hit, no new SETEX
 
 
@@ -190,8 +191,8 @@ def test_projects_by_status_namespace_consistency_across_modules() -> None:
     """
     import inspect
 
-    from app.api.v1 import users as users_mod
     from app.api.v1 import projects as proj_mod
+    from app.api.v1 import users as users_mod
 
     namespace = users_mod._USER_PROJECTS_BY_STATUS_CACHE_NAMESPACE
     assert namespace == "user-projects-by-status"

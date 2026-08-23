@@ -188,9 +188,9 @@ def test_notifications_namespace_consistency_across_modules() -> None:
     constant (not a hardcoded string)."""
     import inspect
 
-    from app.api.v1 import users as users_mod
-    from app.api.v1 import simulations as sim_mod
     from app.api.v1 import decisions as dec_mod
+    from app.api.v1 import simulations as sim_mod
+    from app.api.v1 import users as users_mod
 
     namespace = users_mod._USER_NOTIFICATIONS_CACHE_NAMESPACE
     assert namespace == "user-notifications"

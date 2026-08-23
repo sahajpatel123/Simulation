@@ -106,6 +106,7 @@ def test_recent_outcomes_caches_payload(monkeypatch):
     assert fake.setex_calls[0][1] == 60
 
     out2 = _call_route()
+    assert out2 == out1
     assert len(fake.setex_calls) == 1  # hit, no new SETEX
 
 
@@ -170,8 +171,8 @@ def test_recent_outcomes_namespace_consistency_across_modules():
     """
     import inspect
 
-    from app.api.v1 import users as users_mod
     from app.api.v1 import outcomes as out_mod
+    from app.api.v1 import users as users_mod
 
     namespace = users_mod._USER_RECENT_OUTCOMES_CACHE_NAMESPACE
     assert namespace == "user-recent-outcomes"

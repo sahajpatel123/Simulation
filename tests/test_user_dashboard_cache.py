@@ -197,10 +197,10 @@ def test_user_dashboard_namespace_consistency_across_modules() -> None:
     use the constant (not a hardcoded string)."""
     import inspect
 
-    from app.api.v1 import users as users_mod
-    from app.api.v1 import simulations as sim_mod
     from app.api.v1 import decisions as dec_mod
     from app.api.v1 import outcomes as out_mod
+    from app.api.v1 import simulations as sim_mod
+    from app.api.v1 import users as users_mod
 
     namespace = users_mod._USER_DASHBOARD_CACHE_NAMESPACE
     assert namespace == "user-dashboard"
@@ -220,7 +220,7 @@ def test_user_dashboard_namespace_consistency_across_modules() -> None:
         # The import appears at least once in each
         # invalidator module.
         assert (
-            f"_USER_DASHBOARD_CACHE_NAMESPACE" in src
+            "_USER_DASHBOARD_CACHE_NAMESPACE" in src
         ), f"_USER_DASHBOARD_CACHE_NAMESPACE not imported in {label}"
         # And the namespace literal is used via the
         # constant (not hardcoded as "user-dashboard").

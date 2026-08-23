@@ -109,6 +109,7 @@ def test_tag_taxonomy_caches_payload(monkeypatch):
     assert fake.setex_calls[0][1] == 300
 
     out2 = _call_route()
+    assert out2 == out1
     assert len(fake.setex_calls) == 1  # hit, no new SETEX
 
 
@@ -172,6 +173,7 @@ def test_tag_taxonomy_namespace_in_route_only():
     string usage.
     """
     import inspect
+
     from app.api.v1 import users as users_mod
 
     namespace = users_mod._USER_TAG_TAXONOMY_CACHE_NAMESPACE

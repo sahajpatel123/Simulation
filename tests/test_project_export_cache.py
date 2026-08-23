@@ -116,6 +116,7 @@ def test_project_export_caches_payload(monkeypatch) -> None:
     assert fake.setex_calls[0][1] == 60
 
     out2 = _call_route()
+    assert out2 == out1
     assert len(fake.setex_calls) == 1  # hit, no new SETEX
 
 

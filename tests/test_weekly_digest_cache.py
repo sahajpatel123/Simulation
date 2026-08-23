@@ -114,6 +114,7 @@ def test_weekly_digest_caches_payload(monkeypatch) -> None:
     assert fake.setex_calls[0][1] == 60
 
     out2 = _call_digest()
+    assert out2 == out1
     assert len(fake.setex_calls) == 1  # hit, no new SETEX
 
 
@@ -181,10 +182,10 @@ def test_weekly_digest_namespace_consistency_across_modules() -> None:
     """
     import inspect
 
-    from app.api.v1 import users as users_mod
-    from app.api.v1 import simulations as sim_mod
     from app.api.v1 import decisions as dec_mod
     from app.api.v1 import outcomes as out_mod
+    from app.api.v1 import simulations as sim_mod
+    from app.api.v1 import users as users_mod
 
     namespace = users_mod._USER_WEEKLY_DIGEST_CACHE_NAMESPACE
     assert namespace == "user-weekly-digest"

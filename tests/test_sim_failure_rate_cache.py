@@ -106,6 +106,7 @@ def test_sim_failure_rate_caches_payload(monkeypatch):
     assert fake.setex_calls[0][1] == 60
 
     out2 = _call_route()
+    assert out2 == out1
     assert len(fake.setex_calls) == 1  # hit, no new SETEX
 
 
@@ -170,8 +171,8 @@ def test_sim_failure_rate_namespace_consistency_across_modules():
     """
     import inspect
 
-    from app.api.v1 import users as users_mod
     from app.api.v1 import simulations as sim_mod
+    from app.api.v1 import users as users_mod
 
     namespace = users_mod._USER_SIM_FAILURE_RATE_CACHE_NAMESPACE
     assert namespace == "user-sim-failure-rate"
