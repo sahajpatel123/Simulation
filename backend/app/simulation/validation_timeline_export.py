@@ -83,11 +83,6 @@ _ASSUMPTION_HEADERS: tuple[str, ...] = (
     "latest_evidence_event_id",
 )
 
-# Fraction metrics read best as percentages in the Markdown brief.
-_PCT_KEYS: frozenset[str] = frozenset(
-    {"validation_score", "evidence_coverage_pct"}
-)
-
 
 def _as_dict(payload: Any) -> dict[str, Any]:
     """Coerce a Pydantic model or plain mapping into a plain dictionary."""

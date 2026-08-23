@@ -182,7 +182,6 @@ _NO_UNIT_DEFAULT_MULTIPLIER = {"inr": 0.0012, "usd": 0.001}
 
 # ── Model constants ─────────────────────────────────────────────────────
 
-_NEUTRAL_HEALTH: float = 0.70          # confirmed-but-modest viability
 _STRONG_HEALTH: float = 0.88           # >= $2M equivalent raised
 _MODERATE_HEALTH: float = 0.78         # >= $0.5M equivalent raised
 _WEAK_HEALTH: float = 0.65             # small raise

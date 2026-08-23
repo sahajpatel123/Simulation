@@ -24,13 +24,6 @@ from __future__ import annotations
 import math
 from datetime import UTC, datetime
 
-# Severity ordering — higher rank = more severe.
-_SEVERITY_RANK: dict[str, int] = {
-    "INFO": 1,
-    "WARNING": 2,
-    "CRITICAL": 3,
-}
-
 
 def _safe_float(raw: object) -> float | None:
     """Coerce to a finite float in [0.0, 1.0] or return None."""

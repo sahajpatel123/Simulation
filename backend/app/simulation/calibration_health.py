@@ -50,9 +50,6 @@ TREND_WINDOWS: tuple[tuple[str, int], ...] = (
     ("90d", 90),
 )
 
-# Cap on per-window rows so the trend doesn't blow up.
-MAX_TREND_WINDOWS: int = 4
-
 # Trajectory labels — derived from comparing the 7d mean
 # |variance| against the 30d mean |variance|. The 7d window
 # is the more recent snapshot; if it's lower than the 30d,

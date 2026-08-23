@@ -87,7 +87,6 @@ RECO_TRUSTED: str = "Continue — architect is calibrated"
 # readable and prevents one noisy architect from spamming 20
 # cluster rows.
 MAX_CRITICAL_CLUSTERS: int = 5
-MIN_CRITICAL_COUNT: int = 1
 
 
 def _safe_float(raw: object) -> float | None:

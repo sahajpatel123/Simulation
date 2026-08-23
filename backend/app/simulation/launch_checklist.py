@@ -46,7 +46,6 @@ from app.simulation.clusters.registry import ClusterRegistry
 STATUS_PASS: str = "PASS"
 STATUS_WARN: str = "WARN"
 STATUS_FAIL: str = "FAIL"
-STATUS_INFO: str = "INFO"
 STATUS_SKIP: str = "SKIP"
 
 VERDICT_READY: str = "READY"
