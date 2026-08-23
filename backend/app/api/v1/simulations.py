@@ -369,6 +369,12 @@ from app.simulation.sim_diff import build_sim_diff
 from app.simulation.simulation_compare import (
     build_simulation_comparison as build_run_diff,
 )
+from app.simulation.simulation_compare_export import (
+    FORMAT_VERSION as simulation_compare_export_FORMAT_VERSION,
+    simulation_compare_to_csv,
+    simulation_compare_to_json,
+    simulation_compare_to_markdown,
+)
 from app.simulation.simulation_export import (
     build_simulation_export,
     simulation_to_csv,
@@ -8732,6 +8738,100 @@ def get_simulation_comparison(
             else None
         ),
         project_id=sim.project_id,
+    )
+
+
+@router.get(
+    "/{simulation_id}/compare/{baseline_id}/export",
+    response_class=StreamingResponse,
+    summary="Export the run-vs-run comparison as CSV, JSON, or Markdown",
+    # Pure post-hoc composition of two completed payloads; cap polling so a
+    # stray dashboard loop can't drive repeated comparisons.
+    dependencies=[Depends(rate_limit(limit=20, window_s=60))],
+)
+def export_run_comparison(
+    simulation_id: int,
+    baseline_id: int,
+    format: str = Query(
+        default="csv",
+        max_length=8,
+        description=(
+            "Output format. ``csv`` (default) returns the multi-section "
+            "spreadsheet; ``json`` returns the raw comparison payload; "
+            "``md`` returns a founder-facing brief. Unsupported values "
+            "return a 400 response."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Download the run-vs-run comparison for two completed simulations.
+
+    Reuses the exact composition path as
+    ``GET /simulations/{id}/compare/{baseline_id}``, so the export can never
+    disagree with the dashboard.
+    """
+    fmt = (format or "csv").strip().lower()
+    if fmt not in {"csv", "json", "md"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unsupported export format {format!r}; expected 'csv', 'json', or 'md'",
+        )
+
+    diff = get_simulation_comparison(
+        simulation_id=simulation_id,
+        baseline_id=baseline_id,
+        db=db,
+        current_user=current_user,
+    )
+
+    metadata = {
+        "generated_at": datetime.now(tz=UTC).isoformat(),
+        "user_id": current_user.id,
+        "format_version": simulation_compare_export_FORMAT_VERSION,
+        "simulation_id": simulation_id,
+        "comparison_simulation_id": simulation_id,
+        "comparison_baseline_id": baseline_id,
+        "project_id": diff.project_id,
+    }
+
+    if fmt == "json":
+        body = simulation_compare_to_json(diff, metadata=metadata).encode()
+        return StreamingResponse(
+            iter([body]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="run-compare-{simulation_id}-vs-{baseline_id}.json"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    if fmt == "md":
+        body = simulation_compare_to_markdown(diff, metadata=metadata).encode()
+        return StreamingResponse(
+            iter([body]),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="run-compare-{simulation_id}-vs-{baseline_id}.md"'
+                ),
+                "Content-Length": str(len(body)),
+            },
+        )
+
+    body = simulation_compare_to_csv(diff, metadata=metadata).encode()
+    return StreamingResponse(
+        iter([body]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="run-compare-{simulation_id}-vs-{baseline_id}.csv"'
+            ),
+            "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
+        },
     )
 
 
