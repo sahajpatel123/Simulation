@@ -46,10 +46,6 @@ celery_app.conf.beat_schedule = {
     },
 }
 
-# Register beat task modules on import (CLI / assert checks)
-import app.tasks.retention_email_tasks  # noqa: E402, F401
-
-
 @celery_app.on_after_configure.connect
 def setup_periodic_tasks(sender, **kwargs) -> None:
     # codeql[py/cyclic-import]: lazy task registration inside the signal handler is the canonical Celery pattern and breaks the module-level cycle by construction
