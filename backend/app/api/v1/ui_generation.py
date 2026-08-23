@@ -1225,7 +1225,6 @@ async def get_infra_scaling(
     if not run.generated_ui_id:
         raise HTTPException(status_code=400, detail="Run has no generated UI")
 
-    product_type_str = (run.results_json or {}).get("product_type", "saas")
     overall_cr = (run.results_json or {}).get("overall_conversion_rate", 0.05)
 
     conductor_results, cluster_list, product_type_str = _load_conductor_results(run)
@@ -1290,7 +1289,6 @@ async def get_simulation_report_pdf(
     project_name = project.title if project else f"Project {project_id}"
 
     results_json = run.results_json or {}
-    product_type_str = results_json.get("product_type", "saas")
     aov = float(results_json.get("aov", 999))
     overall_cr = float(results_json.get("overall_conversion_rate", 0.05))
 
