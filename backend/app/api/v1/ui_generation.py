@@ -23,6 +23,7 @@ from app.core.prompts import (
     validate_generated_html,
 )
 from app.core.rate_limiter import rate_limit
+from app.core.security import log_safe
 from app.models.generated_ui import GeneratedUI
 from app.models.project import Project
 from app.models.ui_simulation_run import UISimulationRun
@@ -533,7 +534,7 @@ async def generate_ui(
     html = _build_safe_html(raw)
     logger.info(
         "generate-ui ok project=%s raw_len=%s html_len=%s",
-        project_id,
+        log_safe(project_id),
         len(raw),
         len(html),
     )

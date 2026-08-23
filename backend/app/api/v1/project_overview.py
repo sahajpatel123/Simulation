@@ -32,6 +32,7 @@ from app.api.v1.simulations import get_prediction_range
 from app.core.deps import get_current_user, get_db
 from app.core.rate_limiter import rate_limit
 from app.core.response_cache import cache_get_json, cache_set_json
+from app.core.security import log_safe
 from app.models.simulation import Simulation
 from app.models.user import User
 from app.schemas.project_overview import ProjectOverviewOut
@@ -145,8 +146,8 @@ def get_project_overview(
             logger.warning(
                 "project overview: %s panel failed for project %s: %s",
                 key,
-                project_id,  # codeql[py/log-injection]: FastAPI coerces the path param to int before the handler
-                exc,
+                log_safe(project_id),
+                log_safe(exc),
             )
 
     payload = build_project_overview(

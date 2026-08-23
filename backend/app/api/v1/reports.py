@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.api.v1.common import get_owned_project
 from app.core.deps import get_current_user, get_db
 from app.core.rate_limiter import rate_limit
+from app.core.security import log_safe
 from app.models.assumption import Assumption
 from app.models.decision import Decision
 from app.models.outcome import Outcome
@@ -103,7 +104,7 @@ def generate_report(
 
     logger.info(
         "[Report] Generating PDF — project_id=%s has_sim=%s assumptions=%s outcomes=%s",
-        project_id,
+        log_safe(project_id),
         latest_sim is not None,
         len(assumptions),
         len(outcomes),
@@ -113,7 +114,7 @@ def generate_report(
         generator = ReportGenerator()
         pdf_bytes = generator.generate(report_data)
     except Exception as exc:
-        logger.exception("[Report] PDF generation failed — project_id=%s", project_id)
+        logger.exception("[Report] PDF generation failed — project_id=%s", log_safe(project_id))
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(exc)}")
 
     filename = f"TheCee_Report_{_safe_filename(project.title or 'project')}.pdf"
