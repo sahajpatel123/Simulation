@@ -50,6 +50,9 @@ founder record *what happened* and see the consequence:
   metric.
 * ``GET /projects/{project_id}/evidence-verdicts/export`` downloads that
   scorecard as CSV, JSON, or a founder-facing Markdown brief.
+* ``GET /projects/{project_id}/assumption-recovery-plan`` turns killed and
+  inconsistent verdicts into ordered recovery plays — a reframed
+  hypothesis plus a concrete re-test from the planner's METHOD_SPECS.
 
 Pure post-hoc analysis — no Celery dispatch, no LLM calls.
 """
@@ -107,6 +110,7 @@ from app.schemas.evidence_staleness import (
     EvidenceStalenessSummaryOut,
 )
 from app.schemas.evidence_verdicts import EvidenceVerdictsOut
+from app.schemas.recovery_plan import RecoveryPlanOut
 from app.schemas.validation_dashboard import DASHBOARD_MODEL, ValidationDashboardOut
 from app.schemas.validation_experiment import METHOD_ID_LITERAL
 from app.schemas.validation_momentum import ValidationMomentumOut
@@ -156,6 +160,7 @@ from app.simulation.evidence_verdicts_export import (
     evidence_verdicts_to_json,
     evidence_verdicts_to_markdown,
 )
+from app.simulation.recovery_planner import build_recovery_plan
 from app.simulation.validation_dashboard_export import (
     FORMAT_VERSION as VALIDATION_DASHBOARD_FORMAT_VERSION,
 )
@@ -1077,6 +1082,54 @@ def export_evidence_verdicts(
             "Content-Length": str(len(body)),
             "Cache-Control": "no-store",
         },
+    )
+
+
+@router.get(
+    "/{project_id}/assumption-recovery-plan",
+    response_model=RecoveryPlanOut,
+    summary="Ordered recovery plays for killed and inconsistent assumptions",
+    responses=_JSON_200,
+)
+def get_assumption_recovery_plan(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RecoveryPlanOut:
+    """
+    The verdicts scorecard says *what* died; this says *what to do next*.
+    Every KILLED or INCONSISTENT_* assumption gets deterministic recovery
+    plays selected by theme — pricing, demand, trust, competition,
+    usability, retention — each rendered from the experiment planner's
+    METHOD_SPECS (method, cost tier, duration, sample target, success bar).
+    Inconsistent records get an audit play first: verify the bookkeeping
+    before spending on new experiments.
+    """
+    project = get_owned_project(db, current_user.id, project_id)
+    assumptions = (
+        db.query(Assumption)
+        .filter(
+            Assumption.project_id == project.id,
+            Assumption.is_hidden.is_(False),
+        )
+        .order_by(Assumption.id.asc())
+        .all()
+    )
+    evidence = (
+        db.query(AssumptionEvidence)
+        .filter(AssumptionEvidence.project_id == project.id)
+        .order_by(
+            AssumptionEvidence.created_at.desc(),
+            AssumptionEvidence.id.desc(),
+        )
+        .all()
+    )
+    return RecoveryPlanOut(
+        **build_recovery_plan(
+            assumptions=assumptions,
+            evidence=evidence,
+            project_id=project.id,
+        )
     )
 
 
