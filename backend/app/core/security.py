@@ -70,7 +70,10 @@ def hash_api_token(token: str) -> str:
     brute-forcing the digest is infeasible and a slow KDF would only add
     per-request latency. Human passwords use bcrypt via ``pwd_context``.
     """
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()  # codeql[py/weak-sensitive-data-hashing]: high-entropy opaque token, not a password — bcrypt covers passwords above
+    # codeql[py/weak-sensitive-data-hashing]: high-entropy opaque token (secrets.token_urlsafe),
+    # not a human password — brute-forcing SHA-256 of it is infeasible and a slow KDF would
+    # only add per-request latency; bcrypt covers actual passwords via pwd_context above.
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def api_token_expiry(expires_in_days: int | None = None) -> datetime:

@@ -139,7 +139,9 @@ def test_generate_token_is_prefixed_unique_and_hashed() -> None:
     b = generate_api_token()
     assert a.startswith(API_TOKEN_PREFIX)
     assert a != b
-    assert hash_api_token(a) == hashlib.sha256(a.encode("utf-8")).hexdigest()  # codeql[py/weak-sensitive-data-hashing]: characterization test for at-rest token hashing (high-entropy token, not a password)
+    # codeql[py/weak-sensitive-data-hashing]: characterization test pinning
+    # at-rest hashing to plain SHA-256 (high-entropy token, not a password).
+    assert hash_api_token(a) == hashlib.sha256(a.encode("utf-8")).hexdigest()
     assert hash_api_token(a) != hash_api_token(b)
 
 
