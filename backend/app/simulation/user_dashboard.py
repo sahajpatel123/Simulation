@@ -39,7 +39,10 @@ Output shape
 """
 from __future__ import annotations
 
+import logging
 from datetime import UTC
+
+logger = logging.getLogger(__name__)
 
 # Cap on monthly sim runs for the FREE tier. Higher
 # tiers are enforced elsewhere; this is the dashboard's
@@ -191,7 +194,13 @@ def build_user_dashboard(
                     account_age_days,
                 )
             except Exception:
-                pass
+                # Unparseable timestamps fall back to the fresh-account
+                # default below; keep the failure visible in debug logs.
+                logger.debug(
+                    "account_created_at=%r unparseable",
+                    account_created_at,
+                    exc_info=True,
+                )
     if account_age_days is None:
         # Fallback when the timestamp couldn't be parsed.
         account_age_days = 0
