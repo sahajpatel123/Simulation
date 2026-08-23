@@ -98,13 +98,13 @@ def test_csv_sections_and_native_negative_numbers() -> None:
     assert lines[3] == "format_version,1"
     assert lines[4] == ""
 
-    assert "Verdict Summary" in lines
+    assert "section,Verdict Summary" in lines
     assert "on_track_count,1" in lines
     assert "killed_count,1" in lines
-    assert "Assumption Verdicts" in lines
-    assert "Next Action" in lines
+    assert "section,Assumption Verdicts" in lines
+    assert "section,Next Action" in lines
     assert "hit a kill bar" in text
-    assert "Verdicts Meta" in lines
+    assert "section,Verdicts Meta" in lines
 
     # The killed row's margin stays a native negative number — the formula
     # guard must not apostrophe-escape it into spreadsheet text.
@@ -154,7 +154,7 @@ def test_markdown_brief_tables_and_footer() -> None:
         "| 2 | Users will pay ₹999 | PRICING | 1 | PASS "
         "| Willingness-to-pay survey | 30.0% | 42.0% | +12.00pp | ON_TRACK |"
     ) in md
-    assert "**2 assumption(s) hit a kill bar" in md
+    assert "**1 assumption(s) hit a kill bar" in md
     assert md.rstrip().endswith(
         "*Evidence verdicts · Project 5 · Generated 2026-08-23T09:15:00+00:00*"
     )
@@ -190,8 +190,8 @@ def test_export_route_registered() -> None:
 
 
 def test_export_route_round_trip_all_formats(monkeypatch) -> None:
-    from app.schemas.evidence_verdicts import EvidenceVerdictsOut
     from app.api.v1 import assumption_evidence as ev_mod
+    from app.schemas.evidence_verdicts import EvidenceVerdictsOut
 
     captured: dict = {}
 

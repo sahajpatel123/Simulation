@@ -58,6 +58,31 @@ _ROW_HEADERS: tuple[str, ...] = (
     "explanation",
 )
 
+# Columns whose values stay native numbers in the CSV (so spreadsheets can
+# compute on them); only strings ever need the formula guard.
+_NUMERIC_KEYS: frozenset[str] = frozenset(
+    {
+        "assumption_id",
+        "evidence_count",
+        "threshold",
+        "observed_metric",
+        "margin_pp",
+    }
+)
+
+
+def _cell(item: dict[str, Any], key: str) -> object:
+    """Native number when the column is numeric and the value is one."""
+    value = item.get(key, "")
+    if key in _NUMERIC_KEYS:
+        if isinstance(value, bool):
+            return _text(value)
+        if isinstance(value, (int, float)):
+            return value
+        if value is None:
+            return ""
+    return _text(value)
+
 
 def _as_dict(payload: Any) -> dict[str, Any]:
     """Coerce a Pydantic model or plain mapping into a plain dictionary."""
@@ -145,7 +170,10 @@ def evidence_verdicts_to_csv(
     _write_row(writer, ["key", "value"])
     for key in _SUMMARY_KEYS:
         value = data.get(key)
-        _write_row(writer, [key, _text(value) if value is not None else ""])
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            _write_row(writer, [key, value])
+        else:
+            _write_row(writer, [key, _text(value) if value is not None else ""])
     _write_row(writer, [])
 
     _write_row(writer, ["section", "Assumption Verdicts"])
@@ -156,7 +184,7 @@ def evidence_verdicts_to_csv(
             continue
         _write_row(
             writer,
-            [_text(item.get(key, "")) for key in _ROW_HEADERS],
+            [_cell(item, key) for key in _ROW_HEADERS],
         )
     _write_row(writer, [])
 
