@@ -60,6 +60,7 @@ from app.core.response_cache import (
     cache_invalidate,
     cache_set_json,
 )
+from app.core.security import log_safe
 from app.core.tier_enforcement import enforce_simulation_limit
 from app.core.websocket import sync_broadcast
 from app.models.assumption import Assumption
@@ -4817,9 +4818,9 @@ def cancel_simulation(
         except Exception as exc:
             logger.warning(
                 "[Simulation] revoke failed - simulation_id=%s task_id=%s error=%s",
-                simulation_id,  # codeql[py/log-injection]: FastAPI coerces the path param to int before the handler
+                log_safe(simulation_id),
                 sim.task_id,
-                exc,  # codeql[py/log-injection]: internal library exception text, server-side log only
+                log_safe(exc),
             )
 
     cancelled_at = datetime.now(UTC)
@@ -4886,15 +4887,15 @@ def cancel_simulation(
         logger.warning(
             "[Simulation] webhook enqueue on cancel skipped - "
             "simulation_id=%s error=%s",
-            simulation_id,  # codeql[py/log-injection]: FastAPI coerces the path param to int before the handler
-            exc,  # codeql[py/log-injection]: internal library exception text, server-side log only
+            log_safe(simulation_id),
+            log_safe(exc),
         )
 
     _invalidate_simulation_caches(current_user.id)
 
     logger.info(
         "[Simulation] Cancelled by user - simulation_id=%s task_id=%s",
-        simulation_id,  # codeql[py/log-injection]: FastAPI coerces the path param to int before the handler
+        log_safe(simulation_id),
         sim.task_id,
     )
 
@@ -11121,7 +11122,7 @@ def get_simulation_journey_category_benchmark(
             logger.warning(
                 "journey-category-benchmark: discarding invalid cached "
                 "payload for simulation %s",
-                simulation_id,  # codeql[py/log-injection]: FastAPI coerces the path param to int before the handler
+                log_safe(simulation_id),
             )
 
     rows = (
