@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
@@ -133,14 +134,13 @@ REWEIGHTING_RULES: dict[str, ReweightRules] = {
 }
 
 
-_VALIDATED_IDS: set[str] | None = None
-
-
+@lru_cache(maxsize=1)
 def _validate_rule_ids() -> None:
-    """Warn if any hardcoded cluster ID in REWEIGHTING_RULES is unknown."""
-    global _VALIDATED_IDS
-    if _VALIDATED_IDS is not None:
-        return
+    """Warn if any hardcoded cluster ID in REWEIGHTING_RULES is unknown.
+
+    Memoized with ``lru_cache`` so the registry lookup and the
+    warning pass run at most once per process.
+    """
     try:
         known = {c.cluster_id for c in ClusterRegistry().all_clusters()}
     except Exception:
@@ -156,7 +156,6 @@ def _validate_rule_ids() -> None:
             "may be renamed in registry but not updated here.",
             uid,
         )
-    _VALIDATED_IDS = seen
 
 
 class ClusterReweightingEngine:
