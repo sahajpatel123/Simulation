@@ -336,7 +336,9 @@ async def prometheus_metrics() -> Response:
         if checked_out is not None:
             metrics.set_db_pool_checked_out(int(checked_out))
     except Exception:
-        pass
+        # Don't fail the scrape over a gauge refresh — but keep the reason
+        # visible at debug so a persistently broken gauge is diagnosable.
+        logger.debug("db pool gauge refresh failed", exc_info=True)
 
     body = metrics.render()
     return Response(content=body, media_type="text/plain", headers={"Content-Type": _PROM_CONTENT_TYPE})
