@@ -203,7 +203,6 @@ def _parse_change_manifest(raw: str) -> tuple[list[dict], str]:
     if not m:
         return [], raw
     try:
-        import json
         manifest = json.loads(m.group(1))
     except (json.JSONDecodeError, Exception):
         manifest = []
@@ -621,10 +620,9 @@ async def refine_ui(
     html = _build_safe_html(raw_html)
 
     _lock_project_for_ui_version(db, project_id, current_user.id)
-    import json as _json
     stored_prompt = body.refinement_prompt
     if changes_meta:
-        stored_prompt += "\n/* CHANGES: " + _json.dumps(changes_meta) + " */"
+        stored_prompt += "\n/* CHANGES: " + json.dumps(changes_meta) + " */"
 
     new_ui = GeneratedUI(
         project_id=project_id,
