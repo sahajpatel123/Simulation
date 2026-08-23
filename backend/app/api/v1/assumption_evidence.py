@@ -1795,6 +1795,30 @@ async def export_validation_workbook(
         except Exception as exc:  # noqa: BLE001 — one bad sheet must not sink the bundle
             failures.append(f"{label}: {exc}")
 
+    # Founder-facing Markdown briefs ride along with the raw CSVs so the
+    # workbook doubles as a shareable narrative, not just data.
+    for label, builder in (
+        ("momentum-brief", export_validation_momentum),
+        ("dashboard-brief", export_validation_dashboard),
+    ):
+        try:
+            brief_kwargs: dict[str, Any] = {
+                "project_id": project.id,
+                "format": "md",
+                "target_de_risked_pct": 1.0,
+                "db": db,
+                "current_user": current_user,
+            }
+            if builder is export_validation_dashboard:
+                brief_kwargs["fresh_days"] = DEFAULT_FRESH_DAYS
+                brief_kwargs["aging_days"] = DEFAULT_AGING_DAYS
+            body, filename = await _workbook_part(builder, **brief_kwargs)
+            sheets.append((filename, body))
+        except HTTPException as exc:
+            failures.append(f"{label}: {exc.status_code} {exc.detail}")
+        except Exception as exc:  # noqa: BLE001 — one bad sheet must not sink the bundle
+            failures.append(f"{label}: {exc}")
+
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         generated = datetime.now(tz=UTC).isoformat()

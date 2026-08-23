@@ -72,6 +72,8 @@ _SHEET_BODIES = {
     "validation-momentum-10.csv": b"section,Momentum Counts\n",
     "evidence-freshness-10.csv": b"section,Freshness\n",
     "validation-dashboard-10.csv": b"section,Dashboard\n",
+    "validation-momentum-10.md": b"# Validation Momentum\n",
+    "validation-dashboard-10.md": b"# Validation Dashboard\n",
 }
 
 
@@ -111,6 +113,31 @@ def _install_builders(monkeypatch, *, fail_label: str | None = None) -> dict:
         ev_mod,
         "export_validation_dashboard",
         make("validation-dashboard", "validation-dashboard-10.csv"),
+    )
+    # Markdown briefs reuse the momentum/dashboard builders with format=md;
+    # the same stub serves both by matching on the requested format.
+    def _momentum_any(**kwargs):
+        if kwargs.get("format") == "md":
+            calls.setdefault("momentum-brief", dict(kwargs))
+            return _sheet_response(
+                "validation-momentum-10.md", _SHEET_BODIES["validation-momentum-10.md"]
+            )
+        return _builder_momentum_csv(**kwargs)
+
+    def _dashboard_any(**kwargs):
+        if kwargs.get("format") == "md":
+            calls.setdefault("dashboard-brief", dict(kwargs))
+            return _sheet_response(
+                "validation-dashboard-10.md",
+                _SHEET_BODIES["validation-dashboard-10.md"],
+            )
+        return _builder_dashboard_csv(**kwargs)
+
+    _builder_momentum_csv = ev_mod.export_validation_momentum
+    _builder_dashboard_csv = ev_mod.export_validation_dashboard
+    monkeypatch.setattr(ev_mod, "export_validation_momentum", _momentum_any)
+    monkeypatch.setattr(
+        ev_mod, "export_validation_dashboard", _dashboard_any
     )
     return calls
 
