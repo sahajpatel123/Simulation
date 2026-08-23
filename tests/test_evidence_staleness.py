@@ -116,8 +116,10 @@ def test_recommendations_name_top_actionable_items() -> None:
     )
 
     assert payload["recommendations"] == [
-        'Design a first experiment for "Never checked" — it has never been '
-        "tested.",
+        (
+            'Design a first experiment for "Never checked" — it has never been '
+            "tested."
+        ),
         'Re-test "Old news" — latest evidence is 120 days old.',
     ]
 

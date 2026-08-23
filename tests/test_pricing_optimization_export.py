@@ -69,12 +69,16 @@ def _payload() -> PricingOptimizationOut:
             )
         ],
         recommendations=[
-            "Lowering price from 999.00 toward 499.50 could add "
-            "~10.4% cohort revenue — demand currently collapses before "
-            "the base price is reached.",
-            "Demand around the current price is elastic "
-            "(arc elasticity -1.32): a ±20% price move shifts "
-            "demand-weighted conversion materially.",
+            (
+                "Lowering price from 999.00 toward 499.50 could add "
+                "~10.4% cohort revenue — demand currently collapses before "
+                "the base price is reached."
+            ),
+            (
+                "Demand around the current price is elastic "
+                "(arc elasticity -1.32): a ±20% price move shifts "
+                "demand-weighted conversion materially."
+            ),
         ],
         key_signals=[
             {

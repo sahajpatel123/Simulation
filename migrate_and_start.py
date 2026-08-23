@@ -1,5 +1,5 @@
-from pathlib import Path
 import sys
+from pathlib import Path
 
 _backend = Path(__file__).resolve().parent / "backend"
 if _backend.is_dir():
@@ -10,19 +10,6 @@ from sqlalchemy import text
 from app.core.database import engine
 from app.models import (
     Base,
-    User,
-    Project,
-    Assumption,
-    Environment,
-    Simulation,
-    Decision,
-    Outcome,
-    OutcomeTracker,
-    GeneratedUI,
-    UISimulationSession,
-    UISimulationRun,
-    HardwareProduct,
-    Hardware3DModel,
 )
 
 
@@ -1265,12 +1252,16 @@ def run_migrations():
             # Reverse-chronological lookup for ``GET /me/audit-log`` uses
             # (user_id, id DESC) so the index supports both the filter and
             # the cursor pagination key.
-            "CREATE INDEX IF NOT EXISTS idx_api_audit_log_user_id "
-            "ON api_audit_log (user_id, id DESC);",
+            (
+                "CREATE INDEX IF NOT EXISTS idx_api_audit_log_user_id "
+                "ON api_audit_log (user_id, id DESC);"
+            ),
             # Catch-all time index lets ops query "all writes in the last
             # hour" without a sequential scan.
-            "CREATE INDEX IF NOT EXISTS idx_api_audit_log_created_at "
-            "ON api_audit_log (created_at DESC);",
+            (
+                "CREATE INDEX IF NOT EXISTS idx_api_audit_log_created_at "
+                "ON api_audit_log (created_at DESC);"
+            ),
         ]:
             try:
                 conn.execute(text(idx_sql))
@@ -1360,8 +1351,8 @@ def _seed_cluster_parameters():
 if __name__ == "__main__":
     run_migrations()
     print("🚀 Starting TheCee backend on http://localhost:8000")
-    import uvicorn
-
     import os
+
+    import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=False)

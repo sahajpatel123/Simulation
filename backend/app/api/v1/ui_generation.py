@@ -871,12 +871,16 @@ async def serve_generated_ui(
     csp_parts = [
         "default-src 'none'",
         # Tailwind Play CDN and Alpine.js both rely on eval/inline execution.
-        "script-src 'unsafe-inline' 'unsafe-eval' "
-        "https://cdn.tailwindcss.com https://unpkg.com "
-        "https://cdn.jsdelivr.net https://esm.sh",
-        "style-src 'unsafe-inline' "
-        "https://cdn.tailwindcss.com https://fonts.googleapis.com "
-        "https://cdn.jsdelivr.net",
+        (
+            "script-src 'unsafe-inline' 'unsafe-eval' "
+            "https://cdn.tailwindcss.com https://unpkg.com "
+            "https://cdn.jsdelivr.net https://esm.sh"
+        ),
+        (
+            "style-src 'unsafe-inline' "
+            "https://cdn.tailwindcss.com https://fonts.googleapis.com "
+            "https://cdn.jsdelivr.net"
+        ),
         "font-src data: https://fonts.gstatic.com https://cdn.jsdelivr.net",
         "img-src data: blob:",
         "connect-src 'none'",

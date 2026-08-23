@@ -11,20 +11,19 @@ import pytest
 from fastapi import HTTPException
 
 from app.schemas.feature_prioritization import (
+    SEGMENT_ADVANCED,
+    TIER_BUILD_FIRST,
+    VERDICT_FOCUSED,
     BriefFeatureScore,
     ClusterFeatureProfile,
     FeatureDimension,
     FeaturePrioritizationOut,
-    SEGMENT_ADVANCED,
-    TIER_BUILD_FIRST,
-    VERDICT_FOCUSED,
 )
 from app.simulation.feature_prioritization_export import (
     feature_prioritization_to_csv,
     feature_prioritization_to_json,
     feature_prioritization_to_markdown,
 )
-
 
 if "razorpay" not in sys.modules:
     stub = types.ModuleType("razorpay")
@@ -93,8 +92,10 @@ def _payload() -> FeaturePrioritizationOut:
         ],
         flags=["shallow_adoption_risk", "power_discovery_gap"],
         recommendations=[
-            "Start with Integrations — highest validated upside "
-            "(35% adoption, 59% headroom).",
+            (
+                "Start with Integrations — highest validated upside "
+                "(35% adoption, 59% headroom)."
+            ),
             "Focus onboarding on power features before adding new ones.",
         ],
         meta={
