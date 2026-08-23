@@ -145,6 +145,7 @@ from app.schemas.simulation import (
     SimulationSensitivityMatrixOut,
     SimulationStatusOut,
 )
+from app.schemas.simulation_compare import SimulationRunDiffOut
 from app.schemas.simulation_comparison import (
     SimulationCompareRequest,
     SimulationComparisonOut,
@@ -364,6 +365,9 @@ from app.simulation.sensitivity_export import (
 from app.simulation.sensitivity_matrix import compute_simulation_sensitivity_matrix
 from app.simulation.setup_friction import build_setup_friction
 from app.simulation.sim_diff import build_sim_diff
+from app.simulation.simulation_compare import (
+    build_simulation_comparison as build_run_diff,
+)
 from app.simulation.simulation_export import (
     build_simulation_export,
     simulation_to_csv,
@@ -8655,6 +8659,78 @@ def get_validation_experiment_schedule(
         max_days=max_days,
         budget_tier=budget_tier,
         max_parallel=max_parallel,
+    )
+
+
+@router.get(
+    "/{simulation_id}/compare/{baseline_id}",
+    response_model=SimulationRunDiffOut,
+    summary="Diff a completed run against a baseline run",
+    responses=_JSON_200,
+)
+def get_simulation_comparison(
+    simulation_id: int,
+    baseline_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SimulationRunDiffOut:
+    """
+    Funnel-level diff between two completed simulations.
+
+    Where ``sim-diff`` compares domain findings and ``cluster-diff``
+    compares clusters inside one run, this endpoint answers "did the
+    re-run move the projection?" — headline conversion in percentage
+    points, per-stage drop-off changes, and the cluster movers behind
+    the shift. Pure post-hoc analysis over stored ``results_json``.
+    """
+    if baseline_id == simulation_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="baseline_id must differ from simulation_id",
+        )
+
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+    baseline = _get_owned_simulation(baseline_id, current_user.id, db)
+
+    for role, row in (("compared", sim), ("baseline", baseline)):
+        if row.status == "FAILED":
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"{role} simulation failed: "
+                    f"{row.error_message or 'unknown error'}"
+                ),
+            )
+        if row.status != "COMPLETED":
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"{role} simulation is {row.status} — comparison "
+                    "requires completed results."
+                ),
+            )
+        if not row.results_json:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"{role} simulation completed but results_json is empty."
+                ),
+            )
+
+    return build_run_diff(
+        simulation_id=sim.id,
+        baseline_id=baseline.id,
+        current_results=sim.results_json or {},
+        baseline_results=baseline.results_json or {},
+        current_signal=(
+            float(sim.signal_quality) if sim.signal_quality is not None else None
+        ),
+        baseline_signal=(
+            float(baseline.signal_quality)
+            if baseline.signal_quality is not None
+            else None
+        ),
+        project_id=sim.project_id,
     )
 
 
