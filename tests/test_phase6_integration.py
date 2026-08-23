@@ -24,7 +24,6 @@ from app.simulation.product_type import ProductType
 from app.simulation.profiles import AgentProfileGenerator
 from app.tasks.simulation_tasks import _funnel_result_from_conductor
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ENCODING = tiktoken.get_encoding("cl100k_base")
 
@@ -268,6 +267,7 @@ def test_prompt_token_budgets_are_lower_than_pre_step_48_templates():
     # where the canonical `backend/app/core/prompts.py` introduced the
     # prompt constants. Skip when neither source is reachable (e.g. shallow
     # clones without the historical commit).
+    historical: str | None = None
     for candidate in (
         ("app/core/prompts.py", "3e3ba4f"),
         ("backend/app/core/prompts.py", "a9fcff9"),
