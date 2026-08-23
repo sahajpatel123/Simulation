@@ -367,8 +367,8 @@ def run_pass(args, prompt: str, log_path: Path, timeout: int):
         try:
             proc.stdin.write(prompt)
             proc.stdin.close()
-        except (BrokenPipeError, OSError):
-            pass
+        except (BrokenPipeError, OSError) as exc:
+            print(f"[{now_text()}] prompt write failed (child closed early): {exc}")
         try:
             rc = proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
@@ -405,8 +405,8 @@ def prune_logs() -> None:
     for old in logs[:-KEEP_LOGS]:
         try:
             old.unlink()
-        except OSError:
-            pass
+        except OSError as exc:
+            print(f"[{now_text()}] could not prune old log {old.name}: {exc}")
 
 
 def main() -> int:
