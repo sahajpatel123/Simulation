@@ -377,4 +377,12 @@ For security concerns, please contact the project maintainers.
   `/simulations/ws/info` — which exposes the live connection count —
   joined the same admin-in-production gate as the `/system` digests,
   with an AST pin keeping both in place.
+- 2026-08-25 - Refined the share-link credential lifecycle: audited the
+  full share-token system (256-bit URL-safe generation, hash-only
+  persistence, owner-scoped mint/revoke/list, anonymised public payload,
+  rate limits) and closed its one defensive gap — `compute_expiry` now
+  clamps TTLs to `[1, 365]` days, so a future client-supplied TTL from
+  the deliberately reserved mint-request body can never mint an
+  effectively never-expiring (or already-inverted) public link. Pinned
+  by clamp tests in `tests/test_share_token.py`.
 - [VERSION] - Initial security policy

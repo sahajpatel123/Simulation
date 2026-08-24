@@ -6,6 +6,7 @@ expiry math, anonymisation) is fully covered here. The DB-backed routes
 need an integration env, so they are smoke-tested via route registration
 only — the helper layer is where the meaningful business logic lives.
 """
+
 from __future__ import annotations
 
 import sys
@@ -25,9 +26,7 @@ def test_generate_token_is_urlsafe_and_long() -> None:
     assert len(token) >= 40
     assert isinstance(token, str)
     # URL-safe alphabet only.
-    allowed = set(
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
-    )
+    allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
     assert set(token) <= allowed
 
 
@@ -475,3 +474,39 @@ def test_generated_token_meets_min_length() -> None:
 
     for _ in range(20):
         assert len(generate_token()) >= 16
+
+
+# ---------------------------------------------------------------------------
+# TTL clamp — share links must never become effectively permanent
+# ---------------------------------------------------------------------------
+
+
+def test_compute_expiry_clamps_oversized_ttl() -> None:
+    """A future client-supplied TTL (the mint body is deliberately
+    reserved) can never mint an effectively never-expiring link."""
+    from app.simulation.share_token import MAX_TTL_DAYS, compute_expiry
+
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    assert compute_expiry(now=now, ttl_days=100_000) == (now + timedelta(days=MAX_TTL_DAYS))
+    assert MAX_TTL_DAYS == 365
+
+
+def test_compute_expiry_clamps_nonpositive_ttl() -> None:
+    """Zero / negative TTLs clamp to the floor instead of producing an
+    already-expired (or inverted-window) credential."""
+    from app.simulation.share_token import MIN_TTL_DAYS, compute_expiry
+
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    for ttl in (0, -1, -1000):
+        assert compute_expiry(now=now, ttl_days=ttl) == (now + timedelta(days=MIN_TTL_DAYS))
+    assert MIN_TTL_DAYS == 1
+
+
+def test_compute_expiry_keeps_valid_ttl_range_untouched() -> None:
+    """Values inside [MIN, MAX] pass through exactly."""
+    from app.simulation.share_token import compute_expiry
+
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    assert compute_expiry(now=now, ttl_days=1) == now + timedelta(days=1)
+    assert compute_expiry(now=now, ttl_days=30) == now + timedelta(days=30)
+    assert compute_expiry(now=now, ttl_days=365) == now + timedelta(days=365)
