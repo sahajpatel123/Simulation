@@ -1,7 +1,7 @@
 """Defensive tests for decode_token's required-claims enforcement.
 
 decode_token now passes ``options={"require": ["exp", "sub", "type"]}`` to
-python-jose. A token missing any of those claims must fail closed (return
+PyJWT. A token missing any of those claims must fail closed (return
 None) rather than silently bypassing the check. This file pins that
 contract so the defence cannot regress to a permissive default.
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from jose import jwt
+import jwt
 
 from app.core.config import settings
 from app.core.security import decode_token

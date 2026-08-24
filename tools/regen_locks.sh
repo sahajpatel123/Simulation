@@ -10,7 +10,7 @@
 #
 # Deterministic by construction: every direct pin is == (see lock-specs/),
 # so the same python/pip pair reproduces byte-identical versions. Use
-# python 3.11 + pip 25.2 (the CI interpreter pair) for best fidelity.
+# python 3.11 + pip 26.2.1 (the CI interpreter pair) for best fidelity.
 #
 # Usage:
 #   tools/regen_locks.sh            # regenerate all three locks

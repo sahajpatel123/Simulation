@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Query OSV for known vulnerabilities in every pinned dependency.
 
-Reads the direct pins from ``requirements.txt`` and the resolved root
-packages from ``package-lock.json``, then asks ``api.osv.dev`` about
-each exact version. This is the same vulnerability database OpenSSF
-Scorecard's ``Vulnerabilities`` check consults, so a clean run here
-means scorecard sees a clean dependency set too — without waiting for
-the weekly analysis.
+Reads every Python pin source in the repo — ``requirements.txt``, all
+generated ``requirements-*-lock.txt`` hash-lock files, and the
+``tools/lock-specs/*.txt`` specs — plus the resolved root packages from
+``package-lock.json``, then asks ``api.osv.dev`` about each exact
+version. This mirrors how OpenSSF Scorecard's ``Vulnerabilities`` check
+works: it runs osv-scanner recursively over the whole checkout with the
+python requirements plugin enabled, so the hash-lock files' frozen
+*transitive* versions are scanned too, not just direct pins. A clean run
+here means scorecard sees a clean dependency set too — without waiting
+for the weekly analysis.
 
 Stdlib-only by design: the tool must stay installable-free so CI can
 run it straight after ``actions/setup-python`` with no hash-locked
@@ -115,12 +119,29 @@ def query_osv(
     return findings
 
 
+def python_pin_sources(root: Path) -> list[Path]:
+    """Every in-repo file scorecard's recursive osv-scanner would parse.
+
+    The hash-lock files matter most: they freeze every transitive
+    dependency at generation time, so an advisory published after the
+    last regeneration only shows up here — never in ``requirements.txt``.
+    """
+    paths = sorted(root.glob("requirements*.txt"))
+    specs = root / "tools" / "lock-specs"
+    if specs.is_dir():
+        paths.extend(sorted(specs.glob("*.txt")))
+    return paths
+
+
 def scan(root: Path) -> dict[str, list[str]]:
     """Scan both ecosystems under ``root`` and return all findings."""
     findings: dict[str, list[str]] = {}
-    py_pins = parse_requirements_txt(root / "requirements.txt")
+    py_pins: dict[tuple[str, str], None] = {}
+    for path in python_pin_sources(root):
+        for pin in parse_requirements_txt(path):
+            py_pins[pin] = None
     if py_pins:
-        findings.update(query_osv(py_pins, "PyPI"))
+        findings.update(query_osv(list(py_pins), "PyPI"))
     npm_pins = parse_package_lock_json(root / "package-lock.json")
     if npm_pins:
         findings.update(query_osv(npm_pins, "npm"))

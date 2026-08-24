@@ -160,6 +160,53 @@ class TestOsvQuerying:
 
 
 class TestScanEndToEnd:
+    def test_python_pin_sources_includes_locks_and_specs(self, tmp_path):
+        (tmp_path / "requirements.txt").write_text("a==1\n")
+        (tmp_path / "requirements-lock.txt").write_text("a==1\ntransitive==0.9\n")
+        specs = tmp_path / "tools" / "lock-specs"
+        specs.mkdir(parents=True)
+        (specs / "runtime.txt").write_text("-r ../../requirements.txt\n")
+        (specs / "tools.txt").write_text("ruff==0.16.0\n")
+
+        sources = osv.python_pin_sources(tmp_path)
+        names = [p.relative_to(tmp_path).as_posix() for p in sources]
+        assert names == [
+            "requirements-lock.txt",
+            "requirements.txt",
+            "tools/lock-specs/runtime.txt",
+            "tools/lock-specs/tools.txt",
+        ]
+
+    def test_scan_dedupes_shared_pins_across_sources(self, monkeypatch, tmp_path):
+        # Same direct pin listed in the manifest and its hash-lock: OSV must
+        # see it once, not once per source file.
+        (tmp_path / "requirements.txt").write_text("dup==1.0\nonly-manifest==2.0\n")
+        (tmp_path / "requirements-lock.txt").write_text(
+            "dup==1.0 \\\n    --hash=sha256:aa\nonly-lock==3.0\n"
+        )
+        seen: list[str] = []
+
+        def fake_urlopen(request, timeout):
+            body = json.loads(request.data.decode())
+            for q in body["queries"]:
+                seen.append(q["package"]["name"])
+            out = json.dumps({"results": [{} for _ in body["queries"]]}).encode()
+
+            class _Resp(io.BytesIO):
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *args):
+                    return False
+
+            return _Resp(out)
+
+        monkeypatch.setattr(osv, "urlopen", fake_urlopen)
+        monkeypatch.setattr(osv.time, "sleep", lambda s: None)
+
+        assert osv.scan(tmp_path) == {}
+        assert sorted(seen) == ["dup", "only-lock", "only-manifest"]
+
     def test_scan_aggregates_both_ecosystems(self, monkeypatch, tmp_path):
         (tmp_path / "requirements.txt").write_text("requests==2.32.0\n")
         (tmp_path / "package-lock.json").write_text(

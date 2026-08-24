@@ -163,7 +163,7 @@ Resolution deliberately stays local: a workflow would need bare
 `pip install --report` steps, which scorecard's PinnedDependencies probe
 flags — the exact findings hash-locking closed. The per-lock spec files
 (`tools/lock-specs/`) pin every direct requirement with `==`, so the same
-python 3.11 / pip 25.2 pair reproduces identical output.
+python 3.11 / pip 26.2.1 pair reproduces identical output.
 
 ### Secrets Management
 
@@ -284,4 +284,14 @@ For security concerns, please contact the project maintainers.
   the obsolete hash-pinning-deferral exception with the enforced hash-locking
   flow, and refreshed the Actions hardening checklist for job-scoped write
   permissions.
+- 2026-08-24 - Extended `tools/osv_scan.py` to cover every Python pin source
+  scorecard's recursive osv-scanner sees (`requirements*.txt`, all generated
+  locks, `tools/lock-specs/*.txt`) instead of direct pins only — surfacing
+  two frozen-transitive findings the earlier scans missed.
+- 2026-08-24 - Removed the last unfixable advisory surface: replaced
+  `python-jose[cryptography]` with `PyJWT==2.13.0` (python-jose depends on
+  `ecdsa`, which OSV marks affected from version 0 with no fixed release —
+  Minerva timing attack on P-256). JWT behavior is pinned by
+  `tests/test_security_jwt_required_claims.py`. Also bumped the CI tools
+  spec from pip 25.2 to 26.2.1 to clear eleven published pip advisories.
 - [VERSION] - Initial security policy

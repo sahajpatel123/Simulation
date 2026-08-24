@@ -5,7 +5,7 @@ import secrets
 import string
 from datetime import UTC, datetime, timedelta
 
-from jose import JWTError, jwt
+import jwt
 from passlib.context import CryptContext
 
 from app.core.config import settings
@@ -169,9 +169,6 @@ def decode_token(token: str, token_type: str = "access") -> str | None:
     classic ``alg=none`` / HS-vs-RS confusion attacks, and explicitly
     requires ``exp``, ``sub`` and ``type`` so a token missing any of
     those claims fails closed rather than silently bypassing checks.
-
-    python-jose uses ``require_<claim>`` keys (not a ``require`` array)
-    to gate claim presence — see ``jose.jwt._validate_claims``.
     """
     try:
         payload = jwt.decode(
@@ -179,13 +176,11 @@ def decode_token(token: str, token_type: str = "access") -> str | None:
             settings.SECRET_KEY,
             algorithms=[settings.ALGORITHM],
             options={
-                "require_exp": True,
-                "require_sub": True,
-                "require_type": True,
+                "require": ["exp", "sub", "type"],
                 "verify_exp": True,
             },
         )
-    except JWTError:
+    except jwt.PyJWTError:
         return None
     if payload.get("type") != token_type:
         return None
