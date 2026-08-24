@@ -1,0 +1,5 @@
+# Pytest superset lock spec: runtime deps plus the test-only plugins
+# backend-ci needs (pytest itself already lives in requirements.txt).
+-r ../../requirements.txt
+pytest-cov==7.1.0
+pytest-asyncio==1.4.0

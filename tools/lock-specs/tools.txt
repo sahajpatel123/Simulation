@@ -1,0 +1,9 @@
+# CI tooling lock spec — the direct tools every workflow installs.
+# Keep in sync with the ruff-pre-commit rev in .pre-commit-config.yaml.
+pip==25.2
+ruff==0.16.0
+bandit==1.7.10
+pip-audit==2.7.2
+safety==3.6.1
+zizmor==1.28.0
+PyYAML==6.0.3
