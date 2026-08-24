@@ -67,21 +67,6 @@ def _store_refresh_token(db: Session, user_id: int, raw_token: str) -> None:
     )
 
 
-def _revoke_refresh_token(db: Session, raw_token: str) -> int:
-    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-    result = db.execute(
-        text(
-            """
-            UPDATE refresh_tokens
-            SET revoked = TRUE, revoked_at = NOW()
-            WHERE token_hash = :hash AND revoked = FALSE
-            """
-        ),
-        {"hash": token_hash},
-    )
-    return int(result.rowcount or 0)
-
-
 def _revoke_user_refresh_tokens(db: Session, user_id: int) -> int:
     result = db.execute(
         text(

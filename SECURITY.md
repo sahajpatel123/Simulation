@@ -411,4 +411,15 @@ For security concerns, please contact the project maintainers.
   nothing and stay side-effect free. Migration is additive (`ADD COLUMN
   IF NOT EXISTS`); all revocation paths stamp `revoked_at`. Pinned by
   four new tests in `tests/test_auth_refresh_rotation.py`.
+- 2026-08-25 - Added refresh-token retention hygiene: auth flows never
+  deleted rows (every login and rotation inserts one; only ``revoked``
+  flips), so dead credential hashes accumulated forever and widened the
+  offline-cracking target after any future database leak. A daily Celery
+  beat sweep (`maintenance.purge_stale_refresh_tokens`) now deletes rows
+  that have been unusable — revoked or expired — for longer than 90 days,
+  preserving recent history for reuse-detection forensics. Legacy rows
+  revoked before the `revoked_at` column fall back to `expires_at`; live
+  tokens match none of the purge predicates. Also removed the dead
+  `_revoke_refresh_token` helper. Six tests pin cutoff math, SQL shape,
+  rollback-on-failure, and beat registration.
 - [VERSION] - Initial security policy

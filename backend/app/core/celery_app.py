@@ -24,6 +24,7 @@ celery_app = Celery(
         "app.tasks.hardware_tasks",
         "app.tasks.hardware_consumer_simulation",
         "app.tasks.retention_email_tasks",
+        "app.tasks.maintenance_tasks",
     ],
 )
 
@@ -51,6 +52,12 @@ celery_app.conf.beat_schedule = {
     "week4-retention-emails": {
         "task": "retention.send_week4_retention_emails",
         "schedule": crontab(hour=9, minute=0, day_of_week=1),
+    },
+    # Daily sweep: refresh-token rows dead (revoked/expired) for longer
+    # than the retention window stop accumulating forever.
+    "maintenance-purge-stale-refresh-tokens": {
+        "task": "maintenance.purge_stale_refresh_tokens",
+        "schedule": crontab(hour=4, minute=17),
     },
 }
 
