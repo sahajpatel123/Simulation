@@ -13,7 +13,8 @@ can catch issues locally before pushing:
     into CI.
   - Every checkout sets persist-credentials: false.
   - Every workflow declares least-privilege permissions; no actions: write;
-    id-token: write only in scorecard.yml.
+    id-token: write only in scorecard.yml (analysis job); every other write
+    scope lives on a job, never at workflow level.
   - Every job declares a positive timeout-minutes so CI cannot hang indefinitely.
   - Every workflow includes a workflow_dispatch trigger for manual runs.
   - The zizmor config disables hash-pinning (this repo pins to full tags instead).
@@ -160,14 +161,29 @@ def validate_permissions() -> list[str]:
             data = yaml.safe_load(fh) or {}
         rel = Path(path).relative_to(ROOT)
         blocks: list[tuple[str, dict]] = []
-        if data.get("permissions"):
-            blocks.append(("workflow", data["permissions"]))
-        else:
+        top = data.get("permissions")
+        if not top:
             errors.append(f"{rel}: no top-level permissions block")
+        elif isinstance(top, str):
+            # e.g. ``permissions: read-all`` — legal YAML but it hides which
+            # scopes are granted and breaks the per-scope audit below.
+            errors.append(
+                f"{rel}: workflow permissions must be a scope map, got {top!r}"
+            )
+        else:
+            blocks.append(("workflow", top))
         for job_name, job in (data.get("jobs") or {}).items():
-            if job.get("permissions"):
-                blocks.append((f"job {job_name}", job["permissions"]))
-        if not blocks:
+            perms = job.get("permissions")
+            if not perms:
+                continue
+            if isinstance(perms, str):
+                errors.append(
+                    f"{rel} job {job_name}: job permissions must be a scope "
+                    f"map, got {perms!r}"
+                )
+            else:
+                blocks.append((f"job {job_name}", perms))
+        if not blocks and not top:
             errors.append(f"{rel}: no permissions block")
         for block_name, block in blocks:
             if block.get("actions") == "write":
@@ -180,6 +196,16 @@ def validate_permissions() -> list[str]:
                     f"{rel} {block_name}: id-token: write is only allowed in "
                     "scorecard.yml"
                 )
+            if block_name == "workflow":
+                writes = sorted(
+                    k for k, v in block.items() if v == "write" and k != "actions"
+                )
+                if writes:
+                    errors.append(
+                        f"{rel}: workflow-level write permissions "
+                        f"({', '.join(writes)}) must be scoped to the job "
+                        "that needs them"
+                    )
     return errors
 
 

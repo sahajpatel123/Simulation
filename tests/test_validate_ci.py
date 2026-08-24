@@ -216,6 +216,61 @@ class TestWorkflowHygiene:
         errors = vci.validate_permissions()
         assert any("actions: write" in e for e in errors)
 
+    def test_workflow_level_write_scope_flagged(self, vci, tmp_path):
+        # The b39f77b1 pattern: writes belong on the job that needs them so
+        # a future job can't inherit them by accident.
+        _write_workflow(
+            tmp_path,
+            MINIMAL_WORKFLOW.replace(
+                "permissions:\n  contents: read",
+                "permissions:\n  contents: read\n  security-events: write",
+            ),
+        )
+        errors = vci.validate_permissions()
+        assert any("workflow-level write" in e and "security-events" in e for e in errors)
+
+    def test_job_level_write_scope_passes(self, vci, tmp_path):
+        body = MINIMAL_WORKFLOW.replace(
+            "jobs:",
+            "jobs:\n"
+            "  uploader:\n"
+            "    runs-on: ubuntu-latest\n"
+            "    timeout-minutes: 5\n"
+            "    permissions:\n"
+            "      security-events: write\n"
+            "    steps:\n"
+            "      - run: true",
+        )
+        _write_workflow(tmp_path, body)
+        assert vci.validate_permissions() == []
+
+    def test_string_permissions_rejected_without_crash(self, vci, tmp_path):
+        # ``permissions: read-all`` used to hit dict.get on a str.
+        _write_workflow(
+            tmp_path,
+            MINIMAL_WORKFLOW.replace(
+                "permissions:\n  contents: read", "permissions: read-all"
+            ),
+        )
+        errors = vci.validate_permissions()
+        assert len(errors) == 1
+        assert "scope map" in errors[0]
+
+    def test_job_level_string_permissions_rejected(self, vci, tmp_path):
+        body = MINIMAL_WORKFLOW.replace(
+            "jobs:",
+            "jobs:\n"
+            "  j2:\n"
+            "    runs-on: ubuntu-latest\n"
+            "    timeout-minutes: 5\n"
+            "    permissions: write-all\n"
+            "    steps:\n"
+            "      - run: true",
+        )
+        _write_workflow(tmp_path, body)
+        errors = vci.validate_permissions()
+        assert any("job j2" in e and "scope map" in e for e in errors)
+
     def test_minimal_valid_workflow_passes_hygiene(self, vci, tmp_path):
         _write_workflow(tmp_path, MINIMAL_WORKFLOW)
         assert vci.validate_permissions() == []
