@@ -320,4 +320,13 @@ For security concerns, please contact the project maintainers.
   was fixed weeks ago and GitHub's alert state machine simply never
   transitioned them to fixed. They stay open pending a maintainer
   dismissal decision; do not re-audit their flagged lines.
+- 2026-08-25 - Completed a repo-wide parameterized-SQL audit: every
+  dynamic statement binds values through named parameters and the only
+  interpolated DDL uses static identifier tuples. Hardened the cluster
+  sync's bulk UPDATE to emit row chunks bounded below PostgreSQL's
+  65,535 per-statement bind-parameter ceiling (previously one statement
+  sized `rows × 3`, which would fail opaquely if the registry grew),
+  hoisted its function-local SQLAlchemy import to module top, and pinned
+  the parameterized-SQL property with a regression test
+  (`tests/test_cluster_sync.py`).
 - [VERSION] - Initial security policy

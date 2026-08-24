@@ -11,16 +11,20 @@ Performance contract:
     calls (a hot path during conductor runs) reuse a single list per
     product-type. ``_WEIGHT_SUM`` is computed once at import time.
 """
+
 from __future__ import annotations
 
 from threading import RLock
 from typing import Any
+
+from sqlalchemy import text
 
 from app.simulation.clusters.definitions import ClusterDefinition
 
 # ---------------------------------------------------------------------------
 # Helper: default variance block (reused across many clusters)
 # ---------------------------------------------------------------------------
+
 
 def _v(
     income: float = 0.07,
@@ -33,13 +37,13 @@ def _v(
     social: float = 0.10,
 ) -> dict[str, float]:
     return {
-        "income_level":       income,
-        "digital_literacy":   digital,
-        "motivation":         motivation,
-        "trust":              trust,
-        "price_sensitivity":  price,
-        "risk_aversion":      risk,
-        "patience_score":     patience,
+        "income_level": income,
+        "digital_literacy": digital,
+        "motivation": motivation,
+        "trust": trust,
+        "price_sensitivity": price,
+        "risk_aversion": risk,
+        "patience_score": patience,
         "social_orientation": social,
     }
 
@@ -55,13 +59,13 @@ def _t(
     social: float,
 ) -> dict[str, float]:
     return {
-        "income_level":       income,
-        "digital_literacy":   digital,
-        "motivation":         motivation,
-        "trust":              trust,
-        "price_sensitivity":  price,
-        "risk_aversion":      risk,
-        "patience_score":     patience,
+        "income_level": income,
+        "digital_literacy": digital,
+        "motivation": motivation,
+        "trust": trust,
+        "price_sensitivity": price,
+        "risk_aversion": risk,
+        "patience_score": patience,
         "social_orientation": social,
     }
 
@@ -73,9 +77,7 @@ def _t(
 # ---------------------------------------------------------------------------
 
 _CLUSTERS: dict[str, ClusterDefinition] = {
-
     # ── High-income metro professionals ──────────────────────────────────
-
     "metro_power_professional": ClusterDefinition(
         cluster_id="metro_power_professional",
         name="Metro power professional",
@@ -89,9 +91,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Performance claim unsubstantiated → rejects immediately",
         ],
         product_affinities=["saas", "developer_tool", "enterprise_software"],
-        demographic_profile={"geography": "metro", "age_bracket": "28-42", "device_primary": "desktop"},
+        demographic_profile={
+            "geography": "metro",
+            "age_bracket": "28-42",
+            "device_primary": "desktop",
+        },
     ),
-
     "senior_enterprise_decision_maker": ClusterDefinition(
         cluster_id="senior_enterprise_decision_maker",
         name="Senior enterprise decision maker",
@@ -105,9 +110,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Self-serve only → cannot route to sales",
         ],
         product_affinities=["enterprise_software", "saas", "b2b_marketplace"],
-        demographic_profile={"geography": "metro", "age_bracket": "38-55", "device_primary": "desktop"},
+        demographic_profile={
+            "geography": "metro",
+            "age_bracket": "38-55",
+            "device_primary": "desktop",
+        },
     ),
-
     "high_income_early_adopter": ClusterDefinition(
         cluster_id="high_income_early_adopter",
         name="High-income early adopter",
@@ -120,10 +128,20 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Looks too mainstream → loses interest",
             "No beta/early-access framing → skips",
         ],
-        product_affinities=["consumer_app", "consumer_hardware", "wearable", "iot_hardware", "developer_tool", "saas"],
-        demographic_profile={"geography": "metro", "age_bracket": "25-38", "device_primary": "mobile"},
+        product_affinities=[
+            "consumer_app",
+            "consumer_hardware",
+            "wearable",
+            "iot_hardware",
+            "developer_tool",
+            "saas",
+        ],
+        demographic_profile={
+            "geography": "metro",
+            "age_bracket": "25-38",
+            "device_primary": "mobile",
+        },
     ),
-
     "affluent_metro_late_majority": ClusterDefinition(
         cluster_id="affluent_metro_late_majority",
         name="Affluent metro late majority",
@@ -137,9 +155,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No social proof → stays on consideration page",
         ],
         product_affinities=["consumer_app", "health_hardware", "saas"],
-        demographic_profile={"geography": "metro", "age_bracket": "35-52", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro",
+            "age_bracket": "35-52",
+            "device_primary": "mobile",
+        },
     ),
-
     "high_income_hardware_enthusiast": ClusterDefinition(
         cluster_id="high_income_hardware_enthusiast",
         name="High-income hardware enthusiast",
@@ -152,10 +173,19 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No benchmark data → defers",
             "Specs page missing → bounces",
         ],
-        product_affinities=["consumer_hardware", "wearable", "iot_hardware", "smart_home", "health_hardware"],
-        demographic_profile={"geography": "metro", "age_bracket": "26-42", "device_primary": "desktop"},
+        product_affinities=[
+            "consumer_hardware",
+            "wearable",
+            "iot_hardware",
+            "smart_home",
+            "health_hardware",
+        ],
+        demographic_profile={
+            "geography": "metro",
+            "age_bracket": "26-42",
+            "device_primary": "desktop",
+        },
     ),
-
     "wealthy_health_conscious_buyer": ClusterDefinition(
         cluster_id="wealthy_health_conscious_buyer",
         name="Wealthy health-conscious buyer",
@@ -169,11 +199,13 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Generic wellness claim → ignored",
         ],
         product_affinities=["health_hardware", "consumer_app", "d2c"],
-        demographic_profile={"geography": "metro", "age_bracket": "30-50", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro",
+            "age_bracket": "30-50",
+            "device_primary": "mobile",
+        },
     ),
-
     # ── Urban mid-income professionals ───────────────────────────────────
-
     "urban_mid_income_saas_buyer": ClusterDefinition(
         cluster_id="urban_mid_income_saas_buyer",
         name="Urban mid-income SaaS buyer",
@@ -187,9 +219,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "ROI not demonstrated during trial → churns",
         ],
         product_affinities=["saas", "productivity_tool", "marketplace"],
-        demographic_profile={"geography": "metro_tier1", "age_bracket": "26-40", "device_primary": "desktop"},
+        demographic_profile={
+            "geography": "metro_tier1",
+            "age_bracket": "26-40",
+            "device_primary": "desktop",
+        },
     ),
-
     "urban_mid_income_hardware_considerer": ClusterDefinition(
         cluster_id="urban_mid_income_hardware_considerer",
         name="Urban mid-income hardware considerer",
@@ -203,9 +238,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Price higher than Amazon listing → bounces",
         ],
         product_affinities=["consumer_hardware", "iot_hardware", "smart_home", "health_hardware"],
-        demographic_profile={"geography": "metro_tier1", "age_bracket": "28-45", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro_tier1",
+            "age_bracket": "28-45",
+            "device_primary": "mobile",
+        },
     ),
-
     "young_urban_professional_first_job": ClusterDefinition(
         cluster_id="young_urban_professional_first_job",
         name="Young urban professional, first job",
@@ -219,9 +257,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No mobile-first experience → exits immediately",
         ],
         product_affinities=["consumer_app", "saas", "marketplace", "d2c"],
-        demographic_profile={"geography": "metro_tier1", "age_bracket": "22-27", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro_tier1",
+            "age_bracket": "22-27",
+            "device_primary": "mobile",
+        },
     ),
-
     "urban_couple_joint_purchaser": ClusterDefinition(
         cluster_id="urban_couple_joint_purchaser",
         name="Urban couple joint purchaser",
@@ -235,9 +276,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No family/couples plan → reverts to cheaper alternative",
         ],
         product_affinities=["consumer_app", "smart_home", "d2c", "health_hardware"],
-        demographic_profile={"geography": "metro_tier1", "age_bracket": "28-40", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro_tier1",
+            "age_bracket": "28-40",
+            "device_primary": "mobile",
+        },
     ),
-
     "mid_income_startup_founder": ClusterDefinition(
         cluster_id="mid_income_startup_founder",
         name="Mid-income startup founder",
@@ -251,9 +295,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Enterprise sales cycle → wrong fit",
         ],
         product_affinities=["saas", "developer_tool", "productivity_tool", "marketplace"],
-        demographic_profile={"geography": "metro_tier1", "age_bracket": "24-38", "device_primary": "desktop"},
+        demographic_profile={
+            "geography": "metro_tier1",
+            "age_bracket": "24-38",
+            "device_primary": "desktop",
+        },
     ),
-
     "urban_working_mother": ClusterDefinition(
         cluster_id="urban_working_mother",
         name="Urban working mother",
@@ -267,11 +314,13 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No safety/ingredient transparency → blocks purchase",
         ],
         product_affinities=["consumer_app", "d2c", "health_hardware"],
-        demographic_profile={"geography": "metro_tier1", "age_bracket": "30-44", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro_tier1",
+            "age_bracket": "30-44",
+            "device_primary": "mobile",
+        },
     ),
-
     # ── Students ─────────────────────────────────────────────────────────
-
     "high_literacy_student_freemium_ceiling": ClusterDefinition(
         cluster_id="high_literacy_student_freemium_ceiling",
         name="High-literacy student with freemium ceiling",
@@ -285,9 +334,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No student discount → perpetual free tier user",
         ],
         product_affinities=["consumer_app", "saas", "developer_tool"],
-        demographic_profile={"geography": "metro_tier1_tier2", "age_bracket": "18-23", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro_tier1_tier2",
+            "age_bracket": "18-23",
+            "device_primary": "mobile",
+        },
     ),
-
     "low_literacy_student_passive": ClusterDefinition(
         cluster_id="low_literacy_student_passive",
         name="Low-literacy student (passive consumer)",
@@ -301,9 +353,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No vernacular language support → confused and exits",
         ],
         product_affinities=["consumer_app", "d2c"],
-        demographic_profile={"geography": "tier2_tier3", "age_bracket": "17-22", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "tier2_tier3",
+            "age_bracket": "17-22",
+            "device_primary": "mobile",
+        },
     ),
-
     "student_high_intent_specific_need": ClusterDefinition(
         cluster_id="student_high_intent_specific_need",
         name="Student with high intent, specific need",
@@ -317,9 +372,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No outcome promise → hesitates",
         ],
         product_affinities=["consumer_app", "saas", "marketplace"],
-        demographic_profile={"geography": "metro_tier1_tier2", "age_bracket": "18-25", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro_tier1_tier2",
+            "age_bracket": "18-25",
+            "device_primary": "mobile",
+        },
     ),
-
     "college_group_purchase": ClusterDefinition(
         cluster_id="college_group_purchase",
         name="College group purchaser",
@@ -333,9 +391,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No UPI/WhatsApp pay → checkout friction",
         ],
         product_affinities=["consumer_app", "d2c"],
-        demographic_profile={"geography": "metro_tier1_tier2", "age_bracket": "18-23", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro_tier1_tier2",
+            "age_bracket": "18-23",
+            "device_primary": "mobile",
+        },
     ),
-
     "recent_graduate_job_seeker": ClusterDefinition(
         cluster_id="recent_graduate_job_seeker",
         name="Recent graduate job seeker",
@@ -349,11 +410,13 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No success stories from peers → doesn't trust value",
         ],
         product_affinities=["saas", "marketplace", "consumer_app"],
-        demographic_profile={"geography": "metro_tier1_tier2", "age_bracket": "21-26", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro_tier1_tier2",
+            "age_bracket": "21-26",
+            "device_primary": "mobile",
+        },
     ),
-
     # ── Tier-2 / Tier-3 consumers ─────────────────────────────────────────
-
     "tier2_aspirational_founder": ClusterDefinition(
         cluster_id="tier2_aspirational_founder",
         name="Tier-2 aspirational founder",
@@ -367,9 +430,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No cash/UPI payment → checkout failure",
         ],
         product_affinities=["saas", "marketplace", "productivity_tool"],
-        demographic_profile={"geography": "tier2", "age_bracket": "24-38", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "tier2",
+            "age_bracket": "24-38",
+            "device_primary": "mobile",
+        },
     ),
-
     "tier2_established_business_owner": ClusterDefinition(
         cluster_id="tier2_established_business_owner",
         name="Tier-2 established business owner",
@@ -383,9 +449,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Complex digital onboarding → abandons",
         ],
         product_affinities=["saas", "marketplace", "b2b_marketplace"],
-        demographic_profile={"geography": "tier2", "age_bracket": "35-55", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "tier2",
+            "age_bracket": "35-55",
+            "device_primary": "mobile",
+        },
     ),
-
     "tier3_first_time_app_user": ClusterDefinition(
         cluster_id="tier3_first_time_app_user",
         name="Tier-3 first-time app user",
@@ -399,9 +468,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "More than 2 steps to first value → exits",
         ],
         product_affinities=["consumer_app", "d2c"],
-        demographic_profile={"geography": "tier3_rural", "age_bracket": "18-40", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "tier3_rural",
+            "age_bracket": "18-40",
+            "device_primary": "mobile",
+        },
     ),
-
     "tier2_price_sensitive_pragmatist": ClusterDefinition(
         cluster_id="tier2_price_sensitive_pragmatist",
         name="Tier-2 price-sensitive pragmatist",
@@ -415,9 +487,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No clearly stated price on landing page → exits",
         ],
         product_affinities=["consumer_app", "d2c", "marketplace"],
-        demographic_profile={"geography": "tier2", "age_bracket": "25-45", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "tier2",
+            "age_bracket": "25-45",
+            "device_primary": "mobile",
+        },
     ),
-
     "tier3_community_influenced_buyer": ClusterDefinition(
         cluster_id="tier3_community_influenced_buyer",
         name="Tier-3 community-influenced buyer",
@@ -431,9 +506,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "National ad campaign without local face → ignored",
         ],
         product_affinities=["d2c", "consumer_app"],
-        demographic_profile={"geography": "tier3_rural", "age_bracket": "20-50", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "tier3_rural",
+            "age_bracket": "20-50",
+            "device_primary": "mobile",
+        },
     ),
-
     "tier2_educated_young_parent": ClusterDefinition(
         cluster_id="tier2_educated_young_parent",
         name="Tier-2 educated young parent",
@@ -447,11 +525,13 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No refund/return guarantee → blocks purchase",
         ],
         product_affinities=["consumer_app", "d2c", "marketplace"],
-        demographic_profile={"geography": "tier2", "age_bracket": "26-40", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "tier2",
+            "age_bracket": "26-40",
+            "device_primary": "mobile",
+        },
     ),
-
     # ── SMB / B2B ────────────────────────────────────────────────────────
-
     "smb_owner_self_serve": ClusterDefinition(
         cluster_id="smb_owner_self_serve",
         name="SMB owner (self-serve)",
@@ -465,9 +545,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Complex onboarding requiring team setup → abandons solo",
         ],
         product_affinities=["saas", "productivity_tool", "marketplace"],
-        demographic_profile={"geography": "metro_tier1_tier2", "age_bracket": "28-48", "device_primary": "desktop"},
+        demographic_profile={
+            "geography": "metro_tier1_tier2",
+            "age_bracket": "28-48",
+            "device_primary": "desktop",
+        },
     ),
-
     "smb_owner_referral_dependent": ClusterDefinition(
         cluster_id="smb_owner_referral_dependent",
         name="SMB owner (referral-dependent)",
@@ -481,9 +564,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Cold outreach → instinctive distrust",
         ],
         product_affinities=["saas", "b2b_marketplace", "marketplace"],
-        demographic_profile={"geography": "metro_tier1_tier2", "age_bracket": "30-52", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro_tier1_tier2",
+            "age_bracket": "30-52",
+            "device_primary": "mobile",
+        },
     ),
-
     "mid_market_it_decision_maker": ClusterDefinition(
         cluster_id="mid_market_it_decision_maker",
         name="Mid-market IT decision maker",
@@ -497,9 +583,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No SOC 2 or equivalent → security review blocker",
         ],
         product_affinities=["saas", "developer_tool", "enterprise_software"],
-        demographic_profile={"geography": "metro", "age_bracket": "30-50", "device_primary": "desktop"},
+        demographic_profile={
+            "geography": "metro",
+            "age_bracket": "30-50",
+            "device_primary": "desktop",
+        },
     ),
-
     "enterprise_procurement_gatekeeper": ClusterDefinition(
         cluster_id="enterprise_procurement_gatekeeper",
         name="Enterprise procurement gatekeeper",
@@ -513,9 +602,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No MSA/DPA template → legal stall",
         ],
         product_affinities=["enterprise_software", "saas"],
-        demographic_profile={"geography": "metro", "age_bracket": "32-55", "device_primary": "desktop"},
+        demographic_profile={
+            "geography": "metro",
+            "age_bracket": "32-55",
+            "device_primary": "desktop",
+        },
     ),
-
     "technical_founder_evaluator": ClusterDefinition(
         cluster_id="technical_founder_evaluator",
         name="Technical founder evaluator",
@@ -529,9 +621,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Slow API response in demo → rejected",
         ],
         product_affinities=["developer_tool", "saas", "enterprise_software"],
-        demographic_profile={"geography": "metro", "age_bracket": "24-40", "device_primary": "desktop"},
+        demographic_profile={
+            "geography": "metro",
+            "age_bracket": "24-40",
+            "device_primary": "desktop",
+        },
     ),
-
     "non_technical_co_founder_buyer": ClusterDefinition(
         cluster_id="non_technical_co_founder_buyer",
         name="Non-technical co-founder buyer",
@@ -545,11 +640,13 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No 'no-code' or 'easy setup' signal → thinks it requires dev resources",
         ],
         product_affinities=["saas", "productivity_tool", "marketplace"],
-        demographic_profile={"geography": "metro_tier1", "age_bracket": "26-42", "device_primary": "desktop"},
+        demographic_profile={
+            "geography": "metro_tier1",
+            "age_bracket": "26-42",
+            "device_primary": "desktop",
+        },
     ),
-
     # ── Hardware-specific ─────────────────────────────────────────────────
-
     "early_hardware_adopter_tech_enthusiast": ClusterDefinition(
         cluster_id="early_hardware_adopter_tech_enthusiast",
         name="Early hardware adopter (tech enthusiast)",
@@ -562,10 +659,19 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No crowdfunding/pre-order campaign → waits for public launch",
             "No community/Discord for product → loses excitement",
         ],
-        product_affinities=["consumer_hardware", "wearable", "iot_hardware", "smart_home", "health_hardware"],
-        demographic_profile={"geography": "metro", "age_bracket": "22-38", "device_primary": "desktop"},
+        product_affinities=[
+            "consumer_hardware",
+            "wearable",
+            "iot_hardware",
+            "smart_home",
+            "health_hardware",
+        ],
+        demographic_profile={
+            "geography": "metro",
+            "age_bracket": "22-38",
+            "device_primary": "desktop",
+        },
     ),
-
     "considered_hardware_researcher": ClusterDefinition(
         cluster_id="considered_hardware_researcher",
         name="Considered hardware researcher",
@@ -579,9 +685,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Unavailable on Amazon/Flipkart → won't buy direct",
         ],
         product_affinities=["consumer_hardware", "iot_hardware", "smart_home"],
-        demographic_profile={"geography": "metro_tier1", "age_bracket": "28-48", "device_primary": "desktop"},
+        demographic_profile={
+            "geography": "metro_tier1",
+            "age_bracket": "28-48",
+            "device_primary": "desktop",
+        },
     ),
-
     "value_hardware_buyer": ClusterDefinition(
         cluster_id="value_hardware_buyer",
         name="Value hardware buyer",
@@ -595,9 +704,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No value-tier SKU → exits to competitor",
         ],
         product_affinities=["consumer_hardware", "d2c"],
-        demographic_profile={"geography": "metro_tier1_tier2", "age_bracket": "25-45", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro_tier1_tier2",
+            "age_bracket": "25-45",
+            "device_primary": "mobile",
+        },
     ),
-
     "gift_hardware_buyer": ClusterDefinition(
         cluster_id="gift_hardware_buyer",
         name="Gift hardware buyer",
@@ -611,9 +723,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Unknown brand at same price as known brand → loses",
         ],
         product_affinities=["consumer_hardware", "wearable", "d2c", "health_hardware"],
-        demographic_profile={"geography": "metro_tier1_tier2", "age_bracket": "25-55", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro_tier1_tier2",
+            "age_bracket": "25-55",
+            "device_primary": "mobile",
+        },
     ),
-
     "replacement_hardware_buyer": ClusterDefinition(
         cluster_id="replacement_hardware_buyer",
         name="Replacement hardware buyer",
@@ -627,11 +742,13 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No loyalty discount for returning buyer → feels undervalued",
         ],
         product_affinities=["consumer_hardware", "iot_hardware", "smart_home"],
-        demographic_profile={"geography": "metro_tier1_tier2", "age_bracket": "28-50", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro_tier1_tier2",
+            "age_bracket": "28-50",
+            "device_primary": "mobile",
+        },
     ),
-
     # ── Health hardware ───────────────────────────────────────────────────
-
     "health_hardware_skeptic": ClusterDefinition(
         cluster_id="health_hardware_skeptic",
         name="Health hardware skeptic",
@@ -645,9 +762,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No return policy → won't risk it",
         ],
         product_affinities=["health_hardware"],
-        demographic_profile={"geography": "metro_tier1", "age_bracket": "30-55", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro_tier1",
+            "age_bracket": "30-55",
+            "device_primary": "mobile",
+        },
     ),
-
     "health_hardware_enthusiast": ClusterDefinition(
         cluster_id="health_hardware_enthusiast",
         name="Health hardware enthusiast",
@@ -661,9 +781,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No integration with Strava/Apple Health → dealbreaker",
         ],
         product_affinities=["health_hardware", "consumer_app"],
-        demographic_profile={"geography": "metro", "age_bracket": "24-45", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro",
+            "age_bracket": "24-45",
+            "device_primary": "mobile",
+        },
     ),
-
     "smart_home_early_adopter": ClusterDefinition(
         cluster_id="smart_home_early_adopter",
         name="Smart home early adopter",
@@ -677,11 +800,13 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No local control option → privacy concern blocks purchase",
         ],
         product_affinities=["smart_home", "iot_hardware", "consumer_hardware"],
-        demographic_profile={"geography": "metro", "age_bracket": "26-45", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro",
+            "age_bracket": "26-45",
+            "device_primary": "mobile",
+        },
     ),
-
     # ── Behavioural / psychographic clusters ─────────────────────────────
-
     "anxiety_driven_researcher": ClusterDefinition(
         cluster_id="anxiety_driven_researcher",
         name="Anxiety-driven researcher",
@@ -694,10 +819,20 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No money-back guarantee → paralysed",
             "Any negative review visible → deters conversion",
         ],
-        product_affinities=["consumer_app", "saas", "consumer_hardware", "wearable", "iot_hardware", "d2c"],
-        demographic_profile={"geography": "metro_tier1", "age_bracket": "25-45", "device_primary": "desktop"},
+        product_affinities=[
+            "consumer_app",
+            "saas",
+            "consumer_hardware",
+            "wearable",
+            "iot_hardware",
+            "d2c",
+        ],
+        demographic_profile={
+            "geography": "metro_tier1",
+            "age_bracket": "25-45",
+            "device_primary": "desktop",
+        },
     ),
-
     "impulsive_trend_follower": ClusterDefinition(
         cluster_id="impulsive_trend_follower",
         name="Impulsive trend follower",
@@ -711,9 +846,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Onboarding longer than 60 seconds → drops",
         ],
         product_affinities=["consumer_app", "d2c"],
-        demographic_profile={"geography": "metro_tier1_tier2", "age_bracket": "18-32", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro_tier1_tier2",
+            "age_bracket": "18-32",
+            "device_primary": "mobile",
+        },
     ),
-
     "loyalist_returning_buyer": ClusterDefinition(
         cluster_id="loyalist_returning_buyer",
         name="Loyalist / returning buyer",
@@ -727,9 +865,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Product regression in core feature → switches",
         ],
         product_affinities=["saas", "consumer_app", "d2c", "marketplace"],
-        demographic_profile={"geography": "metro_tier1_tier2", "age_bracket": "28-55", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro_tier1_tier2",
+            "age_bracket": "28-55",
+            "device_primary": "mobile",
+        },
     ),
-
     "price_anchor_manipulated_buyer": ClusterDefinition(
         cluster_id="price_anchor_manipulated_buyer",
         name="Price-anchor manipulated buyer",
@@ -743,9 +884,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Discount seems too large → suspects quality",
         ],
         product_affinities=["d2c", "marketplace", "consumer_app"],
-        demographic_profile={"geography": "metro_tier1_tier2", "age_bracket": "22-48", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro_tier1_tier2",
+            "age_bracket": "22-48",
+            "device_primary": "mobile",
+        },
     ),
-
     "peer_pressure_converter": ClusterDefinition(
         cluster_id="peer_pressure_converter",
         name="Peer-pressure converter",
@@ -759,9 +903,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Product not visually brandable → peers can't show it off",
         ],
         product_affinities=["consumer_app", "d2c", "saas"],
-        demographic_profile={"geography": "metro_tier1_tier2", "age_bracket": "20-38", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro_tier1_tier2",
+            "age_bracket": "20-38",
+            "device_primary": "mobile",
+        },
     ),
-
     "deliberate_minimalist": ClusterDefinition(
         cluster_id="deliberate_minimalist",
         name="Deliberate minimalist",
@@ -775,9 +922,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Any feature bloat visible → opts out",
         ],
         product_affinities=["saas", "productivity_tool"],
-        demographic_profile={"geography": "metro", "age_bracket": "28-50", "device_primary": "desktop"},
+        demographic_profile={
+            "geography": "metro",
+            "age_bracket": "28-50",
+            "device_primary": "desktop",
+        },
     ),
-
     "productivity_maximiser": ClusterDefinition(
         cluster_id="productivity_maximiser",
         name="Productivity maximiser",
@@ -791,9 +941,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Keyboard shortcuts missing → frustration churn",
         ],
         product_affinities=["saas", "productivity_tool", "developer_tool"],
-        demographic_profile={"geography": "metro", "age_bracket": "24-42", "device_primary": "desktop"},
+        demographic_profile={
+            "geography": "metro",
+            "age_bracket": "24-42",
+            "device_primary": "desktop",
+        },
     ),
-
     "budget_constrained_high_intent": ClusterDefinition(
         cluster_id="budget_constrained_high_intent",
         name="Budget-constrained high-intent buyer",
@@ -807,9 +960,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No waitlist or notify-on-sale feature → forgets product",
         ],
         product_affinities=["consumer_app", "d2c", "marketplace", "saas"],
-        demographic_profile={"geography": "metro_tier1_tier2", "age_bracket": "20-35", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro_tier1_tier2",
+            "age_bracket": "20-35",
+            "device_primary": "mobile",
+        },
     ),
-
     "passive_enterprise_user": ClusterDefinition(
         cluster_id="passive_enterprise_user",
         name="Passive enterprise user",
@@ -823,9 +979,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No end-user onboarding → low adoption, procurement drops renewal",
         ],
         product_affinities=["enterprise_software", "saas"],
-        demographic_profile={"geography": "metro", "age_bracket": "24-50", "device_primary": "desktop"},
+        demographic_profile={
+            "geography": "metro",
+            "age_bracket": "24-50",
+            "device_primary": "desktop",
+        },
     ),
-
     "burnt_previously_buyer": ClusterDefinition(
         cluster_id="burnt_previously_buyer",
         name="Burnt previously buyer",
@@ -839,11 +998,13 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No money-back guarantee → conversion wall",
         ],
         product_affinities=["saas", "consumer_app", "d2c", "marketplace"],
-        demographic_profile={"geography": "metro_tier1_tier2", "age_bracket": "26-50", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro_tier1_tier2",
+            "age_bracket": "26-50",
+            "device_primary": "mobile",
+        },
     ),
-
     # ── 5 additional clusters to reach 52 ────────────────────────────────
-
     "retiree_digital_explorer": ClusterDefinition(
         cluster_id="retiree_digital_explorer",
         name="Retiree digital explorer",
@@ -857,9 +1018,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No vernacular language or voice support → blocked",
         ],
         product_affinities=["consumer_app", "health_hardware", "d2c"],
-        demographic_profile={"geography": "metro_tier1_tier2", "age_bracket": "60-75", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro_tier1_tier2",
+            "age_bracket": "60-75",
+            "device_primary": "mobile",
+        },
     ),
-
     "gig_economy_worker": ClusterDefinition(
         cluster_id="gig_economy_worker",
         name="Gig economy worker",
@@ -873,9 +1037,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "Monthly cost > ₹300 → too expensive relative to gig earnings",
         ],
         product_affinities=["marketplace", "saas", "consumer_app"],
-        demographic_profile={"geography": "metro_tier1_tier2_tier3", "age_bracket": "22-42", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "metro_tier1_tier2_tier3",
+            "age_bracket": "22-42",
+            "device_primary": "mobile",
+        },
     ),
-
     "ngo_nonprofit_buyer": ClusterDefinition(
         cluster_id="ngo_nonprofit_buyer",
         name="NGO / nonprofit buyer",
@@ -889,9 +1056,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No offline functionality → excluded for field use",
         ],
         product_affinities=["saas", "productivity_tool", "b2b_marketplace"],
-        demographic_profile={"geography": "metro_tier1_tier2", "age_bracket": "28-50", "device_primary": "desktop"},
+        demographic_profile={
+            "geography": "metro_tier1_tier2",
+            "age_bracket": "28-50",
+            "device_primary": "desktop",
+        },
     ),
-
     "diaspora_remittance_buyer": ClusterDefinition(
         cluster_id="diaspora_remittance_buyer",
         name="Diaspora / NRI remittance buyer",
@@ -905,9 +1075,12 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No gift delivery or COD option for recipient → loses",
         ],
         product_affinities=["d2c", "consumer_app", "consumer_hardware", "wearable"],
-        demographic_profile={"geography": "international", "age_bracket": "25-55", "device_primary": "desktop"},
+        demographic_profile={
+            "geography": "international",
+            "age_bracket": "25-55",
+            "device_primary": "desktop",
+        },
     ),
-
     "vernacular_content_creator": ClusterDefinition(
         cluster_id="vernacular_content_creator",
         name="Vernacular content creator",
@@ -921,7 +1094,11 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
             "No affiliate or referral payout → no incentive to promote",
         ],
         product_affinities=["consumer_app", "marketplace", "saas"],
-        demographic_profile={"geography": "tier1_tier2_tier3", "age_bracket": "20-38", "device_primary": "mobile"},
+        demographic_profile={
+            "geography": "tier1_tier2_tier3",
+            "age_bracket": "20-38",
+            "device_primary": "mobile",
+        },
     ),
 }
 
@@ -931,8 +1108,7 @@ _CLUSTERS: dict[str, ClusterDefinition] = {
 # ---------------------------------------------------------------------------
 _raw_total = sum(c.population_weight for c in _CLUSTERS.values())
 _normalised_weights = {
-    cid: round(c.population_weight / _raw_total, 6)
-    for cid, c in _CLUSTERS.items()
+    cid: round(c.population_weight / _raw_total, 6) for cid, c in _CLUSTERS.items()
 }
 _weight_residual = round(1.0 - sum(_normalised_weights.values()), 6)
 if _weight_residual:
@@ -965,14 +1141,13 @@ _WEIGHT_SUM = sum(c.population_weight for c in _CLUSTERS.values())
 assert abs(_WEIGHT_SUM - 1.0) <= 0.001, (
     f"ClusterRegistry: population weights sum to {_WEIGHT_SUM:.6f}, must be 1.000 ± 0.001"
 )
-assert len(_CLUSTERS) == 52, (
-    f"ClusterRegistry: expected 52 clusters, got {len(_CLUSTERS)}"
-)
+assert len(_CLUSTERS) == 52, f"ClusterRegistry: expected 52 clusters, got {len(_CLUSTERS)}"
 
 
 # ---------------------------------------------------------------------------
 # ClusterRegistry
 # ---------------------------------------------------------------------------
+
 
 class ClusterRegistry:
     """
@@ -1013,15 +1188,13 @@ class ClusterRegistry:
     def get_cluster(self, cluster_id: str) -> ClusterDefinition:
         if not isinstance(cluster_id, str) or not cluster_id:
             raise KeyError(
-                f"ClusterRegistry.get_cluster requires a non-empty str, "
-                f"got {cluster_id!r}"
+                f"ClusterRegistry.get_cluster requires a non-empty str, got {cluster_id!r}"
             )
         try:
             return self._clusters[cluster_id]
         except KeyError:
             raise KeyError(
-                f"Unknown cluster_id '{cluster_id}'. "
-                f"Valid ids: {sorted(self._clusters.keys())}"
+                f"Unknown cluster_id '{cluster_id}'. Valid ids: {sorted(self._clusters.keys())}"
             )
 
     def clusters_for_product_type(self, product_type: str) -> list[ClusterDefinition]:
@@ -1034,8 +1207,7 @@ class ClusterRegistry:
             cached = ClusterRegistry._product_type_cache.get(product_type)
             if cached is None:
                 cached = [
-                    c for c in self._clusters.values()
-                    if product_type in c.product_affinities
+                    c for c in self._clusters.values() if product_type in c.product_affinities
                 ]
                 ClusterRegistry._product_type_cache[product_type] = cached
             return cached
@@ -1050,9 +1222,7 @@ class ClusterRegistry:
         with ClusterRegistry._cache_lock:
             return {
                 "all_clusters_cached": ClusterRegistry._all_clusters_cache is not None,
-                "product_types_cached": sorted(
-                    ClusterRegistry._product_type_cache.keys()
-                ),
+                "product_types_cached": sorted(ClusterRegistry._product_type_cache.keys()),
                 "weight_sum": ClusterRegistry._weight_sum,
             }
 
@@ -1066,6 +1236,15 @@ class ClusterRegistry:
             cls._all_clusters_cache = None
             cls._product_type_cache = {}
 
+    # PostgreSQL rejects any single statement carrying more than 65_535
+    # bind parameters. Each synced row binds three values (cluster_id,
+    # trait_name, base_value), so the bulk UPDATE is emitted in row chunks
+    # that keep the parameter count far below that ceiling — today's 52 ×
+    # 8 grid fits in one statement, and a future registry growth fails
+    # nothing at startup instead of surfacing an obscure driver error.
+    _SYNC_PARAMS_PER_ROW = 3
+    _SYNC_MAX_BIND_PARAMS = 30_000
+
     def sync_to_db(self, db_session) -> None:
         """
         Sync cluster base_traits to the cluster_parameters table.
@@ -1075,12 +1254,13 @@ class ClusterRegistry:
           (i.e. no real data has been collected yet for that parameter).
         - Safe to call on every startup — idempotent.
 
-        Uses a single bulk UPDATE ... FROM (VALUES ...) statement so all 416
-        rows are updated in one PostgreSQL round-trip instead of 416 separate
-        queries, reducing startup time from ~60 s to under 1 s.
+        Uses a bulk UPDATE ... FROM (VALUES ...) statement so all rows land
+        in one PostgreSQL round-trip instead of one query per row, reducing
+        startup time from ~60 s to under 1 s. Rows are emitted in chunks
+        bounded by PostgreSQL's per-statement bind-parameter ceiling, so
+        registry growth degrades to a few extra round-trips rather than a
+        hard failure. A single commit covers every chunk.
         """
-        from sqlalchemy import text
-
         rows = [
             (cluster.cluster_id, trait_name, float(base_value))
             for cluster in self.all_clusters()
@@ -1090,30 +1270,32 @@ class ClusterRegistry:
         if not rows:
             return
 
-        # Build named bind parameters for each row so SQLAlchemy can safely
-        # interpolate them without any risk of SQL injection.
-        placeholders = ", ".join(
-            f"(:cid_{i}, :trait_{i}, :val_{i})" for i in range(len(rows))
-        )
-        params: dict = {}
-        for i, (cid, trait, val) in enumerate(rows):
-            params[f"cid_{i}"] = cid
-            params[f"trait_{i}"] = trait
-            params[f"val_{i}"] = val
+        chunk_rows = self._SYNC_MAX_BIND_PARAMS // self._SYNC_PARAMS_PER_ROW
 
-        db_session.execute(
-            text(f"""
-                UPDATE cluster_parameters AS cp
-                SET
-                    base_value       = v.base_value::float,
-                    calibrated_value = CASE
-                        WHEN cp.calibration_count = 0 THEN v.base_value::float
-                        ELSE cp.calibrated_value
-                    END
-                FROM (VALUES {placeholders}) AS v(cluster_id, trait_name, base_value)
-                WHERE cp.cluster_id = v.cluster_id
-                AND   cp.trait_name  = v.trait_name
-            """),
-            params,
-        )
+        # Named bind parameters carry every row value; only the placeholder
+        # skeleton itself is interpolated into the SQL text.
+        for start in range(0, len(rows), chunk_rows):
+            chunk = rows[start : start + chunk_rows]
+            placeholders = ", ".join(f"(:cid_{i}, :trait_{i}, :val_{i})" for i in range(len(chunk)))
+            params: dict = {}
+            for i, (cid, trait, val) in enumerate(chunk):
+                params[f"cid_{i}"] = cid
+                params[f"trait_{i}"] = trait
+                params[f"val_{i}"] = val
+
+            db_session.execute(
+                text(f"""
+                    UPDATE cluster_parameters AS cp
+                    SET
+                        base_value       = v.base_value::float,
+                        calibrated_value = CASE
+                            WHEN cp.calibration_count = 0 THEN v.base_value::float
+                            ELSE cp.calibrated_value
+                        END
+                    FROM (VALUES {placeholders}) AS v(cluster_id, trait_name, base_value)
+                    WHERE cp.cluster_id = v.cluster_id
+                    AND   cp.trait_name  = v.trait_name
+                """),
+                params,
+            )
         db_session.commit()
