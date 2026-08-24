@@ -345,4 +345,14 @@ For security concerns, please contact the project maintainers.
   had been flipped back to disabled since their 2026-08-23 enablement.
   Feature list corrected to carry a live status note; re-enablement
   tracked until `.security_and_analysis` shows every feature enabled.
+- 2026-08-25 - Closed a config-defaults footgun: every production guard in
+  `Settings` (JWT-secret strength, HTTPS frontend URL, CORS lockdown,
+  disabled OpenAPI surface) keyed off `ENVIRONMENT`, which defaults to
+  `"development"` — a deploy that omitted that single env var silently
+  disarmed all of them. A `mode="before"` validator now promotes an
+  omitted `ENVIRONMENT` to `"production"` whenever Railway's
+  auto-injected `RAILWAY_ENVIRONMENT` is present (previews included),
+  so guards can no longer be skipped by omission on the deploy target;
+  explicit values still win as deliberate opt-outs. Pinned by
+  `tests/test_config_platform_inference.py`.
 - [VERSION] - Initial security policy

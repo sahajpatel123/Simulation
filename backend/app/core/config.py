@@ -1,3 +1,5 @@
+import os
+
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -68,6 +70,33 @@ class Settings(BaseSettings):
     # Comma-separated admin emails; may access GET /api/v1/analytics/platform
     ADMIN_EMAILS: str = ""
     ALLOW_INDEXING: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _infer_environment_from_platform(cls, data: object) -> object:
+        """Promote a forgotten ``ENVIRONMENT`` to "production" on Railway.
+
+        Every production guard below (JWT-secret strength, HTTPS frontend,
+        CORS lockdown) keys off ``ENVIRONMENT`` — which defaults to
+        ``"development"``. A deploy that omits that one env var therefore
+        silently disarms all of them. Railway (the project's deploy target)
+        injects ``RAILWAY_ENVIRONMENT`` into every service it runs, so its
+        presence is authoritative evidence of a real deployment even when
+        ``ENVIRONMENT`` was never set. Preview deploys are public internet
+        too, so *any* Railway environment gets the full guards; an explicit
+        ``ENVIRONMENT`` (init kwarg, OS env, or .env — pydantic-settings
+        merges every source before this validator sees it) always wins as a
+        deliberate opt-out.
+        """
+        if not isinstance(data, dict) or "ENVIRONMENT" in data:
+            return data
+        # Platform signals are injected at the OS level by definition — they
+        # are never a value a maintainer would put in .env, so reading
+        # os.environ directly here is correct (unlike the GROK_* aliases,
+        # which must also honour .env overrides).
+        if os.environ.get("RAILWAY_ENVIRONMENT"):
+            data["ENVIRONMENT"] = "production"
+        return data
 
     @model_validator(mode="after")
     def _coerce_llm_env_aliases(self) -> "Settings":
