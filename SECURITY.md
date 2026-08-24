@@ -422,4 +422,16 @@ For security concerns, please contact the project maintainers.
   tokens match none of the purge predicates. Also removed the dead
   `_revoke_refresh_token` helper. Six tests pin cutoff math, SQL shape,
   rollback-on-failure, and beat registration.
+- 2026-08-25 - Closed the webhook abuse surface: `/billing/webhook` was
+  the only billing route without a rate limit — signature verification
+  rejects forged events but invalid-signature spam still burned an HMAC
+  comparison + log line per hit, and valid events lacking a dedupeable
+  event id re-ran their state transitions on every replay. Now capped at
+  a generous 120/min/IP (far above real Razorpay burst rates, whose
+  retries are backoff-driven) with `fail_open=True` so payment state
+  keeps flowing if the limiter itself is down; a route-introspection test
+  pins the guard so it cannot silently disappear. The daily retention
+  sweep also now covers dead API-token rows (revoked or expired past the
+  same 90-day window), and the task was renamed to
+  `maintenance.purge_stale_auth_tokens` to match its scope.
 - [VERSION] - Initial security policy

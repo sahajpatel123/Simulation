@@ -53,10 +53,10 @@ celery_app.conf.beat_schedule = {
         "task": "retention.send_week4_retention_emails",
         "schedule": crontab(hour=9, minute=0, day_of_week=1),
     },
-    # Daily sweep: refresh-token rows dead (revoked/expired) for longer
-    # than the retention window stop accumulating forever.
-    "maintenance-purge-stale-refresh-tokens": {
-        "task": "maintenance.purge_stale_refresh_tokens",
+    # Daily sweep: dead (revoked/expired) refresh- and API-token rows past
+    # the retention window stop accumulating forever.
+    "maintenance-purge-stale-auth-tokens": {
+        "task": "maintenance.purge_stale_auth_tokens",
         "schedule": crontab(hour=4, minute=17),
     },
 }
