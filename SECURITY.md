@@ -400,4 +400,15 @@ For security concerns, please contact the project maintainers.
   crash mid-hash, and equalized login timing by burning a bcrypt round on
   the unknown-email branch against a dummy digest so response latency can
   no longer enumerate which addresses are registered.
+- 2026-08-25 - Added refresh-token reuse detection: replaying an
+  already-rotated refresh token (the stolen-credential signature — the
+  legitimate owner surrendered it when they rotated) now revokes every
+  refresh session for that user instead of returning a bare 401. The
+  lookup keys off a new `refresh_tokens.revoked_at` timestamp with a
+  60-second grace window so benign concurrent double-fires (two
+  simultaneous requests, one loses the atomic claim milliseconds later)
+  are never mistaken for theft; expired-unused and unknown tokens match
+  nothing and stay side-effect free. Migration is additive (`ADD COLUMN
+  IF NOT EXISTS`); all revocation paths stamp `revoked_at`. Pinned by
+  four new tests in `tests/test_auth_refresh_rotation.py`.
 - [VERSION] - Initial security policy

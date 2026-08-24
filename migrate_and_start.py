@@ -104,9 +104,7 @@ def run_migrations():
                 conn.commit()
             except Exception as e:
                 conn.rollback()
-                raise RuntimeError(
-                    f"failed to add column {table}.{column}: {e}"
-                ) from e
+                raise RuntimeError(f"failed to add column {table}.{column}: {e}") from e
 
         try:
             conn.execute(
@@ -185,7 +183,8 @@ def run_migrations():
     # Step 36a: learning system tables
     with engine.connect() as conn:
         try:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE IF NOT EXISTS cluster_parameters (
                     id SERIAL PRIMARY KEY,
                     cluster_id VARCHAR(100) NOT NULL,
@@ -198,7 +197,8 @@ def run_migrations():
                     calibration_source VARCHAR(50) DEFAULT 'AUTHORED',
                     UNIQUE(cluster_id, trait_name)
                 );
-            """))
+            """)
+            )
             conn.commit()
             print("✅ cluster_parameters ready")
         except Exception as e:
@@ -206,7 +206,8 @@ def run_migrations():
             print(f"⚠️ cluster_parameters skip: {e}")
 
         try:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE IF NOT EXISTS cluster_run_summaries (
                     id SERIAL PRIMARY KEY,
                     simulation_id INTEGER REFERENCES simulations(id),
@@ -223,7 +224,8 @@ def run_migrations():
                     product_type VARCHAR(50),
                     created_at TIMESTAMP DEFAULT NOW()
                 );
-            """))
+            """)
+            )
             conn.commit()
             print("✅ cluster_run_summaries ready")
         except Exception as e:
@@ -231,16 +233,19 @@ def run_migrations():
             print(f"⚠️ cluster_run_summaries skip: {e}")
 
         try:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE UNIQUE INDEX IF NOT EXISTS uq_cluster_run_summaries_sim_cluster
                 ON cluster_run_summaries (simulation_id, cluster_id);
-            """))
+            """)
+            )
             conn.commit()
         except Exception:
             conn.rollback()
 
         try:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE IF NOT EXISTS architect_corrections (
                     id SERIAL PRIMARY KEY,
                     architect_name VARCHAR(100) NOT NULL,
@@ -256,7 +261,8 @@ def run_migrations():
                     last_updated TIMESTAMP DEFAULT NOW(),
                     UNIQUE(architect_name, product_type, product_attribute, cluster_id)
                 );
-            """))
+            """)
+            )
             conn.commit()
             print("✅ architect_corrections ready")
         except Exception as e:
@@ -264,7 +270,8 @@ def run_migrations():
             print(f"⚠️ architect_corrections skip: {e}")
 
         try:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE IF NOT EXISTS funnel_stage_corrections (
                     id SERIAL PRIMARY KEY,
                     product_type VARCHAR(50) NOT NULL,
@@ -282,7 +289,8 @@ def run_migrations():
                     last_updated TIMESTAMP DEFAULT NOW(),
                     UNIQUE(product_type, stage, cluster_id)
                 );
-            """))
+            """)
+            )
             conn.commit()
             print("✅ funnel_stage_corrections ready")
         except Exception as e:
@@ -290,7 +298,8 @@ def run_migrations():
             print(f"⚠️ funnel_stage_corrections skip: {e}")
 
         try:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE IF NOT EXISTS founder_outcomes (
                     id SERIAL PRIMARY KEY,
                     simulation_id INTEGER REFERENCES simulations(id),
@@ -310,7 +319,8 @@ def run_migrations():
                     learning_weight FLOAT DEFAULT 0.0,
                     created_at TIMESTAMP DEFAULT NOW()
                 );
-            """))
+            """)
+            )
             conn.commit()
             print("✅ founder_outcomes ready")
         except Exception as e:
@@ -318,13 +328,15 @@ def run_migrations():
             print(f"⚠️ founder_outcomes skip: {e}")
 
         try:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE IF NOT EXISTS cluster_trait_calibration_state (
                     cluster_id VARCHAR(100) PRIMARY KEY,
                     last_processed_outcome_id BIGINT NOT NULL DEFAULT 0,
                     updated_at TIMESTAMP DEFAULT NOW()
                 );
-            """))
+            """)
+            )
             conn.commit()
             print("✅ cluster_trait_calibration_state ready")
         except Exception as e:
@@ -380,7 +392,8 @@ def run_migrations():
         # Feeds the de-risking scorecard (confidence upgrades / downgrades
         # that flow back into validation-ROI).
         try:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE IF NOT EXISTS assumption_evidence (
                     id SERIAL PRIMARY KEY,
                     project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
@@ -392,7 +405,8 @@ def run_migrations():
                     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
                 );
-            """))
+            """)
+            )
             conn.commit()
             print("✅ assumption_evidence ready")
         except Exception as e:
@@ -463,7 +477,8 @@ def run_migrations():
             print(f"⚠️ ab_test_experiments table skip: {e}")
 
         try:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE IF NOT EXISTS user_claim_accuracy_profiles (
                     id SERIAL PRIMARY KEY,
                     user_id INTEGER REFERENCES users(id),
@@ -474,7 +489,8 @@ def run_migrations():
                     last_updated TIMESTAMP DEFAULT NOW(),
                     UNIQUE(user_id, architect_name)
                 );
-            """))
+            """)
+            )
             conn.commit()
             print("✅ user_claim_accuracy_profiles ready")
         except Exception as e:
@@ -482,7 +498,8 @@ def run_migrations():
             print(f"⚠️ user_claim_accuracy_profiles skip: {e}")
 
         try:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE IF NOT EXISTS user_market_blindspots (
                     id SERIAL PRIMARY KEY,
                     user_id INTEGER REFERENCES users(id),
@@ -493,7 +510,8 @@ def run_migrations():
                     last_surfaced_to_user TIMESTAMP,
                     UNIQUE(user_id, blindspot_type, blindspot_value)
                 );
-            """))
+            """)
+            )
             conn.commit()
             print("✅ user_market_blindspots ready")
         except Exception as e:
@@ -501,7 +519,8 @@ def run_migrations():
             print(f"⚠️ user_market_blindspots skip: {e}")
 
         try:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE IF NOT EXISTS user_simulation_accuracy_history (
                     id SERIAL PRIMARY KEY,
                     user_id INTEGER REFERENCES users(id),
@@ -513,7 +532,8 @@ def run_migrations():
                     accuracy_trend VARCHAR(30) DEFAULT 'INSUFFICIENT_DATA',
                     created_at TIMESTAMP DEFAULT NOW()
                 );
-            """))
+            """)
+            )
             conn.commit()
             print("✅ user_simulation_accuracy_history ready")
         except Exception as e:
@@ -543,7 +563,6 @@ def run_migrations():
         except Exception as e:
             conn.rollback()
             print(f"⚠️ generated_uis skip: {e}")
-
 
         try:
             conn.execute(
@@ -724,10 +743,7 @@ def run_migrations():
         # Step 76: runs may use auto-generated configs (no persisted row) — FK optional
         try:
             conn.execute(
-                text(
-                    "ALTER TABLE hardware_test_results "
-                    "ALTER COLUMN test_config_id DROP NOT NULL"
-                )
+                text("ALTER TABLE hardware_test_results ALTER COLUMN test_config_id DROP NOT NULL")
             )
             conn.commit()
             print("✅ hardware_test_results.test_config_id nullable (Step 76)")
@@ -1104,9 +1120,18 @@ def run_migrations():
                         token_hash VARCHAR(64) NOT NULL UNIQUE,
                         expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
                         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                        revoked    BOOLEAN    DEFAULT FALSE
+                        revoked    BOOLEAN    DEFAULT FALSE,
+                        revoked_at TIMESTAMP WITH TIME ZONE
                     );
                     """
+                )
+            )
+            # Existing deployments created the table before ``revoked_at``
+            # existed (reuse detection needs to know WHEN a token died).
+            conn.execute(
+                text(
+                    "ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS "
+                    "revoked_at TIMESTAMP WITH TIME ZONE;"
                 )
             )
             conn.execute(
@@ -1164,8 +1189,7 @@ def run_migrations():
             )
             conn.execute(
                 text(
-                    "CREATE INDEX IF NOT EXISTS idx_share_tokens_user_id "
-                    "ON share_tokens (user_id);"
+                    "CREATE INDEX IF NOT EXISTS idx_share_tokens_user_id ON share_tokens (user_id);"
                 )
             )
             conn.commit()
@@ -1200,10 +1224,7 @@ def run_migrations():
                 )
             )
             conn.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS idx_api_tokens_user_id "
-                    "ON api_tokens (user_id);"
-                )
+                text("CREATE INDEX IF NOT EXISTS idx_api_tokens_user_id ON api_tokens (user_id);")
             )
             conn.execute(
                 text(
@@ -1278,33 +1299,58 @@ def run_migrations():
 
 _CLUSTER_IDS = [
     # Step 37 canonical cluster IDs (47 explicit + 5 additional = 52 total)
-    "metro_power_professional", "senior_enterprise_decision_maker",
-    "high_income_early_adopter", "affluent_metro_late_majority",
-    "high_income_hardware_enthusiast", "wealthy_health_conscious_buyer",
-    "urban_mid_income_saas_buyer", "urban_mid_income_hardware_considerer",
-    "young_urban_professional_first_job", "urban_couple_joint_purchaser",
-    "mid_income_startup_founder", "urban_working_mother",
-    "high_literacy_student_freemium_ceiling", "low_literacy_student_passive",
-    "student_high_intent_specific_need", "college_group_purchase",
+    "metro_power_professional",
+    "senior_enterprise_decision_maker",
+    "high_income_early_adopter",
+    "affluent_metro_late_majority",
+    "high_income_hardware_enthusiast",
+    "wealthy_health_conscious_buyer",
+    "urban_mid_income_saas_buyer",
+    "urban_mid_income_hardware_considerer",
+    "young_urban_professional_first_job",
+    "urban_couple_joint_purchaser",
+    "mid_income_startup_founder",
+    "urban_working_mother",
+    "high_literacy_student_freemium_ceiling",
+    "low_literacy_student_passive",
+    "student_high_intent_specific_need",
+    "college_group_purchase",
     "recent_graduate_job_seeker",
-    "tier2_aspirational_founder", "tier2_established_business_owner",
-    "tier3_first_time_app_user", "tier2_price_sensitive_pragmatist",
-    "tier3_community_influenced_buyer", "tier2_educated_young_parent",
-    "smb_owner_self_serve", "smb_owner_referral_dependent",
-    "mid_market_it_decision_maker", "enterprise_procurement_gatekeeper",
-    "technical_founder_evaluator", "non_technical_co_founder_buyer",
-    "early_hardware_adopter_tech_enthusiast", "considered_hardware_researcher",
-    "value_hardware_buyer", "gift_hardware_buyer", "replacement_hardware_buyer",
-    "health_hardware_skeptic", "health_hardware_enthusiast",
+    "tier2_aspirational_founder",
+    "tier2_established_business_owner",
+    "tier3_first_time_app_user",
+    "tier2_price_sensitive_pragmatist",
+    "tier3_community_influenced_buyer",
+    "tier2_educated_young_parent",
+    "smb_owner_self_serve",
+    "smb_owner_referral_dependent",
+    "mid_market_it_decision_maker",
+    "enterprise_procurement_gatekeeper",
+    "technical_founder_evaluator",
+    "non_technical_co_founder_buyer",
+    "early_hardware_adopter_tech_enthusiast",
+    "considered_hardware_researcher",
+    "value_hardware_buyer",
+    "gift_hardware_buyer",
+    "replacement_hardware_buyer",
+    "health_hardware_skeptic",
+    "health_hardware_enthusiast",
     "smart_home_early_adopter",
-    "anxiety_driven_researcher", "impulsive_trend_follower",
-    "loyalist_returning_buyer", "price_anchor_manipulated_buyer",
-    "peer_pressure_converter", "deliberate_minimalist",
-    "productivity_maximiser", "budget_constrained_high_intent",
-    "passive_enterprise_user", "burnt_previously_buyer",
+    "anxiety_driven_researcher",
+    "impulsive_trend_follower",
+    "loyalist_returning_buyer",
+    "price_anchor_manipulated_buyer",
+    "peer_pressure_converter",
+    "deliberate_minimalist",
+    "productivity_maximiser",
+    "budget_constrained_high_intent",
+    "passive_enterprise_user",
+    "burnt_previously_buyer",
     # 5 additional clusters
-    "retiree_digital_explorer", "gig_economy_worker",
-    "ngo_nonprofit_buyer", "diaspora_remittance_buyer",
+    "retiree_digital_explorer",
+    "gig_economy_worker",
+    "ngo_nonprofit_buyer",
+    "diaspora_remittance_buyer",
     "vernacular_content_creator",
 ]
 
@@ -1360,5 +1406,6 @@ if __name__ == "__main__":
     import os
 
     import uvicorn
+
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=False)

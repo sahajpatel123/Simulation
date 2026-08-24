@@ -33,6 +33,16 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 EXPIRES_IN_SECONDS = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
 
+# How recently a token may have been revoked before its replay counts as a
+# breach signal rather than an innocent concurrent double-fire. Two
+# simultaneous refresh requests with the same token resolve in milliseconds
+# (one wins the atomic claim, the loser then sees revoked=TRUE); treating
+# that loser as theft would log the user out everywhere on every double
+# fire. A replayed token revoked longer than this window ago, however, is
+# the classic stolen-credential signature — the legitimate owner rotated
+# past it long ago, so only an attacker still holds it.
+REFRESH_REUSE_GRACE_SECONDS = 60
+
 # A real bcrypt digest of a throwaway secret. The unknown-email branch of
 # ``login`` verifies against it so both failure paths burn one bcrypt round
 # — otherwise "no such user" returns measurably faster than "wrong
@@ -63,7 +73,7 @@ def _revoke_refresh_token(db: Session, raw_token: str) -> int:
         text(
             """
             UPDATE refresh_tokens
-            SET revoked = TRUE
+            SET revoked = TRUE, revoked_at = NOW()
             WHERE token_hash = :hash AND revoked = FALSE
             """
         ),
@@ -77,7 +87,7 @@ def _revoke_user_refresh_tokens(db: Session, user_id: int) -> int:
         text(
             """
             UPDATE refresh_tokens
-            SET revoked = TRUE
+            SET revoked = TRUE, revoked_at = NOW()
             WHERE user_id = :uid AND revoked = FALSE
             """
         ),
@@ -186,7 +196,7 @@ def refresh_access_token(payload: RefreshRequest, db: Session = Depends(get_db))
             text(
                 """
             UPDATE refresh_tokens
-            SET revoked = TRUE
+            SET revoked = TRUE, revoked_at = NOW()
             WHERE token_hash = :hash
               AND revoked = FALSE
               AND (expires_at IS NULL OR expires_at > NOW())
@@ -200,6 +210,34 @@ def refresh_access_token(payload: RefreshRequest, db: Session = Depends(get_db))
     )
 
     if not claim:
+        # Reuse detection: the atomic claim failed, so this token was never
+        # issued, expired unused, or was already rotated. Only the third
+        # case is a breach signal — replaying a credential the legitimate
+        # owner surrendered long ago means it was copied, so revoke every
+        # session for that user. Tokens revoked within the grace window are
+        # excluded by the SQL (concurrent double-fires) and unknown or
+        # merely-expired tokens match nothing (normal lifecycle, no
+        # side effects). The response stays uniform either way.
+        cutoff = datetime.now(UTC) - timedelta(seconds=REFRESH_REUSE_GRACE_SECONDS)
+        breach = (
+            db.execute(
+                text(
+                    """
+                SELECT user_id FROM refresh_tokens
+                WHERE token_hash = :hash
+                  AND revoked = TRUE
+                  AND revoked_at IS NOT NULL
+                  AND revoked_at < :cutoff
+                """
+                ),
+                {"hash": token_hash, "cutoff": cutoff},
+            )
+            .mappings()
+            .first()
+        )
+        if breach:
+            _revoke_user_refresh_tokens(db, int(breach["user_id"]))
+            db.commit()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
     user_id = int(claim["user_id"])
