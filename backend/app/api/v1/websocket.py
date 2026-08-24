@@ -19,6 +19,47 @@ from app.models.user import User
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["websocket"])
 
+# How long an accepted-but-unauthenticated socket may sit waiting for its
+# auth frame. A real frontend sends it immediately; every extra second is
+# a free slot for anonymous socket-holding (each idle connection pins a
+# TCP socket plus an asyncio task).
+PRE_AUTH_TIMEOUT_SECONDS = 5
+
+# App-level frame cap, enforced BEFORE the payload reaches handlers. The
+# ASGI server also caps frames (uvicorn ws_max_size, default 16MB), but
+# that is far above anything this protocol needs and would still allow a
+# 16MB allocation per frame per socket; enforcing here makes the real
+# limit explicit and survivable.
+MAX_FRAME_CHARS = 65536
+
+
+async def _receive_limited(
+    websocket: WebSocket,
+    timeout: float | None,
+) -> tuple[str | None, bool]:
+    """Receive one text frame bounded by ``timeout`` and MAX_FRAME_CHARS.
+
+    Returns ``(text, False)`` on success, ``(None, True)`` when a text
+    frame arrived but exceeded the cap (its contents are never handed to
+    handlers), and ``(None, False)`` on disconnect / non-message events /
+    binary frames (the protocol is text-only). Propagates transport
+    errors to the caller's existing handling.
+    """
+    message = await asyncio.wait_for(websocket.receive(), timeout=timeout)
+    if message.get("type") != "websocket.receive":
+        return None, False
+    text = message.get("text")
+    if text is None:
+        return None, False
+    if len(text) > MAX_FRAME_CHARS:
+        logger.warning(
+            "[WS] Oversized frame rejected len=%d cap=%d",
+            len(text),
+            MAX_FRAME_CHARS,
+        )
+        return None, True
+    return text, False
+
 
 def _origin_allowed(origin: str | None) -> bool:
     """Return True iff the WebSocket Origin is in the CORS allowlist.
@@ -90,11 +131,15 @@ async def websocket_simulation_progress(
         return
     await websocket.accept()
     try:
-        raw = await asyncio.wait_for(websocket.receive_text(), timeout=20.0)
+        raw, oversize = await _receive_limited(websocket, PRE_AUTH_TIMEOUT_SECONDS)
     except TimeoutError:
         await websocket.close(code=4001)
         return
     except Exception:
+        await websocket.close(code=4001)
+        return
+    if oversize or raw is None:
+        # Oversized, binary, or non-message first frame — never even parse it.
         await websocket.close(code=4001)
         return
     try:
@@ -135,17 +180,15 @@ async def websocket_simulation_progress(
     try:
         while True:
             try:
-                data = await websocket.receive_text()
-                if len(data) > 65536:
-                    logger.warning(
-                        "[WS] Oversized frame rejected simulation_id=%s len=%s",
-                        log_safe(simulation_id).replace("\n", " "),
-                        len(data),
-                    )
+                data, oversize = await _receive_limited(websocket, None)
+                if oversize:
                     await websocket.send_text(
                         '{"type":"error","message":"Frame too large (max 64KB)"}'
                     )
                     continue
+                if data is None:
+                    # Binary or non-message event — not part of this protocol.
+                    break
                 if data.strip() == "ping":
                     await websocket.send_text('{"type":"pong"}')
             except WebSocketDisconnect:

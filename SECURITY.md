@@ -485,4 +485,16 @@ For security concerns, please contact the project maintainers.
   they now pass through untouched, while any sign followed by non-numeric
   content (``-2+3+cmd|…``, DDE payloads) keeps the full guard. Pinned by
   parametrized exact-match tests covering both sides of the exemption.
+- 2026-08-25 - Bounded the WebSocket pre-auth resource surface: the
+  endpoint accepted an anonymous socket and waited 20s for an auth frame
+  read via ``receive_text()``, which buffers the whole message before any
+  size check — one anonymous connection could force a large allocation,
+  and every idle socket pinned a TCP slot plus an asyncio task for the
+  full window. The pre-auth window is now 5s (a real frontend sends its
+  auth frame immediately), and a shared receive helper enforces the 64KB
+  cap BEFORE handlers see payload on every read: oversized or binary
+  first frames are closed (4001) without parsing, while an oversized
+  mid-stream frame still draws the in-band error message instead of
+  dropping the connection. Flow tests drive the full handler against a
+  fake socket to pin each behaviour.
 - [VERSION] - Initial security policy
