@@ -53,9 +53,10 @@ jobs:
           # pack and cannot point at a local directory (confirmed against
           # codeql-action v4.37.7 src/config/db-config.ts, its packaging
           # PR-checks, and the GitHub docs). Wiring options for unpublished
-          # in-repo extension packs need proof before going live; until then
-          # the 17 py/log-injection alerts stay open rather than risk a
-          # broken scan.
+          # in-repo extension packs need proof before going live. Every
+          # py/log-injection finding was meanwhile eliminated at the source —
+          # untrusted values reach logs only through app.core.security.log_safe()
+          # — so nothing currently depends on the pack being wired.
           queries: security-and-quality
 
       - name: Autobuild

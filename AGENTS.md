@@ -96,6 +96,13 @@ Rules that keep CI green and secure:
 - `tools/validate_ci.py` fails if `.github/zizmor.yml` ever disables
   `unpinned-uses` again — that override only made sense under the old
   tag-pinning policy.
+- Before trying to "fix" an open CodeQL alert, check whether it is still
+  real: download the newest Python analysis SARIF
+  (`gh api -H "Accept: application/sarif+json"
+  repos/<owner>/<repo>/code-scanning/analyses/<id>`) and grep its results.
+  A few long-open alerts here are verified-fixed state-machine artifacts
+  (their instances point at comment/docstring lines); they can only be
+  closed by a maintainer dismissal decision, not by more code changes.
 
 Local security scans:
 

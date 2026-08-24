@@ -310,4 +310,14 @@ For security concerns, please contact the project maintainers.
   Minerva timing attack on P-256). JWT behavior is pinned by
   `tests/test_security_jwt_required_claims.py`. Also bumped the CI tools
   spec from pip 25.2 to 26.2.1 to clear eleven published pip advisories.
+- 2026-08-25 - Audited every secret-comparison path: Razorpay webhook
+  signatures (`billing.py`) and UI preview tokens (`ui_generation.py`)
+  both verify through `hmac.compare_digest`, and API-token digests use
+  keyed HMAC-SHA256 — no raw `==` secret comparisons exist. Also proved,
+  against the raw SARIF of the newest CodeQL Python analysis, that the
+  three oldest open Python alerts (stack-trace exposure, bad tag filter,
+  incomplete URL sanitization) have zero current detections: their code
+  was fixed weeks ago and GitHub's alert state machine simply never
+  transitioned them to fixed. They stay open pending a maintainer
+  dismissal decision; do not re-audit their flagged lines.
 - [VERSION] - Initial security policy
