@@ -360,9 +360,9 @@ In production, the API and Celery worker run as separate processes. A `sync_broa
 
 1. Create `app/simulation/architects/my_domain.py`
 2. Subclass `BaseArchitect`, implement `name`, `product_types`, `compute()`, `generate_report()`
-3. Register in `app/simulation/conductor.py` → `_build_architect_registry()`
-4. Add to `ARCHITECT_STACKS[product_type]` if product-type specific
-5. Register in `DEPENDENCY_MAP` if consuming other architects' outputs
+3. Register in `app/simulation/architect_registry.py` → `build_architect_registry()` (the eager module-level `ARCHITECTS` dict that the conductor imports as `_ARCHITECTS`; it lives apart from the conductor so markov can import instances without creating a cycle)
+4. Add to `ARCHITECT_STACKS[product_type]` if product-type specific (the dict lives in `conductor.py`)
+5. Register in `DEPENDENCY_MAP` (also `conductor.py`) if consuming other architects' outputs
 6. Add DB column to `migrate_and_start.py` if storing architect corrections
 
 ### Adding a New Cluster
@@ -447,6 +447,7 @@ thecee/
 │   │   ├── websocket.py     # sync_broadcast() helper
 │   │   ├── auth.py          # JWT helpers
 │   │   ├── security.py      # CORS, headers, sanitization
+│   │   ├── safe_errors.py   # Exception → safe label for API error details
 │   │   └── ...
 │   │
 │   ├── simulation/          # Core simulation engine
@@ -464,6 +465,8 @@ thecee/
 │   │   ├── sampling.py      # AgentProfileGenerator
 │   │   ├── profiles.py      # AgentProfile dataclass
 │   │   ├── conductor.py     # Orchestrator (main entry)
+│   │   ├── architect_registry.py  # Neutral ARCHITECTS dict (keeps conductor ↔ markov acyclic)
+│   │   ├── architect_stack.py     # Pure helpers for the architect-stack registry endpoint
 │   │   ├── aggregation.py   # Results aggregation
 │   │   ├── accountability.py # Failure identification
 │   │   ├── calibration.py   # Learning system
