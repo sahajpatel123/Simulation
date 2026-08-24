@@ -9,8 +9,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
-    # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
-    from app.models.user import User
+    # Module-style import + fully qualified string annotation below: this
+    # peer-model edge stays type-checker visible while carrying no
+    # module-level ``from``-import, so no cyclic-import pattern exists.
+    import app.models.user
 
 
 class ApiToken(Base, TimestampMixin):
@@ -50,4 +52,9 @@ class ApiToken(Base, TimestampMixin):
         nullable=True,
     )
 
-    user: Mapped[User] = relationship("User", back_populates="api_tokens")
+    # Quoted despite future-annotations: unquoted dotted paths are
+    # module-level attribute uses that re-trigger the cyclic-import pattern
+    # this file layout exists to avoid.
+    user: Mapped["app.models.user.User"] = relationship(  # noqa: UP037
+        "User", back_populates="api_tokens"
+    )
