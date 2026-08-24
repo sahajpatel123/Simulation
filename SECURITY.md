@@ -89,6 +89,9 @@ rules before pushing.
 
 - Every action ref is pinned to a full 40-hex commit SHA (version kept as a
   trailing comment).
+- Every external repo in `.pre-commit-config.yaml` is likewise pinned to a
+  full 40-hex commit SHA — pre-commit runs that code locally on every
+  commit, so mutable tags carry the same risk as unpinned actions.
 - The Dockerfile pins its base image by sha256 digest (`FROM python:3.11-slim@sha256:…`).
 - Every workflow declares a top-level least-privilege `permissions` block;
   write scopes (e.g. `id-token`, `security-events`) are scoped to the job
@@ -284,6 +287,11 @@ For security concerns, please contact the project maintainers.
   the obsolete hash-pinning-deferral exception with the enforced hash-locking
   flow, and refreshed the Actions hardening checklist for job-scoped write
   permissions.
+- 2026-08-25 - Extended the SHA-everywhere pinning policy to
+  `.pre-commit-config.yaml`: all five external hook repos now pin full
+  commit SHAs (versions kept as trailing comments), and a new
+  `validate_pre_commit_pins` check in `tools/validate_ci.py` rejects any
+  mutable tag so the policy cannot silently regress.
 - 2026-08-24 - Extended `tools/osv_scan.py` to cover every Python pin source
   scorecard's recursive osv-scanner sees (`requirements*.txt`, all generated
   locks, `tools/lock-specs/*.txt`) instead of direct pins only — surfacing

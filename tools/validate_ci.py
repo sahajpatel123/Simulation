@@ -21,6 +21,9 @@ can catch issues locally before pushing:
     pinning satisfies zizmor's unpinned-uses audit, so no overrides are needed.
   - Artifact uploads fail when no files are found instead of passing silently.
   - Every pip install in a workflow run block pins an exact version.
+  - Every external repo in .pre-commit-config.yaml is pinned to a full
+    commit SHA — pre-commit runs that code locally on every commit, so
+    mutable tags carry the same risk as unpinned workflow actions.
   - Direct pins in requirements.txt match the hash-locked files CI
     installs from, so a requirements bump without regenerating the
     locks fails instead of silently keeping stale versions.
@@ -477,6 +480,36 @@ def validate_lock_sync() -> list[str]:
     return errors
 
 
+def validate_pre_commit_pins() -> list[str]:
+    """Every external pre-commit repo is pinned to a full commit SHA.
+
+    pre-commit clones these repos and runs their hooks on every local
+    commit, so a repointed mutable tag swaps code into the dev loop —
+    the same supply-chain hole SHA pinning closed for workflow actions.
+    ``repo: local`` entries run in-repo code and are exempt; version
+    context stays readable as a trailing comment on the rev line.
+    """
+    path = ROOT / ".pre-commit-config.yaml"
+    if not path.exists():
+        return []
+    data = yaml.safe_load(path.read_text()) or {}
+    errors: list[str] = []
+    for entry in data.get("repos") or []:
+        if not isinstance(entry, dict):
+            errors.append(f"{path.name}: malformed repos entry {entry!r}")
+            continue
+        repo = entry.get("repo") or ""
+        rev = str(entry.get("rev") or "")
+        if repo == "local":
+            continue
+        if not re.fullmatch(r"[0-9a-f]{40}", rev):
+            errors.append(
+                f"{path.name}: {repo} rev '{rev}' must be a full 40-hex "
+                "commit SHA (version kept as trailing comment)"
+            )
+    return errors
+
+
 def main() -> int:
     checks = [
         ("YAML", validate_yaml),
@@ -494,6 +527,7 @@ def main() -> int:
         ("pinned installs", validate_pinned_installs),
         ("dependency lock sync", validate_lock_sync),
         ("Dockerfile base images", validate_dockerfile_base_image),
+        ("pre-commit pins", validate_pre_commit_pins),
     ]
     errors: list[str] = []
     for label, func in checks:

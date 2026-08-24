@@ -59,7 +59,8 @@ Rules that keep CI green and secure:
 - Pin every GitHub Action to a full 40-hex commit SHA (e.g.
   `actions/checkout@<sha> # v7.0.1`), never `@master`, a floating `@vN`, or a
   mutable tag — `tools/validate_ci.py` enforces this; the trailing comment
-  keeps the release version human-readable.
+  keeps the release version human-readable. The same rule applies to every
+  external repo's `rev:` in `.pre-commit-config.yaml`.
 - Pin every non-`-r` pip install in a workflow to an exact version
   (`pkg==X.Y.Z`); `-r` includes must point at the generated hash-locked
   files (`requirements-*-lock.txt`) installed with `--require-hashes`, and

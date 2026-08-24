@@ -372,3 +372,65 @@ class TestZizmorConfig:
         gh.mkdir(parents=True)
         (gh / "zizmor.yml").write_text("rules: {}\n")
         assert vci.validate_zizmor_config() == []
+
+
+class TestPreCommitPins:
+    @staticmethod
+    def _config(tmp_path: Path, body: str) -> None:
+        (tmp_path / ".pre-commit-config.yaml").write_text(textwrap.dedent(body))
+
+    def test_mutable_tag_flagged(self, vci, tmp_path):
+        self._config(
+            tmp_path,
+            """\
+            repos:
+              - repo: https://github.com/astral-sh/ruff-pre-commit
+                rev: v0.16.0
+                hooks:
+                  - id: ruff
+            """,
+        )
+        errors = vci.validate_pre_commit_pins()
+        assert len(errors) == 1
+        assert "ruff-pre-commit" in errors[0]
+        assert "40-hex" in errors[0]
+
+    def test_sha_pin_with_local_repo_passes(self, vci, tmp_path):
+        self._config(
+            tmp_path,
+            """\
+            repos:
+              - repo: https://github.com/pre-commit/pre-commit-hooks
+                rev: cef0300fd0fc4d2a87a85fa2093c6b283ea36f4b # v5.0.0
+                hooks:
+                  - id: trailing-whitespace
+              - repo: local
+                hooks:
+                  - id: validate-ci-hygiene
+                    entry: python3 tools/validate_ci.py
+                    language: system
+            """,
+        )
+        assert vci.validate_pre_commit_pins() == []
+
+    def test_short_sha_still_rejected(self, vci, tmp_path):
+        self._config(
+            tmp_path,
+            """\
+            repos:
+              - repo: https://github.com/PyCQA/bandit
+                rev: 36fd6505 # 1.7.10 (abbreviated)
+                hooks:
+                  - id: bandit
+            """,
+        )
+        assert len(vci.validate_pre_commit_pins()) == 1
+
+    def test_missing_file_is_noop(self, vci, tmp_path):
+        assert vci.validate_pre_commit_pins() == []
+
+    def test_malformed_entry_reported_without_crash(self, vci, tmp_path):
+        self._config(tmp_path, "repos:\n  - just-a-string\n")
+        errors = vci.validate_pre_commit_pins()
+        assert len(errors) == 1
+        assert "malformed" in errors[0]
