@@ -19,7 +19,6 @@ from app.core.metrics import metrics
 from app.core.progress_bridge import progress_bridge
 from app.core.redis_client import get_redis_client
 from app.core.request_id_middleware import RequestIdMiddleware
-from app.core.safe_errors import safe_error_label
 from app.core.timing_middleware import TimingMiddleware
 
 logger = logging.getLogger(__name__)
@@ -267,9 +266,12 @@ async def readyz() -> JSONResponse:
         db_ok = True
     except Exception as exc:
         logger.error("readiness database check failed: %s", exc, exc_info=True)
+        # Deliberately no error detail in the body: this endpoint is
+        # unauthenticated, so even a class-derived label advertises
+        # dependency internals to anyone who can reach it. Full diagnosis
+        # detail lives in the server-side log line above.
         checks["database"] = {
             "status": "error",
-            "error": safe_error_label(exc),
         }
         db_ok = False
 
@@ -287,9 +289,10 @@ async def readyz() -> JSONResponse:
             redis_ok = True
         except Exception as exc:
             logger.error("readiness Redis check failed: %s", exc, exc_info=True)
+            # Same policy as the database branch above: status only in the
+            # response; exception detail stays in server-side logs.
             checks["redis"] = {
                 "status": "error",
-                "error": safe_error_label(exc),
             }
             redis_ok = False
 
