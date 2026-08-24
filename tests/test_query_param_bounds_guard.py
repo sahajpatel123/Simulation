@@ -1,13 +1,18 @@
-"""Regression guard: every pagination Query param declares schema bounds.
+"""Regression guard: Query params declare their bounds at the schema.
 
-An authenticated caller passing ``?limit=1000000`` to a route whose
-``Query(...)`` lacks ``le=`` makes the database do unbounded work per
-hit — the same resource-exhaustion class as the route-level rate-limit
-audit, one layer down. This test AST-scans ``backend/app/api/v1`` and
-fails on any pagination-shaped parameter that does not declare its
-bound at the schema level.
+Two systemic invariants over every ``Query(...)`` default in
+``backend/app/api/v1``, both resource-exhaustion classes one layer
+below the route-level rate-limit audit:
 
-Two escape hatches exist, both deliberate:
+1. **Pagination params** — an authenticated caller passing
+   ``?limit=1000000`` to a route whose ``Query(...)`` lacks ``le=``
+   makes the database do unbounded work per hit; ``offset``-style
+   params without ``ge=`` can go negative.
+2. **Free-text params** — a ``str``-typed param without ``max_length``
+   (or a constraining ``pattern``) accepts multi-megabyte query strings
+   that then flow into filters, logs, and JSONB round-trips.
+
+For pagination there are two escape hatches, both deliberate:
 
 * ``le=``/``ge=`` declared in the ``Query(...)`` call itself — the
   normal case (422 on violation, documented in OpenAPI).
@@ -17,6 +22,9 @@ Two escape hatches exist, both deliberate:
   so those sites are allowlisted by ``(file, param)`` rather than
   forced to change semantics. Each entry must still correspond to an
   actual finding — stale entries fail the suite.
+
+String params have no allowlist: declaring ``max_length`` (or an
+anchored ``pattern``) costs nothing and needs no exceptions.
 """
 
 from __future__ import annotations
@@ -46,9 +54,9 @@ DECLARED_IN_HANDLER: frozenset[tuple[str, str]] = frozenset(
 )
 
 
-def _pagination_findings() -> list[tuple[str, int, str, bool, bool]]:
-    """Return (file, line, param, has_le, has_ge) for each Query default."""
-    findings: list[tuple[str, int, str, bool, bool]] = []
+def _query_defaults() -> list[tuple[str, int, ast.arg, ast.Call]]:
+    """Yield (file, line, arg-node, Query(...) call) for every Query default."""
+    out: list[tuple[str, int, ast.arg, ast.Call]] = []
     for path in sorted(V1_DIR.glob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
@@ -69,10 +77,20 @@ def _pagination_findings() -> list[tuple[str, int, str, bool, bool]]:
                 func_name = getattr(default.func, "id", "") or getattr(default.func, "attr", "")
                 if func_name != "Query":
                     continue
-                has_le = any(kw.arg == "le" for kw in default.keywords)
-                has_ge = any(kw.arg == "ge" for kw in default.keywords)
-                findings.append((path.name, arg.lineno, arg.arg, has_le, has_ge))
-    return findings
+                out.append((path.name, arg.lineno, arg, default))
+    return out
+
+
+def _has_kw(call: ast.Call, name: str) -> bool:
+    return any(kw.arg == name for kw in call.keywords)
+
+
+def _pagination_findings() -> list[tuple[str, int, str, bool, bool]]:
+    """Return (file, line, param, has_le, has_ge) for each Query default."""
+    return [
+        (fname, lineno, arg.arg, _has_kw(call, "le"), _has_kw(call, "ge"))
+        for fname, lineno, arg, call in _query_defaults()
+    ]
 
 
 def _is_violation(param: str, has_le: bool, has_ge: bool) -> bool:
@@ -82,6 +100,24 @@ def _is_violation(param: str, has_le: bool, has_ge: bool) -> bool:
     if LOWER_ONLY_NAME.search(param):
         return not has_ge
     return False
+
+
+_STR_ANNOTATION = re.compile(r"^(str|str \| None|None \| str)$")
+
+
+def _unbounded_string_params() -> list[str]:
+    """File:line `param` for str-typed Query defaults lacking max_length AND pattern."""
+    violations: list[str] = []
+    for fname, lineno, arg, call in _query_defaults():
+        ann_src = ast.unparse(arg.annotation) if arg.annotation else ""
+        if not _STR_ANNOTATION.match(ann_src.strip()):
+            # list[str] items carry per-item max_length; count bounds are a
+            # separate concern. Non-str scalars are numeric/bounded elsewhere.
+            continue
+        if _has_kw(call, "max_length") or _has_kw(call, "pattern"):
+            continue
+        violations.append(f"{fname}:{lineno} `{arg.arg}`")
+    return violations
 
 
 def test_pagination_params_all_bounded_or_allowlisted() -> None:
@@ -116,6 +152,37 @@ def test_handler_clamp_allowlist_has_no_stale_entries() -> None:
         "DECLARED_IN_HANDLER entries no longer match any unbounded Query() "
         f"(the site gained bounds or was renamed — remove them): {sorted(stale)}"
     )
+
+
+def test_string_query_params_all_bounded() -> None:
+    violations = _unbounded_string_params()
+
+    assert not violations, (
+        "str Query params without max_length or pattern found "
+        "(add max_length=<sane ceiling> to the Query(); a fully-anchored "
+        f"pattern= also satisfies the invariant): {violations}"
+    )
+
+
+def test_string_bound_classifier_accepts_known_good_shapes() -> None:
+    """Pin the annotation matcher so refactors can't silently unmatch."""
+    import ast as _ast
+
+    def _violations_for(ann_src: str, keywords: list[str]) -> bool:
+        call = _ast.parse(
+            f"Query({', '.join(keywords)})" if keywords else "Query()", mode="eval"
+        ).body
+        assert isinstance(call, _ast.Call)
+        matched = bool(_STR_ANNOTATION.match(ann_src.strip()))
+        constrained = _has_kw(call, "max_length") or _has_kw(call, "pattern")
+        return matched and not constrained
+
+    assert _violations_for("str | None", [])  # str + no bound -> violation
+    assert _violations_for("str", [])
+    assert not _violations_for("str | None", ["max_length=16"])
+    assert not _violations_for("str | None", [r'pattern=r"^(POST|PUT)$"'])
+    assert not _violations_for("int | None", [])  # non-str never flagged
+    assert not _violations_for("list[str] | None", [])  # list items self-bound
 
 
 # ---------------------------------------------------------------------------

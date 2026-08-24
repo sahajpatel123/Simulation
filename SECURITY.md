@@ -507,4 +507,13 @@ For security concerns, please contact the project maintainers.
   two deliberate clamp-in-handler contracts (project search coerces via
   ``_normalise_limit`` → [1, 100]; buyer personas clamp to [1, 52]) and
   unit tests pinning that both clamps actually hold.
+- 2026-08-25 - Extended the bounds audit to free-text query params:
+  every ``str``-typed ``Query(...)`` in the API now declares
+  ``max_length`` (or a constraining ``pattern``) — previously five
+  params accepted unbounded strings into filters and JSONB round-trips.
+  Three domain-findings filter params gained explicit ceilings, the two
+  already-pattern-constrained audit-log params satisfy the invariant as
+  they were, and the pagination guard test was generalized into a
+  query-param-bounds guard enforcing both invariants with zero
+  allowlist entries on the string side.
 - [VERSION] - Initial security policy
