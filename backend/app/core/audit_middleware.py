@@ -64,13 +64,12 @@ def _resolve_user_id(request: Request) -> int | None:
     try:
         # Imported lazily so a startup failure in auth (e.g. a missing
         # SECRET_KEY in a test environment) can't break the middleware.
+        from app.core.deps import lookup_api_token_row
         from app.core.security import (
             API_TOKEN_PREFIX,
-            api_token_hash_candidates,
             api_token_is_expired,
             decode_token,
         )
-        from app.models.api_token import ApiToken
 
         sub = decode_token(token, token_type="access")
         if sub is None:
@@ -78,11 +77,7 @@ def _resolve_user_id(request: Request) -> int | None:
                 return None
             db = SessionLocal()
             try:
-                row = (
-                    db.query(ApiToken)
-                    .filter(ApiToken.token_hash.in_(api_token_hash_candidates(token)))
-                    .first()
-                )
+                row = lookup_api_token_row(db, token)
                 if (
                     row is not None
                     and row.revoked_at is None

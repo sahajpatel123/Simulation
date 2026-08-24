@@ -75,7 +75,7 @@ API_TOKEN_MAX_DAYS: int = 365
 
 # Prefix marking the current (HMAC-keyed) digest generation in the
 # ``token_hash`` column; unprefixed rows are legacy bare SHA-256 hex digests.
-_API_TOKEN_HASH_V2_PREFIX = "v2:"
+API_TOKEN_HASH_V2_PREFIX = "v2:"
 
 
 def generate_api_token() -> str:
@@ -110,7 +110,7 @@ def hash_api_token(token: str) -> str:
     until they are revoked or re-issued.
     """
     return (
-        _API_TOKEN_HASH_V2_PREFIX
+        API_TOKEN_HASH_V2_PREFIX
         + hmac.new(_api_token_digest_key(), token.encode("utf-8"), hashlib.sha256).hexdigest()
     )
 
