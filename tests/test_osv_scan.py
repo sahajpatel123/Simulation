@@ -3,8 +3,9 @@
 The scanner is stdlib-only so CI can run it with zero installs; these
 tests keep its parsing and batching honest without touching the real
 OSV API. The nested/scoped package-lock cases encode the exact tree
-shapes npm emits (a wrong filter here silently drops @scope/* deps from
-coverage, which is worse than not scanning at all).
+shapes npm emits: nested copies are scanned because scorecard's
+recursive osv-scanner scans them too, and a wrong filter here silently
+drops deps from coverage — worse than not scanning at all.
 """
 
 from __future__ import annotations
@@ -69,7 +70,10 @@ class TestPackageLockParsing:
             ("react", "19.2.8"),
         ]
 
-    def test_nested_copies_excluded(self, tmp_path):
+    def test_nested_copies_included(self, tmp_path):
+        # npm installs a nested copy for its subtree when ranges force
+        # duplication, and scorecard's osv-scanner scans it — so both
+        # versions must be reported, not just the root.
         lock = self._lock(
             tmp_path,
             {
@@ -77,7 +81,24 @@ class TestPackageLockParsing:
                 "node_modules/postcss/node_modules/nanoid": {"version": "3.3.16"},
             },
         )
-        assert osv.parse_package_lock_json(lock) == [("nanoid", "3.3.18")]
+        assert osv.parse_package_lock_json(lock) == [
+            ("nanoid", "3.3.16"),
+            ("nanoid", "3.3.18"),
+        ]
+
+    def test_identical_nested_versions_deduplicated(self, tmp_path):
+        lock = self._lock(
+            tmp_path,
+            {
+                "node_modules/debug": {"version": "4.4.3"},
+                "node_modules/eslint-config-next/node_modules/debug": {"version": "3.2.7"},
+                "node_modules/eslint-plugin-import/node_modules/debug": {"version": "3.2.7"},
+            },
+        )
+        assert osv.parse_package_lock_json(lock) == [
+            ("debug", "3.2.7"),
+            ("debug", "4.4.3"),
+        ]
 
     def test_versionless_entries_skipped(self, tmp_path):
         lock = self._lock(tmp_path, {"node_modules/link-dep": {"link": True}})

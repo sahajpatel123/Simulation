@@ -92,6 +92,9 @@ rules before pushing.
 - Every external repo in `.pre-commit-config.yaml` is likewise pinned to a
   full 40-hex commit SHA — pre-commit runs that code locally on every
   commit, so mutable tags carry the same risk as unpinned actions.
+  Dependabot has no pre-commit ecosystem, so these revs are bumped
+  manually: resolve each release tag to its commit SHA and update the
+  `rev:` line, keeping the version comment.
 - The Dockerfile pins its base image by sha256 digest (`FROM python:3.11-slim@sha256:…`).
 - Every workflow declares a top-level least-privilege `permissions` block;
   write scopes (e.g. `id-token`, `security-events`) are scoped to the job
@@ -287,6 +290,11 @@ For security concerns, please contact the project maintainers.
   the obsolete hash-pinning-deferral exception with the enforced hash-locking
   flow, and refreshed the Actions hardening checklist for job-scoped write
   permissions.
+- 2026-08-25 - Closed the last osv_scan parity gap: nested package-lock
+  copies are now scanned (and deduplicated), matching scorecard's
+  recursive osv-scanner — a vulnerable nested pin can no longer be
+  CLEAN here but flagged there. Dependabot's lack of a pre-commit
+  ecosystem documented as manual rev maintenance.
 - 2026-08-25 - Extended the SHA-everywhere pinning policy to
   `.pre-commit-config.yaml`: all five external hook repos now pin full
   commit SHAs (versions kept as trailing comments), and a new

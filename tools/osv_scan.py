@@ -3,8 +3,8 @@
 
 Reads every Python pin source in the repo — ``requirements.txt``, all
 generated ``requirements-*-lock.txt`` hash-lock files, and the
-``tools/lock-specs/*.txt`` specs — plus the resolved root packages from
-``package-lock.json``, then asks ``api.osv.dev`` about each exact
+``tools/lock-specs/*.txt`` specs — plus every resolved package (root and
+nested) from ``package-lock.json``, then asks ``api.osv.dev`` about each exact
 version. This mirrors how OpenSSF Scorecard's ``Vulnerabilities`` check
 works: it runs osv-scanner recursively over the whole checkout with the
 python requirements plugin enabled, so the hash-lock files' frozen
@@ -59,25 +59,30 @@ def parse_requirements_txt(path: Path) -> list[tuple[str, str]]:
 
 
 def parse_package_lock_json(path: Path) -> list[tuple[str, str]]:
-    """Root-level resolved packages from an npm lockfile v2/v3 ``packages`` map.
+    """Every resolved package from an npm lockfile v2/v3 ``packages`` map.
 
-    Top-level entries are exactly the ``node_modules/<name>`` keys;
-    ``<name>`` may itself contain one slash for scopes (``@scope/pkg``).
-    Anything containing a further ``/node_modules/`` is a nested
-    transitive copy and is covered by its own root entry.
+    Entries are ``node_modules/<name>`` keys; ``<name>`` may contain one
+    slash for scopes (``@scope/pkg``). Nested copies
+    (``node_modules/x/node_modules/y``) are included on purpose: npm
+    installs them for their subtree when ranges force duplication, and
+    scorecard's recursive osv-scanner scans them — skipping them would
+    open a parity gap where this tool reports CLEAN while scorecard
+    flags a vulnerable nested pin. Identical ``name@version`` pairs from
+    multiple paths are deduplicated so batches stay minimal.
     """
     if not path.exists():
         return []
     data = json.loads(path.read_text())
     prefix = "node_modules/"
-    pins: list[tuple[str, str]] = []
+    unique: dict[tuple[str, str], None] = {}
     for key, meta in sorted((data.get("packages") or {}).items()):
-        if not key.startswith(prefix) or "/node_modules/" in key:
+        if not key.startswith(prefix):
             continue
+        name = key[len(prefix) :].split("/node_modules/")[-1]
         version = meta.get("version")
         if version:
-            pins.append((key[len(prefix) :], version))
-    return pins
+            unique[(name, version)] = None
+    return sorted(unique)
 
 
 def _post_with_retry(payload: dict, attempts: int = _RETRY_ATTEMPTS) -> dict:
