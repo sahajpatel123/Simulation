@@ -9,10 +9,11 @@ on:
     - cron: "0 4 * * 1"
   workflow_dispatch:
 
+# Workflow level stays read-only; the two write scopes live on the
+# analysis job so a future second job can't inherit them
+# (scorecard TokenPermissions / zizmor audit).
 permissions:
   contents: read
-  security-events: write
-  id-token: write
 
 concurrency:
   group: scorecard-${{ github.ref }}
@@ -23,6 +24,11 @@ jobs:
     name: Scorecard analysis
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
+    permissions:
+      contents: read
+      id-token: write        # scorecard-action's OIDC token for publish_results
+      security-events: write # SARIF upload to code scanning
 
     steps:
       - name: Checkout
