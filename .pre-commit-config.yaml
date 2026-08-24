@@ -9,7 +9,9 @@ repos:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
-        files: ^\.venv/ || ^backend/
+        # Python regex — ``||`` is not alternation here; scope formatting to
+        # the backend package explicitly.
+        files: ^backend/app/
 
   # Trailing whitespace
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -70,7 +72,10 @@ repos:
         entry: python3 tools/validate_ci.py
         language: system
         pass_filenames: false
-        files: ^\.github/workflows/|^\.github/zizmor\.yml$|^tools/validate_ci\.py$|^SECURITY\.md$|^AGENTS\.md$|^Dockerfile$
+        # Includes requirements*.txt and the lock generator because the
+        # validator's lock-sync check reads them — a dependency bump must
+        # trip the gate locally, not only in workflow-validation.yml.
+        files: ^\.github/workflows/|^\.github/zizmor\.yml$|^tools/validate_ci\.py$|^tools/gen_dependency_lock\.py$|^requirements(-.*)?\.txt$|^SECURITY\.md$|^AGENTS\.md$|^Dockerfile$
 
       - id: zizmor
         name: zizmor workflow security
