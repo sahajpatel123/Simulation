@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from app.simulation.architect_registry import ARCHITECTS
 from app.simulation.funnel_stage_calibration import corrected_forward_probability
 
 if TYPE_CHECKING:
@@ -270,9 +271,6 @@ class MarkovBehaviourModel:
         if seed is not None:
             np.random.seed(seed)
 
-        # codeql[py/cyclic-import]: deferred import deliberately breaks the conductor↔markov module-level cycle
-        from app.simulation.conductor import _ARCHITECTS
-
         STATE_ORDER = ["ARRIVE", "BROWSE", "CONSIDER", "DECIDE", "PURCHASE", "ABANDON", "RETURN"]
         n = len(STATE_ORDER)
         idx = {s: i for i, s in enumerate(STATE_ORDER)}
@@ -290,7 +288,7 @@ class MarkovBehaviourModel:
 
         inputs_used: dict[str, float] = {}
         for arch_name, output in architect_outputs.items():
-            architect = _ARCHITECTS.get(arch_name)
+            architect = ARCHITECTS.get(arch_name)
             if architect is None:
                 continue
             try:
