@@ -20,6 +20,9 @@ can catch issues locally before pushing:
   - The zizmor config disables hash-pinning (this repo pins to full tags instead).
   - Artifact uploads fail when no files are found instead of passing silently.
   - Every pip install in a workflow run block pins an exact version.
+  - Direct pins in requirements.txt match the hash-locked files CI
+    installs from, so a requirements bump without regenerating the
+    locks fails instead of silently keeping stale versions.
   - Every workflow declares a concurrency block to cancel superseded runs.
   - Every Dockerfile FROM pins its base image by sha256 digest.
 
@@ -405,6 +408,74 @@ def validate_security_events_permission() -> list[str]:
     return errors
 
 
+def _parse_requirement_pins(path: Path) -> dict[str, str]:
+    """Map normalised package name -> pinned version for ``==`` lines.
+
+    Skips comments, blank lines, and hash continuations (which are
+    indented). Extras brackets (``uvicorn[standard]``) are ignored;
+    names are lowercased and underscore-normalised per PEP 503 so the
+    two files compare equal despite cosmetic differences.
+    """
+    pins: dict[str, str] = {}
+    if not path.exists():
+        return pins
+    for line in path.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        match = re.match(
+            r"^([A-Za-z0-9][A-Za-z0-9._-]*)(\[[^\]]*\])?\s*==\s*([^\s\\]+)",
+            stripped,
+        )
+        if not match:
+            continue
+        name = match.group(1).lower().replace("_", "-")
+        pins[name] = match.group(3)
+    return pins
+
+
+def validate_lock_sync() -> list[str]:
+    """Direct dependency pins must match every derived lock file.
+
+    CI installs from the hash-locked files, not from requirements.txt —
+    so bumping requirements.txt without regenerating the locks would
+    silently keep CI (and the Docker image) on stale versions while
+    looking up to date. This check makes that drift a hard failure.
+
+    Only locks *derived* from requirements.txt are checked;
+    requirements-tools-lock.txt resolves its own tool set (its pydantic
+    pin deliberately differs) and is intentionally exempt.
+    """
+    errors: list[str] = []
+    direct = _parse_requirement_pins(ROOT / "requirements.txt")
+    if not direct:
+        return errors
+    for lock_name in ("requirements-lock.txt", "requirements-pytest-lock.txt"):
+        lock_path = ROOT / lock_name
+        locked = _parse_requirement_pins(lock_path)
+        if not locked:
+            errors.append(
+                f"{lock_name}: missing or has no pins — regenerate with "
+                "tools/gen_dependency_lock.py after changing requirements.txt"
+            )
+            continue
+        for name, version in sorted(direct.items()):
+            locked_version = locked.get(name)
+            if locked_version is None:
+                errors.append(
+                    f"{lock_name}: {name}=={version} is required by "
+                    "requirements.txt but absent from the lock — regenerate "
+                    "via tools/gen_dependency_lock.py"
+                )
+            elif locked_version != version:
+                errors.append(
+                    f"{lock_name}: {name} drifted — requirements.txt pins "
+                    f"{version}, lock holds {locked_version} — regenerate "
+                    "via tools/gen_dependency_lock.py"
+                )
+    return errors
+
+
 def main() -> int:
     checks = [
         ("YAML", validate_yaml),
@@ -420,6 +491,7 @@ def main() -> int:
         ("concurrency", validate_concurrency),
         ("SARIF permissions", validate_security_events_permission),
         ("pinned installs", validate_pinned_installs),
+        ("dependency lock sync", validate_lock_sync),
         ("Dockerfile base images", validate_dockerfile_base_image),
     ]
     errors: list[str] = []

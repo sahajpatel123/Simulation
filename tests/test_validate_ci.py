@@ -279,6 +279,83 @@ class TestWorkflowHygiene:
         assert vci.validate_workflow_dispatch() == []
 
 
+class TestLockSync:
+    """requirements.txt bumps must reach the hash-locked files CI installs."""
+
+    def _write(self, tmp_path: Path, requirements: str, lock: str, pytest_lock: str | None = None) -> None:
+        (tmp_path / "requirements.txt").write_text(textwrap.dedent(requirements))
+        (tmp_path / "requirements-lock.txt").write_text(textwrap.dedent(lock))
+        if pytest_lock is not None:
+            (tmp_path / "requirements-pytest-lock.txt").write_text(
+                textwrap.dedent(pytest_lock)
+            )
+
+    def test_in_sync_passes(self, vci, tmp_path):
+        self._write(
+            tmp_path,
+            """
+            fastapi==0.100.0
+            uvicorn[standard]==0.20.0
+            """,
+            """
+            # header comment
+            fastapi==0.100.0 \\
+                --hash=sha256:abcd
+            uvicorn[standard]==0.20.0 \\
+                --hash=sha256:beef
+            """,
+            """
+            fastapi==0.100.0 \\
+                --hash=sha256:abcd
+            uvicorn[standard]==0.20.0 \\
+                --hash=sha256:beef
+            pytest==9.1.1 \\
+                --hash=sha256:c0de
+            """,
+        )
+        assert vci.validate_lock_sync() == []
+
+    def test_version_drift_flagged(self, vci, tmp_path):
+        self._write(
+            tmp_path,
+            "fastapi==0.101.0\n",
+            "fastapi==0.100.0 \\\n    --hash=sha256:abcd\n",
+            "fastapi==0.100.0 \\\n    --hash=sha256:abcd\n",
+        )
+        errors = vci.validate_lock_sync()
+        assert len(errors) == 2
+        assert all("drifted" in e for e in errors)
+
+    def test_missing_package_flagged(self, vci, tmp_path):
+        self._write(
+            tmp_path,
+            "fastapi==0.100.0\nnewpkg==1.0.0\n",
+            "fastapi==0.100.0 \\\n    --hash=sha256:abcd\n",
+            "fastapi==0.100.0 \\\n    --hash=sha256:abcd\n",
+        )
+        errors = vci.validate_lock_sync()
+        assert len(errors) == 2
+        assert all("absent from the lock" in e and "newpkg" in e for e in errors)
+
+    def test_missing_lock_file_flagged(self, vci, tmp_path):
+        (tmp_path / "requirements.txt").write_text("fastapi==0.100.0\n")
+        errors = vci.validate_lock_sync()
+        assert len(errors) == 2
+        assert all("missing or has no pins" in e for e in errors)
+
+    def test_name_normalisation_and_comments_ignored(self, vci, tmp_path):
+        self._write(
+            tmp_path,
+            "# a comment\n\nPython_Multipart==0.0.20  # trailing comment\n",
+            "python-multipart==0.0.20 \\\n    --hash=sha256:abcd\n",
+            "python-multipart==0.0.20 \\\n    --hash=sha256:abcd\n",
+        )
+        assert vci.validate_lock_sync() == []
+
+    def test_no_requirements_txt_is_noop(self, vci, tmp_path):
+        assert vci.validate_lock_sync() == []
+
+
 class TestZizmorConfig:
     def test_disabling_unpinned_uses_flagged(self, vci, tmp_path):
         gh = tmp_path / ".github"
