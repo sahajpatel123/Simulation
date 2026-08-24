@@ -8,6 +8,10 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+# Imported from the neutral formatting module (not the engine) so this
+# schema file and app.simulation.what_if never import each other.
+from app.simulation.scenario_formatting import direction_label, format_delta_pct
+
 
 class WhatIfAssumption(BaseModel):
     """A single assumption to add or modify in the what-if scenario."""
@@ -110,9 +114,6 @@ class WhatIfOut(BaseModel):
 
     def to_log_line(self) -> str:
         """Return a compact one-line log string describing the scenario."""
-        # codeql[py/cyclic-import]: deferred import deliberately breaks the schema↔engine module-level cycle
-        from app.simulation.what_if import format_delta_pct
-
         direction = self.meta.get("dominant_direction", "NEUTRAL")
         sensitivity = self.meta.get("sensitivity_label", "NONE")
         return (
@@ -170,9 +171,6 @@ class WhatIfOut(BaseModel):
         Delegates to ``app.simulation.what_if.direction_label``. Symmetric
         with ``direction_arrow()`` but returns a word instead of a glyph.
         """
-        # codeql[py/cyclic-import]: deferred import deliberately breaks the schema↔engine module-level cycle
-        from app.simulation.what_if import direction_label
-
         return direction_label(self.conversion_delta)
 
     def has_positive_delta(self) -> bool:
@@ -204,9 +202,6 @@ class WhatIfOut(BaseModel):
 
         Example: ``"sim=1 ▲ +12.50%"``.
         """
-        # codeql[py/cyclic-import]: deferred import deliberately breaks the schema↔engine module-level cycle
-        from app.simulation.what_if import format_delta_pct
-
         return (
             f"sim={self.simulation_id} "
             f"{self.direction_arrow()} "
@@ -219,9 +214,6 @@ class WhatIfOut(BaseModel):
         Example: ``"↑ +12.50%"``. Useful for inline UI badges next to a
         scenario title.
         """
-        # codeql[py/cyclic-import]: deferred import deliberately breaks the schema↔engine module-level cycle
-        from app.simulation.what_if import format_delta_pct
-
         return f"{self.direction_arrow()} {format_delta_pct(self.conversion_delta_pct)}"
 
     def __str__(self) -> str:
@@ -339,9 +331,6 @@ class WhatIfDiff(BaseModel):
         Delegates to ``app.simulation.what_if.direction_label`` so the
         threshold matches ``WhatIfOut.direction_label()`` exactly.
         """
-        # codeql[py/cyclic-import]: deferred import deliberately breaks the schema↔engine module-level cycle
-        from app.simulation.what_if import direction_label
-
         return direction_label(self.delta_difference)
 
     def has_positive_delta(self) -> bool:
