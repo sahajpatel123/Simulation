@@ -8,9 +8,9 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import (
     API_TOKEN_PREFIX,
+    api_token_hash_candidates,
     api_token_is_expired,
     decode_token,
-    hash_api_token,
 )
 from app.models.api_token import ApiToken
 from app.models.environment import Environment as EnvironmentModel
@@ -59,7 +59,7 @@ def user_from_api_token(
         return None
     row = (
         db.query(ApiToken)
-        .filter(ApiToken.token_hash == hash_api_token(token))
+        .filter(ApiToken.token_hash.in_(api_token_hash_candidates(token)))
         .first()
     )
     if row is None or row.revoked_at is not None:

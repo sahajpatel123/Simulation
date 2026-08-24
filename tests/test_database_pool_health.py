@@ -276,10 +276,12 @@ def test_collect_pool_snapshot_error_on_broken_pool() -> None:
     snapshot = collect_pool_snapshot(_BrokenEngine())
 
     assert snapshot["status"] == POOL_STATUS_ERROR
-    # Client-facing error carries the exception class only — the raw
-    # message must never leak through a health digest.
-    assert snapshot.get("error") == "RuntimeError"
+    # Client-facing error comes from the fixed label vocabulary — neither
+    # the raw message nor even the class name may leak through a health
+    # digest.
+    assert snapshot.get("error") == "internal_error"
     assert "pool exploded" not in (snapshot.get("error") or "")
+    assert "RuntimeError" not in (snapshot.get("error") or "")
 
 
 # ---------------------------------------------------------------------------
@@ -388,10 +390,12 @@ def test_collect_server_snapshot_error_on_db_failure() -> None:
     assert snapshot["status"] == SERVER_STATUS_ERROR
     assert snapshot["reason"] == "probe_exception"
     assert snapshot["connection_ratio"] is None
-    # Client-facing error carries the exception class only — the raw
-    # message (which can embed host names / SQL fragments) must not leak.
-    assert snapshot.get("error") == "RuntimeError"
+    # Client-facing error comes from the fixed label vocabulary — neither
+    # the raw message (which can embed host names / SQL fragments) nor even
+    # the class name may leak.
+    assert snapshot.get("error") == "internal_error"
     assert "connection refused" not in (snapshot.get("error") or "")
+    assert "RuntimeError" not in (snapshot.get("error") or "")
 
 
 # ---------------------------------------------------------------------------

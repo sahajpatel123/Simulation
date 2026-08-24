@@ -4,6 +4,7 @@ import logging
 import re
 import secrets
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, Response
@@ -48,6 +49,10 @@ _PDF_200 = {200: {"description": "PDF file", "content": {"application/pdf": {}}}
 
 ALLOWED_CDNS = ["tailwindcss", "cdn.tailwindcss", "images.unsplash.com", "unpkg.com", "fonts.googleapis.com", "fonts.gstatic.com"]
 TAILWIND_CDN = '<script src="https://cdn.tailwindcss.com"></script>'
+
+# Extracts the value of any src=/href= attribute so CDN presence can be
+# decided on parsed URL hosts rather than raw substring containment.
+_ATTR_URL_RE = re.compile(r"""(?:src|href)\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
 
 
 def _load_conductor_results(
@@ -238,10 +243,17 @@ def _strip_injected_tags(html: str) -> str:
 
 
 def _ensure_cdns(html: str) -> str:
-    """Guarantee the Tailwind CDN is present — the prototype's styling depends on it."""
-    lower = html.lower()
-    if "cdn.tailwindcss.com" in lower or "tailwindcss" in lower:
-        return html
+    """Guarantee the Tailwind CDN is present — the prototype's styling depends on it.
+
+    Detection parses each ``src``/``href`` attribute value and compares the
+    URL *host* exactly (via ``urlparse``) instead of a loose substring test —
+    a bare ``"tailwindcss" in html`` check also matches page text and would
+    wrongly skip injecting the stylesheet dependency.
+    """
+    for match in _ATTR_URL_RE.finditer(html):
+        host = (urlparse(match.group(1)).hostname or "").lower()
+        if host == "cdn.tailwindcss.com":
+            return html
     if re.search(r"</head\s*>", html, re.IGNORECASE):
         return re.sub(r"</head\s*>", TAILWIND_CDN + "</head>", html, count=1, flags=re.IGNORECASE)
     if re.search(r"<body\b[^>]*>", html, re.IGNORECASE):

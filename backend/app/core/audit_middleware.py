@@ -66,9 +66,9 @@ def _resolve_user_id(request: Request) -> int | None:
         # SECRET_KEY in a test environment) can't break the middleware.
         from app.core.security import (
             API_TOKEN_PREFIX,
+            api_token_hash_candidates,
             api_token_is_expired,
             decode_token,
-            hash_api_token,
         )
         from app.models.api_token import ApiToken
 
@@ -80,7 +80,7 @@ def _resolve_user_id(request: Request) -> int | None:
             try:
                 row = (
                     db.query(ApiToken)
-                    .filter(ApiToken.token_hash == hash_api_token(token))
+                    .filter(ApiToken.token_hash.in_(api_token_hash_candidates(token)))
                     .first()
                 )
                 if (

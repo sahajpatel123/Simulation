@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import re
 import secrets
 import string
@@ -72,24 +73,60 @@ API_TOKEN_DEFAULT_DAYS: int = 90
 API_TOKEN_MIN_DAYS: int = 1
 API_TOKEN_MAX_DAYS: int = 365
 
+# Prefix marking the current (HMAC-keyed) digest generation in the
+# ``token_hash`` column; unprefixed rows are legacy bare SHA-256 hex digests.
+_API_TOKEN_HASH_V2_PREFIX = "v2:"
+
 
 def generate_api_token() -> str:
     """Generate a fresh opaque API token (``thecee_`` + 256 bits of entropy)."""
     return f"{API_TOKEN_PREFIX}{secrets.token_urlsafe(32)}"
 
 
-def hash_api_token(token: str) -> str:
-    """Return the SHA-256 hex digest persisted instead of the plaintext token.
+def _api_token_digest_key() -> bytes:
+    """Domain-separated HMAC key for API-token digests.
 
-    SHA-256 is the right primitive here: the input is a 256-bit high-entropy
-    opaque token (``secrets.token_urlsafe``), not a human-chosen password, so
-    brute-forcing the digest is infeasible and a slow KDF would only add
-    per-request latency. Human passwords use bcrypt via ``pwd_context``.
+    Derived from ``SECRET_KEY`` through a labelled SHA-256 step so the
+    token-digest key and the JWT-signing key are independent streams even
+    though they share a root secret. Computed per call (microsecond cost)
+    so a rotated ``SECRET_KEY`` takes effect without a process restart.
     """
-    # codeql[py/weak-sensitive-data-hashing]: high-entropy opaque token (secrets.token_urlsafe),
-    # not a human password — brute-forcing SHA-256 of it is infeasible and a slow KDF would
-    # only add per-request latency; bcrypt covers actual passwords via pwd_context above.
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+    return hashlib.sha256(
+        b"thecee:api-token-digest:v2:" + settings.SECRET_KEY.encode("utf-8")
+    ).digest()
+
+
+def hash_api_token(token: str) -> str:
+    """Return the digest persisted instead of the plaintext token.
+
+    The current generation is a domain-separated HMAC-SHA256 (``v2:``
+    prefix): verifying a leaked database row against a guessed token now
+    also requires ``SECRET_KEY``, so the hash alone is no longer an
+    offline oracle. The token itself carries 256 bits of
+    ``secrets.token_urlsafe`` entropy, so this is defence-in-depth rather
+    than the primary barrier; human passwords still use bcrypt via
+    ``pwd_context``. Rows written before this change hold a bare SHA-256
+    hex digest and keep authenticating through ``api_token_hash_candidates``
+    until they are revoked or re-issued.
+    """
+    return (
+        _API_TOKEN_HASH_V2_PREFIX
+        + hmac.new(_api_token_digest_key(), token.encode("utf-8"), hashlib.sha256).hexdigest()
+    )
+
+
+def api_token_hash_candidates(token: str) -> list[str]:
+    """Every persisted digest form that could match ``token``.
+
+    Lookup sites must match against all accepted digest generations so a
+    pre-upgrade row keeps working until rotation while newly minted tokens
+    always store the strongest current form. Ordered newest-first so fresh
+    tokens hit on the first candidate.
+    """
+    return [
+        hash_api_token(token),
+        hashlib.sha256(token.encode("utf-8")).hexdigest(),
+    ]
 
 
 def api_token_expiry(expires_in_days: int | None = None) -> datetime:
