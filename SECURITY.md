@@ -449,4 +449,18 @@ For security concerns, please contact the project maintainers.
   accounts. The 409 branch now burns one bcrypt round against the same
   dummy digest the login path uses; pinned by a test asserting exactly
   one verify call with the caller-supplied password.
+- 2026-08-25 - Eliminated the last unbounded anonymous routes: a full
+  runtime sweep of all 440 registered endpoints found nine GETs with
+  neither auth nor rate limiting — the root-level `/`, `/health`,
+  `/readyz`, `/metrics`, `/celery/status` probes and four simulations
+  diagnostics/registry routes. Each performs live infrastructure I/O per
+  hit (DB pool round-trips, broker inspects with 1–2s timeouts, Redis
+  pings), so an anonymous loop could starve real workloads for free, and
+  unbounded `/metrics` exposed operational telemetry. All nine now carry
+  IP-bounded limits; probes use `fail_open=True` so a limiter outage can't
+  turn health checks into failures (LB cascade) or blind observability,
+  and `/simulations/clusters` fails closed like every other public route.
+  A new systemic guard test asserts every route on the app is
+  authenticated or rate-limited — new handlers fail CI until guarded or
+  explicitly allowlisted with documented reasons.
 - [VERSION] - Initial security policy

@@ -674,6 +674,10 @@ def create_simulation(
 @router.get(
     "/worker/health",
     summary="Probe Celery worker with a test task",
+    # Broadcasts a broker inspect with a 1s timeout per hit — anonymous and
+    # unbounded, this is a free amplifier against both API workers and the
+    # Celery broker.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60, fail_open=True))],
     responses=_JSON_200,
 )
 def worker_health():
@@ -688,6 +692,11 @@ def worker_health():
 @router.get(
     "/db-health",
     summary="Probe database connectivity with SELECT 1",
+    # Unauthenticated + a pool round-trip per hit: without a cap an
+    # anonymous loop could starve the real workload of connections through
+    # the probe itself. fail_open keeps the diagnostic honest during a
+    # limiter outage.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60, fail_open=True))],
     response_model=DatabaseHealthOut,
     responses={
         200: {"description": "Database is reachable"},
@@ -718,6 +727,8 @@ def db_health(
 @router.get(
     "/redis-health",
     summary="Probe Redis connectivity with PING",
+    # Same exposure as /db-health: anonymous + live I/O per hit.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60, fail_open=True))],
     response_model=RedisHealthOut,
     responses={
         200: {"description": "Redis is reachable or unconfigured"},
@@ -1010,6 +1021,11 @@ def get_simulation_reproducibility(
 @router.get(
     "/clusters",
     summary="List 52 customer clusters and registry metadata",
+    # Public registry dump (demographic + behavioral profiles): cheap to
+    # serve but pure information exposure if scrapable without bound. The
+    # standard 30/min cap matches the sibling informational routes; unlike
+    # the probes it may fail closed like every other public route.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
     responses=_JSON_200,
 )
 def get_cluster_registry():

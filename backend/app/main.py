@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 import sentry_sdk
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy import text
@@ -17,6 +17,7 @@ from app.core.errors import TheCeeError, generic_error_handler, thecee_error_han
 from app.core.logging_config import configure_logging
 from app.core.metrics import metrics
 from app.core.progress_bridge import progress_bridge
+from app.core.rate_limiter import rate_limit
 from app.core.redis_client import get_redis_client
 from app.core.request_id_middleware import RequestIdMiddleware
 from app.core.timing_middleware import TimingMiddleware
@@ -194,10 +195,21 @@ def _service_health() -> tuple[dict[str, object], int]:
     return report, status_code
 
 
+# The root-level probes below are deliberately unauthenticated (load
+# balancers and Prometheus cannot present JWTs) but NOT unlimited: each
+# performs live infrastructure I/O, so an anonymous loop would otherwise
+# churn the DB pool / broker / Redis for free. Every probe limit uses
+# fail_open=True — if Redis is down the limiter must not convert health
+# probes into failures, or the load balancer would drop instances exactly
+# when the outage they diagnose is happening.
 @app.get(
     "/celery/status",
     tags=["system"],
     summary="Celery worker and broker status",
+    # Each hit broadcasts a broker inspect with a 2s timeout — the most
+    # expensive probe here. 10/min/IP keeps dashboards working while making
+    # it worthless as a free amplifier.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60, fail_open=True))],
     responses={
         200: {
             "description": "Broker URL and worker reachability",
@@ -225,6 +237,7 @@ async def celery_status():
     "/",
     tags=["system"],
     summary="API service metadata",
+    dependencies=[Depends(rate_limit(limit=60, window_s=60, fail_open=True))],
     responses={
         200: {"description": "Service name and version", "content": {"application/json": {}}}
     },
@@ -241,6 +254,9 @@ async def root():
     "/health",
     tags=["system"],
     summary="Liveness probe",
+    # LB/K8s poll this every few seconds from shared infra IPs — the
+    # highest legitimate volume of any probe, hence the generous cap.
+    dependencies=[Depends(rate_limit(limit=120, window_s=60, fail_open=True))],
     responses={200: {"description": "Health status", "content": {"application/json": {}}}},
 )
 async def health():
@@ -259,6 +275,9 @@ async def health():
     "/readyz",
     tags=["system"],
     summary="Readiness probe (DB + Redis reachable)",
+    # Hits the DB and Redis on every call — bounded so anonymous hammering
+    # can't exhaust the connection pool through the readiness path itself.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60, fail_open=True))],
     responses={
         200: {
             "description": "Process is ready to serve traffic",
@@ -328,6 +347,11 @@ _PROM_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
     "/metrics",
     tags=["system"],
     summary="Prometheus metrics endpoint",
+    # A single Prometheus scraper polls at 15–30s intervals (2–4/min), so
+    # 30/min/IP leaves scraping unaffected while capping anonymous
+    # telemetry-scraping of operational internals. fail_open keeps
+    # observability alive during the incidents it exists to diagnose.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60, fail_open=True))],
     responses={
         200: {
             "description": "Metrics in Prometheus text exposition format",
