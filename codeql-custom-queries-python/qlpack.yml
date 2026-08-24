@@ -1,0 +1,14 @@
+# CodeQL model pack teaching the analyzer about TheCee's security helpers.
+#
+# Today it registers one barrier: app.core.security.log_safe() strips CR/LF
+# and C0 control characters, so its return value cannot forge log lines.
+# Declaring it as a log-injection barrier lets the stock py/log-injection
+# query stop flagging call sites whose values already pass through the
+# helper — no inline-suppression comments or alert dismissals needed.
+#
+# The pack is wired into .github/workflows/codeql.yml via the `packs:` input
+# of github/codeql-action/init for the python matrix leg.
+name: thecee/python-security-models
+version: 0.1.0
+extensionTargets:
+  codeql/python-all: "*"
