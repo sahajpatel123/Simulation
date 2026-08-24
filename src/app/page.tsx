@@ -1,12 +1,11 @@
 'use client'
 
-import React, { useRef, useState, useEffect } from 'react'
-import { motion, useScroll, useTransform, useSpring, MotionValue } from 'framer-motion'
+import React, { useRef, useState } from 'react'
+import { motion, useScroll, useTransform, MotionValue } from 'framer-motion'
 import Link from 'next/link'
-import { ArrowRight, Activity, Crosshair, Database } from 'lucide-react'
+import { Activity, Crosshair, Database } from 'lucide-react'
 
 import InlineAuth from '@/components/landing/InlineAuth'
-import DossierSpecimen from '@/components/landing/DossierSpecimen'
 import { useAuthStore } from '@/store/auth.store'
 import { auth as authLib } from '@/lib/auth'
 
