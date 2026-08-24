@@ -385,4 +385,19 @@ For security concerns, please contact the project maintainers.
   the deliberately reserved mint-request body can never mint an
   effectively never-expiring (or already-inverted) public link. Pinned
   by clamp tests in `tests/test_share_token.py`.
+- 2026-08-25 - Unbroke the password credential path: the pinned
+  `passlib==1.7.4` + `bcrypt==5.0.0` pairing is non-functional — passlib's
+  backend probe crashes against bcrypt ≥ 5 (`__about__` removed) and every
+  `hash()`/`verify()` raised `ValueError` regardless of input length, so
+  registration, login, and password change all failed under the locked
+  dependency set with no test exercising a real bcrypt roundtrip.
+  `security.py` now calls the maintained `bcrypt` package directly and the
+  dead passlib pin was dropped from all three dependency files; a hash →
+  verify roundtrip test plus a malformed-digest-as-false test now guard the
+  pairing. Also capped password length at bcrypt's real 72-byte limit
+  (measured in UTF-8 bytes — multi-byte characters consume the budget
+  faster than character count) instead of letting long secrets truncate or
+  crash mid-hash, and equalized login timing by burning a bcrypt round on
+  the unknown-email branch against a dummy digest so response latency can
+  no longer enumerate which addresses are registered.
 - [VERSION] - Initial security policy

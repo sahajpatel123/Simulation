@@ -33,6 +33,12 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 EXPIRES_IN_SECONDS = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
 
+# A real bcrypt digest of a throwaway secret. The unknown-email branch of
+# ``login`` verifies against it so both failure paths burn one bcrypt round
+# — otherwise "no such user" returns measurably faster than "wrong
+# password" and response latency becomes an account-enumeration oracle.
+_DUMMY_PASSWORD_HASH = get_password_hash("timing-equalizer-not-a-credential")
+
 
 def _store_refresh_token(db: Session, user_id: int, raw_token: str) -> None:
     token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
@@ -46,8 +52,7 @@ def _store_refresh_token(db: Session, user_id: int, raw_token: str) -> None:
         {
             "uid": user_id,
             "hash": token_hash,
-            "expires_at": datetime.now(UTC)
-            + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+            "expires_at": datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         },
     )
 
@@ -128,7 +133,17 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
 )
 def login(payload: UserLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email).first()
-    if not user or not verify_password(payload.password, user.hashed_password):
+    if user is None:
+        # Unknown email — burn the same bcrypt work as the wrong-password
+        # branch below so timing can't separate registered addresses from
+        # unregistered ones.
+        verify_password(payload.password, _DUMMY_PASSWORD_HASH)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not verify_password(payload.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -166,9 +181,10 @@ def refresh_access_token(payload: RefreshRequest, db: Session = Depends(get_db))
     # read-then-write race where a valid token could be rotated twice
     # (e.g. when two requests fire simultaneously) and produce duplicate
     # access sessions.
-    claim = db.execute(
-        text(
-            """
+    claim = (
+        db.execute(
+            text(
+                """
             UPDATE refresh_tokens
             SET revoked = TRUE
             WHERE token_hash = :hash
@@ -176,14 +192,15 @@ def refresh_access_token(payload: RefreshRequest, db: Session = Depends(get_db))
               AND (expires_at IS NULL OR expires_at > NOW())
             RETURNING user_id
             """
-        ),
-        {"hash": token_hash},
-    ).mappings().first()
+            ),
+            {"hash": token_hash},
+        )
+        .mappings()
+        .first()
+    )
 
     if not claim:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
-        )
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
     user_id = int(claim["user_id"])
     new_refresh = create_refresh_token()
@@ -226,9 +243,7 @@ def update_me(
 
     if "email" in data and data["email"] and data["email"] != current_user.email:
         taken = (
-            db.query(User)
-            .filter(User.email == data["email"], User.id != current_user.id)
-            .first()
+            db.query(User).filter(User.email == data["email"], User.id != current_user.id).first()
         )
         if taken:
             raise HTTPException(

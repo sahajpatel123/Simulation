@@ -5,12 +5,10 @@ import secrets
 import string
 from datetime import UTC, datetime, timedelta
 
+import bcrypt
 import jwt
-from passlib.context import CryptContext
 
 from app.core.config import settings
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Matches CR/LF (log-forging line breaks) and other C0 control chars that
 # corrupt single-line log records.
@@ -29,16 +27,39 @@ def log_safe(value: object) -> str:
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    """Verify ``plain`` against a stored bcrypt digest.
+
+    Calls the maintained ``bcrypt`` package directly: passlib 1.7.4 is
+    unmaintained and its backend probe crashes against bcrypt ≥ 5 (the
+    ``__about__`` attribute it reads was removed), turning every hash or
+    verify into a ``ValueError`` regardless of input length. A malformed
+    or non-bcrypt digest in storage must read as "wrong password", never
+    as a crashed login.
+    """
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except ValueError:
+        return False
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    """Hash with bcrypt at the default cost (12 rounds), same as passlib wrote."""
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("ascii")
+
+
+# bcrypt only digests the first 72 bytes of any secret, and the backend
+# raises ``ValueError`` on longer input rather than silently truncating.
+# Enforce the ceiling at validation time so every caller gets one
+# consistent, client-visible rejection instead of a 500 — and so a hash
+# can never silently cover just the prefix of what the user typed.
+BCRYPT_MAX_PASSWORD_BYTES = 72
 
 
 def validate_password_strength(password: str) -> str:
     if len(password) < 10:
         raise ValueError("Password must be at least 10 characters")
+    if len(password.encode("utf-8")) > BCRYPT_MAX_PASSWORD_BYTES:
+        raise ValueError("Password must be at most 72 bytes (bcrypt limit)")
     if not any(ch.islower() for ch in password):
         raise ValueError("Password must include a lowercase letter")
     if not any(ch.isupper() for ch in password):
@@ -104,8 +125,8 @@ def hash_api_token(token: str) -> str:
     also requires ``SECRET_KEY``, so the hash alone is no longer an
     offline oracle. The token itself carries 256 bits of
     ``secrets.token_urlsafe`` entropy, so this is defence-in-depth rather
-    than the primary barrier; human passwords still use bcrypt via
-    ``pwd_context``. Rows written before this change hold a bare SHA-256
+    than the primary barrier; human passwords still use bcrypt directly.
+    Rows written before this change hold a bare SHA-256
     hex digest and keep authenticating through ``api_token_hash_candidates``
     until they are revoked or re-issued.
     """
