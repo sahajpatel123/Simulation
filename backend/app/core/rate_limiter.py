@@ -83,6 +83,28 @@ _memory_limiter = InMemoryRateLimiter()
 _redis_limiter = RedisRateLimiter()
 
 
+def _client_ip(request: Request) -> str:
+    """Client identity for rate-limit bucketing.
+
+    Uses the RIGHTMOST ``X-Forwarded-For`` entry: proxies append each hop,
+    so the leftmost value is attacker-supplied whenever a request has
+    traversed any chaining client. Taking the leftmost entry let one actor
+    mint unlimited buckets by rotating a spoofed header and bypass every
+    limit in the codebase. The rightmost entry is written by the closest
+    trusted proxy (the platform edge) and cannot be overwritten by the
+    client. Falls back to the peer address, then to a per-call UUID bucket
+    so a missing peer address never collapses all anonymous traffic into
+    one global bucket that a single actor can saturate.
+    """
+    xff = request.headers.get("x-forwarded-for") or ""
+    entries = [part.strip() for part in xff.split(",") if part.strip()]
+    if entries:
+        return entries[-1]
+    if request.client is not None:
+        return request.client.host
+    return f"anon-{uuid.uuid4().hex[:12]}"
+
+
 def rate_limit(
     limit: int = 30,
     window_s: int = 60,
@@ -99,17 +121,7 @@ def rate_limit(
     """
 
     async def _check(request: Request) -> None:
-        # Prefer X-Forwarded-For when present (e.g. behind a reverse proxy),
-        # then request.client.host, then a per-call UUID bucket so a missing
-        # peer address never collapses all anonymous traffic into one global
-        # bucket that a single actor can saturate.
-        xff = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
-        if xff:
-            ip = xff
-        elif request.client is not None:
-            ip = request.client.host
-        else:
-            ip = f"anon-{uuid.uuid4().hex[:12]}"
+        ip = _client_ip(request)
         key = f"rate-limit:{request.url.path}:{ip}"
         allowed = _redis_limiter.is_allowed(key, limit, window_s)
         if allowed is None:

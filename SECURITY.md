@@ -434,4 +434,13 @@ For security concerns, please contact the project maintainers.
   sweep also now covers dead API-token rows (revoked or expired past the
   same 90-day window), and the task was renamed to
   `maintenance.purge_stale_auth_tokens` to match its scope.
+- 2026-08-25 - Fixed rate-limit bucket spoofing via `X-Forwarded-For`:
+  bucketing took the LEFTMOST XFF entry, but proxies append hops, so that
+  value is attacker-supplied whenever a request traverses any chaining
+  client — one actor could rotate a spoofed header to mint unlimited
+  buckets and bypass every rate limit in the codebase. Bucket identity now
+  uses the rightmost entry (written by the closest trusted platform edge,
+  un-spoofable by clients), falling back to peer address then per-call
+  anon buckets. Five tests pin rightmost selection, whitespace stripping,
+  blank-header fallback, and anonymous bucketing.
 - [VERSION] - Initial security policy
