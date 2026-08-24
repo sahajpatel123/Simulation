@@ -17,7 +17,6 @@ These tests lock the contract:
 """
 from __future__ import annotations
 
-
 import pytest
 
 from app.simulation.conductor import Conductor

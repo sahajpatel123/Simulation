@@ -1,7 +1,7 @@
 from app.simulation.cluster_cohort_drift import (
-    compute_cluster_cohort_drift,
-    SIGNAL_OK,
     SIGNAL_CRITICAL,
+    SIGNAL_OK,
+    compute_cluster_cohort_drift,
 )
 
 

@@ -7,7 +7,6 @@ threshold and go/no-go rule per assumption worth testing.
 """
 from __future__ import annotations
 
-
 import pytest
 from pydantic import ValidationError
 

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 
-
 def test_public_allowlist_matches_callers():
     from app.simulation import runs_this_month
     assert set(runs_this_month.__all__) == {

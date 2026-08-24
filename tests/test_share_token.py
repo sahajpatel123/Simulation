@@ -10,8 +10,7 @@ from __future__ import annotations
 
 import sys
 import types
-from datetime import datetime, timedelta, timezone
-
+from datetime import UTC, datetime, timedelta
 
 # ---------------------------------------------------------------------------
 # Token generation / hashing
@@ -63,7 +62,7 @@ def test_hash_token_differs_per_input() -> None:
 def test_compute_expiry_default_is_30_days() -> None:
     from app.simulation.share_token import compute_expiry
 
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     exp = compute_expiry(now=now)
     assert exp == now + timedelta(days=30)
 
@@ -71,7 +70,7 @@ def test_compute_expiry_default_is_30_days() -> None:
 def test_compute_expiry_respects_ttl_days() -> None:
     from app.simulation.share_token import compute_expiry
 
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     exp = compute_expiry(now=now, ttl_days=7)
     assert exp == now + timedelta(days=7)
 
@@ -89,22 +88,22 @@ def test_compute_expiry_coerces_naive_to_utc() -> None:
 def test_is_expired_true_for_past() -> None:
     from app.simulation.share_token import is_expired
 
-    now = datetime(2026, 1, 2, tzinfo=timezone.utc)
-    assert is_expired(datetime(2026, 1, 1, tzinfo=timezone.utc), now=now) is True
+    now = datetime(2026, 1, 2, tzinfo=UTC)
+    assert is_expired(datetime(2026, 1, 1, tzinfo=UTC), now=now) is True
 
 
 def test_is_expired_false_for_future() -> None:
     from app.simulation.share_token import is_expired
 
-    now = datetime(2026, 1, 2, tzinfo=timezone.utc)
-    assert is_expired(datetime(2026, 1, 3, tzinfo=timezone.utc), now=now) is False
+    now = datetime(2026, 1, 2, tzinfo=UTC)
+    assert is_expired(datetime(2026, 1, 3, tzinfo=UTC), now=now) is False
 
 
 def test_is_expired_true_at_exact_boundary() -> None:
     """``exp <= now`` is treated as expired — strictly safer."""
     from app.simulation.share_token import is_expired
 
-    now = datetime(2026, 1, 2, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 2, tzinfo=UTC)
     assert is_expired(now, now=now) is True
 
 
@@ -149,8 +148,8 @@ def _completed_sim_row() -> dict:
 def test_anonymise_strips_user_id_and_project_id() -> None:
     from app.simulation.share_token import anonymise_simulation
 
-    shared_at = datetime(2026, 7, 1, tzinfo=timezone.utc)
-    expires_at = datetime(2026, 7, 31, tzinfo=timezone.utc)
+    shared_at = datetime(2026, 7, 1, tzinfo=UTC)
+    expires_at = datetime(2026, 7, 31, tzinfo=UTC)
     out = anonymise_simulation(
         sim_row=_completed_sim_row(),
         project_row={"title": "Acme SaaS"},
@@ -171,8 +170,8 @@ def test_anonymise_reads_funnel_counts() -> None:
     out = anonymise_simulation(
         sim_row=_completed_sim_row(),
         project_row={"title": "X"},
-        shared_at=datetime.now(timezone.utc),
-        expires_at=datetime.now(timezone.utc),
+        shared_at=datetime.now(UTC),
+        expires_at=datetime.now(UTC),
     )
     assert out["funnel"] == {
         "ARRIVE": 10000,
@@ -189,8 +188,8 @@ def test_anonymise_normalises_finding_severity() -> None:
     out = anonymise_simulation(
         sim_row=_completed_sim_row(),
         project_row={"title": "X"},
-        shared_at=datetime.now(timezone.utc),
-        expires_at=datetime.now(timezone.utc),
+        shared_at=datetime.now(UTC),
+        expires_at=datetime.now(UTC),
     )
     severities = [f["severity"] for f in out["domain_findings"]]
     assert severities == ["CRITICAL", "WARNING"]
@@ -202,8 +201,8 @@ def test_anonymise_handles_missing_project() -> None:
     out = anonymise_simulation(
         sim_row=_completed_sim_row(),
         project_row=None,
-        shared_at=datetime.now(timezone.utc),
-        expires_at=datetime.now(timezone.utc),
+        shared_at=datetime.now(UTC),
+        expires_at=datetime.now(UTC),
     )
     assert out["project_title"] == "Untitled Project"
 
@@ -219,8 +218,8 @@ def test_anonymise_handles_missing_revenue_projection() -> None:
     out = anonymise_simulation(
         sim_row=row,
         project_row={"title": "X"},
-        shared_at=datetime.now(timezone.utc),
-        expires_at=datetime.now(timezone.utc),
+        shared_at=datetime.now(UTC),
+        expires_at=datetime.now(UTC),
     )
     assert out["revenue_projection"] is None
     assert out["funnel"] == {"ARRIVE": 100, "BROWSE": 80}
@@ -237,8 +236,8 @@ def test_anonymise_handles_string_results_json() -> None:
     out = anonymise_simulation(
         sim_row=row,
         project_row={"title": "X"},
-        shared_at=datetime.now(timezone.utc),
-        expires_at=datetime.now(timezone.utc),
+        shared_at=datetime.now(UTC),
+        expires_at=datetime.now(UTC),
     )
     assert out["population_weighted_conversion"] == 0.062
 
@@ -256,8 +255,8 @@ def test_anonymise_skips_non_dict_findings() -> None:
     out = anonymise_simulation(
         sim_row=row,
         project_row={"title": "X"},
-        shared_at=datetime.now(timezone.utc),
-        expires_at=datetime.now(timezone.utc),
+        shared_at=datetime.now(UTC),
+        expires_at=datetime.now(UTC),
     )
     assert len(out["domain_findings"]) == 2
 
@@ -321,8 +320,8 @@ def test_share_token_out_round_trip() -> None:
         token="abc123",
         simulation_id=42,
         scope="read_only",
-        expires_at=datetime(2026, 8, 1, tzinfo=timezone.utc),
-        created_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+        expires_at=datetime(2026, 8, 1, tzinfo=UTC),
+        created_at=datetime(2026, 7, 1, tzinfo=UTC),
         share_url="/api/v1/share/abc123",
     )
     dumped = out.model_dump()
@@ -358,8 +357,8 @@ def test_share_token_list_item_round_trip() -> None:
         simulation_id=42,
         scope="read_only",
         is_active=True,
-        created_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
-        expires_at=datetime(2026, 7, 31, tzinfo=timezone.utc),
+        created_at=datetime(2026, 7, 1, tzinfo=UTC),
+        expires_at=datetime(2026, 7, 31, tzinfo=UTC),
         revoked_at=None,
         last_accessed_at=None,
         access_count=0,
@@ -378,16 +377,16 @@ def test_share_token_list_out_counters_sum() -> None:
             id=1,
             simulation_id=42,
             is_active=True,
-            created_at=datetime.now(timezone.utc),
-            expires_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            expires_at=datetime.now(UTC),
         ),
         ShareTokenListItem(
             id=2,
             simulation_id=42,
             is_active=False,
-            created_at=datetime.now(timezone.utc),
-            expires_at=datetime.now(timezone.utc),
-            revoked_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            expires_at=datetime.now(UTC),
+            revoked_at=datetime.now(UTC),
         ),
     ]
     out = ShareTokenListOut(

@@ -12,7 +12,6 @@ import types
 import pytest
 from fastapi import HTTPException
 
-
 # ``app.api.v1`` eagerly imports the billing router, which imports the
 # razorpay SDK. In test environments without the package installed (or
 # with a broken transitive dependency), stub it the same way the existing

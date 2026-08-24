@@ -15,7 +15,6 @@ from app.simulation.sustainability_positioning import (
     build_sustainability_positioning,
 )
 
-
 if "razorpay" not in sys.modules:
     stub = types.ModuleType("razorpay")
     stub.Client = object  # type: ignore[attr-defined]

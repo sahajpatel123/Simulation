@@ -3,12 +3,11 @@ from __future__ import annotations
 
 import sys
 import types
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 from fastapi import HTTPException
-
 
 if "razorpay" not in sys.modules:
     razorpay_stub = types.ModuleType("razorpay")
@@ -142,7 +141,7 @@ def test_helper_converts_datetime_to_iso() -> None:
         build_outcome_tracker_timeline,
     )
 
-    dt = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    dt = datetime(2026, 8, 1, tzinfo=UTC)
     row = _row(1, recorded_at=dt)
     out = build_outcome_tracker_timeline([row], project_id=7)
     assert out["points"][0]["recorded_at"] == "2026-08-01T00:00:00+00:00"
@@ -268,6 +267,7 @@ def test_schema_requires_at_least_one_metric() -> None:
 
 def test_schema_rejects_extra_keys() -> None:
     from pydantic import ValidationError
+
     from app.schemas.outcome_tracker import OutcomeTrackerCreate
 
     with pytest.raises(ValidationError):
@@ -287,6 +287,7 @@ def test_update_schema_requires_at_least_one_field() -> None:
 
 def test_update_schema_rejects_extra_keys() -> None:
     from pydantic import ValidationError
+
     from app.schemas.outcome_tracker import OutcomeTrackerUpdate
 
     with pytest.raises(ValidationError):
@@ -295,6 +296,7 @@ def test_update_schema_rejects_extra_keys() -> None:
 
 def test_update_schema_rejects_out_of_range_values() -> None:
     from pydantic import ValidationError
+
     from app.schemas.outcome_tracker import OutcomeTrackerUpdate
 
     with pytest.raises(ValidationError):
@@ -305,6 +307,7 @@ def test_update_schema_rejects_out_of_range_values() -> None:
 
 def test_create_schema_rejects_non_finite_metrics() -> None:
     from pydantic import ValidationError
+
     from app.schemas.outcome_tracker import OutcomeTrackerCreate
 
     with pytest.raises(ValidationError):
@@ -319,6 +322,7 @@ def test_create_schema_rejects_non_finite_metrics() -> None:
 
 def test_update_schema_rejects_non_finite_metrics() -> None:
     from pydantic import ValidationError
+
     from app.schemas.outcome_tracker import OutcomeTrackerUpdate
 
     with pytest.raises(ValidationError):
@@ -464,7 +468,7 @@ def _tracker_row(
     predicted: float = 0.05,
     pred_rev: float = 1000.0,
     variance: float = 20.0,
-    recorded_at: datetime = datetime(2026, 8, 1, tzinfo=timezone.utc),
+    recorded_at: datetime = datetime(2026, 8, 1, tzinfo=UTC),
 ) -> Any:
     from app.models.outcome_tracker import OutcomeTracker
 
@@ -569,7 +573,7 @@ def test_get_returns_points_and_summary() -> None:
             predicted_revenue=1000.0,
             variance=variance,
             notes=None,
-            recorded_at=datetime(2026, 8, rid, tzinfo=timezone.utc),
+            recorded_at=datetime(2026, 8, rid, tzinfo=UTC),
         )
         return r
 
@@ -677,7 +681,7 @@ def test_patch_updates_recorded_at() -> None:
         payload={"recorded_at": "2026-08-15T00:00:00+00:00"},
     )
 
-    assert out.recorded_at == datetime(2026, 8, 15, tzinfo=timezone.utc)
+    assert out.recorded_at == datetime(2026, 8, 15, tzinfo=UTC)
 
 
 def test_patch_clears_notes_and_recorded_at_with_explicit_null() -> None:

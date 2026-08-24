@@ -47,8 +47,8 @@ def test_digest_snapshot_helper_payload_keys_match_schema() -> None:
     must line up with the DigestSnapshotOut schema fields
     so a schema round-trip doesn't lose data.
     """
-    from app.simulation.digest_snapshot import build_digest_snapshot
     from app.schemas.user import DigestSnapshotOut
+    from app.simulation.digest_snapshot import build_digest_snapshot
 
     payload = build_digest_snapshot(
         dashboard={"a": 1},

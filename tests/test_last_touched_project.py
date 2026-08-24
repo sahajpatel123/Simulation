@@ -1,8 +1,7 @@
 """Tests for the per-user last-touched-project helper."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
+from datetime import UTC, datetime, timedelta
 
 
 def test_public_allowlist_matches_callers():
@@ -28,7 +27,7 @@ def test_picks_most_recent_across_types():
     from app.simulation.last_touched_project import (
         build_last_touched_project,
     )
-    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 1, tzinfo=UTC)
     out = build_last_touched_project([
         {
             "project_id": 1, "project_title": "A",

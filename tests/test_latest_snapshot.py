@@ -1,8 +1,7 @@
 """Tests for the per-project latest-snapshot helper."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
+from datetime import UTC, datetime
 
 
 def test_public_allowlist_matches_callers() -> None:
@@ -206,7 +205,7 @@ def test_snapshot_handles_datetime_objects() -> None:
         latest_simulation_row={
             "id": 1, "status": "COMPLETED",
             "created_at": datetime(
-                2026, 1, 5, tzinfo=timezone.utc,
+                2026, 1, 5, tzinfo=UTC,
             ),
             "predicted_conversion_rate": 0.05,
             "actual_conversion_rate": None,

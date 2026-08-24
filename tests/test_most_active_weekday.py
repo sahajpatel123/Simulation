@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 
-
 def test_public_allowlist_matches_callers():
     from app.simulation import most_active_weekday
     assert set(most_active_weekday.__all__) == {

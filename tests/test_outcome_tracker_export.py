@@ -1,7 +1,7 @@
 """Tests for the pure outcome-tracker CSV export helper."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.simulation.outcome_tracker_export import (
     outcome_tracker_count_to_csv,
@@ -113,7 +113,7 @@ def test_csv_handles_datetime_and_malformed_timestamps() -> None:
         [
             _row(
                 1,
-                recorded_at=datetime(2026, 8, 1, tzinfo=timezone.utc),
+                recorded_at=datetime(2026, 8, 1, tzinfo=UTC),
                 actual=0.05,
             ),
             _row(2, recorded_at="not-a-timestamp", actual=0.06),

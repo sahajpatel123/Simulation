@@ -21,7 +21,6 @@ from app.schemas.setup_friction import (
     LEVER_PREFLASHED_FIRMWARE,
     LEVER_PRINTED_GUIDE,
     LEVER_SIMPLIFIED_ASSEMBLY,
-    SetupFrictionOut,
     TIER_BLOCKED,
     TIER_ROUGH,
     TIER_SEAMLESS,
@@ -34,6 +33,7 @@ from app.schemas.setup_friction import (
     VERDICT_FAST,
     VERDICT_INSUFFICIENT,
     VERDICT_SLOW,
+    SetupFrictionOut,
 )
 from app.simulation.conductor import Conductor
 from app.simulation.product_type import ProductType

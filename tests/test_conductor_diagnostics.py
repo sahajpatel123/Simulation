@@ -20,10 +20,10 @@ from app.simulation.architects.base import ArchitectOutput
 from app.simulation.architects.pricing import PricingArchitect
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.conductor import (
-    Conductor,
-    ConductorDiagnostics,
     _ARCHITECTS,
     ArchitectDiagnostics,
+    Conductor,
+    ConductorDiagnostics,
 )
 from app.simulation.product_type import ProductType
 

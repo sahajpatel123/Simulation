@@ -9,10 +9,9 @@ scipy).
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Public surface
@@ -78,9 +77,9 @@ def test_health_skips_rows_with_missing_outcome() -> None:
     from app.simulation.calibration_health import build_calibration_health
 
     out = build_calibration_health([
-        (datetime(2026, 1, 1, tzinfo=timezone.utc), 0.10, 0.05, []),
-        (datetime(2026, 1, 2, tzinfo=timezone.utc), None, None, []),
-        (datetime(2026, 1, 3, tzinfo=timezone.utc), "abc", "def", []),
+        (datetime(2026, 1, 1, tzinfo=UTC), 0.10, 0.05, []),
+        (datetime(2026, 1, 2, tzinfo=UTC), None, None, []),
+        (datetime(2026, 1, 3, tzinfo=UTC), "abc", "def", []),
     ])
     assert out["observation_count"] == 1
 
@@ -97,8 +96,8 @@ def test_health_well_calibrated_below_2pp() -> None:
     )
 
     out = build_calibration_health([
-        (datetime(2026, 1, 1, tzinfo=timezone.utc), 0.10, 0.09, []),
-        (datetime(2026, 1, 2, tzinfo=timezone.utc), 0.10, 0.11, []),
+        (datetime(2026, 1, 1, tzinfo=UTC), 0.10, 0.09, []),
+        (datetime(2026, 1, 2, tzinfo=UTC), 0.10, 0.11, []),
     ])
     # |variance| mean = (0.01 + 0.01) / 2 = 0.01 < 0.02
     assert out["overall_health"] == LABEL_WELL_CALIBRATED
@@ -111,8 +110,8 @@ def test_health_needs_attention_for_mid_variance() -> None:
     )
 
     out = build_calibration_health([
-        (datetime(2026, 1, 1, tzinfo=timezone.utc), 0.10, 0.05, []),
-        (datetime(2026, 1, 2, tzinfo=timezone.utc), 0.10, 0.10, []),
+        (datetime(2026, 1, 1, tzinfo=UTC), 0.10, 0.05, []),
+        (datetime(2026, 1, 2, tzinfo=UTC), 0.10, 0.10, []),
     ])
     # mean |variance| = 0.025 → NEEDS_ATTENTION.
     assert out["overall_health"] == LABEL_NEEDS_ATTENTION
@@ -125,8 +124,8 @@ def test_health_poorly_calibrated_for_high_variance() -> None:
     )
 
     out = build_calibration_health([
-        (datetime(2026, 1, 1, tzinfo=timezone.utc), 0.20, 0.05, []),
-        (datetime(2026, 1, 2, tzinfo=timezone.utc), 0.10, 0.20, []),
+        (datetime(2026, 1, 1, tzinfo=UTC), 0.20, 0.05, []),
+        (datetime(2026, 1, 2, tzinfo=UTC), 0.10, 0.20, []),
     ])
     # mean |variance| = 0.125 → POORLY_CALIBRATED.
     assert out["overall_health"] == LABEL_POORLY_CALIBRATED
@@ -154,14 +153,14 @@ def test_health_top_miscalibrated_architect() -> None:
         # findings → bridge sees pricing with calibration
         # 0.05.
         (
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            datetime(2026, 1, 1, tzinfo=UTC),
             0.10, 0.05,
             [_finding("PricingArchitect", "CRITICAL")],
         ),
         # Sim 2: |variance| 0.10, only TrustArchitect
         # findings → trust with calibration 0.10.
         (
-            datetime(2026, 1, 2, tzinfo=timezone.utc),
+            datetime(2026, 1, 2, tzinfo=UTC),
             0.20, 0.10,
             [_finding("TrustArchitect", "CRITICAL")],
         ),
@@ -180,7 +179,7 @@ def test_health_top_miscalibrated_none_when_no_calibrated_architect() -> None:
     # No findings → every architect is INSUFFICIENT_DATA.
     out = build_calibration_health([
         (
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            datetime(2026, 1, 1, tzinfo=UTC),
             0.10, 0.05,
             [],
         ),
@@ -211,19 +210,19 @@ def test_health_architect_accuracy_counts_increments() -> None:
 
     out = build_calibration_health([
         (
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            datetime(2026, 1, 1, tzinfo=UTC),
             0.20, 0.05,
             [_finding("PricingArchitect", "CRITICAL")] * 3,
         ),
         # Two distinct sims for trust with high variance →
         # TIGHTEN / LOOSEN depending on direction.
         (
-            datetime(2026, 1, 2, tzinfo=timezone.utc),
+            datetime(2026, 1, 2, tzinfo=UTC),
             0.20, 0.10,
             [_finding("TrustArchitect", "CRITICAL")],
         ),
         (
-            datetime(2026, 1, 3, tzinfo=timezone.utc),
+            datetime(2026, 1, 3, tzinfo=UTC),
             0.30, 0.10,
             [_finding("TrustArchitect", "CRITICAL")],
         ),
@@ -258,7 +257,7 @@ def test_health_trend_buckets_filter_by_window() -> None:
     or 30d."""
     from app.simulation.calibration_health import build_calibration_health
 
-    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 1, tzinfo=UTC)
     out = build_calibration_health(
         [
             (
@@ -281,7 +280,7 @@ def test_health_trend_buckets_mean_uses_window_rows() -> None:
     window, not the full batch."""
     from app.simulation.calibration_health import build_calibration_health
 
-    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 1, tzinfo=UTC)
     out = build_calibration_health(
         [
             # In all windows.
@@ -328,7 +327,7 @@ def test_health_summary_includes_label_and_variance() -> None:
     from app.simulation.calibration_health import build_calibration_health
 
     out = build_calibration_health([
-        (datetime(2026, 1, 1, tzinfo=timezone.utc), 0.10, 0.09, []),
+        (datetime(2026, 1, 1, tzinfo=UTC), 0.10, 0.09, []),
     ])
     # |variance| 0.01 → WELL_CALIBRATED.
     assert "WELL_CALIBRATED" in out["summary"]
@@ -352,7 +351,7 @@ def test_health_trajectory_improving_when_7d_below_30d() -> None:
         build_calibration_health,
     )
 
-    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 1, tzinfo=UTC)
     out = build_calibration_health(
         [
             # 30d: |variance| 0.05 (mild bias)
@@ -373,7 +372,7 @@ def test_health_trajectory_degrading_when_7d_above_30d() -> None:
         build_calibration_health,
     )
 
-    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 1, tzinfo=UTC)
     out = build_calibration_health(
         [
             # 30d: |variance| 0.01 (well-calibrated)
@@ -394,7 +393,7 @@ def test_health_trajectory_stable_within_1pp_band() -> None:
         build_calibration_health,
     )
 
-    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 1, tzinfo=UTC)
     out = build_calibration_health(
         [
             # 30d: |variance| 0.05
@@ -427,7 +426,7 @@ def test_health_consecutive_well_calibrated_days_counts_back() -> None:
     """
     from app.simulation.calibration_health import build_calibration_health
 
-    now = datetime(2026, 6, 10, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 10, tzinfo=UTC)
     out = build_calibration_health(
         [
             # 3 consecutive days of well-calibrated sims.
@@ -453,7 +452,7 @@ def test_health_consecutive_streak_zero_when_no_data() -> None:
 def test_health_consecutive_streak_breaks_on_miscalibrated() -> None:
     from app.simulation.calibration_health import build_calibration_health
 
-    now = datetime(2026, 6, 10, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 10, tzinfo=UTC)
     out = build_calibration_health(
         [
             # 2 days well-calibrated, then today miscalibrated.
@@ -520,7 +519,7 @@ def test_calibration_health_out_round_trips_helper_payload() -> None:
 
     payload = build_calibration_health([
         (
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            datetime(2026, 1, 1, tzinfo=UTC),
             0.10, 0.05,
             [_finding("PricingArchitect", "CRITICAL")],
         ),

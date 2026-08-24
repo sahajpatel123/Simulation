@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 
-
 def test_public_allowlist_matches_callers():
     from app.simulation import quick_stats
     assert set(quick_stats.__all__) == {

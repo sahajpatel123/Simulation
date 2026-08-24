@@ -7,7 +7,6 @@ from __future__ import annotations
 from typing import Any
 
 from app.schemas.feature_prioritization import (
-    FeaturePrioritizationOut,
     TIER_BUILD_FIRST,
     TIER_GROW,
     TIER_UNMAPPED,
@@ -16,6 +15,7 @@ from app.schemas.feature_prioritization import (
     VERDICT_FOCUSED,
     VERDICT_INSUFFICIENT,
     VERDICT_READY,
+    FeaturePrioritizationOut,
 )
 from app.simulation.feature_prioritization import (
     DIMENSIONS,

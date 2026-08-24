@@ -13,7 +13,6 @@ from app.simulation.channel_attribution_read import build_channel_attribution
 from app.simulation.conductor import Conductor as _RealConductor
 from app.simulation.product_type import ProductType
 
-
 if "razorpay" not in sys.modules:
     stub = types.ModuleType("razorpay")
     stub.Client = object  # type: ignore[attr-defined]

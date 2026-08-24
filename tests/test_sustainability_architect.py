@@ -254,7 +254,7 @@ def test_generate_report_no_positioned_clusters_is_info():
 
 def test_registered_in_conductor_and_calibration():
     from app.simulation.calibration_engine import ALL_ARCHITECT_NAMES
-    from app.simulation.conductor import ARCHITECT_STACKS, ProductType, _ARCHITECTS
+    from app.simulation.conductor import _ARCHITECTS, ARCHITECT_STACKS, ProductType
 
     assert "SustainabilityArchitect" in _ARCHITECTS
     assert "SustainabilityArchitect" in ARCHITECT_STACKS[ProductType.SAAS]

@@ -5,8 +5,7 @@ a DB.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
+from datetime import UTC, datetime
 
 
 def test_public_allowlist_matches_callers() -> None:
@@ -47,7 +46,7 @@ def test_export_empty_input() -> None:
 def test_export_includes_project_meta() -> None:
     from app.simulation.project_export import build_project_export
 
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_project_export(
         project_row={
             "id": 1,

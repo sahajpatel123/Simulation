@@ -19,7 +19,6 @@ from pydantic import ValidationError
 
 from app.schemas.auth import UserUpdate
 
-
 VALID_HANDLES = [
     "alice",
     "alice_123",

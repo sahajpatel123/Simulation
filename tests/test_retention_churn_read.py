@@ -26,12 +26,12 @@ from app.schemas.retention_churn import (
     VERDICT_WEAK,
     RetentionChurnOut,
 )
+from app.simulation.architects.retention import RetentionArchitect
+from app.simulation.conductor import ARCHITECT_STACKS
 from app.simulation.retention_churn_read import (
     RETENTION_PRODUCT_TYPES,
     build_retention_churn,
 )
-from app.simulation.architects.retention import RetentionArchitect
-from app.simulation.conductor import ARCHITECT_STACKS
 
 
 def _registry(clusters: list[dict[str, Any]]) -> list[dict[str, Any]]:

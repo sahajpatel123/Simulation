@@ -1,8 +1,7 @@
 """Tests for the per-user runs-per-week helper."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
+from datetime import UTC, datetime
 
 
 def test_public_allowlist_matches_callers():
@@ -36,7 +35,7 @@ def test_handles_iso_string_week_start():
 def test_handles_datetime_week_start():
     from app.simulation.runs_per_week import build_runs_per_week
     out = build_runs_per_week([
-        (datetime(2026, 1, 1, tzinfo=timezone.utc), 3),
+        (datetime(2026, 1, 1, tzinfo=UTC), 3),
     ])
     assert out["weeks"][0]["week_start"] == "2026-01-01"
     assert out["weeks"][0]["sim_count"] == 3

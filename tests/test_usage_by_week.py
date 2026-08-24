@@ -4,7 +4,6 @@ from __future__ import annotations
 from datetime import date
 
 
-
 def test_public_allowlist_matches_callers() -> None:
     from app.simulation import usage_by_week
 

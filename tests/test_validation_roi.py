@@ -31,7 +31,6 @@ from app.simulation.validation_roi import (
     build_validation_roi,
 )
 
-
 ENV: dict[str, Any] = {
     "price_sensitivity": 0.5,
     "market_maturity": 0.3,

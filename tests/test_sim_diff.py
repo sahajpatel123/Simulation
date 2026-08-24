@@ -8,10 +8,9 @@ via the route-registration pattern (gated by scipy).
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Public surface
@@ -60,7 +59,7 @@ def test_sim_diff_echoes_metadata() -> None:
     a = {
         "project_id": 10,
         "status": "COMPLETED",
-        "created_at": datetime(2026, 1, 15, tzinfo=timezone.utc),
+        "created_at": datetime(2026, 1, 15, tzinfo=UTC),
         "predicted_conversion_rate": 0.10,
         "actual_conversion_rate": 0.08,
         "domain_findings": [],

@@ -7,10 +7,9 @@ razorpay stub (same pattern as the other route tests).
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Public surface
@@ -207,7 +206,7 @@ def test_digest_stale_when_old() -> None:
     from app.simulation.intervention_digest import build_intervention_digest
 
     # Generated 20 days ago, "now" is today.
-    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 1, tzinfo=UTC)
     out = build_intervention_digest(
         {
             "interventions": [
@@ -224,7 +223,7 @@ def test_digest_stale_when_old() -> None:
 def test_digest_fresh_when_recent() -> None:
     from app.simulation.intervention_digest import build_intervention_digest
 
-    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 1, tzinfo=UTC)
     out = build_intervention_digest(
         {
             "interventions": [
@@ -280,7 +279,7 @@ def test_digest_narrative_mentions_top_recommendation() -> None:
 def test_digest_narrative_mentions_stale_when_old() -> None:
     from app.simulation.intervention_digest import build_intervention_digest
 
-    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 1, tzinfo=UTC)
     out = build_intervention_digest(
         {
             "interventions": [

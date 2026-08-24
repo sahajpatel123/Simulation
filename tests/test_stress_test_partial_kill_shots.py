@@ -15,7 +15,6 @@ from __future__ import annotations
 from typing import Any
 
 
-
 def test_partial_kill_shot_predicate_at_boundary() -> None:
     from app.tasks.stress_test_tasks import _is_partial_kill_shot
 

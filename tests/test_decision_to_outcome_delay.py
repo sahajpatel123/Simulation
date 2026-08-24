@@ -1,8 +1,7 @@
 """Tests for the per-user decision-to-outcome-delay helper."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
+from datetime import UTC, datetime, timedelta
 
 
 def test_public_allowlist_matches_callers():
@@ -28,7 +27,7 @@ def test_fast_verdict_when_under_24_hours():
     from app.simulation.decision_to_outcome_delay import (
         build_decision_to_outcome_delay,
     )
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_decision_to_outcome_delay([
         (now, now + timedelta(hours=2)),
         (now, now + timedelta(hours=8)),
@@ -42,7 +41,7 @@ def test_normal_verdict_when_under_7_days():
     from app.simulation.decision_to_outcome_delay import (
         build_decision_to_outcome_delay,
     )
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_decision_to_outcome_delay([
         (now, now + timedelta(hours=72)),
     ])
@@ -53,7 +52,7 @@ def test_slow_verdict_when_over_7_days():
     from app.simulation.decision_to_outcome_delay import (
         build_decision_to_outcome_delay,
     )
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_decision_to_outcome_delay([
         (now, now + timedelta(hours=240)),
     ])
@@ -64,7 +63,7 @@ def test_skips_pairs_with_none_values():
     from app.simulation.decision_to_outcome_delay import (
         build_decision_to_outcome_delay,
     )
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_decision_to_outcome_delay([
         (None, now + timedelta(hours=2)),
         (now, None),
@@ -77,7 +76,7 @@ def test_skips_negative_gaps():
     from app.simulation.decision_to_outcome_delay import (
         build_decision_to_outcome_delay,
     )
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_decision_to_outcome_delay([
         (now, now - timedelta(hours=2)),
         (now, now + timedelta(hours=4)),
@@ -93,8 +92,8 @@ def test_skips_non_list_entries():
     out = build_decision_to_outcome_delay([
         "not-a-list",
         None,
-        (datetime(2026, 1, 1, tzinfo=timezone.utc),
-         datetime(2026, 1, 1, 1, tzinfo=timezone.utc)),
+        (datetime(2026, 1, 1, tzinfo=UTC),
+         datetime(2026, 1, 1, 1, tzinfo=UTC)),
     ])
     assert out["sample_count"] == 1
 
@@ -125,7 +124,7 @@ def test_median_even_count():
     from app.simulation.decision_to_outcome_delay import (
         build_decision_to_outcome_delay,
     )
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_decision_to_outcome_delay([
         (now, now + timedelta(hours=1)),
         (now, now + timedelta(hours=5)),
@@ -138,7 +137,7 @@ def test_fastest_and_slowest():
     from app.simulation.decision_to_outcome_delay import (
         build_decision_to_outcome_delay,
     )
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_decision_to_outcome_delay([
         (now, now + timedelta(hours=2)),
         (now, now + timedelta(hours=20)),
@@ -152,7 +151,7 @@ def test_narrative_mentions_verdict():
     from app.simulation.decision_to_outcome_delay import (
         build_decision_to_outcome_delay,
     )
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_decision_to_outcome_delay([
         (now, now + timedelta(hours=6)),
     ])
@@ -171,7 +170,7 @@ def test_key_signal_present_when_data_exists():
     from app.simulation.decision_to_outcome_delay import (
         build_decision_to_outcome_delay,
     )
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_decision_to_outcome_delay([
         (now, now + timedelta(hours=12)),
     ])
@@ -200,7 +199,7 @@ def test_schema_round_trip():
     from app.simulation.decision_to_outcome_delay import (
         build_decision_to_outcome_delay,
     )
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     payload = build_decision_to_outcome_delay([
         (now, now + timedelta(hours=12)),
     ])

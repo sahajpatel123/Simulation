@@ -18,7 +18,6 @@ def test_total_returns_sum_of_counts() -> None:
 
 
 def test_total_matches_scenario_count_for_default_summary() -> None:
-    from typing import Any
 
     from app.simulation.what_if import build_what_if_scenario, summarise_what_if_scenarios
 

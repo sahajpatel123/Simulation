@@ -24,11 +24,11 @@ from app.schemas.competitive_moat import (
 from app.simulation.architects.competitive_dynamics import (
     CompetitiveDynamicsArchitect,
 )
+from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.competitive_moat import (
     COMPETITIVE_MOAT_PRODUCT_TYPES,
     build_competitive_moat,
 )
-from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.conductor import ARCHITECT_STACKS, Conductor
 from app.simulation.product_type import ProductType
 

@@ -1,8 +1,7 @@
 """Tests for the per-user recent-decisions helper."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
+from datetime import UTC, datetime
 
 
 def test_public_allowlist_matches_callers():
@@ -46,7 +45,7 @@ def test_normalizes_alternate_field_names():
             "title": "Pivot?",
             "status": "PENDING",
             "created_at": datetime(
-                2026, 1, 1, tzinfo=timezone.utc
+                2026, 1, 1, tzinfo=UTC
             ),
         },
     ])

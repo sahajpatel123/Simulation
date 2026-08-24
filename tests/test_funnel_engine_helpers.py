@@ -16,7 +16,6 @@ the engine's pure helpers that don't need a process pool:
 """
 from __future__ import annotations
 
-
 import pytest
 
 from app.simulation.funnel import (
@@ -24,7 +23,6 @@ from app.simulation.funnel import (
     FunnelExecutionEngine,
     StageMetrics,
 )
-
 
 # ---------------------------------------------------------------------------
 # _derive_assumption_impact

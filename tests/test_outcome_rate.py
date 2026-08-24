@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 
-
 def test_public_allowlist_matches_callers():
     from app.simulation import outcome_rate
     assert set(outcome_rate.__all__) == {

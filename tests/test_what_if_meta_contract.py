@@ -5,7 +5,6 @@ from typing import Any
 
 from app.simulation.what_if import build_what_if_scenario
 
-
 _REQUIRED_META_KEYS = {
     "generated_at",
     "base_matrix_conversion",

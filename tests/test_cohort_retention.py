@@ -6,7 +6,11 @@ from __future__ import annotations
 
 from typing import Any
 
-
+from app.schemas.cohort_retention import (
+    ClusterRetentionProfile,
+    CohortRetentionOut,
+    RetentionCurvePoint,
+)
 from app.simulation.cohort_retention import (
     RETENTION_DAYS,
     _churn_risk_label,
@@ -14,12 +18,6 @@ from app.simulation.cohort_retention import (
     _compute_survival_curve,
     build_cohort_retention,
 )
-from app.schemas.cohort_retention import (
-    CohortRetentionOut,
-    ClusterRetentionProfile,
-    RetentionCurvePoint,
-)
-
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers

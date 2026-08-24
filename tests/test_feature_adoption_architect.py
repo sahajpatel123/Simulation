@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # Cluster fixture
 # ---------------------------------------------------------------------------
@@ -477,8 +476,8 @@ def test_generate_report_no_shallow_handles_empty() -> None:
 
 
 def test_generate_report_collects_shallow_clusters() -> None:
-    from app.simulation.architects.feature_adoption import FeatureAdoptionArchitect
     from app.simulation.architects.base import ArchitectOutput
+    from app.simulation.architects.feature_adoption import FeatureAdoptionArchitect
 
     a = FeatureAdoptionArchitect()
     shallow = ArchitectOutput(

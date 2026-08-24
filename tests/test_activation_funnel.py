@@ -7,7 +7,6 @@ from __future__ import annotations
 from typing import Any
 
 from app.schemas.activation_funnel import (
-    ActivationFunnelOut,
     BLOCKER_COMPLETION,
     BLOCKER_EMPTY_STATE,
     TIER_CRITICAL,
@@ -20,6 +19,7 @@ from app.schemas.activation_funnel import (
     VERDICT_BLOCKED,
     VERDICT_INSUFFICIENT,
     VERDICT_READY,
+    ActivationFunnelOut,
 )
 from app.simulation.activation_funnel import (
     ACTIVATION_PRODUCT_TYPES,

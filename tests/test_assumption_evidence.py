@@ -7,7 +7,7 @@ an evidence-derived confidence tier and recomputes the validation-ROI formula
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 
@@ -24,7 +24,6 @@ from app.simulation.evidence_scorecard import (
     evidence_to_out,
 )
 from app.simulation.scored_assumption import ClaimConfidence
-
 
 ENV: dict[str, Any] = {
     "price_sensitivity": 0.5,
@@ -72,7 +71,7 @@ ASSUMPTIONS: list[dict[str, Any]] = [
 
 
 def _ts(day: int) -> datetime:
-    return datetime(2026, 1, day, tzinfo=timezone.utc)
+    return datetime(2026, 1, day, tzinfo=UTC)
 
 
 def _evidence(

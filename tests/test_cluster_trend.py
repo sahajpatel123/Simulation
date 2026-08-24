@@ -8,10 +8,9 @@ via the route-registration pattern (gated by scipy).
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Public surface
@@ -131,14 +130,14 @@ def test_trend_handles_missing_cluster_breakdown() -> None:
     from app.simulation.cluster_trend import build_cluster_trend
 
     rows = [
-        (datetime(2026, 1, 15, tzinfo=timezone.utc), None),
-        (datetime(2026, 2, 15, tzinfo=timezone.utc), {}),
+        (datetime(2026, 1, 15, tzinfo=UTC), None),
+        (datetime(2026, 2, 15, tzinfo=UTC), {}),
         (
-            datetime(2026, 3, 15, tzinfo=timezone.utc),
+            datetime(2026, 3, 15, tzinfo=UTC),
             {"cluster_breakdown": None},
         ),
         (
-            datetime(2026, 4, 15, tzinfo=timezone.utc),
+            datetime(2026, 4, 15, tzinfo=UTC),
             {"cluster_breakdown": {"other_cluster": 0.10}},
         ),
     ]
@@ -157,15 +156,15 @@ def test_trend_groups_by_month_by_default() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 5, tzinfo=timezone.utc),
+            datetime(2026, 1, 5, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.05}},
         ),
         (
-            datetime(2026, 1, 25, tzinfo=timezone.utc),
+            datetime(2026, 1, 25, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.15}},
         ),
         (
-            datetime(2026, 2, 10, tzinfo=timezone.utc),
+            datetime(2026, 2, 10, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.20}},
         ),
     ]
@@ -185,17 +184,17 @@ def test_trend_groups_by_week_when_requested() -> None:
     rows = [
         (
             # 2026-01-05 is a Monday (ISO week 2 of 2026).
-            datetime(2026, 1, 5, tzinfo=timezone.utc),
+            datetime(2026, 1, 5, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.10}},
         ),
         (
             # 2026-01-07 (Wednesday, same ISO week).
-            datetime(2026, 1, 7, tzinfo=timezone.utc),
+            datetime(2026, 1, 7, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.20}},
         ),
         (
             # 2026-01-12 (next Monday → different ISO week).
-            datetime(2026, 1, 12, tzinfo=timezone.utc),
+            datetime(2026, 1, 12, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.30}},
         ),
     ]
@@ -214,15 +213,15 @@ def test_trend_groups_by_day_when_requested() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 5, 10, tzinfo=timezone.utc),
+            datetime(2026, 1, 5, 10, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.10}},
         ),
         (
-            datetime(2026, 1, 5, 20, tzinfo=timezone.utc),
+            datetime(2026, 1, 5, 20, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.20}},
         ),
         (
-            datetime(2026, 1, 6, 9, tzinfo=timezone.utc),
+            datetime(2026, 1, 6, 9, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.30}},
         ),
     ]
@@ -246,15 +245,15 @@ def test_trend_bins_sorted_chronologically() -> None:
     # helper sorts before output.
     rows = [
         (
-            datetime(2026, 3, 15, tzinfo=timezone.utc),
+            datetime(2026, 3, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.30}},
         ),
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.10}},
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.20}},
         ),
     ]
@@ -268,7 +267,7 @@ def test_trend_bin_start_is_iso_utc_start_of_period() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.10}},
         ),
     ]
@@ -290,15 +289,15 @@ def test_trend_overall_direction_up_for_increasing() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.05}},
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.10}},
         ),
         (
-            datetime(2026, 3, 15, tzinfo=timezone.utc),
+            datetime(2026, 3, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.20}},
         ),
     ]
@@ -318,11 +317,11 @@ def test_trend_overall_direction_down_for_decreasing() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.20}},
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.10}},
         ),
     ]
@@ -343,11 +342,11 @@ def test_trend_overall_direction_stable_for_tiny_delta() -> None:
     # 0.10 → 0.105 → delta 0.005 < STABLE_DELTA_THRESHOLD.
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.10}},
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.10 + STABLE_DELTA_THRESHOLD / 2}},
         ),
     ]
@@ -364,7 +363,7 @@ def test_trend_overall_direction_unknown_for_single_bin() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.10}},
         ),
     ]
@@ -409,7 +408,7 @@ def test_trend_skips_invalid_iso_strings() -> None:
             {"cluster_breakdown": {"c1": 0.10}},
         ),
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.20}},
         ),
     ]
@@ -423,19 +422,19 @@ def test_trend_skips_non_numeric_rates() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": "NaN"}},
         ),
         (
-            datetime(2026, 1, 16, tzinfo=timezone.utc),
+            datetime(2026, 1, 16, tzinfo=UTC),
             {"cluster_breakdown": {"c1": True}},
         ),
         (
-            datetime(2026, 1, 17, tzinfo=timezone.utc),
+            datetime(2026, 1, 17, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 1.5}},  # out of range
         ),
         (
-            datetime(2026, 1, 18, tzinfo=timezone.utc),
+            datetime(2026, 1, 18, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.10}},
         ),
     ]
@@ -455,7 +454,7 @@ def test_trend_naive_datetime_assumed_utc() -> None:
             {"cluster_breakdown": {"c1": 0.10}},
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.20}},
         ),
     ]
@@ -480,15 +479,15 @@ def test_trend_peak_bin_is_highest_mean_conversion() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.05}},
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.20}},
         ),
         (
-            datetime(2026, 3, 15, tzinfo=timezone.utc),
+            datetime(2026, 3, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.10}},
         ),
     ]
@@ -507,20 +506,20 @@ def test_trend_peak_bin_tiebreak_by_observation_count() -> None:
     rows = [
         # Jan: 1 obs at 0.20
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.20}},
         ),
         # Feb: 3 obs averaging 0.20 → mean 0.20, more data.
         (
-            datetime(2026, 2, 5, tzinfo=timezone.utc),
+            datetime(2026, 2, 5, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.10}},
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.20}},
         ),
         (
-            datetime(2026, 2, 25, tzinfo=timezone.utc),
+            datetime(2026, 2, 25, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.30}},
         ),
     ]
@@ -536,7 +535,7 @@ def test_trend_peak_bin_carries_bin_start() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.20}},
         ),
     ]
@@ -570,15 +569,15 @@ def test_trend_volatility_label_low_for_steady_bins() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.10}},
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.105}},
         ),
         (
-            datetime(2026, 3, 15, tzinfo=timezone.utc),
+            datetime(2026, 3, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.11}},
         ),
     ]
@@ -595,11 +594,11 @@ def test_trend_volatility_label_high_for_spread_bins() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.05}},
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.30}},
         ),
     ]
@@ -617,11 +616,11 @@ def test_trend_volatility_label_moderate_for_mid_spread() -> None:
     # Means [0.10, 0.20] → CV = 0.05 / 0.15 ≈ 0.33.
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.10}},
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.20}},
         ),
     ]
@@ -658,11 +657,11 @@ def test_cluster_trend_out_round_trips_helper_payload() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.10}},
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             {"cluster_breakdown": {"c1": 0.20}},
         ),
     ]

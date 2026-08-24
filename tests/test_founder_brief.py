@@ -10,7 +10,6 @@ from fastapi import HTTPException
 
 from app.simulation.founder_brief import build_founder_brief
 
-
 if "razorpay" not in sys.modules:
     stub = types.ModuleType("razorpay")
     stub.Client = object  # type: ignore[attr-defined]

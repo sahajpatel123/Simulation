@@ -87,13 +87,13 @@ class _FakeSession:
     def __init__(self, sim: _FakeSimulation | None = None) -> None:
         self._sim = sim
 
-    def query(self, *args: Any, **kwargs: Any) -> "_FakeSession":
+    def query(self, *args: Any, **kwargs: Any) -> _FakeSession:
         return self
 
-    def join(self, *args: Any, **kwargs: Any) -> "_FakeSession":
+    def join(self, *args: Any, **kwargs: Any) -> _FakeSession:
         return self
 
-    def filter(self, *args: Any, **kwargs: Any) -> "_FakeSession":
+    def filter(self, *args: Any, **kwargs: Any) -> _FakeSession:
         return self
 
     def first(self) -> Any:

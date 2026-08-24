@@ -13,7 +13,6 @@ from app.schemas.ecosystem_compatibility import (
     BLOCKER_SMART_HOME,
     BLOCKER_SUBSCRIPTION,
     BLOCKER_VOICE,
-    EcosystemCompatibilityOut,
     LEVER_API,
     LEVER_HOUSEHOLD,
     LEVER_MATTER,
@@ -29,6 +28,7 @@ from app.schemas.ecosystem_compatibility import (
     VERDICT_INSUFFICIENT,
     VERDICT_SEAMLESS,
     VERDICT_WORKABLE,
+    EcosystemCompatibilityOut,
 )
 from app.simulation.conductor import Conductor
 from app.simulation.ecosystem_compatibility import (

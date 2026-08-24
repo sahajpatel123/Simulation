@@ -7,7 +7,7 @@ fields on ``GET /projects/{id}/outcomes`` plus the optional
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -70,12 +70,12 @@ class _OutcomeQuery:
     def with_entities(self, *args, **kwargs):  # noqa: ARG002
         return _AggregateQuery(self.rows)
 
-    def offset(self, value: int) -> "_OutcomeQuery":
+    def offset(self, value: int) -> _OutcomeQuery:
         clone = self._clone()
         clone._offset = value
         return clone
 
-    def limit(self, value: int) -> "_OutcomeQuery":
+    def limit(self, value: int) -> _OutcomeQuery:
         clone = self._clone()
         clone._limit = value
         return clone
@@ -86,7 +86,7 @@ class _OutcomeQuery:
             return self.rows[start:]
         return self.rows[start : start + self._limit]
 
-    def _clone(self) -> "_OutcomeQuery":
+    def _clone(self) -> _OutcomeQuery:
         clone = _OutcomeQuery(self.rows)
         clone._offset = self._offset
         clone._limit = self._limit
@@ -158,7 +158,7 @@ def _call_route(
 
 
 def _rows(count: int) -> list[SimpleNamespace]:
-    base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    base = datetime(2026, 1, 1, tzinfo=UTC)
     return [
         _outcome(i + 1, base.replace(hour=23 - i))
         for i in range(count)
@@ -166,7 +166,7 @@ def _rows(count: int) -> list[SimpleNamespace]:
 
 
 def _rows_with_scores(scores: list[float]) -> list[SimpleNamespace]:
-    base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    base = datetime(2026, 1, 1, tzinfo=UTC)
     rows = [
         _outcome(i + 1, base.replace(hour=23 - i))
         for i in range(len(scores))
@@ -230,8 +230,8 @@ def test_aggregates_cover_full_filtered_set_not_just_page() -> None:
 def test_date_filters_are_wired() -> None:
     _, query = _call_route(
         _rows(3),
-        start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        end_date=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        start_date=datetime(2026, 1, 1, tzinfo=UTC),
+        end_date=datetime(2026, 1, 2, tzinfo=UTC),
     )
 
     # project_id filter + start_date + end_date = 3 filter calls.
@@ -242,12 +242,12 @@ def test_naive_datetimes_are_normalized_to_utc() -> None:
     from app.api.v1.outcomes import _as_utc
 
     assert _as_utc(datetime(2026, 1, 1)) == datetime(
-        2026, 1, 1, tzinfo=timezone.utc
+        2026, 1, 1, tzinfo=UTC
     )
     assert _as_utc(None) is None
-    aware = datetime(2026, 1, 1, 5, 30, tzinfo=timezone.utc)
+    aware = datetime(2026, 1, 1, 5, 30, tzinfo=UTC)
     assert _as_utc(aware) == aware
-    offset = datetime(2026, 1, 1, 6, 0, tzinfo=timezone.utc)
+    offset = datetime(2026, 1, 1, 6, 0, tzinfo=UTC)
     ist = datetime(2026, 1, 1, 11, 30, tzinfo=timezone(timedelta(hours=5, minutes=30)))
     assert _as_utc(ist) == offset
 

@@ -1,6 +1,6 @@
 from app.simulation.anomaly_detector import (
-    detect_simulation_anomalies,
     SIGNAL_CRITICAL,
+    detect_simulation_anomalies,
 )
 
 

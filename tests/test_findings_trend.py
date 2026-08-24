@@ -8,10 +8,9 @@ via the route-registration pattern (gated by scipy).
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Public surface
@@ -117,9 +116,9 @@ def test_trend_skips_sims_with_no_findings() -> None:
     from app.simulation.findings_trend import build_findings_trend
 
     rows = [
-        (datetime(2026, 1, 15, tzinfo=timezone.utc), None),
-        (datetime(2026, 2, 15, tzinfo=timezone.utc), []),
-        (datetime(2026, 3, 15, tzinfo=timezone.utc), "not a list"),
+        (datetime(2026, 1, 15, tzinfo=UTC), None),
+        (datetime(2026, 2, 15, tzinfo=UTC), []),
+        (datetime(2026, 3, 15, tzinfo=UTC), "not a list"),
     ]
     out = build_findings_trend(rows)
     assert out["bins"] == []
@@ -142,15 +141,15 @@ def test_trend_groups_by_day_by_default() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 5, tzinfo=timezone.utc),
+            datetime(2026, 1, 5, tzinfo=UTC),
             [_finding("CRITICAL"), _finding("WARNING")],
         ),
         (
-            datetime(2026, 1, 5, 18, tzinfo=timezone.utc),
+            datetime(2026, 1, 5, 18, tzinfo=UTC),
             [_finding("INFO")],
         ),
         (
-            datetime(2026, 1, 6, tzinfo=timezone.utc),
+            datetime(2026, 1, 6, tzinfo=UTC),
             [_finding("CRITICAL")],
         ),
     ]
@@ -177,16 +176,16 @@ def test_trend_groups_by_week_when_requested() -> None:
     rows = [
         # Mon + Wed = same week.
         (
-            datetime(2026, 1, 5, tzinfo=timezone.utc),
+            datetime(2026, 1, 5, tzinfo=UTC),
             [_finding("CRITICAL")],
         ),
         (
-            datetime(2026, 1, 7, tzinfo=timezone.utc),
+            datetime(2026, 1, 7, tzinfo=UTC),
             [_finding("CRITICAL")],
         ),
         # Next Monday.
         (
-            datetime(2026, 1, 12, tzinfo=timezone.utc),
+            datetime(2026, 1, 12, tzinfo=UTC),
             [_finding("CRITICAL")],
         ),
     ]
@@ -211,7 +210,7 @@ def test_trend_min_severity_critical_excludes_lower() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 5, tzinfo=timezone.utc),
+            datetime(2026, 1, 5, tzinfo=UTC),
             [
                 _finding("CRITICAL"),
                 _finding("WARNING"),
@@ -232,7 +231,7 @@ def test_trend_min_severity_warning_excludes_info() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 5, tzinfo=timezone.utc),
+            datetime(2026, 1, 5, tzinfo=UTC),
             [
                 _finding("CRITICAL"),
                 _finding("WARNING"),
@@ -260,11 +259,11 @@ def test_trend_overall_direction_improving_when_critical_drops() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 5, tzinfo=timezone.utc),
+            datetime(2026, 1, 5, tzinfo=UTC),
             [_finding("CRITICAL")] * 5,
         ),
         (
-            datetime(2026, 1, 6, tzinfo=timezone.utc),
+            datetime(2026, 1, 6, tzinfo=UTC),
             [_finding("CRITICAL")] * 2,
         ),
     ]
@@ -280,11 +279,11 @@ def test_trend_overall_direction_degrading_when_critical_grows() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 5, tzinfo=timezone.utc),
+            datetime(2026, 1, 5, tzinfo=UTC),
             [_finding("CRITICAL")],
         ),
         (
-            datetime(2026, 1, 6, tzinfo=timezone.utc),
+            datetime(2026, 1, 6, tzinfo=UTC),
             [_finding("CRITICAL")] * 5,
         ),
     ]
@@ -300,11 +299,11 @@ def test_trend_overall_direction_stable_when_unchanged() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 5, tzinfo=timezone.utc),
+            datetime(2026, 1, 5, tzinfo=UTC),
             [_finding("CRITICAL")] * 3,
         ),
         (
-            datetime(2026, 1, 6, tzinfo=timezone.utc),
+            datetime(2026, 1, 6, tzinfo=UTC),
             [_finding("CRITICAL")] * 3,
         ),
     ]
@@ -322,7 +321,7 @@ def test_trend_peak_critical_bin_none_when_no_criticals() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 5, tzinfo=timezone.utc),
+            datetime(2026, 1, 5, tzinfo=UTC),
             [_finding("WARNING")],
         ),
     ]
@@ -335,15 +334,15 @@ def test_trend_peak_critical_bin_picks_highest_count() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 5, tzinfo=timezone.utc),
+            datetime(2026, 1, 5, tzinfo=UTC),
             [_finding("CRITICAL")] * 2,
         ),
         (
-            datetime(2026, 1, 6, tzinfo=timezone.utc),
+            datetime(2026, 1, 6, tzinfo=UTC),
             [_finding("CRITICAL")] * 7,
         ),
         (
-            datetime(2026, 1, 7, tzinfo=timezone.utc),
+            datetime(2026, 1, 7, tzinfo=UTC),
             [_finding("CRITICAL")] * 3,
         ),
     ]
@@ -358,11 +357,11 @@ def test_trend_peak_critical_bin_tiebreak_by_latest_bin() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 5, tzinfo=timezone.utc),
+            datetime(2026, 1, 5, tzinfo=UTC),
             [_finding("CRITICAL")] * 3,
         ),
         (
-            datetime(2026, 1, 6, tzinfo=timezone.utc),
+            datetime(2026, 1, 6, tzinfo=UTC),
             [_finding("CRITICAL")] * 3,
         ),
     ]
@@ -384,7 +383,7 @@ def test_trend_skips_non_numeric_severity_gracefully() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 5, tzinfo=timezone.utc),
+            datetime(2026, 1, 5, tzinfo=UTC),
             [
                 {"architect_name": "PricingArchitect", "severity": "FOO"},
                 _finding("CRITICAL"),
@@ -402,7 +401,7 @@ def test_trend_skips_non_dict_findings() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 5, tzinfo=timezone.utc),
+            datetime(2026, 1, 5, tzinfo=UTC),
             [
                 "not a dict",
                 _finding("CRITICAL"),
@@ -422,7 +421,7 @@ def test_trend_skips_invalid_iso_strings() -> None:
             [_finding("CRITICAL")],
         ),
         (
-            datetime(2026, 1, 5, tzinfo=timezone.utc),
+            datetime(2026, 1, 5, tzinfo=UTC),
             [_finding("CRITICAL")],
         ),
     ]
@@ -453,32 +452,32 @@ def test_trend_critical_distribution_bucketing() -> None:
     rows = [
         # zero (0 criticals)
         (
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            datetime(2026, 1, 1, tzinfo=UTC),
             [_finding("WARNING")],
         ),
         # zero (no findings)
         (
-            datetime(2026, 1, 2, tzinfo=timezone.utc),
+            datetime(2026, 1, 2, tzinfo=UTC),
             [_finding("WARNING"), _finding("INFO")],
         ),
         # low (1 critical)
         (
-            datetime(2026, 1, 3, tzinfo=timezone.utc),
+            datetime(2026, 1, 3, tzinfo=UTC),
             [_finding("CRITICAL")],
         ),
         # low (2 criticals)
         (
-            datetime(2026, 1, 4, tzinfo=timezone.utc),
+            datetime(2026, 1, 4, tzinfo=UTC),
             [_finding("CRITICAL")] * 2,
         ),
         # moderate (3 criticals)
         (
-            datetime(2026, 1, 5, tzinfo=timezone.utc),
+            datetime(2026, 1, 5, tzinfo=UTC),
             [_finding("CRITICAL")] * 3,
         ),
         # high (6 criticals)
         (
-            datetime(2026, 1, 6, tzinfo=timezone.utc),
+            datetime(2026, 1, 6, tzinfo=UTC),
             [_finding("CRITICAL")] * 6,
         ),
     ]
@@ -498,19 +497,19 @@ def test_trend_critical_distribution_boundary_at_2_and_5() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            datetime(2026, 1, 1, tzinfo=UTC),
             [_finding("CRITICAL")] * 2,
         ),
         (
-            datetime(2026, 1, 2, tzinfo=timezone.utc),
+            datetime(2026, 1, 2, tzinfo=UTC),
             [_finding("CRITICAL")] * 3,
         ),
         (
-            datetime(2026, 1, 3, tzinfo=timezone.utc),
+            datetime(2026, 1, 3, tzinfo=UTC),
             [_finding("CRITICAL")] * 5,
         ),
         (
-            datetime(2026, 1, 4, tzinfo=timezone.utc),
+            datetime(2026, 1, 4, tzinfo=UTC),
             [_finding("CRITICAL")] * 6,
         ),
     ]
@@ -528,13 +527,13 @@ def test_trend_totals_sum_across_bins() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            datetime(2026, 1, 1, tzinfo=UTC),
             [_finding("CRITICAL")] * 3
             + [_finding("WARNING")] * 2
             + [_finding("INFO")] * 1,
         ),
         (
-            datetime(2026, 1, 2, tzinfo=timezone.utc),
+            datetime(2026, 1, 2, tzinfo=UTC),
             [_finding("CRITICAL")] * 1
             + [_finding("WARNING")] * 1
             + [_finding("INFO")] * 4,
@@ -590,11 +589,11 @@ def test_findings_trend_out_round_trips_helper_payload() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 5, tzinfo=timezone.utc),
+            datetime(2026, 1, 5, tzinfo=UTC),
             [_finding("CRITICAL")],
         ),
         (
-            datetime(2026, 1, 6, tzinfo=timezone.utc),
+            datetime(2026, 1, 6, tzinfo=UTC),
             [_finding("CRITICAL")] * 3,
         ),
     ]

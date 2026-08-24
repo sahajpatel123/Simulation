@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import types
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 if "razorpay" not in sys.modules:
     stub = types.ModuleType("razorpay")
@@ -40,7 +40,7 @@ class _FakeSession:
 class _User:
     def __init__(self) -> None:
         self.id = 42
-        self.created_at = datetime(2026, 8, 1, tzinfo=timezone.utc)
+        self.created_at = datetime(2026, 8, 1, tzinfo=UTC)
 
 
 def _call_route(*, format: str = "csv", session: _FakeSession | None = None):

@@ -9,10 +9,9 @@ scipy).
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Public surface
@@ -76,7 +75,7 @@ def test_rollup_skips_rows_with_none_project_id() -> None:
             None,
             "orphan",
             1,
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            datetime(2026, 1, 1, tzinfo=UTC),
             0.10,
             0.05,
         ),
@@ -100,7 +99,7 @@ def test_rollup_groups_sims_by_project() -> None:
             1,
             "Alpha",
             101,
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            datetime(2026, 1, 1, tzinfo=UTC),
             0.10,
             0.08,
         ),
@@ -108,7 +107,7 @@ def test_rollup_groups_sims_by_project() -> None:
             1,
             "Alpha",
             102,
-            datetime(2026, 1, 2, tzinfo=timezone.utc),
+            datetime(2026, 1, 2, tzinfo=UTC),
             0.12,
             0.10,
         ),
@@ -116,7 +115,7 @@ def test_rollup_groups_sims_by_project() -> None:
             2,
             "Bravo",
             201,
-            datetime(2026, 1, 3, tzinfo=timezone.utc),
+            datetime(2026, 1, 3, tzinfo=UTC),
             0.20,
             0.18,
         ),
@@ -191,7 +190,7 @@ def test_rollup_tracks_latest_sim_per_project() -> None:
             1,
             "Alpha",
             101,
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            datetime(2026, 1, 1, tzinfo=UTC),
             0.10,
             0.05,
         ),
@@ -199,7 +198,7 @@ def test_rollup_tracks_latest_sim_per_project() -> None:
             1,
             "Alpha",
             102,
-            datetime(2026, 2, 1, tzinfo=timezone.utc),
+            datetime(2026, 2, 1, tzinfo=UTC),
             0.10,
             0.05,
         ),
@@ -221,7 +220,7 @@ def test_rollup_handles_null_sim_id() -> None:
             1,
             "Alpha",
             None,
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            datetime(2026, 1, 1, tzinfo=UTC),
             0.10,
             0.05,
         ),

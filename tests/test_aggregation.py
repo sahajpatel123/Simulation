@@ -89,7 +89,6 @@ def test_ci_rounds_to_four_dp(aggregator) -> None:
 
 
 def test_revenue_ci_empty_returns_zero_interval(aggregator) -> None:
-    from app.simulation.aggregation import ConfidenceInterval
 
     ci = aggregator._revenue_ci([], level=0.95)
     assert ci.low == 0.0

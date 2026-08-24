@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 
-
 def test_public_allowlist_matches_callers():
     from app.simulation import portfolio_health_snapshot
     assert set(portfolio_health_snapshot.__all__) == {

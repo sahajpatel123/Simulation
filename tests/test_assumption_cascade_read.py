@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+
 from app.schemas.assumption_cascade import (
     BLOCKER_BLIND_SPOT,
     BLOCKER_DUAL_FAILURE,

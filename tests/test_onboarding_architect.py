@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # Cluster fixture
 # ---------------------------------------------------------------------------
@@ -447,8 +446,8 @@ def test_generate_report_no_critical_handles_empty() -> None:
 
 
 def test_generate_report_collects_critical_severity_clusters() -> None:
-    from app.simulation.architects.onboarding import OnboardingArchitect
     from app.simulation.architects.base import ArchitectOutput
+    from app.simulation.architects.onboarding import OnboardingArchitect
 
     a = OnboardingArchitect()
     # Force two outputs to CRITICAL severity.

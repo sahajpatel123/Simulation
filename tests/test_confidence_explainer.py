@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 
-
 def test_public_allowlist_matches_callers():
     from app.simulation import confidence_explainer
     assert set(confidence_explainer.__all__) == {

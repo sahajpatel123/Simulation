@@ -15,7 +15,6 @@ from app.schemas.what_if_batch import (
     WhatIfBatchScenarioInput,
 )
 
-
 if "razorpay" not in sys.modules:
     stub = types.ModuleType("razorpay")
     stub.Client = object  # type: ignore[attr-defined]
