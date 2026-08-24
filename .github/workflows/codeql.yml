@@ -45,6 +45,13 @@ jobs:
           # security-and-quality covers the full default security suite plus
           # maintainability/correctness queries for both Python and JavaScript.
           queries: security-and-quality
+          # Model pack teaching CodeQL that app.core.security.log_safe()
+          # strips CR/LF, making its return value a log-injection barrier.
+          # The per-language prefix means only the python matrix leg loads
+          # it; a rejected/malformed pack fails init loudly instead of
+          # silently scanning without the models.
+          packs: |
+            python: ./codeql-custom-queries-python
 
       - name: Autobuild
         uses: github/codeql-action/autobuild@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
