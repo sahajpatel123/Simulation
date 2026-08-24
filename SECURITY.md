@@ -34,9 +34,7 @@ We take security seriously. If you discover a security vulnerability in TheCee, 
 
 ### GitHub Repository Security Features
 
-This public repository enables every free GitHub-native security feature
-(verified/enforced via the API; re-check with
-`gh api repos/<owner>/<repo> --jq .security_and_analysis`):
+This public repository runs every free GitHub-native security feature:
 
 - **Secret scanning** — detects known credential formats pushed anywhere in
   the repo, including the full git history.
@@ -49,8 +47,13 @@ This public repository enables every free GitHub-native security feature
 - **Dependabot security updates** — automatic PRs for dependencies with known
   CVEs, complementing the weekly pip-audit/Safety/Trivy scans.
 
-If any of these show `disabled`, re-enable them — they are part of the
-project's security posture, not optional extras.
+> **Status 2026-08-25**: an API audit found all five of these flipped to
+> `disabled` (they had been enabled on 2026-08-23). Re-enablement via the
+> REST API (`PATCH /repos/…` → `security_and_analysis`) was attempted and is
+> pending; if the token lacks the required admin scope, enable them under
+> **Settings → Code security and analysis** — they are part of the project's
+> security posture, not optional extras. Re-check anytime with
+> `gh api repos/<owner>/<repo> --jq .security_and_analysis`.
 
 ### CI/CD Security Checks
 
@@ -336,4 +339,10 @@ For security concerns, please contact the project maintainers.
   future function-local stdlib import. App-internal lazy imports stay
   allowed: several are deliberate cycle-breakers, and heavy optional
   dependencies (playwright) are legitimately deferred to use.
+- 2026-08-25 - API audit caught a silent posture regression: all five
+  GitHub-native security features (secret scanning, push protection,
+  validity checks, non-provider patterns, Dependabot security updates)
+  had been flipped back to disabled since their 2026-08-23 enablement.
+  Feature list corrected to carry a live status note; re-enablement
+  tracked until `.security_and_analysis` shows every feature enabled.
 - [VERSION] - Initial security policy
