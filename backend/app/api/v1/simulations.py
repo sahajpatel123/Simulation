@@ -4827,7 +4827,7 @@ def cancel_simulation(
             logger.warning(
                 "[Simulation] revoke failed - simulation_id=%s task_id=%s error=%s",
                 log_safe(simulation_id),
-                sim.task_id,
+                log_safe(sim.task_id),
                 log_safe(exc),
             )
 
@@ -4904,7 +4904,7 @@ def cancel_simulation(
     logger.info(
         "[Simulation] Cancelled by user - simulation_id=%s task_id=%s",
         log_safe(simulation_id),
-        sim.task_id,
+        log_safe(sim.task_id),
     )
 
     return SimulationCancelOut(

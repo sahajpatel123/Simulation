@@ -47,7 +47,19 @@ _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}
 _HTML_200 = {200: {"description": "HTML document", "content": {"text/html": {}}}}
 _PDF_200 = {200: {"description": "PDF file", "content": {"application/pdf": {}}}}
 
-ALLOWED_CDNS = ["tailwindcss", "cdn.tailwindcss", "images.unsplash.com", "unpkg.com", "fonts.googleapis.com", "fonts.gstatic.com"]
+# Exact hosts allowed to serve <script src=...> in generated prototypes.
+# Comparison is host-exact via urlparse — a substring test ("tailwindcss"
+# in tag) also matched lookalike URLs such as
+# https://evil.com/cdn.tailwindcss.com/x.js and let them through the filter.
+ALLOWED_CDNS = frozenset(
+    {
+        "cdn.tailwindcss.com",
+        "images.unsplash.com",
+        "unpkg.com",
+        "fonts.googleapis.com",
+        "fonts.gstatic.com",
+    }
+)
 TAILWIND_CDN = '<script src="https://cdn.tailwindcss.com"></script>'
 
 # Extracts the value of any src=/href= attribute so CDN presence can be
@@ -134,8 +146,14 @@ def _next_ui_version(db: Session, project_id: int) -> int:
 
 
 def _strip_unsafe_scripts(html: str) -> str:
+    """Drop every ``<script src=...>`` whose URL host is not allowlisted."""
+
     def is_safe(tag: str) -> bool:
-        return any(cdn in tag for cdn in ALLOWED_CDNS)
+        src = re.search(r"""src\s*=\s*["']([^"']+)["']""", tag, re.IGNORECASE)
+        if not src:
+            return False
+        host = (urlparse(src.group(1)).hostname or "").lower()
+        return host in ALLOWED_CDNS
 
     return re.sub(
         r'<script[^>]*src=["\'][^"\']+["\'][^>]*></script>',
@@ -804,7 +822,7 @@ async def diff_ui_versions(
             # A malformed CHANGES manifest degrades to an empty diff list.
             logger.debug(
                 "CHANGES manifest unparseable for version %s",
-                to_version,
+                log_safe(to_version),
                 exc_info=True,
             )
 

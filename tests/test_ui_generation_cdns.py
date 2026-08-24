@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import re
 
-from app.api.v1.ui_generation import TAILWIND_CDN, _ensure_cdns
+from app.api.v1.ui_generation import (
+    TAILWIND_CDN,
+    _ensure_cdns,
+    _strip_unsafe_scripts,
+)
 
 
 def _has_cdn(html: str) -> bool:
@@ -68,3 +72,36 @@ def test_prepended_verbatim_when_no_head_or_body() -> None:
     html = "<div>fragment</div>"
 
     assert _ensure_cdns(html).startswith(TAILWIND_CDN + "<div>")
+
+
+# ---------------------------------------------------------------------------
+# _strip_unsafe_scripts: host-exact allowlisting
+# ---------------------------------------------------------------------------
+
+
+def test_allowlisted_cdn_script_is_kept() -> None:
+    html = '<script src="https://cdn.tailwindcss.com/3.4.1"></script>'
+
+    assert _strip_unsafe_scripts(html) == html
+
+
+def test_unknown_host_script_is_stripped() -> None:
+    html = '<p>a</p><script src="https://evil.example/payload.js"></script>'
+
+    assert _strip_unsafe_scripts(html) == "<p>a</p>"
+
+
+def test_lookalike_path_cannot_impersonate_allowlisted_cdn() -> None:
+    # A substring filter ("tailwindcss" in tag) would keep this tag; only an
+    # exact host match may survive.
+    html = '<script src="https://evil.example/cdn.tailwindcss.com/x.js"></script>'
+
+    assert _strip_unsafe_scripts(html) == ""
+
+
+def test_inline_script_without_src_is_out_of_scope() -> None:
+    # This filter only targets remote ``<script src=...>`` tags; inline
+    # script bodies are neutralized by _build_safe_html.
+    html = "<script>alert(1)</script>"
+
+    assert _strip_unsafe_scripts(html) == html
