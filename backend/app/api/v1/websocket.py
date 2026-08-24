@@ -102,6 +102,12 @@ async def websocket_simulation_progress(
     except json.JSONDecodeError:
         await websocket.close(code=4001)
         return
+    # A syntactically valid but non-object frame ("[]" / "5" / '"x"') has
+    # no .get() — reject it here rather than crashing the handler with an
+    # unhandled AttributeError.
+    if not isinstance(payload, dict):
+        await websocket.close(code=4001)
+        return
     if payload.get("type") != "auth":
         await websocket.close(code=4001)
         return

@@ -370,4 +370,11 @@ For security concerns, please contact the project maintainers.
   (`tests/test_system_health_guard.py`). Coarse reachability probes
   (`/health`, `/api/v1/simulations/*-health`) stay public for load
   balancers by design.
+- 2026-08-25 - Polished the live-progress delivery surface: the
+  WebSocket auth handshake now rejects syntactically valid but
+  non-object frames (`[]`, `5`, `"x"`) with a clean 4001 close instead
+  of crashing the handler on an unhandled `AttributeError`, and
+  `/simulations/ws/info` — which exposes the live connection count —
+  joined the same admin-in-production gate as the `/system` digests,
+  with an AST pin keeping both in place.
 - [VERSION] - Initial security policy
