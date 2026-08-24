@@ -9,6 +9,7 @@ No DB / I/O — verifiable without FastAPI or PostgreSQL.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -127,9 +128,8 @@ def _coerce_results(value: Any) -> dict[str, Any]:
         return value
     if isinstance(value, str):
         try:
-            import json as _json
 
-            parsed = _json.loads(value)
+            parsed = json.loads(value)
             return parsed if isinstance(parsed, dict) else {}
         except (ValueError, TypeError):
             return {}
@@ -709,7 +709,6 @@ def scenarios_to_json(scenarios: list[WhatIfOut]) -> str:
     Uses ``WhatIfOut.summary()`` for a compact shape — pairs naturally with
     ``scenarios_to_csv`` for spreadsheet-vs-API export paths.
     """
-    import json
 
     return json.dumps([scenario.summary() for scenario in scenarios], indent=2)
 

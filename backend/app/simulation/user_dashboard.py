@@ -40,7 +40,7 @@ Output shape
 from __future__ import annotations
 
 import logging
-from datetime import UTC
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +154,6 @@ def build_user_dashboard(
         Dict matching the output shape described in the
         module docstring.
     """
-    from datetime import datetime
 
     used = _safe_int(monthly_sim_used)
     cap = (

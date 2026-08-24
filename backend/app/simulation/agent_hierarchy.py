@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import lru_cache
@@ -170,7 +171,6 @@ class AgentHierarchyRouter:
         ]
 
     def tier_summary(self, decisions: list[AgentRoutingDecision]) -> dict:
-        from collections import Counter
 
         counts = Counter(d.tier for d in decisions)
         return {

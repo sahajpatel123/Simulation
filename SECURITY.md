@@ -329,4 +329,11 @@ For security concerns, please contact the project maintainers.
   hoisted its function-local SQLAlchemy import to module top, and pinned
   the parameterized-SQL property with a regression test
   (`tests/test_cluster_sync.py`).
+- 2026-08-25 - Hoisted all remaining function-local stdlib imports (26
+  sites across 24 files — `json`, `datetime`, `math`, `collections`,
+  `re`) to module tops per the repo's no-local-imports rule, and added a
+  repo-wide AST guard (`tests/test_import_hygiene.py`) that fails any
+  future function-local stdlib import. App-internal lazy imports stay
+  allowed: several are deliberate cycle-breakers, and heavy optional
+  dependencies (playwright) are legitimately deferred to use.
 - [VERSION] - Initial security policy

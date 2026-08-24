@@ -32,6 +32,8 @@ batch's ``results_json.domain_findings``.
 """
 from __future__ import annotations
 
+import math
+
 # Outlier threshold — count of findings per sim that, when
 # exceeded, flags the sim as an "outlier sim" for this
 # architect. Default 5 findings/sim is "above typical" without
@@ -91,7 +93,6 @@ MAX_CRITICAL_CLUSTERS: int = 5
 
 def _safe_float(raw: object) -> float | None:
     """Coerce to a finite float or return ``None``."""
-    import math
     if raw is None or isinstance(raw, bool):
         return None
     if isinstance(raw, (int, float)):

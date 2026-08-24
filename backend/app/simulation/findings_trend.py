@@ -18,7 +18,7 @@ results_json + created_at per sim before invoking.
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 # Reuse the bin constants from cluster_trend so the
 # dashboard's wording stays consistent.
@@ -333,7 +333,6 @@ def build_findings_trend(
 
 
 def _timedelta(**kwargs):
-    from datetime import timedelta
     return timedelta(**kwargs)
 
 

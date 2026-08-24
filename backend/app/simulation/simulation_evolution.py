@@ -15,6 +15,7 @@ deterministic helper style as ``simulation_trend`` and ``sim_diff``.
 """
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -78,10 +79,9 @@ def _coerce_results(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
     if isinstance(value, str):
-        import json as _json
 
         try:
-            parsed = _json.loads(value)
+            parsed = json.loads(value)
         except (ValueError, TypeError):
             return {}
         return parsed if isinstance(parsed, dict) else {}

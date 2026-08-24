@@ -24,6 +24,8 @@ Overall health transition uses a transition matrix — see
 """
 from __future__ import annotations
 
+import math
+
 # Direction labels — emitted by per-metric delta calc.
 DIR_IMPROVING: str = "IMPROVING"
 DIR_DEGRADING: str = "DEGRADING"
@@ -87,7 +89,6 @@ def _safe_float(raw: object) -> float | None:
     """Coerce to a finite float or return ``None``. Mirrors the
     helper module's defensive coercion so NaN / None /
     out-of-range never poison a delta."""
-    import math
     if raw is None or isinstance(raw, bool):
         return None
     if isinstance(raw, (int, float)):

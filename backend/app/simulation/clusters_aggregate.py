@@ -27,6 +27,8 @@ registry before calling.
 """
 from __future__ import annotations
 
+import math
+
 # Default + cap for the top-laggards / top-performers lists.
 DEFAULT_TOP_N: int = 5
 MAX_TOP_N: int = 100
@@ -78,7 +80,6 @@ def _safe_conversion(raw: object) -> float | None:
     "we don't have a real number for this sim" and must be skipped
     so one bad row doesn't poison the cross-cluster rollup.
     """
-    import math
     if raw is None:
         return None
     if isinstance(raw, bool):

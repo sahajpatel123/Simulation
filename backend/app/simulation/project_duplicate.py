@@ -7,6 +7,7 @@ these against a live session and commits.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 
@@ -28,7 +29,6 @@ def build_duplicate_title(original_title: str, *, suffix: str = " (copy)") -> st
     """
     title = _coerce_str(original_title).strip() or "Untitled Project"
     # Detect existing " (copy)" or " (copy N)" suffix.
-    import re
 
     pattern = re.compile(r"^(.*?) \(copy(?: (\d+))?\)$")
     match = pattern.match(title)

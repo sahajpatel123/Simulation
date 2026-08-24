@@ -8187,9 +8187,8 @@ def get_stale_check(
         ts = raw.get("generated_at")
         if not isinstance(ts, str):
             return None
-        from datetime import datetime as _dt
         try:
-            return _dt.fromisoformat(ts)
+            return datetime.fromisoformat(ts)
         except Exception:
             return None
 
