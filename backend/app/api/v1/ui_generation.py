@@ -3,6 +3,7 @@ import json
 import logging
 import re
 import secrets
+from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urlparse
 
@@ -145,22 +146,83 @@ def _next_ui_version(db: Session, project_id: int) -> int:
     return int(latest or 0) + 1
 
 
-def _strip_unsafe_scripts(html: str) -> str:
-    """Drop every ``<script src=...>`` whose URL host is not allowlisted."""
+class _ScriptSrcHostFilter(HTMLParser):
+    """Locate ``<script src=...>`` elements whose src host is not allowlisted.
 
-    def is_safe(tag: str) -> bool:
-        src = re.search(r"""src\s*=\s*["']([^"']+)["']""", tag, re.IGNORECASE)
+    The stdlib parser reports exact character offsets for each tag, so the
+    caller can delete disallowed elements byte-for-byte. Deciding on parsed
+    attributes (not pattern matching over raw markup) means an attribute
+    value containing ``>``, unusual spacing, or mixed-case tags cannot make
+    the filter mis-locate the element boundaries the way a hand-written
+    regular expression could.
+    """
+
+    def __init__(self, html: str) -> None:
+        super().__init__(convert_charrefs=False)
+        self._html = html
+        # Offset of each line start, so parser (line, col) positions map to
+        # absolute indices in the original string.
+        self._line_starts = [0]
+        for index, char in enumerate(html):
+            if char == "\n":
+                self._line_starts.append(index + 1)
+        self.spans: list[tuple[int, int]] = []
+        self._evil_open_start: int | None = None
+
+    def _abs(self) -> int:
+        line, col = self.getpos()
+        return self._line_starts[line - 1] + col
+
+    def _is_disallowed(self, attrs: list[tuple[str, str | None]]) -> bool:
+        src = dict(attrs).get("src")
         if not src:
+            # Inline scripts are out of scope here; _build_safe_html and the
+            # serve-time CSP handle script bodies.
             return False
-        host = (urlparse(src.group(1)).hostname or "").lower()
-        return host in ALLOWED_CDNS
+        host = (urlparse(src).hostname or "").lower()
+        return host not in ALLOWED_CDNS
 
-    return re.sub(
-        r'<script[^>]*src=["\'][^"\']+["\'][^>]*></script>',
-        lambda m: m.group(0) if is_safe(m.group(0)) else "",
-        html,
-        flags=re.IGNORECASE,
-    )
+    def handle_starttag(self, tag, attrs) -> None:
+        if tag == "script" and self._is_disallowed(attrs):
+            self._evil_open_start = self._abs()
+
+    def handle_startendtag(self, tag, attrs) -> None:
+        # Self-closing <script src="…" /> never reaches handle_endtag.
+        if tag != "script" or not self._is_disallowed(attrs):
+            return
+        start = self._abs()
+        end = start + len(self.get_starttag_text() or "")
+        self.spans.append((start, end))
+
+    def handle_endtag(self, tag) -> None:
+        if tag != "script" or self._evil_open_start is None:
+            return
+        pos = self._abs()
+        gt = self._html.find(">", pos)
+        end = gt + 1 if gt != -1 else pos + len("</script>")
+        self.spans.append((self._evil_open_start, end))
+        self._evil_open_start = None
+
+
+def _strip_unsafe_scripts(html: str) -> str:
+    """Drop every ``<script src=...>`` element whose URL host is not allowlisted.
+
+    Element boundaries come from the stdlib HTML parser and are deleted from
+    the original string verbatim — the whole element (attributes *and*
+    inline body) goes, so a disallowed remote script can't survive by
+    carrying content between its tags.
+    """
+    finder = _ScriptSrcHostFilter(html)
+    try:
+        finder.feed(html)
+        finder.close()
+    except Exception as exc:  # noqa: BLE001 - filtering must not brick generation
+        logger.warning("script-src filter fell back to no-op: %s", log_safe(exc))
+        return html
+    result = html
+    for start, end in sorted(finder.spans, reverse=True):
+        result = result[:start] + result[end:]
+    return result
 
 
 def _strip_markdown_fences(raw: str) -> str:

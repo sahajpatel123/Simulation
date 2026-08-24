@@ -105,3 +105,70 @@ def test_inline_script_without_src_is_out_of_scope() -> None:
     html = "<script>alert(1)</script>"
 
     assert _strip_unsafe_scripts(html) == html
+
+
+# ---------------------------------------------------------------------------
+# Parser-based element removal: boundaries survive markup a regex can't
+# ---------------------------------------------------------------------------
+
+
+def test_disallowed_element_with_inline_body_is_removed_whole() -> None:
+    # A remote script whose body carries payload code must lose the body
+    # too — matching only `<script src=…></script>` leaves it behind.
+    html = '<p>a</p><script src="https://evil.example/p.js">steal()</script><p>b</p>'
+
+    assert _strip_unsafe_scripts(html) == "<p>a</p><p>b</p>"
+
+
+def test_attribute_value_containing_gt_does_not_confuse_boundaries() -> None:
+    # `[^>]`-style matching stops at the ">" inside the attribute value and
+    # mangles the document; parsed attributes locate the real tag end.
+    html = '<p>a</p><script src="https://evil.example/a>b.js"></script><p>b</p>'
+
+    assert _strip_unsafe_scripts(html) == "<p>a</p><p>b</p>"
+
+
+def test_multiline_tag_is_removed_intact() -> None:
+    html = (
+        '<p>a</p><script\n  defer\n  src="https://evil.example/p.js"\n'
+        '  crossorigin="anonymous"></script><p>b</p>'
+    )
+
+    assert _strip_unsafe_scripts(html) == "<p>a</p><p>b</p>"
+
+
+def test_self_closing_disallowed_script_is_removed() -> None:
+    # XHTML-style self-closing tags have no </script>, so a matcher that
+    # requires one never fires; the parser reports them directly.
+    html = '<p>a</p><script src="https://evil.example/p.js" /><p>b</p>'
+
+    assert _strip_unsafe_scripts(html) == "<p>a</p><p>b</p>"
+
+
+def test_uppercase_tag_and_attr_are_handled() -> None:
+    html = '<SCRIPT SRC="https://evil.example/p.js">x()</SCRIPT>ok'
+
+    assert _strip_unsafe_scripts(html) == "ok"
+
+
+def test_mixed_allowed_and_disallowed_keep_order() -> None:
+    html = (
+        '<script src="https://cdn.tailwindcss.com"></script>'
+        '<script src="https://evil.example/p.js"></script>'
+        '<script src="https://unpkg.com/lib@1/x.js"></script>'
+    )
+
+    result = _strip_unsafe_scripts(html)
+
+    assert (
+        result
+        == '<script src="https://cdn.tailwindcss.com"></script>'
+        + '<script src="https://unpkg.com/lib@1/x.js"></script>'
+    )
+
+
+def test_relative_and_protocol_relative_src_are_not_trusted() -> None:
+    # No host, or an untrusted one: both fail the exact-host allowlist.
+    html = '<i></i><script src="/local.js"></script><b></b><script src="//evil.example/p.js"></script>'
+
+    assert _strip_unsafe_scripts(html) == "<i></i><b></b>"
