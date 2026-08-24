@@ -887,7 +887,7 @@ async def diff_ui_versions(
             # A malformed CHANGES manifest degrades to an empty diff list.
             logger.debug(
                 "CHANGES manifest unparseable for version %s",
-                log_safe(to_version),
+                log_safe(to_version).replace("\n", " "),
                 exc_info=True,
             )
 
