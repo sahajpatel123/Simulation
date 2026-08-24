@@ -73,10 +73,13 @@ This repository runs automated security scans:
 
 The `workflow-validation.yml` job also enforces that every GitHub Action ref is pinned
 to a full 40-hex commit SHA (with the release version kept as a trailing comment),
-that every pip install in a workflow runs with `--require-hashes` against a generated
-lock file, that every workflow declares least-privilege permissions, and that no
-workflow grants `actions: write`. YAML files are parsed and invalid workflow files
-fail the validator.
+that every non-`-r` pip install in a workflow pins an exact version, that direct pins
+in `requirements.txt` match the generated hash-locked files CI installs from, that
+every workflow declares least-privilege permissions and keeps zizmor's audits enabled,
+and that no workflow grants `actions: write`. YAML files are parsed and invalid
+workflow files fail the validator. (The `--require-hashes` flags themselves are repo
+convention — visible in every install step above — not separately parsed by the
+validator; the lock-sync check is what fails when locks go stale.)
 
 Run `python3 tools/validate_ci.py` locally to check the same supply-chain,
 permissions, YAML/TOML, security-policy, env-file tracking, and job-timeout

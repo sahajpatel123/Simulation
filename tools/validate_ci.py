@@ -17,7 +17,8 @@ can catch issues locally before pushing:
     scope lives on a job, never at workflow level.
   - Every job declares a positive timeout-minutes so CI cannot hang indefinitely.
   - Every workflow includes a workflow_dispatch trigger for manual runs.
-  - The zizmor config disables hash-pinning (this repo pins to full tags instead).
+  - The zizmor config keeps every audit enabled (`rules: {}`) — SHA-everywhere
+    pinning satisfies zizmor's unpinned-uses audit, so no overrides are needed.
   - Artifact uploads fail when no files are found instead of passing silently.
   - Every pip install in a workflow run block pins an exact version.
   - Direct pins in requirements.txt match the hash-locked files CI

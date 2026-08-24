@@ -43,7 +43,8 @@ The repo ships several GitHub Actions workflows in `.github/workflows/`:
 - `dependency-review.yml` — fails PRs that introduce high-severity dependency
   vulnerabilities (scans dependency diffs).
 - `lint.yml` — ruff + `pip-audit` / `safety` dependency scans.
-- `security-scan.yml` — Bandit, `pip-audit`, `safety`, `npm audit`, and Trivy (fs + Dockerfile config).
+- `security-scan.yml` — Bandit, `pip-audit`, `safety`, an OSV scan of every
+  pinned Python/npm version (`tools/osv_scan.py`), `npm audit`, and Trivy (fs + Dockerfile config).
 - `secret-scan.yml` — weekly full-history gitleaks scan (scheduled + manual).
 - `scorecard.yml` — OpenSSF Scorecard supply-chain analysis (SARIF → Code Scanning).
 - `workflow-validation.yml` — actionlint plus `tools/validate_ci.py` (YAML/TOML
@@ -59,9 +60,12 @@ Rules that keep CI green and secure:
   `actions/checkout@<sha> # v7.0.1`), never `@master`, a floating `@vN`, or a
   mutable tag — `tools/validate_ci.py` enforces this; the trailing comment
   keeps the release version human-readable.
-- Pin every pip install in a workflow to an exact version (`pkg==X.Y.Z`);
-  `-r requirements.txt` includes are exempt — the referenced file is the pin
-  source and every entry there is exact-pinned too.
+- Pin every non-`-r` pip install in a workflow to an exact version
+  (`pkg==X.Y.Z`); `-r` includes must point at the generated hash-locked
+  files (`requirements-*-lock.txt`) installed with `--require-hashes`, and
+  direct pins in `requirements.txt` must match those locks —
+  `tools/validate_ci.py` enforces all of this; regenerate with
+  `tools/regen_locks.sh` after bumping `requirements.txt`.
 - When a workflow downloads a tool (actionlint, scanners, etc.), pin the exact
   release and verify the artifact checksum before using it.
 - If a security scanner cannot run, fix the runner; do not silence it with `|| true`.
@@ -86,10 +90,11 @@ Rules that keep CI green and secure:
 - Include a `workflow_dispatch` trigger on every workflow so it can be run
   manually; `tools/validate_ci.py` enforces this.
 - Workflow changes must pass `zizmor` (configured in `.github/zizmor.yml`);
-  tag-pinning is intentional and enforced separately, so zizmor focuses on the
-  other workflow-security classes.
-- The zizmor config must keep `unpinned-uses` disabled; `tools/validate_ci.py`
-  enforces this so it can't silently drift back to hash-pinning requirements.
+  because every action is SHA-pinned, the config keeps all audits enabled
+  (`rules: {}`) and zizmor's `unpinned-uses` audit runs as a second net.
+- `tools/validate_ci.py` fails if `.github/zizmor.yml` ever disables
+  `unpinned-uses` again — that override only made sense under the old
+  tag-pinning policy.
 
 Local security scans:
 
@@ -121,7 +126,7 @@ ProjectDescription
   → ClaudeExtracts(Assumptions)
   → ScoreAssumptions()          # signal quality: 0.0 – 1.0
   → AgentProfileGenerator       # samples 10 000 agents from 52 clusters
-  → Conductor.run()             # calls all 21 architects per cluster
+  → Conductor.run()             # calls the product-type's architects per cluster (35 registered)
   → Markov funnel               # ARRIVE → BROWSE → CONSIDER → DECIDE → PURCHASE
   → ResultsAggregator
   → AccountabilityEngine        # ranked DomainFindings
@@ -142,8 +147,9 @@ must exist in the `cluster_parameters` PostgreSQL table.
 
 ### 3. Architects (`app/simulation/architects/`)
 
-20 domain-specialist modules. Each subclasses `BaseArchitect` and must
-implement:
+35 domain-specialist classes (registered in
+`app/simulation/architect_registry.py`; hardware-only ones activate only for
+hardware product types). Each subclasses `BaseArchitect` and must implement:
 - `name: str` — unique string used as DB key
 - `product_types: list[str]` — which product categories this activates for
   (empty = all)
@@ -154,7 +160,7 @@ Architects may optionally override `transition_overrides()` to shift Markov
 state-transition probabilities.
 
 **Never modify `base.py` unless you are changing the architect interface.**
-All 21 subclasses depend on it.
+All 35 subclasses depend on it.
 
 ### 4. The Conductor (`app/simulation/conductor.py`)
 
@@ -277,7 +283,10 @@ Runs on every Railway deploy before uvicorn starts. It:
 1. Create `app/simulation/architects/my_domain.py`
 2. Subclass `BaseArchitect`, implement `name`, `product_types`, `compute()`,
    `generate_report()`
-3. Register it in `app/simulation/conductor.py` (add to the architects list)
+3. Register it in `app/simulation/architect_registry.py`
+   (`build_architect_registry()`); add it to `ARCHITECT_STACKS` /
+   `DEPENDENCY_MAP` in `conductor.py` if product-type-specific or
+   consuming other architects' outputs
 4. The architect name is automatically tracked in `architect_corrections`
 
 ## Adding a new API endpoint
