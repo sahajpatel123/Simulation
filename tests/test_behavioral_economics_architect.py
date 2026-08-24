@@ -429,13 +429,13 @@ def test_conductor_runs_architect_and_accountability_surfaces_finding() -> None:
 
 
 def test_registry_includes_architect_in_every_product_stack() -> None:
+    from app.simulation.architect_registry import build_architect_registry
     from app.simulation.conductor import (
         ARCHITECT_STACKS,
         ProductType,
-        _build_architect_registry,
     )
 
-    registry = _build_architect_registry()
+    registry = build_architect_registry()
     assert "BehavioralEconomicsArchitect" in registry
     for product_type in ProductType:
         stack = ARCHITECT_STACKS[product_type]

@@ -17,9 +17,6 @@ from sqlalchemy import delete, text
 
 from app.core.metrics import metrics
 from app.simulation.architect_registry import ARCHITECTS as _ARCHITECTS
-from app.simulation.architect_registry import (
-    build_architect_registry as _build_architect_registry,  # noqa: F401  # re-exported for architect tests
-)
 from app.simulation.architects.base import ArchitectOutput, DomainReport
 from app.simulation.cancellation import SimulationCancelled
 from app.simulation.cluster_reweighting import ClusterReweightingEngine

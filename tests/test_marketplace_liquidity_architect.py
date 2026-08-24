@@ -410,13 +410,13 @@ def test_conductor_runs_architect_and_accountability_surfaces_finding() -> None:
 
 
 def test_registry_activates_architect_for_marketplace_stacks_only() -> None:
+    from app.simulation.architect_registry import build_architect_registry
     from app.simulation.conductor import (
         ARCHITECT_STACKS,
-        _build_architect_registry,
     )
     from app.simulation.product_type import ProductType
 
-    registry = _build_architect_registry()
+    registry = build_architect_registry()
     assert "MarketplaceLiquidityArchitect" in registry
     assert (
         "MarketplaceLiquidityArchitect"

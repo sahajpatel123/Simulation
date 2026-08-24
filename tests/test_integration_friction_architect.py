@@ -569,13 +569,13 @@ def test_conductor_neutral_pitch_stays_quiet_in_accountability() -> None:
 
 
 def test_registry_includes_architect_in_software_stacks_only() -> None:
+    from app.simulation.architect_registry import build_architect_registry
     from app.simulation.conductor import (
         ARCHITECT_STACKS,
         ProductType,
-        _build_architect_registry,
     )
 
-    registry = _build_architect_registry()
+    registry = build_architect_registry()
     assert "IntegrationFrictionArchitect" in registry
     software = {
         ProductType.SAAS,

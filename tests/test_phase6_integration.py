@@ -18,8 +18,9 @@ from app.core.prompts import INTERVENTION_PROMPT, PREMORTEM_PROMPT
 from app.schemas.simulation import SimulationResultOut
 from app.simulation.accountability import AccountabilityEngine
 from app.simulation.aggregation import ResultsAggregator
+from app.simulation.architect_registry import build_architect_registry
 from app.simulation.clusters.registry import ClusterRegistry
-from app.simulation.conductor import ARCHITECT_STACKS, Conductor, _build_architect_registry
+from app.simulation.conductor import ARCHITECT_STACKS, Conductor
 from app.simulation.product_type import ProductType
 from app.simulation.profiles import AgentProfileGenerator
 from app.tasks.simulation_tasks import _funnel_result_from_conductor
@@ -95,7 +96,7 @@ def test_cluster_registry_integrity():
 
 
 def test_architect_registry_and_product_stacks_integrity():
-    registry = _build_architect_registry()
+    registry = build_architect_registry()
     assert len(registry) == 35
     assert set(ARCHITECT_STACKS) == set(ProductType)
     for product_type, stack in ARCHITECT_STACKS.items():
@@ -202,7 +203,7 @@ def test_health_hardware_clinical_validation_gate_suppresses_non_enthusiast_clus
 
 def test_780_architect_compute_calls_finish_under_30_seconds():
     clusters = ClusterRegistry().all_clusters()
-    registry = _build_architect_registry()
+    registry = build_architect_registry()
     architects = [
         registry["MarketTimingArchitect"],
         registry["CompetitiveDynamicsArchitect"],
