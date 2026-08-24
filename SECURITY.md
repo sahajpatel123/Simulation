@@ -355,4 +355,8 @@ For security concerns, please contact the project maintainers.
   so guards can no longer be skipped by omission on the deploy target;
   explicit values still win as deliberate opt-outs. Pinned by
   `tests/test_config_platform_inference.py`.
+- 2026-08-25 - Polished the platform-inference flag: the startup log line
+  now reports the effective environment (so a deploy whose guards fired
+  or were inferred is visible in Railway logs), and `.env.example` /
+  CLAUDE.md document the inference and its explicit opt-out.
 - [VERSION] - Initial security policy

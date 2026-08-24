@@ -35,7 +35,12 @@ if settings.SENTRY_DSN:
 async def lifespan(app: FastAPI):
     configure_logging()
     init_extensions()
-    logger.info("TheCee backend running — pgvector enabled")
+    # Effective environment in the deploy's first log line: whether guards
+    # were explicitly set or platform-inferred is visible in Railway logs.
+    logger.info(
+        "TheCee backend running — environment=%s, pgvector enabled",
+        settings.ENVIRONMENT,
+    )
     # Live progress relay: subscribes this process to the Redis progress
     # channel so WebSocket clients receive Celery-task progress even though
     # the worker runs in a separate process. No-op-safe when Redis is down.
@@ -43,6 +48,7 @@ async def lifespan(app: FastAPI):
 
     from app.core.database import SessionLocal
     from app.simulation.clusters.registry import ClusterRegistry
+
     db = SessionLocal()
     try:
         ClusterRegistry().sync_to_db(db)
@@ -68,11 +74,7 @@ app = FastAPI(
     # the deployment surface matches what we intend to expose.
     docs_url="/docs" if settings.ENVIRONMENT.lower() != "production" else None,
     redoc_url="/redoc" if settings.ENVIRONMENT.lower() != "production" else None,
-    openapi_url=(
-        "/openapi.json"
-        if settings.ENVIRONMENT.lower() != "production"
-        else None
-    ),
+    openapi_url=("/openapi.json" if settings.ENVIRONMENT.lower() != "production" else None),
     lifespan=lifespan,
 )
 
@@ -132,7 +134,9 @@ async def set_security_headers(request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     if settings.ENVIRONMENT.lower() == "production":
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains; preload"
+        )
     # Generated-UI serve endpoints are intentionally embedded in iframes on the
     # frontend.  They control framing via Content-Security-Policy: frame-ancestors
     # set in the route handler itself, so we skip the global DENY here.
@@ -194,7 +198,12 @@ def _service_health() -> tuple[dict[str, object], int]:
     "/celery/status",
     tags=["system"],
     summary="Celery worker and broker status",
-    responses={200: {"description": "Broker URL and worker reachability", "content": {"application/json": {}}}},
+    responses={
+        200: {
+            "description": "Broker URL and worker reachability",
+            "content": {"application/json": {}},
+        }
+    },
 )
 async def celery_status():
     try:
@@ -216,7 +225,9 @@ async def celery_status():
     "/",
     tags=["system"],
     summary="API service metadata",
-    responses={200: {"description": "Service name and version", "content": {"application/json": {}}}},
+    responses={
+        200: {"description": "Service name and version", "content": {"application/json": {}}}
+    },
 )
 async def root():
     return {
@@ -249,7 +260,10 @@ async def health():
     tags=["system"],
     summary="Readiness probe (DB + Redis reachable)",
     responses={
-        200: {"description": "Process is ready to serve traffic", "content": {"application/json": {}}},
+        200: {
+            "description": "Process is ready to serve traffic",
+            "content": {"application/json": {}},
+        },
         503: {"description": "Process is not yet ready", "content": {"application/json": {}}},
     },
 )
@@ -314,7 +328,12 @@ _PROM_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
     "/metrics",
     tags=["system"],
     summary="Prometheus metrics endpoint",
-    responses={200: {"description": "Metrics in Prometheus text exposition format", "content": {"text/plain": {}}}},
+    responses={
+        200: {
+            "description": "Metrics in Prometheus text exposition format",
+            "content": {"text/plain": {}},
+        }
+    },
 )
 async def prometheus_metrics() -> Response:
     # Refresh the worker gauge right before render so the snapshot reflects
@@ -344,4 +363,6 @@ async def prometheus_metrics() -> Response:
         logger.debug("db pool gauge refresh failed", exc_info=True)
 
     body = metrics.render()
-    return Response(content=body, media_type="text/plain", headers={"Content-Type": _PROM_CONTENT_TYPE})
+    return Response(
+        content=body, media_type="text/plain", headers={"Content-Type": _PROM_CONTENT_TYPE}
+    )
