@@ -359,4 +359,15 @@ For security concerns, please contact the project maintainers.
   now reports the effective environment (so a deploy whose guards fired
   or were inferred is visible in Railway logs), and `.env.example` /
   CLAUDE.md document the inference and its explicit opt-out.
+- 2026-08-25 - Closed an unauthenticated information-disclosure surface:
+  the ten `/system/*` observability digests (per-route traffic and error
+  statistics, LLM provider health, broker queue depths, pool utilization,
+  live simulation IDs) answered anonymous callers everywhere. A new
+  `require_admin_in_production` dependency now keys them off the
+  effective environment — open in development tooling, admin-only on a
+  public deploy (401 anonymous / 403 non-admin). An AST regression test
+  pins that no future `/system` route can ship without the guard
+  (`tests/test_system_health_guard.py`). Coarse reachability probes
+  (`/health`, `/api/v1/simulations/*-health`) stay public for load
+  balancers by design.
 - [VERSION] - Initial security policy
