@@ -64,13 +64,13 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Every install pins an exact version — unpinned installs are a
-          # supply-chain hole (scorecard PinnedDependencies) and make CI
-          # non-reproducible. Dependabot's pip ecosystem keeps the
-          # requirements.txt pins fresh weekly.
-          python -m pip install --quiet "pip==25.2"
-          pip install --no-cache-dir -r requirements.txt
-          pip install --no-cache-dir "pytest==9.1.1" "pytest-asyncio==1.4.0" "pytest-cov==7.1.0"
+          # Hash-locked install (--require-hashes): scorecard's
+          # PinnedDependencies probe only accepts hash-pinned installs, and
+          # hashes make CI byte-for-byte reproducible. The pytest lock is a
+          # superset of requirements-lock.txt resolved against the runtime
+          # constraints. Regenerate both with tools/gen_dependency_lock.py
+          # after bumping requirements.txt.
+          pip install --no-cache-dir --require-hashes -r requirements-pytest-lock.txt
 
       - name: Check for secrets in codebase
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0

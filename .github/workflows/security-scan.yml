@@ -43,7 +43,7 @@ jobs:
           cache: pip
 
       - name: Install bandit
-        run: pip install --quiet bandit==1.7.10
+        run: pip install --no-cache-dir --require-hashes -r requirements-tools-lock.txt
 
       - name: Run bandit (medium+ severity)
         id: bandit-scan
@@ -129,7 +129,7 @@ jobs:
           cache-dependency-path: requirements.txt
 
       - name: Install pip-audit
-        run: pip install --quiet pip-audit==2.7.2
+        run: pip install --no-cache-dir --require-hashes -r requirements-tools-lock.txt
 
       - name: Audit requirements.txt
         id: pip-audit
@@ -211,7 +211,7 @@ jobs:
           cache-dependency-path: requirements.txt
 
       - name: Install safety
-        run: pip install --quiet safety==3.6.1
+        run: pip install --no-cache-dir --require-hashes -r requirements-tools-lock.txt
 
       - name: Safety check
         id: safety

@@ -26,6 +26,8 @@ playwright==1.62.0
 sentry-sdk[fastapi]==2.68.0
 pytest==9.1.1
 tiktoken==0.14.0
-# Parsed by tools/validate_ci.py (CI hygiene enforcer) and its tests;
-# workflow-validation.yml installs this same pin for the standalone job.
+# Direct pins are resolved into hash-locked files by
+# tools/gen_dependency_lock.py (requirements-lock.txt /
+# requirements-pytest-lock.txt / requirements-tools-lock.txt) — CI and the
+# Dockerfile install only from those, with --require-hashes.
 pyyaml==6.0.3
