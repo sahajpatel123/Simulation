@@ -268,6 +268,39 @@ jobs:
               print(f'safety summary failed: {e}', file=sys.stderr)
           PY
 
+  osv:
+    name: OSV (the DB scorecard's Vulnerabilities check uses)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      # Stdlib-only tool — no install step by design, so the scanner can't
+      # itself become a supply-chain question.
+      - name: Scan pinned dependencies against OSV
+        run: |
+          set +e
+          python tools/osv_scan.py | tee osv-report.txt
+          set -e
+
+      - name: Upload OSV report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: osv-report
+          path: osv-report.txt
+          retention-days: 30
+          if-no-files-found: error
+
   trivy-scan:
     name: Trivy (container & config scan)
     runs-on: ubuntu-latest

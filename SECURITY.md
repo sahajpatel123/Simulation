@@ -61,6 +61,9 @@ This repository runs automated security scans:
 - **Safety**: Python dependency vulnerability scanner (`lint.yml`, `security-scan.yml`)
 - **Trivy**: Container, filesystem, and Dockerfile configuration scanner (`security-scan.yml`)
 - **npm audit**: Frontend dependency vulnerability scanner (`security-scan.yml`)
+- **OSV scan**: queries OpenSSF's OSV database — the same one Scorecard's
+  `Vulnerabilities` check uses — for every pinned Python and npm version;
+  stdlib-only tool at `tools/osv_scan.py` (`security-scan.yml`)
 - **CodeQL**: Semantic code analysis with the `security-and-quality` query suite (`codeql.yml`)
 - **Scorecard**: OpenSSF supply-chain health checks with SARIF uploaded to Code Scanning (`scorecard.yml`)
 - **Dependency Review**: PR-time gate on high-severity dependency changes (`dependency-review.yml`)
