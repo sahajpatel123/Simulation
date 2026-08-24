@@ -61,6 +61,44 @@ class TestMetaNoDirectWriters:
         assert safe_csv_cell(12345) == 12345
         assert safe_csv_cell(None) is None
 
+    @pytest.mark.parametrize(
+        "numeric",
+        ["-20.0", "+3.14", "-7", "42", "2.5e-3", "-1E+9", " -12.75"],
+    )
+    def test_signed_pure_numbers_pass_through_unguarded(self, numeric: str) -> None:
+        """Spreadsheets parse signed pure numbers as numeric cells, never
+        formulas — prefixing them would only corrupt founder data (e.g. a
+        backfilled variance of -20.0)."""
+        from app.simulation.export_utils import safe_csv_cell
+
+        assert safe_csv_cell(numeric) == numeric
+
+    @pytest.mark.parametrize(
+        ("numeric", "lookalike"),
+        [
+            ("-20.0", "-20 bananas"),
+            ("+3.14", "+3 bananas"),
+        ],
+    )
+    def test_sign_plus_non_numeric_stays_guarded(self, numeric: str, lookalike: str) -> None:
+        """The exemption is exact-match: the same sign followed by anything
+        non-numeric keeps the full guard."""
+        from app.simulation.export_utils import safe_csv_cell
+
+        assert safe_csv_cell(numeric) == numeric  # sanity anchor
+        assert safe_csv_cell(lookalike) == f"'{lookalike}"
+
+    @pytest.mark.parametrize(
+        "lookalike",
+        ["-2+3+cmd|' /C calc'!A0", "+1+1", "--20", "+-3"],
+    )
+    def test_arithmetic_lookalikes_stay_guarded(self, lookalike: str) -> None:
+        """Sign-leading strings that are NOT clean numbers keep the full
+        guard — DDE/formula payloads often disguise themselves this way."""
+        from app.simulation.export_utils import safe_csv_cell
+
+        assert safe_csv_cell(lookalike) == f"'{lookalike}"
+
 
 class TestExporterRoundTrips:
     """Hostile user-controlled text through real exporters, end to end."""

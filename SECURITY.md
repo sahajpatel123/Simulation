@@ -477,4 +477,12 @@ For security concerns, please contact the project maintainers.
   calls outside export_utils so new exporters cannot bypass the guard,
   with hostile-payload round-trips pinning behaviour end to end through
   real exporters.
+- 2026-08-25 - Refined the CSV formula guard to stop mangling signed
+  numeric data: ``safe_csv_cell`` prefixed every sign-leading string, so a
+  backfilled variance of ``-20.0`` exported as ``'-20.0`` and broke the
+  founder's spreadsheet math. Spreadsheets parse signed pure numbers
+  (``-20.0``, ``+3``, ``2.5e-3``) as numeric cells — never formulas — so
+  they now pass through untouched, while any sign followed by non-numeric
+  content (``-2+3+cmd|…``, DDE payloads) keeps the full guard. Pinned by
+  parametrized exact-match tests covering both sides of the exemption.
 - [VERSION] - Initial security policy
