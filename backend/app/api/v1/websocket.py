@@ -84,7 +84,7 @@ async def websocket_simulation_progress(
     if not _origin_allowed(origin):
         logger.warning(
             "[WS] Rejected handshake: origin=%r not in allowlist",
-            log_safe(origin),
+            log_safe(origin).replace("\n", " "),
         )
         await websocket.close(code=4003)
         return
@@ -133,7 +133,7 @@ async def websocket_simulation_progress(
                 if len(data) > 65536:
                     logger.warning(
                         "[WS] Oversized frame rejected simulation_id=%s len=%s",
-                        log_safe(simulation_id),
+                        log_safe(simulation_id).replace("\n", " "),
                         len(data),
                     )
                     await websocket.send_text(
@@ -147,8 +147,8 @@ async def websocket_simulation_progress(
             except Exception as exc:
                 logger.warning(
                     "[WS] Receive error simulation_id=%s: %s",
-                    log_safe(simulation_id),
-                    log_safe(exc),
+                    log_safe(simulation_id).replace("\n", " "),
+                    log_safe(exc).replace("\n", " "),
                 )
                 break
     finally:

@@ -63,11 +63,17 @@ class ConnectionManager:
                     _exc,
                 )
         self._connections[simulation_id] = websocket
-        logger.info("[WS] Client connected - simulation_id=%s", log_safe(simulation_id))
+        logger.info(
+            "[WS] Client connected - simulation_id=%s",
+            log_safe(simulation_id).replace("\n", " "),
+        )
 
     def disconnect(self, simulation_id: int) -> None:
         self._connections.pop(simulation_id, None)
-        logger.info("[WS] Client disconnected - simulation_id=%s", log_safe(simulation_id))
+        logger.info(
+            "[WS] Client disconnected - simulation_id=%s",
+            log_safe(simulation_id).replace("\n", " "),
+        )
 
     async def send_update(self, simulation_id: int, payload: dict[str, Any]) -> bool:
         ws = self._connections.get(simulation_id)

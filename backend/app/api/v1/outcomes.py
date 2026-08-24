@@ -1801,8 +1801,8 @@ def record_outcome(
 
     logger.info(
         "[Outcome] Recorded — project_id=%s actual_conv=%.3f pred_conv=%s calibration=%.1f",
-        log_safe(project_id),
-        log_safe(payload.actual_conversion_rate),
+        log_safe(project_id).replace("\n", " "),
+        log_safe(payload.actual_conversion_rate).replace("\n", " "),
         pred_conv,
         outcome.calibration_score or 0.0,
     )
@@ -1953,7 +1953,7 @@ def record_outcomes_batch(
 
     logger.info(
         "[Outcome] Batch recorded — project_id=%s rows=%d",
-        log_safe(project_id),
+        log_safe(project_id).replace("\n", " "),
         len(rows),
     )
     _invalidate_outcome_caches(current_user.id)

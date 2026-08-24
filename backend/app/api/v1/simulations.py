@@ -4826,9 +4826,9 @@ def cancel_simulation(
         except Exception as exc:
             logger.warning(
                 "[Simulation] revoke failed - simulation_id=%s task_id=%s error=%s",
-                log_safe(simulation_id),
-                log_safe(sim.task_id),
-                log_safe(exc),
+                log_safe(simulation_id).replace("\n", " "),
+                log_safe(sim.task_id).replace("\n", " "),
+                log_safe(exc).replace("\n", " "),
             )
 
     cancelled_at = datetime.now(UTC)
@@ -4895,16 +4895,16 @@ def cancel_simulation(
         logger.warning(
             "[Simulation] webhook enqueue on cancel skipped - "
             "simulation_id=%s error=%s",
-            log_safe(simulation_id),
-            log_safe(exc),
+            log_safe(simulation_id).replace("\n", " "),
+            log_safe(exc).replace("\n", " "),
         )
 
     _invalidate_simulation_caches(current_user.id)
 
     logger.info(
         "[Simulation] Cancelled by user - simulation_id=%s task_id=%s",
-        log_safe(simulation_id),
-        log_safe(sim.task_id),
+        log_safe(simulation_id).replace("\n", " "),
+        log_safe(sim.task_id).replace("\n", " "),
     )
 
     return SimulationCancelOut(
@@ -11224,7 +11224,7 @@ def get_simulation_journey_category_benchmark(
             logger.warning(
                 "journey-category-benchmark: discarding invalid cached "
                 "payload for simulation %s",
-                log_safe(simulation_id),
+                log_safe(simulation_id).replace("\n", " "),
             )
 
     rows = (

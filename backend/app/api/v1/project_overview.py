@@ -146,8 +146,8 @@ def get_project_overview(
             logger.warning(
                 "project overview: %s panel failed for project %s: %s",
                 key,
-                log_safe(project_id),
-                log_safe(exc),
+                log_safe(project_id).replace("\n", " "),
+                log_safe(exc).replace("\n", " "),
             )
 
     payload = build_project_overview(

@@ -561,7 +561,10 @@ def _build_safe_html(raw: str) -> str:
     doc = _inject_js_boilerplate(doc)
     is_valid, msg = validate_generated_html(doc)
     if not is_valid:
-        logger.warning("[UI] Generated HTML validation: %s", msg)
+        logger.warning(
+            "[UI] Generated HTML validation: %s",
+            log_safe(msg).replace("\n", " "),
+        )
     return doc
 
 
@@ -626,7 +629,7 @@ async def generate_ui(
     html = _build_safe_html(raw)
     logger.info(
         "generate-ui ok project=%s raw_len=%s html_len=%s",
-        log_safe(project_id),
+        log_safe(project_id).replace("\n", " "),
         len(raw),
         len(html),
     )
