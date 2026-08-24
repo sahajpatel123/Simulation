@@ -497,4 +497,14 @@ For security concerns, please contact the project maintainers.
   mid-stream frame still draws the in-band error message instead of
   dropping the connection. Flow tests drive the full handler against a
   fake socket to pin each behaviour.
+- 2026-08-25 - Audited pagination bounds across the whole API surface
+  (274 ``Query(...)`` defaults AST-scanned for pagination-shaped params):
+  every ``limit``-style parameter either declares ``le=`` at the schema
+  or clamps inside its handler — no route lets an authenticated caller
+  request an unbounded result set. The audit is now a permanent guard:
+  a meta-test re-runs the scan and fails on any new pagination param
+  without declared bounds, with a stale-entry-checked allowlist for the
+  two deliberate clamp-in-handler contracts (project search coerces via
+  ``_normalise_limit`` → [1, 100]; buyer personas clamp to [1, 52]) and
+  unit tests pinning that both clamps actually hold.
 - [VERSION] - Initial security policy
