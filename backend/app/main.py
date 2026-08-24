@@ -10,6 +10,7 @@ from sqlalchemy import text
 
 from app.api.v1 import api_router
 from app.core.audit_middleware import AuditLogMiddleware
+from app.core.celery_app import celery_app as _celery_app
 from app.core.config import settings
 from app.core.database import engine, init_extensions
 from app.core.errors import TheCeeError, generic_error_handler, thecee_error_handler
@@ -20,7 +21,6 @@ from app.core.redis_client import get_redis_client
 from app.core.request_id_middleware import RequestIdMiddleware
 from app.core.safe_errors import safe_error_label
 from app.core.timing_middleware import TimingMiddleware
-from app.worker import celery_app as _celery_app
 
 logger = logging.getLogger(__name__)
 

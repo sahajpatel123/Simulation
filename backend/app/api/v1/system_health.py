@@ -18,6 +18,7 @@ from app.core import response_cache as response_cache_module
 from app.core import simulation_health as simulation_health_module
 from app.core import worker_health as worker_health_module
 from app.core.cache_health import build_cache_health
+from app.core.celery_app import celery_app
 from app.core.config import settings
 from app.core.database import engine
 from app.core.deps import get_db
@@ -56,7 +57,6 @@ from app.schemas.system_health import (
     WebsocketHealthOut,
     WorkerHealthOut,
 )
-from app.worker import celery_app
 
 router = APIRouter(prefix="/system", tags=["system"])
 

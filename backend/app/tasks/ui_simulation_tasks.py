@@ -8,6 +8,7 @@ from sqlalchemy import text
 
 from app.browser.pool import BrowserPool
 from app.browser.utils import cluster_to_agent_profile
+from app.core.celery_app import celery_app
 from app.core.database import SessionLocal
 from app.models.ui_simulation_run import UISimulationRun
 from app.models.ui_simulation_session import UISimulationSession
@@ -15,7 +16,6 @@ from app.simulation.agent_hierarchy import AgentHierarchyRouter, AgentTier
 from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.conductor import Conductor
 from app.simulation.product_type import ProductType
-from app.worker import celery_app
 
 _registry = ClusterRegistry()
 _router = AgentHierarchyRouter()

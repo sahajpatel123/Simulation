@@ -5,8 +5,8 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import text
 
+from app.core.celery_app import celery_app
 from app.core.database import SessionLocal
-from app.worker import celery_app
 
 logger = logging.getLogger("thecee.retention")
 

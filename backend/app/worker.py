@@ -1,54 +1,21 @@
-from celery import Celery
+"""Celery worker entrypoint (``celery -A app.worker:celery_app``).
+
+The application instance itself lives in the neutral ``app.core.celery_app``
+module so task modules never import this file — that is what keeps the
+worker↔tasks import graph acyclic. This module only adds the periodic-task
+registrations that need live task objects, importing them lazily inside the
+signal handler (the canonical Celery pattern).
+"""
+
 from celery.schedules import crontab
 
-from app.core.config import settings
+from app.core.celery_app import celery_app
 
-celery_app = Celery(
-    "thecee",
-    broker=settings.CELERY_BROKER_URL,
-    backend=settings.CELERY_RESULT_BACKEND,
-    include=[
-        "app.tasks.simulation_tasks",
-        "app.tasks.stress_test_tasks",
-        "app.tasks.decision_tasks",
-        "app.tasks.calibration_tasks",
-        "app.tasks.ui_simulation_tasks",
-        "app.tasks.hardware_tasks",
-        "app.tasks.hardware_consumer_simulation",
-        "app.tasks.retention_email_tasks",
-    ],
-)
+__all__ = ["celery_app"]
 
-celery_app.conf.update(
-    task_serializer="json",
-    accept_content=["json"],
-    result_serializer="json",
-    timezone="UTC",
-    enable_utc=True,
-    task_track_started=True,
-    task_acks_late=True,
-    task_reject_on_worker_lost=True,
-    task_time_limit=1800,
-    task_soft_time_limit=1500,
-    worker_prefetch_multiplier=1,
-    # Recycle workers to cap RSS growth on long sim runs (value is KiB; ~400 MB).
-    worker_max_memory_per_child=400_000,
-    worker_max_tasks_per_child=10,
-    result_expires=86400,
-    broker_connection_retry_on_startup=True,
-)
-
-celery_app.conf.beat_schedule = {
-    **getattr(celery_app.conf, "beat_schedule", {}),
-    "week4-retention-emails": {
-        "task": "retention.send_week4_retention_emails",
-        "schedule": crontab(hour=9, minute=0, day_of_week=1),
-    },
-}
 
 @celery_app.on_after_configure.connect
 def setup_periodic_tasks(sender, **kwargs) -> None:
-    # codeql[py/cyclic-import]: lazy task registration inside the signal handler is the canonical Celery pattern and breaks the module-level cycle by construction
     from app.tasks.calibration_tasks import (
         run_cluster_trait_calibration,
         run_funnel_stage_calibration,

@@ -50,6 +50,7 @@ from app.api.v1.users import (
     _USER_USAGE_BY_WEEK_CACHE_NAMESPACE,
     _USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
 )
+from app.core.celery_app import celery_app
 from app.core.deps import get_current_user, get_db
 from app.core.metrics import metrics
 from app.core.progress_bridge import progress_bridge
@@ -486,7 +487,6 @@ from app.tasks.simulation_tasks import (
     resolve_simulation_seed,
     run_full_simulation,
 )
-from app.worker import celery_app
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/simulations", tags=["simulations"])

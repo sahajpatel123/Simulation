@@ -8,6 +8,7 @@ from typing import Any
 from celery import Task
 from sqlalchemy.orm import Session
 
+from app.core.celery_app import celery_app
 from app.core.database import SessionLocal
 from app.models.assumption import Assumption
 from app.models.decision import Decision
@@ -16,7 +17,6 @@ from app.models.project import Project
 from app.simulation.aggregation import ResultsAggregator
 from app.simulation.funnel import FunnelExecutionEngine
 from app.simulation.profiles import AgentProfileGenerator
-from app.worker import celery_app
 
 logger = logging.getLogger(__name__)
 
