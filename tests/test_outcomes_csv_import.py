@@ -5,6 +5,7 @@ route layer (``POST /projects/{id}/outcomes/batch/csv``). Route tests drive
 the route function directly with a fake session, matching the pattern in
 ``test_outcomes_batch_api.py`` so no Postgres or Redis is required.
 """
+
 from __future__ import annotations
 
 import sys
@@ -21,6 +22,7 @@ if "razorpay" not in sys.modules:
     sys.modules["razorpay"] = stub
 
 from app.schemas.outcome import OutcomeCsvImportOut
+from app.simulation import outcomes_csv_import as csv_mod
 from app.simulation.outcomes_csv_import import (
     MAX_ROWS,
     CsvRowError,
@@ -44,7 +46,6 @@ def _csv(*rows: str) -> bytes:
 
 
 def test_parser_public_allowlist_matches_callers() -> None:
-    import app.simulation.outcomes_csv_import as csv_mod
 
     assert set(csv_mod.__all__) == {
         "REQUIRED_COLUMNS",
@@ -86,8 +87,7 @@ def test_parse_header_only_reports_no_data_rows() -> None:
 
 def test_parse_header_accepts_case_insensitive_and_bom() -> None:
     text = (
-        "\ufeffACTUAL_CONVERSION_RATE,Actual_MRR,actual_cac,actual_churn_rate\n"
-        "0.05,1000,50,0.03\n"
+        "\ufeffACTUAL_CONVERSION_RATE,Actual_MRR,actual_cac,actual_churn_rate\n0.05,1000,50,0.03\n"
     )
     result = parse_outcomes_csv(text)
     assert result.errors == []
@@ -102,9 +102,7 @@ def test_parse_header_missing_required_column() -> None:
     )
     assert result.items == []
     assert any(
-        error.column == "actual_cac"
-        and "missing required" in error.error
-        and error.row == 1
+        error.column == "actual_cac" and "missing required" in error.error and error.row == 1
         for error in result.errors
     )
 
@@ -116,8 +114,7 @@ def test_parse_header_rejects_unknown_column() -> None:
     )
     assert result.items == []
     assert any(
-        error.column == "revenue" and "unknown column" in error.error
-        for error in result.errors
+        error.column == "revenue" and "unknown column" in error.error for error in result.errors
     )
 
 
@@ -128,8 +125,7 @@ def test_parse_header_rejects_read_only_column() -> None:
     )
     assert result.items == []
     assert any(
-        error.column == "predicted_conversion_rate"
-        and "read-only" in error.error
+        error.column == "predicted_conversion_rate" and "read-only" in error.error
         for error in result.errors
     )
 
@@ -153,8 +149,7 @@ def test_parse_header_rejects_duplicate_column() -> None:
 
 def test_parse_rate_accepts_fraction_and_percentage() -> None:
     result = parse_outcomes_csv(
-        "actual_conversion_rate,actual_mrr,actual_cac,actual_churn_rate\n"
-        "5%,1000,50,12.5%\n"
+        "actual_conversion_rate,actual_mrr,actual_cac,actual_churn_rate\n5%,1000,50,12.5%\n"
     )
     assert result.errors == []
     assert result.items[0]["actual_conversion_rate"] == 0.05
@@ -163,8 +158,7 @@ def test_parse_rate_accepts_fraction_and_percentage() -> None:
 
 def test_parse_rate_rejects_bare_whole_number_with_hint() -> None:
     result = parse_outcomes_csv(
-        "actual_conversion_rate,actual_mrr,actual_cac,actual_churn_rate\n"
-        "5,1000,50,0.03\n"
+        "actual_conversion_rate,actual_mrr,actual_cac,actual_churn_rate\n5,1000,50,0.03\n"
     )
     assert result.items == []
     error = next(e for e in result.errors if e.column == "actual_conversion_rate")
@@ -179,8 +173,7 @@ def test_parse_rejects_invalid_number() -> None:
     )
     assert result.items == []
     assert any(
-        error.column == "actual_mrr" and "invalid number" in error.error
-        for error in result.errors
+        error.column == "actual_mrr" and "invalid number" in error.error for error in result.errors
     )
 
 
@@ -260,8 +253,7 @@ def test_parse_handles_quoted_commas_and_newlines_in_notes() -> None:
 
 def test_parse_rejects_too_many_columns() -> None:
     result = parse_outcomes_csv(
-        "actual_conversion_rate,actual_mrr,actual_cac,actual_churn_rate\n"
-        "0.05,1000,50,0.03,999\n"
+        "actual_conversion_rate,actual_mrr,actual_cac,actual_churn_rate\n0.05,1000,50,0.03,999\n"
     )
     assert result.items == []
     assert result.errors[0].row == 2
@@ -512,10 +504,7 @@ def test_csv_import_rejects_oversized_field_without_500() -> None:
     session = _FakeSession(simulations=[_Simulation(7)])
     huge_notes = "x" * 200_000
     body = (
-        CSV_HEADER.encode("utf-8")
-        + b"\n0.05,1000,50,0.03,\""
-        + huge_notes.encode("utf-8")
-        + b"\"\n"
+        CSV_HEADER.encode("utf-8") + b'\n0.05,1000,50,0.03,"' + huge_notes.encode("utf-8") + b'"\n'
     )
 
     with pytest.raises(HTTPException) as exc:
@@ -608,11 +597,7 @@ def test_csv_import_rejects_oversized_file(monkeypatch) -> None:
 def test_csv_import_handles_bom_and_blank_lines() -> None:
     latest = _Simulation(9)
     session = _FakeSession(simulations=[latest])
-    text = (
-        "\ufeff" + CSV_HEADER + "\n"
-        "\n"
-        "0.05,1000,50,0.03\n"
-    )
+    text = "\ufeff" + CSV_HEADER + "\n\n0.05,1000,50,0.03\n"
 
     resp = _call_csv_import(text.encode("utf-8"), session=session)
 

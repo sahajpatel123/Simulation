@@ -82,10 +82,10 @@ def _git_show(path_at_commit: str, commit: str = "3e3ba4f") -> str | None:
         return None
 
 
-def _prompt_body(source: str, name: str) -> str:
+def _prompt_body(source: str, name: str) -> str | None:
+    """Extract a prompt's triple-quoted body; ``None`` when not present."""
     match = re.search(rf"{name} = \"\"\"(.*?)\"\"\"", source, re.S)
-    assert match is not None, f"{name} not found"
-    return match.group(1)
+    return match.group(1) if match else None
 
 
 def test_cluster_registry_integrity():
@@ -152,14 +152,24 @@ def test_hardware_tier3_distribution_collapses_without_offline_channel():
     _, offline_enabled = _run_conductor(
         product_type=ProductType.CONSUMER_HARDWARE,
         description="A premium smart speaker sold online and offline retail",
-        assumptions=[{"text": "premium smart speaker sold online and offline retail store physical distribution tier-2 available"}],
+        assumptions=[
+            {
+                "text": "premium smart speaker sold online and offline retail store physical distribution tier-2 available"
+            }
+        ],
         average_order_value=12_000,
         geography="TIER3",
     )
 
-    tier3_online = online_only.cluster_results["tier3_first_time_app_user"]["DistributionChannelArchitect"]
-    tier3_offline = offline_enabled.cluster_results["tier3_first_time_app_user"]["DistributionChannelArchitect"]
-    enthusiast_online = online_only.cluster_results["high_income_hardware_enthusiast"]["DistributionChannelArchitect"]
+    tier3_online = online_only.cluster_results["tier3_first_time_app_user"][
+        "DistributionChannelArchitect"
+    ]
+    tier3_offline = offline_enabled.cluster_results["tier3_first_time_app_user"][
+        "DistributionChannelArchitect"
+    ]
+    enthusiast_online = online_only.cluster_results["high_income_hardware_enthusiast"][
+        "DistributionChannelArchitect"
+    ]
 
     assert tier3_online.metrics["distribution_accessibility_multiplier"] == 0.3
     assert tier3_online.flags["distribution_kill_shot"] is True
@@ -171,13 +181,19 @@ def test_health_hardware_clinical_validation_gate_suppresses_non_enthusiast_clus
     _, result = _run_conductor(
         product_type=ProductType.HEALTH_HARDWARE,
         description="A wearable fitness tracker for sleep, activity, and wellness insights",
-        assumptions=[{"text": "wearable fitness tracker for sleep, activity, and wellness insights"}],
+        assumptions=[
+            {"text": "wearable fitness tracker for sleep, activity, and wellness insights"}
+        ],
         average_order_value=6_999,
     )
 
     skeptic = result.cluster_results["health_hardware_skeptic"]["HealthSafetyHardwareArchitect"]
-    enthusiast = result.cluster_results["health_hardware_enthusiast"]["HealthSafetyHardwareArchitect"]
-    wealthy = result.cluster_results["wealthy_health_conscious_buyer"]["HealthSafetyHardwareArchitect"]
+    enthusiast = result.cluster_results["health_hardware_enthusiast"][
+        "HealthSafetyHardwareArchitect"
+    ]
+    wealthy = result.cluster_results["wealthy_health_conscious_buyer"][
+        "HealthSafetyHardwareArchitect"
+    ]
 
     assert skeptic.metrics["clinical_gate_multiplier"] == 0.05
     assert wealthy.metrics["clinical_gate_multiplier"] == 0.05
@@ -281,22 +297,15 @@ def test_prompt_token_budgets_are_lower_than_pre_step_48_templates():
             "test requires a full clone."
         )
     # Initialize up front so the token reads below are provably bound;
-    # pytest.skip() inside an except block is invisible to static flow
-    # analysis (it raises, but nothing declares it).
-    old_pre_tokens: int | None = None
-    old_int_tokens: int | None = None
-    try:
-        old_pre = _prompt_body(historical, "PREMORTEM_PROMPT")
-        old_int = _prompt_body(historical, "INTERVENTION_PROMPT")
-        old_pre_tokens = len(ENCODING.encode(old_pre))
-        old_int_tokens = len(ENCODING.encode(old_int))
-    except AssertionError:
-        pass
+    # missing prompts yield None instead of an exception that a bare
+    # ``except: pass`` would have to swallow.
+    old_pre = _prompt_body(historical, "PREMORTEM_PROMPT")
+    old_int = _prompt_body(historical, "INTERVENTION_PROMPT")
+    old_pre_tokens = len(ENCODING.encode(old_pre)) if old_pre is not None else None
+    old_int_tokens = len(ENCODING.encode(old_int)) if old_int is not None else None
 
     if old_pre_tokens is None or old_int_tokens is None:
-        pytest.skip(
-            "PREMORTEM_PROMPT/INTERVENTION_PROMPT not present in historical baseline."
-        )
+        pytest.skip("PREMORTEM_PROMPT/INTERVENTION_PROMPT not present in historical baseline.")
 
     current_pre = len(ENCODING.encode(PREMORTEM_PROMPT))
     current_int = len(ENCODING.encode(INTERVENTION_PROMPT))
@@ -349,8 +358,7 @@ def test_accountability_marks_pricing_as_primary_failure_for_student_rupee_999_s
     engine = AccountabilityEngine()
     findings = engine.generate_domain_findings(result, total_agents=10_000)
     pricing_findings = [
-        f for f in findings
-        if f.architect_name == "PricingArchitect" and "student" in f.cluster_id
+        f for f in findings if f.architect_name == "PricingArchitect" and "student" in f.cluster_id
     ]
 
     assert engine.primary_failure_domain(findings) == "PricingArchitect"
@@ -385,10 +393,16 @@ def test_results_payload_is_backward_compatible_and_additive():
     results_dict = ResultsAggregator().to_dict(agg_result)
     results_dict["cluster_breakdown"] = conductor_result.cluster_breakdown
     results_dict["domain_findings"] = [
-        f.to_dict() for f in AccountabilityEngine().generate_domain_findings(conductor_result, total_agents=1_000)[:10]
+        f.to_dict()
+        for f in AccountabilityEngine().generate_domain_findings(
+            conductor_result, total_agents=1_000
+        )[:10]
     ]
     results_dict["primary_failure_domain"] = "PricingArchitect"
-    results_dict["highest_value_cluster"] = {"name": "Metro power professional", "conversion_rate": 0.0038}
+    results_dict["highest_value_cluster"] = {
+        "name": "Metro power professional",
+        "conversion_rate": 0.0038,
+    }
     results_dict["architect_accountability"] = conductor_result.architect_accountability
     results_dict["product_type_detected"] = conductor_result.product_type.value
     results_dict["cluster_narrative"] = "Representative narrative."

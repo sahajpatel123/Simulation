@@ -12,6 +12,7 @@ import asyncio
 import json
 import sys
 import types
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -204,20 +205,22 @@ def test_route_rejects_unsupported_format() -> None:
 
     from app.api.v1 import simulations as sim_mod
 
-    class _Boom:
-        def __getattr__(self, name):  # pragma: no cover - must never be hit
-            raise AssertionError("DB accessed before format validation")
+    # Any session interaction (even bare attribute access) registers a call
+    # on the mock, so post-hoc emptiness proves format validation
+    # short-circuits long before the DB layer.
+    db_mock = MagicMock()
 
     with pytest.raises(HTTPException) as exc:
         sim_mod.export_simulation_stress_scenarios(
             simulation_id=77,
             format="xlsx",
-            db=_Boom(),  # type: ignore[arg-type]
+            db=db_mock,
             current_user=type("U", (), {"id": 42})(),
         )
 
     assert exc.value.status_code == 400
     assert "unsupported export format" in exc.value.detail
+    assert db_mock.mock_calls == []
 
 
 def _call_export_route(format: str):
