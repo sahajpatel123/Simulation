@@ -91,6 +91,11 @@ def _revoke_user_refresh_tokens(db: Session, user_id: int) -> int:
 def register(payload: UserCreate, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == payload.email).first()
     if existing:
+        # Burn one bcrypt round so "email already registered" costs the
+        # same as a real registration's hashing step — otherwise response
+        # latency enumerates which addresses have accounts (the login
+        # path below carries the identical guard).
+        verify_password(payload.password, _DUMMY_PASSWORD_HASH)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Email already registered",

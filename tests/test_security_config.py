@@ -216,3 +216,52 @@ def test_login_burns_bcrypt_for_unknown_emails() -> None:
     plain, hashed = verify_calls[0]
     assert plain == "Whatever-123!"
     assert hashed == auth_mod._DUMMY_PASSWORD_HASH
+
+
+def test_register_burns_bcrypt_for_existing_emails() -> None:
+    """The 'email already registered' branch must burn a bcrypt round too:
+    a real registration hashes the password, so an instant 409 would let
+    response latency enumerate which addresses have accounts."""
+    pytest.importorskip("jwt")
+
+    import sys
+    import types
+    from unittest.mock import patch
+
+    from fastapi import HTTPException
+
+    razorpay_stub = types.ModuleType("razorpay")
+    razorpay_stub.Client = object  # type: ignore[attr-defined]
+    sys.modules.setdefault("razorpay", razorpay_stub)
+
+    from app.api.v1 import auth as auth_mod
+    from app.schemas.auth import UserCreate
+
+    class _FakeQuery:
+        def filter(self, *_a, **_k):
+            return self
+
+        def first(self):
+            return object()  # email already taken
+
+    class _FakeDB:
+        def query(self, *_a, **_k):
+            return _FakeQuery()
+
+    verify_calls: list[tuple[str, str]] = []
+
+    def fake_verify(plain: str, hashed: str) -> bool:
+        verify_calls.append((plain, hashed))
+        return False
+
+    payload = UserCreate(email="taken@example.com", password="Whatever-123!")
+    with patch.object(auth_mod, "verify_password", fake_verify):
+        with pytest.raises(HTTPException) as exc_info:
+            auth_mod.register(payload, db=_FakeDB())
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Email already registered"
+    assert len(verify_calls) == 1
+    plain, hashed = verify_calls[0]
+    assert plain == "Whatever-123!"
+    assert hashed == auth_mod._DUMMY_PASSWORD_HASH

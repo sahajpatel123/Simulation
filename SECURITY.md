@@ -443,4 +443,10 @@ For security concerns, please contact the project maintainers.
   un-spoofable by clients), falling back to peer address then per-call
   anon buckets. Five tests pin rightmost selection, whitespace stripping,
   blank-header fallback, and anonymous bucketing.
+- 2026-08-25 - Closed the register-path timing oracle: "email already
+  registered" returned instantly while a real registration burned a
+  bcrypt hash, letting response latency enumerate which addresses have
+  accounts. The 409 branch now burns one bcrypt round against the same
+  dummy digest the login path uses; pinned by a test asserting exactly
+  one verify call with the caller-supplied password.
 - [VERSION] - Initial security policy
