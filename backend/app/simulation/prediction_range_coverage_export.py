@@ -25,6 +25,8 @@ import json
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 FORMAT_VERSION: str = "1"
 
 _SUMMARY_KEYS: tuple[str, ...] = (
@@ -164,7 +166,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with the formula-injection guard on every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
@@ -198,17 +200,11 @@ def _summary_rows(data: dict[str, Any]) -> list[tuple[str, object]]:
 
 
 def _rows(data: dict[str, Any]) -> list[dict[str, Any]]:
-    return [
-        row for row in data.get("rows") or [] if isinstance(row, dict)
-    ]
+    return [row for row in data.get("rows") or [] if isinstance(row, dict)]
 
 
 def _key_signals(data: dict[str, Any]) -> list[dict[str, Any]]:
-    return [
-        signal
-        for signal in data.get("key_signals") or []
-        if isinstance(signal, dict)
-    ]
+    return [signal for signal in data.get("key_signals") or [] if isinstance(signal, dict)]
 
 
 def _csv_rate(value: Any) -> object:
@@ -286,16 +282,19 @@ def prediction_range_coverage_to_json(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     """Render a prediction-range coverage payload as a strict JSON document."""
-    return json.dumps(
-        {
-            "metadata": _json_safe(metadata or {}),
-            "prediction_range_coverage": _json_safe(_as_dict(payload)),
-        },
-        default=str,
-        ensure_ascii=False,
-        indent=2,
-        allow_nan=False,
-    ) + "\n"
+    return (
+        json.dumps(
+            {
+                "metadata": _json_safe(metadata or {}),
+                "prediction_range_coverage": _json_safe(_as_dict(payload)),
+            },
+            default=str,
+            ensure_ascii=False,
+            indent=2,
+            allow_nan=False,
+        )
+        + "\n"
+    )
 
 
 def _escape_md_cell(value: Any) -> str:
@@ -365,27 +364,19 @@ def prediction_range_coverage_to_markdown(
     if isinstance(worst_miss, dict) and worst_miss:
         sim_id = _safe_int(worst_miss.get("simulation_id"))
         margin = _md_float(worst_miss.get("margin"))
-        lines.append(
-            "| Worst miss | "
-            f"Simulation {sim_id or '?'} (margin {margin}) |"
-        )
+        lines.append(f"| Worst miss | Simulation {sim_id or '?'} (margin {margin}) |")
     lines.append("")
 
     rows = _rows(data)
     lines.append("## Out-of-Sample Band Checks")
     lines.append("")
-    lines.append(
-        "| Simulation | Predicted | Actual | Band | Within | Margin | "
-        "History | Source |"
-    )
+    lines.append("| Simulation | Predicted | Actual | Band | Within | Margin | History | Source |")
     lines.append("| --- | ---: | ---: | --- | --- | ---: | ---: | --- |")
     for row in rows:
         low = _md_pct(row.get("low"))
         high = _md_pct(row.get("high"))
         within = row.get("within")
-        within_text = "yes" if within is True else (
-            "no" if within is False else "—"
-        )
+        within_text = "yes" if within is True else ("no" if within is False else "—")
         lines.append(
             "| {sim} | {predicted} | {actual} | {low} – {high} | "
             "{within} | {margin} | {history} | {source} |".format(
@@ -397,8 +388,7 @@ def prediction_range_coverage_to_markdown(
                 within=within_text,
                 margin=_md_float(row.get("margin")),
                 history=_safe_int(row.get("history_count")),
-                source=_escape_md_cell(row.get("calibration_source"))
-                or "—",
+                source=_escape_md_cell(row.get("calibration_source")) or "—",
             )
         )
     lines.append("")
@@ -412,8 +402,7 @@ def prediction_range_coverage_to_markdown(
             if not display:
                 display = _safe_text(signal.get("label"))
             lines.append(
-                f"- **{_escape_md_cell(signal.get('label'))}** — "
-                f"{_escape_md_cell(display)}"
+                f"- **{_escape_md_cell(signal.get('label'))}** — {_escape_md_cell(display)}"
             )
         lines.append("")
 
@@ -421,9 +410,7 @@ def prediction_range_coverage_to_markdown(
     lines.append("")
     footer = [f"Project {_safe_int(data.get('project_id'))}"]
     if data.get("generated_at"):
-        footer.append(
-            f"Generated {_escape_md_cell(data.get('generated_at'))}"
-        )
+        footer.append(f"Generated {_escape_md_cell(data.get('generated_at'))}")
     lines.append(f"*{' · '.join(footer)}*")
     lines.append("")
 

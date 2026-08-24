@@ -1,9 +1,12 @@
 """Pure helper for exporting a user's outcomes as CSV."""
+
 from __future__ import annotations
 
 import csv
 import io
 from typing import Any
+
+from app.simulation.export_utils import write_row
 
 
 def _text(value: Any) -> str:
@@ -21,12 +24,13 @@ def user_outcomes_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
-        writer.writerow(["user_id", _text(metadata.get("user_id"))])
-        writer.writerow(["format_version", _text(metadata.get("format_version", "1"))])
-        writer.writerow([])
+        write_row(writer, ["generated_at", _text(metadata.get("generated_at"))])
+        write_row(writer, ["user_id", _text(metadata.get("user_id"))])
+        write_row(writer, ["format_version", _text(metadata.get("format_version", "1"))])
+        write_row(writer, [])
 
-    writer.writerow(
+    write_row(
+        writer,
         [
             "outcome_id",
             "project_id",
@@ -35,10 +39,11 @@ def user_outcomes_to_csv(
             "actual_cac",
             "actual_churn_rate",
             "created_at",
-        ]
+        ],
     )
     for row in rows:
-        writer.writerow(
+        write_row(
+            writer,
             [
                 _text(row.get("outcome_id")),
                 _text(row.get("project_id")),
@@ -47,7 +52,7 @@ def user_outcomes_to_csv(
                 _text(row.get("actual_cac")),
                 _text(row.get("actual_churn_rate")),
                 _text(row.get("created_at")),
-            ]
+            ],
         )
     return buffer.getvalue()
 

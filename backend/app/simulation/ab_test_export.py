@@ -31,6 +31,7 @@ from typing import Any
 
 from app.schemas.ab_test import AbTestExperimentOut
 from app.simulation.ab_test_summary import build_ab_test_summary
+from app.simulation.export_utils import write_row
 
 FORMAT_VERSION = "1"
 
@@ -102,7 +103,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with formula-injection guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _analysis_dict(data: dict[str, Any]) -> dict[str, Any]:
@@ -222,16 +223,8 @@ def _experiment_fields(data: dict[str, Any]) -> dict[str, Any]:
         if data.get("relative_uplift_pct") is not None
         else analysis.get("relative_uplift_pct")
     )
-    z_score = (
-        data.get("z_score")
-        if data.get("z_score") is not None
-        else analysis.get("z_score")
-    )
-    p_value = (
-        data.get("p_value")
-        if data.get("p_value") is not None
-        else analysis.get("p_value")
-    )
+    z_score = data.get("z_score") if data.get("z_score") is not None else analysis.get("z_score")
+    p_value = data.get("p_value") if data.get("p_value") is not None else analysis.get("p_value")
     return {
         "id": _safe_int(data.get("id")),
         "name": _safe_text(data.get("name")),
@@ -259,9 +252,7 @@ def _experiment_fields(data: dict[str, Any]) -> dict[str, Any]:
         "visitors_needed_for_observed_uplift": _safe_int(
             analysis.get("visitors_needed_for_observed_uplift")
         ),
-        "visitors_needed_for_mde": _safe_int(
-            analysis.get("visitors_needed_for_mde")
-        ),
+        "visitors_needed_for_mde": _safe_int(analysis.get("visitors_needed_for_mde")),
         "recommendations": "; ".join(
             _safe_text(recommendation) for recommendation in recommendations
         ),
@@ -293,11 +284,7 @@ def _experiment_row(fields: dict[str, Any]) -> list[object]:
         fields["absolute_uplift"],
         fields["relative_uplift_pct"],
         fields["z_score"],
-        (
-            ""
-            if p_value is None
-            else f"{_safe_float(p_value):.8f}".rstrip("0").rstrip(".")
-        ),
+        ("" if p_value is None else f"{_safe_float(p_value):.8f}".rstrip("0").rstrip(".")),
         fields["confidence_level"],
         fields["confidence_interval_low"],
         fields["confidence_interval_high"],
@@ -434,9 +421,7 @@ def _summary_lines(summary: dict[str, Any]) -> list[tuple[str, str]]:
     """Curated key/value pairs for the Markdown summary table."""
     verdict_counts = summary.get("verdict_counts") or {}
     if isinstance(verdict_counts, dict):
-        verdict_text = ", ".join(
-            f"{verdict}: {count}" for verdict, count in verdict_counts.items()
-        )
+        verdict_text = ", ".join(f"{verdict}: {count}" for verdict, count in verdict_counts.items())
     else:
         verdict_text = _safe_text(verdict_counts)
     return [
@@ -531,11 +516,7 @@ def ab_test_experiments_to_markdown(
                     rate=_fmt_rate(conversions / visitors) if visitors > 0 else "—",
                     uplift=_fmt_signed(fields["absolute_uplift"]),
                     relative=_fmt_pct_points(fields["relative_uplift_pct"]),
-                    p_value=(
-                        "—"
-                        if p_value is None
-                        else f"{_safe_float(p_value):.6f}"
-                    ),
+                    p_value=("—" if p_value is None else f"{_safe_float(p_value):.6f}"),
                     created=_escape_md_cell(fields["created_at"]),
                 )
             )
@@ -559,10 +540,7 @@ def ab_test_experiments_to_markdown(
     if recommendation_rows:
         for name, recommendations in recommendation_rows:
             for recommendation in recommendations:
-                lines.append(
-                    f"- {_escape_md_cell(name)}: "
-                    f"{_escape_md_cell(recommendation)}"
-                )
+                lines.append(f"- {_escape_md_cell(name)}: {_escape_md_cell(recommendation)}")
     else:
         lines.append("No actionable recommendations are recorded yet.")
     lines.append("")

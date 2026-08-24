@@ -24,6 +24,8 @@ import json
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 FORMAT_VERSION = "1"
 
 
@@ -101,7 +103,7 @@ def _json_safe(value: Any) -> Any:
 
 
 def _write_row(writer: Any, row: list[object]) -> None:
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
@@ -128,22 +130,16 @@ def _summary_dict(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _projects(data: dict[str, Any]) -> list[dict[str, Any]]:
-    return [
-        row for row in _as_list(data.get("projects")) if isinstance(row, dict)
-    ]
+    return [row for row in _as_list(data.get("projects")) if isinstance(row, dict)]
 
 
 def _dimensions(data: dict[str, Any]) -> list[dict[str, Any]]:
-    return [
-        row for row in _as_list(data.get("dimensions")) if isinstance(row, dict)
-    ]
+    return [row for row in _as_list(data.get("dimensions")) if isinstance(row, dict)]
 
 
 def _key_signals(data: dict[str, Any]) -> list[dict[str, Any]]:
     return [
-        row
-        for row in _as_list(_summary_dict(data).get("key_signals"))
-        if isinstance(row, dict)
+        row for row in _as_list(_summary_dict(data).get("key_signals")) if isinstance(row, dict)
     ]
 
 
@@ -295,16 +291,19 @@ def project_comparison_to_json(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     """Render a project-comparison payload as an indented JSON document."""
-    return json.dumps(
-        {
-            "metadata": _json_safe(metadata or {}),
-            "project_comparison": _json_safe(_as_dict(payload)),
-        },
-        default=str,
-        ensure_ascii=False,
-        indent=2,
-        allow_nan=False,
-    ) + "\n"
+    return (
+        json.dumps(
+            {
+                "metadata": _json_safe(metadata or {}),
+                "project_comparison": _json_safe(_as_dict(payload)),
+            },
+            default=str,
+            ensure_ascii=False,
+            indent=2,
+            allow_nan=False,
+        )
+        + "\n"
+    )
 
 
 def _escape_md_cell(value: Any) -> str:
@@ -347,10 +346,7 @@ def project_comparison_to_markdown(
     winner_line = _escape_md_cell(summary.get("winner_label"))
     if winner_id is not None:
         winner_line += f" (project {_safe_int(winner_id)})"
-    lines.append(
-        f"**{_escape_md_cell(summary.get('verdict'))}** — winner "
-        f"{winner_line}."
-    )
+    lines.append(f"**{_escape_md_cell(summary.get('verdict'))}** — winner {winner_line}.")
     narrative = _safe_text(summary.get("narrative"))
     if narrative:
         lines.append("")
@@ -359,9 +355,7 @@ def project_comparison_to_markdown(
 
     lines.append("## Projects Compared")
     lines.append("")
-    lines.append(
-        "| Label | Project | Status | Health | Conversion | Confidence | Brief | Type |"
-    )
+    lines.append("| Label | Project | Status | Health | Conversion | Confidence | Brief | Type |")
     lines.append("| --- | --- | --- | ---: | ---: | ---: | --- | --- |")
     for idx, project in enumerate(_projects(data), start=1):
         label = chr(ord("A") + idx - 1) if idx <= 26 else f"Project {idx}"
@@ -375,8 +369,7 @@ def project_comparison_to_markdown(
                 conversion=_md_pct(project.get("latest_conversion_rate")),
                 confidence=_md_pct(project.get("latest_confidence_score")),
                 brief="yes" if project.get("brief_completed") else "no",
-                ptype=_escape_md_cell(project.get("product_type_detected"))
-                or "—",
+                ptype=_escape_md_cell(project.get("product_type_detected")) or "—",
             )
         )
     lines.append("")
@@ -387,9 +380,7 @@ def project_comparison_to_markdown(
     if not dimensions:
         lines.append("No dimension comparison is available.")
     else:
-        lines.append(
-            "| Dimension | Metric | Project A | Project B | Winner |"
-        )
+        lines.append("| Dimension | Metric | Project A | Project B | Winner |")
         lines.append("| --- | --- | --- | --- | --- |")
         for dimension in dimensions:
             lines.append(
@@ -412,8 +403,7 @@ def project_comparison_to_markdown(
             if not display:
                 display = _safe_text(signal.get("label"))
             lines.append(
-                f"- **{_escape_md_cell(signal.get('label'))}** — "
-                f"{_escape_md_cell(display)}"
+                f"- **{_escape_md_cell(signal.get('label'))}** — {_escape_md_cell(display)}"
             )
         lines.append("")
 

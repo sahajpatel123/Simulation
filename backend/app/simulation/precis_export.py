@@ -4,11 +4,14 @@ Pure helper for exporting a project's precis field as CSV.
 The route layer pulls ``precis`` from the project and hands the row
 here; this module stays deterministic.
 """
+
 from __future__ import annotations
 
 import csv
 import io
 from typing import Any
+
+from app.simulation.export_utils import write_row
 
 
 def _text(value: Any) -> str:
@@ -26,17 +29,18 @@ def precis_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
-        writer.writerow(["user_id", _text(metadata.get("user_id"))])
-        writer.writerow(["format_version", _text(metadata.get("format_version", "1"))])
-        writer.writerow([])
+        write_row(writer, ["generated_at", _text(metadata.get("generated_at"))])
+        write_row(writer, ["user_id", _text(metadata.get("user_id"))])
+        write_row(writer, ["format_version", _text(metadata.get("format_version", "1"))])
+        write_row(writer, [])
 
-    writer.writerow(["project_id", "precis"])
-    writer.writerow(
+    write_row(writer, ["project_id", "precis"])
+    write_row(
+        writer,
         [
             _text(row.get("project_id")),
             _text(row.get("precis")),
-        ]
+        ],
     )
     return buffer.getvalue()
 

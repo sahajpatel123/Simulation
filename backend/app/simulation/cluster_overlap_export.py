@@ -22,6 +22,7 @@ import json
 from typing import Any
 
 from app.simulation.cluster_diff import REQUIRED_TRAITS
+from app.simulation.export_utils import write_row
 
 
 def _as_dict(payload: Any) -> dict[str, Any]:
@@ -66,7 +67,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with the formula-injection guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def cluster_overlap_to_csv(
@@ -98,9 +99,7 @@ def cluster_overlap_to_csv(
     label_counts: dict[str, int] = {}
     for pair in pair_summaries:
         if isinstance(pair, dict) and pair.get("label") is not None:
-            label_counts[str(pair["label"])] = (
-                label_counts.get(str(pair["label"]), 0) + 1
-            )
+            label_counts[str(pair["label"])] = label_counts.get(str(pair["label"]), 0) + 1
     summary: dict[str, object] = {
         "cluster_count": len(cluster_ids),
         "pair_count": len(pair_summaries),

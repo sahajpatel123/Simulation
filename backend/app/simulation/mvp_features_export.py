@@ -4,11 +4,14 @@ Pure helper for exporting a project's MVP feature list as CSV.
 The route layer pulls ``mvp_feature_list`` from the project and hands
 the rows here; this module stays deterministic.
 """
+
 from __future__ import annotations
 
 import csv
 import io
 from typing import Any
+
+from app.simulation.export_utils import write_row
 
 
 def _text(value: Any) -> str:
@@ -26,14 +29,14 @@ def features_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
-        writer.writerow(["user_id", _text(metadata.get("user_id"))])
-        writer.writerow(["format_version", _text(metadata.get("format_version", "1"))])
-        writer.writerow([])
+        write_row(writer, ["generated_at", _text(metadata.get("generated_at"))])
+        write_row(writer, ["user_id", _text(metadata.get("user_id"))])
+        write_row(writer, ["format_version", _text(metadata.get("format_version", "1"))])
+        write_row(writer, [])
 
-    writer.writerow(["index", "feature"])
+    write_row(writer, ["index", "feature"])
     for index, feature in enumerate(features, start=1):
-        writer.writerow([index, _text(feature)])
+        write_row(writer, [index, _text(feature)])
     return buffer.getvalue()
 
 
@@ -46,17 +49,18 @@ def mvp_feature_count_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
-        writer.writerow(["user_id", _text(metadata.get("user_id"))])
-        writer.writerow(["format_version", _text(metadata.get("format_version", "1"))])
-        writer.writerow([])
+        write_row(writer, ["generated_at", _text(metadata.get("generated_at"))])
+        write_row(writer, ["user_id", _text(metadata.get("user_id"))])
+        write_row(writer, ["format_version", _text(metadata.get("format_version", "1"))])
+        write_row(writer, [])
 
-    writer.writerow(["project_id", "mvp_feature_count"])
-    writer.writerow(
+    write_row(writer, ["project_id", "mvp_feature_count"])
+    write_row(
+        writer,
         [
             _text(row.get("project_id")),
             _text(row.get("mvp_feature_count")),
-        ]
+        ],
     )
     return buffer.getvalue()
 

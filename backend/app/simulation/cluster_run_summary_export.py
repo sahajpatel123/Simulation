@@ -29,6 +29,8 @@ import json
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 FORMAT_VERSION: str = "1"
 
 _ROW_FIELDS: tuple[str, ...] = (
@@ -151,8 +153,7 @@ def _safe_csv_cell(value: object) -> object:
     if isinstance(value, str):
         stripped = value.lstrip()
         if value[:1] in ("=", "+", "-", "@", "\t", "\r") or (
-            stripped[:1] in ("=", "+", "-", "@", "\t", "\r")
-            and stripped != value
+            stripped[:1] in ("=", "+", "-", "@", "\t", "\r") and stripped != value
         ):
             return f"'{value}"
     return value
@@ -160,7 +161,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with the formula-injection guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
@@ -242,9 +243,7 @@ def build_cluster_run_summary_export(
                 "agents_assigned": assigned,
                 "agents_converted": converted,
                 "conversion_rate": _bounded_rate(row.get("conversion_rate")),
-                "drop_state_distribution": _json_safe(
-                    row.get("drop_state_distribution")
-                ),
+                "drop_state_distribution": _json_safe(row.get("drop_state_distribution")),
                 "mean_drop_state": _safe_text(row.get("mean_drop_state")),
                 "architect_scores": _json_safe(row.get("architect_scores")),
                 "primary_drop_trigger": _safe_text(row.get("primary_drop_trigger")),
@@ -349,18 +348,19 @@ def cluster_run_summary_to_json(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     """Render a cluster-run-summary payload as an indented JSON document."""
-    return json.dumps(
-        {
-            "metadata": _json_safe(metadata or {}),
-            "cluster_run_summaries": (
-                _json_safe(payload) if isinstance(payload, dict) else {}
-            ),
-        },
-        default=str,
-        ensure_ascii=False,
-        indent=2,
-        allow_nan=False,
-    ) + "\n"
+    return (
+        json.dumps(
+            {
+                "metadata": _json_safe(metadata or {}),
+                "cluster_run_summaries": (_json_safe(payload) if isinstance(payload, dict) else {}),
+            },
+            default=str,
+            ensure_ascii=False,
+            indent=2,
+            allow_nan=False,
+        )
+        + "\n"
+    )
 
 
 __all__ = [

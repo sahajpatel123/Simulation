@@ -4,11 +4,14 @@ Pure helper for exporting a project's founder brief as CSV.
 The route layer pulls the brief fields from the project and hands them
 here; this module stays deterministic.
 """
+
 from __future__ import annotations
 
 import csv
 import io
 from typing import Any
+
+from app.simulation.export_utils import write_row
 
 
 def _text(value: Any) -> str:
@@ -34,28 +37,30 @@ def brief_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
-        writer.writerow(["user_id", _text(metadata.get("user_id"))])
-        writer.writerow(["format_version", _text(metadata.get("format_version", "1"))])
-        writer.writerow([])
+        write_row(writer, ["generated_at", _text(metadata.get("generated_at"))])
+        write_row(writer, ["user_id", _text(metadata.get("user_id"))])
+        write_row(writer, ["format_version", _text(metadata.get("format_version", "1"))])
+        write_row(writer, [])
 
-    writer.writerow(
+    write_row(
+        writer,
         [
             "project_id",
             "brief_positioning",
             "brief_features_json",
             "brief_hook",
             "brief_completed_at",
-        ]
+        ],
     )
-    writer.writerow(
+    write_row(
+        writer,
         [
             _text(row.get("project_id")),
             _text(row.get("brief_positioning")),
             _text(row.get("brief_features_json")),
             _text(row.get("brief_hook")),
             _text(row.get("brief_completed_at")),
-        ]
+        ],
     )
     return buffer.getvalue()
 
@@ -69,17 +74,18 @@ def brief_positioning_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
-        writer.writerow(["user_id", _text(metadata.get("user_id"))])
-        writer.writerow(["format_version", _text(metadata.get("format_version", "1"))])
-        writer.writerow([])
+        write_row(writer, ["generated_at", _text(metadata.get("generated_at"))])
+        write_row(writer, ["user_id", _text(metadata.get("user_id"))])
+        write_row(writer, ["format_version", _text(metadata.get("format_version", "1"))])
+        write_row(writer, [])
 
-    writer.writerow(["project_id", "brief_positioning"])
-    writer.writerow(
+    write_row(writer, ["project_id", "brief_positioning"])
+    write_row(
+        writer,
         [
             _text(row.get("project_id")),
             _text(row.get("brief_positioning")),
-        ]
+        ],
     )
     return buffer.getvalue()
 
@@ -93,17 +99,18 @@ def brief_features_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
-        writer.writerow(["user_id", _text(metadata.get("user_id"))])
-        writer.writerow(["format_version", _text(metadata.get("format_version", "1"))])
-        writer.writerow([])
+        write_row(writer, ["generated_at", _text(metadata.get("generated_at"))])
+        write_row(writer, ["user_id", _text(metadata.get("user_id"))])
+        write_row(writer, ["format_version", _text(metadata.get("format_version", "1"))])
+        write_row(writer, [])
 
-    writer.writerow(["project_id", "brief_features_json"])
-    writer.writerow(
+    write_row(writer, ["project_id", "brief_features_json"])
+    write_row(
+        writer,
         [
             _text(row.get("project_id")),
             _text(row.get("brief_features_json")),
-        ]
+        ],
     )
     return buffer.getvalue()
 
@@ -117,17 +124,18 @@ def brief_completed_count_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
-        writer.writerow(["user_id", _text(metadata.get("user_id"))])
-        writer.writerow(["format_version", _text(metadata.get("format_version", "1"))])
-        writer.writerow([])
+        write_row(writer, ["generated_at", _text(metadata.get("generated_at"))])
+        write_row(writer, ["user_id", _text(metadata.get("user_id"))])
+        write_row(writer, ["format_version", _text(metadata.get("format_version", "1"))])
+        write_row(writer, [])
 
-    writer.writerow(["project_id", "brief_completed_count"])
-    writer.writerow(
+    write_row(writer, ["project_id", "brief_completed_count"])
+    write_row(
+        writer,
         [
             _text(row.get("project_id")),
             _text(row.get("brief_completed_count")),
-        ]
+        ],
     )
     return buffer.getvalue()
 

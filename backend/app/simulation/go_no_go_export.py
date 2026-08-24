@@ -26,6 +26,8 @@ import io
 import json
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 FORMAT_VERSION: str = "1"
 
 PILLAR_CSV_HEADERS: list[str] = [
@@ -91,7 +93,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with the formula-injection guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
@@ -130,9 +132,7 @@ def _list_rows(data: dict[str, Any], key: str) -> list[str]:
     return [
         str(item)
         for item in raw
-        if item is not None
-        and not isinstance(item, (dict, list))
-        and str(item) != ""
+        if item is not None and not isinstance(item, (dict, list)) and str(item) != ""
     ]
 
 
@@ -282,15 +282,18 @@ def go_no_go_to_json(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     """Render a go/no-go payload as an indented JSON document."""
-    return json.dumps(
-        {
-            "metadata": metadata or {},
-            "go_no_go": _as_dict(payload),
-        },
-        default=str,
-        indent=2,
-        ensure_ascii=False,
-    ) + "\n"
+    return (
+        json.dumps(
+            {
+                "metadata": metadata or {},
+                "go_no_go": _as_dict(payload),
+            },
+            default=str,
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n"
+    )
 
 
 __all__ = [

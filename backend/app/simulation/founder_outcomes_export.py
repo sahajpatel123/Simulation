@@ -7,6 +7,7 @@ The route layer left-joins ``founder_outcomes`` to the owning simulation/project
 dicts here; this module stays deterministic and treats missing or malformed
 fields as empty strings.
 """
+
 from __future__ import annotations
 
 import csv
@@ -14,6 +15,8 @@ import io
 import json
 import math
 from typing import Any
+
+from app.simulation.export_utils import write_row
 
 FORMAT_VERSION = "1"
 
@@ -80,12 +83,13 @@ def founder_outcomes_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
-        writer.writerow(["user_id", _text(metadata.get("user_id"))])
-        writer.writerow(["format_version", _text(metadata.get("format_version", FORMAT_VERSION))])
-        writer.writerow([])
+        write_row(writer, ["generated_at", _text(metadata.get("generated_at"))])
+        write_row(writer, ["user_id", _text(metadata.get("user_id"))])
+        write_row(writer, ["format_version", _text(metadata.get("format_version", FORMAT_VERSION))])
+        write_row(writer, [])
 
-    writer.writerow(
+    write_row(
+        writer,
         [
             "id",
             "simulation_id",
@@ -105,12 +109,13 @@ def founder_outcomes_to_csv(
             "validated",
             "learning_weight",
             "notes",
-        ]
+        ],
     )
     for row in rows:
         actual = row.get("actual_conversion_rate")
         predicted = row.get("predicted_conversion_rate")
-        writer.writerow(
+        write_row(
+            writer,
             [
                 _text(row.get("id")),
                 _text(row.get("simulation_id")),
@@ -130,7 +135,7 @@ def founder_outcomes_to_csv(
                 _text(row.get("validated")),
                 _text(row.get("learning_weight")),
                 _text(row.get("notes")),
-            ]
+            ],
         )
     return buffer.getvalue()
 

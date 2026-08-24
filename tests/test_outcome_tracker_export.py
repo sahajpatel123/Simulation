@@ -78,7 +78,10 @@ def test_csv_backfills_variance_when_stored_column_null() -> None:
     )
 
     assert "1,7,12,2026-08-01T00:00:00+00:00,0.06,,0.05,,20.0," in csv_text
-    assert "2,7,12,2026-08-01T00:00:00+00:00,0.04,,0.05,,-20.0," in csv_text
+    # A backfilled negative variance renders as a string whose first
+    # character is "-", so the formula guard prefixes it — spreadsheets
+    # would otherwise read the cell as a formula.
+    assert "2,7,12,2026-08-01T00:00:00+00:00,0.04,,0.05,,'-20.0," in csv_text
 
 
 def test_csv_preserves_stored_variance_over_backfill() -> None:

@@ -61,6 +61,7 @@ founder record *what happened* and see the consequence:
 
 Pure post-hoc analysis — no Celery dispatch, no LLM calls.
 """
+
 from __future__ import annotations
 
 import csv
@@ -176,6 +177,7 @@ from app.simulation.evidence_verdicts_export import (
     evidence_verdicts_to_json,
     evidence_verdicts_to_markdown,
 )
+from app.simulation.export_utils import write_row
 from app.simulation.recovery_planner import build_recovery_plan
 from app.simulation.recovery_planner_export import (
     FORMAT_VERSION as RECOVERY_PLAN_FORMAT_VERSION,
@@ -229,14 +231,10 @@ _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}
 # literals the JSON schemas enforce.
 VALID_METHOD_IDS: frozenset[str] = frozenset(get_args(METHOD_ID_LITERAL))
 VALID_RESULT_IDS: frozenset[str] = frozenset(get_args(EVIDENCE_RESULT_LITERAL))
-VALID_SENSITIVITY_IDS: frozenset[str] = frozenset(
-    get_args(SENSITIVITY_LITERAL)
-)
+VALID_SENSITIVITY_IDS: frozenset[str] = frozenset(get_args(SENSITIVITY_LITERAL))
 
 
-def _assumption_or_404(
-    db: Session, project_id: int, assumption_id: int
-) -> Assumption:
+def _assumption_or_404(db: Session, project_id: int, assumption_id: int) -> Assumption:
     assumption = (
         db.query(Assumption)
         .filter(
@@ -246,9 +244,7 @@ def _assumption_or_404(
         .first()
     )
     if not assumption:
-        raise HTTPException(
-            status_code=404, detail="Assumption not found in this project"
-        )
+        raise HTTPException(status_code=404, detail="Assumption not found in this project")
     return assumption
 
 
@@ -316,9 +312,7 @@ def _apply_evidence_import(
     Rows name their assumption by ``assumption_id`` or, when the id is
     absent, by case-insensitive ``assumption_text`` match.
     """
-    project_assumptions = (
-        db.query(Assumption).filter(Assumption.project_id == project_id).all()
-    )
+    project_assumptions = db.query(Assumption).filter(Assumption.project_id == project_id).all()
     assumptions_by_id = {assumption.id: assumption for assumption in project_assumptions}
     ids_by_text = {
         (assumption.text or "").strip().casefold(): assumption.id
@@ -336,25 +330,19 @@ def _apply_evidence_import(
                     EvidenceImportSkippedRow(
                         index=index,
                         assumption_id=row.assumption_id,
-                        reason=(
-                            f"assumption {row.assumption_id} does not exist "
-                            "in this project"
-                        ),
+                        reason=(f"assumption {row.assumption_id} does not exist in this project"),
                     )
                 )
                 continue
         else:
-            matched_id = ids_by_text.get(
-                (row.assumption_text or "").strip().casefold()
-            )
+            matched_id = ids_by_text.get((row.assumption_text or "").strip().casefold())
             if matched_id is None:
                 skipped_rows.append(
                     EvidenceImportSkippedRow(
                         index=index,
                         assumption_id=None,
                         reason=(
-                            "no assumption matches text "
-                            f"{row.assumption_text!r} in this project"
+                            f"no assumption matches text {row.assumption_text!r} in this project"
                         ),
                     )
                 )
@@ -412,9 +400,7 @@ def import_assumption_evidence(
     insert in a single commit.
     """
     project = get_owned_project(db, current_user.id, project_id)
-    return _apply_evidence_import(
-        db, project.id, payload.rows, []
-    )
+    return _apply_evidence_import(db, project.id, payload.rows, [])
 
 
 _CSV_IMPORT_REQUIRED_HEADERS: tuple[str, ...] = (
@@ -457,11 +443,7 @@ async def import_assumption_evidence_csv(
 
     reader = csv.DictReader(io.StringIO(text))
     headers = [header.strip() for header in (reader.fieldnames or [])]
-    missing = [
-        column
-        for column in _CSV_IMPORT_REQUIRED_HEADERS
-        if column not in headers
-    ]
+    missing = [column for column in _CSV_IMPORT_REQUIRED_HEADERS if column not in headers]
     if missing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -481,10 +463,7 @@ async def import_assumption_evidence_csv(
     parse_skips: list[EvidenceImportSkippedRow] = []
     data_index = -1
     for raw in reader:
-        cells = {
-            (key.strip() if key else key): value
-            for key, value in raw.items()
-        }
+        cells = {(key.strip() if key else key): value for key, value in raw.items()}
         if not any((value or "").strip() for value in cells.values()):
             continue  # entirely blank line — not a data row
         data_index += 1
@@ -553,10 +532,7 @@ async def import_assumption_evidence_csv(
     if len(parsed_rows) + len(parse_skips) > EVIDENCE_IMPORT_MAX_ROWS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"CSV exceeds the {EVIDENCE_IMPORT_MAX_ROWS}-row import "
-                "limit"
-            ),
+            detail=(f"CSV exceeds the {EVIDENCE_IMPORT_MAX_ROWS}-row import limit"),
         )
 
     return _apply_evidence_import(db, project.id, parsed_rows, parse_skips)
@@ -571,22 +547,10 @@ _ASSUMPTION_EXPORT_HEADERS: tuple[str, ...] = (
 )
 
 
-def _csv_guard(value: object) -> object:
-    """Neutralise spreadsheet formulas in exported CSV cells."""
-    if isinstance(value, str) and (
-        value.lstrip()[:1] in ("=", "+", "-", "@")
-        or value[:1] in ("\t", "\r", "\n")
-    ):
-        return f"'{value}"
-    return value
-
-
 @router.get(
     "/{project_id}/assumptions/export",
     response_class=StreamingResponse,
-    summary=(
-        "Download a project's assumptions in the bulk-import CSV shape"
-    ),
+    summary=("Download a project's assumptions in the bulk-import CSV shape"),
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
 def export_assumptions_csv(
@@ -614,23 +578,17 @@ def export_assumptions_csv(
 
     buffer = io.StringIO()
     writer = csv.writer(buffer, lineterminator="\n")
-    writer.writerow(list(_ASSUMPTION_EXPORT_HEADERS))
+    write_row(writer, list(_ASSUMPTION_EXPORT_HEADERS))
     for assumption in assumptions:
-        writer.writerow(
+        write_row(
+            writer,
             [
-                _csv_guard(value)
-                for value in (
-                    assumption.id,
-                    assumption.text or "",
-                    assumption.category or "",
-                    assumption.sensitivity or "",
-                    (
-                        ""
-                        if assumption.impact_score is None
-                        else assumption.impact_score
-                    ),
-                )
-            ]
+                assumption.id,
+                assumption.text or "",
+                assumption.category or "",
+                assumption.sensitivity or "",
+                "" if assumption.impact_score is None else assumption.impact_score,
+            ],
         )
 
     body = buffer.getvalue().encode("utf-8")
@@ -638,9 +596,7 @@ def export_assumptions_csv(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="assumptions-{project.id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="assumptions-{project.id}.csv"'),
             "Content-Length": str(len(body)),
             "Cache-Control": "no-store",
         },
@@ -661,9 +617,7 @@ def _apply_assumption_import(
     """
     existing_keys = {
         (assumption.text or "").strip().casefold()
-        for assumption in db.query(Assumption)
-        .filter(Assumption.project_id == project_id)
-        .all()
+        for assumption in db.query(Assumption).filter(Assumption.project_id == project_id).all()
     }
 
     rows_to_insert: list[Assumption] = []
@@ -674,10 +628,7 @@ def _apply_assumption_import(
             skipped_rows.append(
                 AssumptionImportSkippedRow(
                     index=index,
-                    reason=(
-                        "an assumption with this text already exists in "
-                        "this project"
-                    ),
+                    reason=("an assumption with this text already exists in this project"),
                 )
             )
             continue
@@ -776,10 +727,7 @@ async def import_assumptions_csv(
     parse_skips: list[AssumptionImportSkippedRow] = []
     data_index = -1
     for raw in reader:
-        cells = {
-            (key.strip() if key else key): value
-            for key, value in raw.items()
-        }
+        cells = {(key.strip() if key else key): value for key, value in raw.items()}
         if not any((value or "").strip() for value in cells.values()):
             continue  # entirely blank line — not a data row
         data_index += 1
@@ -802,10 +750,7 @@ async def import_assumptions_csv(
 
         sensitivity = _cell(cells, "sensitivity").upper() or "MEDIUM"
         if sensitivity not in VALID_SENSITIVITY_IDS:
-            skip(
-                f"sensitivity {sensitivity!r} is not one of "
-                "LOW/MEDIUM/HIGH/CRITICAL"
-            )
+            skip(f"sensitivity {sensitivity!r} is not one of LOW/MEDIUM/HIGH/CRITICAL")
             continue
 
         category = _cell(cells, "category") or "Market"
@@ -839,10 +784,7 @@ async def import_assumptions_csv(
     if len(parsed_rows) + len(parse_skips) > ASSUMPTION_IMPORT_MAX_ROWS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"CSV exceeds the {ASSUMPTION_IMPORT_MAX_ROWS}-row import "
-                "limit"
-            ),
+            detail=(f"CSV exceeds the {ASSUMPTION_IMPORT_MAX_ROWS}-row import limit"),
         )
 
     return _apply_assumption_import(db, project.id, parsed_rows, parse_skips)
@@ -906,9 +848,7 @@ def get_assumption_evidence_scorecard(
             detail="Latest simulation completed but results_json is empty.",
         )
 
-    environment = (
-        db.query(Environment).filter(Environment.id == sim.environment_id).first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     env_params: dict = {}
     if environment:
         env_params = {
@@ -936,9 +876,7 @@ def get_assumption_evidence_scorecard(
         base_results=sim.results_json,
         env_params=env_params,
         existing_assumptions=assumptions,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
     )
 
 
@@ -1039,10 +977,7 @@ def get_evidence_verdicts(
 @router.get(
     "/{project_id}/evidence-verdicts/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export a project's evidence-verdict scorecard as CSV, JSON, or "
-        "Markdown"
-    ),
+    summary=("Export a project's evidence-verdict scorecard as CSV, JSON, or Markdown"),
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
 def export_evidence_verdicts(
@@ -1065,10 +1000,7 @@ def export_evidence_verdicts(
     if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; expected 'csv', "
-                "'json', or 'md'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv', 'json', or 'md'"),
         )
 
     verdicts = get_evidence_verdicts(
@@ -1085,9 +1017,7 @@ def export_evidence_verdicts(
     }
 
     if fmt == "json":
-        body = evidence_verdicts_to_json(payload, metadata=metadata).encode(
-            "utf-8"
-        )
+        body = evidence_verdicts_to_json(payload, metadata=metadata).encode("utf-8")
         filename = f"evidence-verdicts-{project_id}.json"
         media_type = "application/json; charset=utf-8"
     elif fmt == "md":
@@ -1098,9 +1028,7 @@ def export_evidence_verdicts(
         filename = f"evidence-verdicts-{project_id}.md"
         media_type = "text/markdown; charset=utf-8"
     else:
-        body = evidence_verdicts_to_csv(payload, metadata=metadata).encode(
-            "utf-8"
-        )
+        body = evidence_verdicts_to_csv(payload, metadata=metadata).encode("utf-8")
         filename = f"evidence-verdicts-{project_id}.csv"
         media_type = "text/csv; charset=utf-8"
 
@@ -1166,10 +1094,7 @@ def get_assumption_recovery_plan(
 @router.get(
     "/{project_id}/assumption-recovery-plan/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export a project's assumption recovery plan as CSV, JSON, or "
-        "Markdown"
-    ),
+    summary=("Export a project's assumption recovery plan as CSV, JSON, or Markdown"),
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
 def export_assumption_recovery_plan(
@@ -1192,10 +1117,7 @@ def export_assumption_recovery_plan(
     if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; expected 'csv', "
-                "'json', or 'md'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv', 'json', or 'md'"),
         )
 
     plan = get_assumption_recovery_plan(
@@ -1212,9 +1134,7 @@ def export_assumption_recovery_plan(
     }
 
     if fmt == "json":
-        body = recovery_plan_to_json(payload, metadata=metadata).encode(
-            "utf-8"
-        )
+        body = recovery_plan_to_json(payload, metadata=metadata).encode("utf-8")
         filename = f"recovery-plan-{project_id}.json"
         media_type = "application/json; charset=utf-8"
     elif fmt == "md":
@@ -1225,9 +1145,7 @@ def export_assumption_recovery_plan(
         filename = f"recovery-plan-{project_id}.md"
         media_type = "text/markdown; charset=utf-8"
     else:
-        body = recovery_plan_to_csv(payload, metadata=metadata).encode(
-            "utf-8"
-        )
+        body = recovery_plan_to_csv(payload, metadata=metadata).encode("utf-8")
         filename = f"recovery-plan-{project_id}.csv"
         media_type = "text/csv; charset=utf-8"
 
@@ -1293,10 +1211,7 @@ def get_evidence_quality(
 @router.get(
     "/{project_id}/evidence-quality/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export a project's evidence-quality report as CSV, JSON, or "
-        "Markdown"
-    ),
+    summary=("Export a project's evidence-quality report as CSV, JSON, or Markdown"),
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
 def export_evidence_quality(
@@ -1319,10 +1234,7 @@ def export_evidence_quality(
     if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; expected 'csv', "
-                "'json', or 'md'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv', 'json', or 'md'"),
         )
 
     report = get_evidence_quality(
@@ -1339,9 +1251,7 @@ def export_evidence_quality(
     }
 
     if fmt == "json":
-        body = evidence_quality_to_json(payload, metadata=metadata).encode(
-            "utf-8"
-        )
+        body = evidence_quality_to_json(payload, metadata=metadata).encode("utf-8")
         filename = f"evidence-quality-{project_id}.json"
         media_type = "application/json; charset=utf-8"
     elif fmt == "md":
@@ -1352,9 +1262,7 @@ def export_evidence_quality(
         filename = f"evidence-quality-{project_id}.md"
         media_type = "text/markdown; charset=utf-8"
     else:
-        body = evidence_quality_to_csv(payload, metadata=metadata).encode(
-            "utf-8"
-        )
+        body = evidence_quality_to_csv(payload, metadata=metadata).encode("utf-8")
         filename = f"evidence-quality-{project_id}.csv"
         media_type = "text/csv; charset=utf-8"
 
@@ -1418,10 +1326,7 @@ def get_validation_risk_map(
 @router.get(
     "/{project_id}/validation-risk-map/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export a project's validation risk map as CSV, JSON, or "
-        "Markdown"
-    ),
+    summary=("Export a project's validation risk map as CSV, JSON, or Markdown"),
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
 def export_validation_risk_map(
@@ -1445,10 +1350,7 @@ def export_validation_risk_map(
     if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; expected 'csv', "
-                "'json', or 'md'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv', 'json', or 'md'"),
         )
 
     report = get_validation_risk_map(
@@ -1547,9 +1449,7 @@ def get_assumption_validation_timeline(
 @router.get(
     "/{project_id}/assumption-validation-timeline/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export a project's validation timeline as CSV, JSON, or Markdown"
-    ),
+    summary=("Export a project's validation timeline as CSV, JSON, or Markdown"),
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
 def export_assumption_validation_timeline(
@@ -1573,10 +1473,7 @@ def export_assumption_validation_timeline(
     if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; expected 'csv', "
-                "'json', or 'md'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv', 'json', or 'md'"),
         )
 
     timeline = get_assumption_validation_timeline(
@@ -1593,9 +1490,7 @@ def export_assumption_validation_timeline(
     }
 
     if fmt == "json":
-        body = validation_timeline_to_json(payload, metadata=metadata).encode(
-            "utf-8"
-        )
+        body = validation_timeline_to_json(payload, metadata=metadata).encode("utf-8")
         filename = f"validation-timeline-{project_id}.json"
         media_type = "application/json; charset=utf-8"
     elif fmt == "md":
@@ -1606,9 +1501,7 @@ def export_assumption_validation_timeline(
         filename = f"validation-timeline-{project_id}.md"
         media_type = "text/markdown; charset=utf-8"
     else:
-        body = validation_timeline_to_csv(payload, metadata=metadata).encode(
-            "utf-8"
-        )
+        body = validation_timeline_to_csv(payload, metadata=metadata).encode("utf-8")
         filename = f"validation-timeline-{project_id}.csv"
         media_type = "text/csv; charset=utf-8"
 
@@ -1685,9 +1578,7 @@ def get_validation_momentum(
 @router.get(
     "/{project_id}/validation-momentum/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export a project's validation momentum as CSV, JSON, or Markdown"
-    ),
+    summary=("Export a project's validation momentum as CSV, JSON, or Markdown"),
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
 def export_validation_momentum(
@@ -1720,10 +1611,7 @@ def export_validation_momentum(
     if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; expected 'csv', "
-                "'json', or 'md'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv', 'json', or 'md'"),
         )
 
     momentum = get_validation_momentum(
@@ -1741,9 +1629,7 @@ def export_validation_momentum(
     }
 
     if fmt == "json":
-        body = validation_momentum_to_json(payload, metadata=metadata).encode(
-            "utf-8"
-        )
+        body = validation_momentum_to_json(payload, metadata=metadata).encode("utf-8")
         filename = f"validation-momentum-{project_id}.json"
         media_type = "application/json; charset=utf-8"
     elif fmt == "md":
@@ -1754,9 +1640,7 @@ def export_validation_momentum(
         filename = f"validation-momentum-{project_id}.md"
         media_type = "text/markdown; charset=utf-8"
     else:
-        body = validation_momentum_to_csv(payload, metadata=metadata).encode(
-            "utf-8"
-        )
+        body = validation_momentum_to_csv(payload, metadata=metadata).encode("utf-8")
         filename = f"validation-momentum-{project_id}.csv"
         media_type = "text/csv; charset=utf-8"
 
@@ -1783,9 +1667,7 @@ def get_evidence_freshness(
         default=DEFAULT_FRESH_DAYS,
         ge=MIN_WINDOW_DAYS,
         le=MAX_WINDOW_DAYS,
-        description=(
-            "Latest evidence within this many days counts as ``FRESH``."
-        ),
+        description=("Latest evidence within this many days counts as ``FRESH``."),
     ),
     aging_days: int = Query(
         default=DEFAULT_AGING_DAYS,
@@ -1811,8 +1693,7 @@ def get_evidence_freshness(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                f"fresh_days ({fresh_days}) must be strictly less than "
-                f"aging_days ({aging_days})"
+                f"fresh_days ({fresh_days}) must be strictly less than aging_days ({aging_days})"
             ),
         )
 
@@ -1849,10 +1730,7 @@ def get_evidence_freshness(
 @router.get(
     "/{project_id}/evidence-freshness/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export a project's evidence-freshness re-test queue as CSV, JSON, "
-        "or Markdown"
-    ),
+    summary=("Export a project's evidence-freshness re-test queue as CSV, JSON, or Markdown"),
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
 def export_evidence_freshness(
@@ -1871,9 +1749,7 @@ def export_evidence_freshness(
         default=DEFAULT_FRESH_DAYS,
         ge=MIN_WINDOW_DAYS,
         le=MAX_WINDOW_DAYS,
-        description=(
-            "Latest evidence within this many days counts as ``FRESH``."
-        ),
+        description=("Latest evidence within this many days counts as ``FRESH``."),
     ),
     aging_days: int = Query(
         default=DEFAULT_AGING_DAYS,
@@ -1892,17 +1768,13 @@ def export_evidence_freshness(
     if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; expected 'csv', "
-                "'json', or 'md'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv', 'json', or 'md'"),
         )
     if fresh_days >= aging_days:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                f"fresh_days ({fresh_days}) must be strictly less than "
-                f"aging_days ({aging_days})"
+                f"fresh_days ({fresh_days}) must be strictly less than aging_days ({aging_days})"
             ),
         )
 
@@ -1922,9 +1794,7 @@ def export_evidence_freshness(
     }
 
     if fmt == "json":
-        body = evidence_staleness_to_json(payload, metadata=metadata).encode(
-            "utf-8"
-        )
+        body = evidence_staleness_to_json(payload, metadata=metadata).encode("utf-8")
         filename = f"evidence-freshness-{project_id}.json"
         media_type = "application/json; charset=utf-8"
     elif fmt == "md":
@@ -1935,9 +1805,7 @@ def export_evidence_freshness(
         filename = f"evidence-freshness-{project_id}.md"
         media_type = "text/markdown; charset=utf-8"
     else:
-        body = evidence_staleness_to_csv(payload, metadata=metadata).encode(
-            "utf-8"
-        )
+        body = evidence_staleness_to_csv(payload, metadata=metadata).encode("utf-8")
         filename = f"evidence-freshness-{project_id}.csv"
         media_type = "text/csv; charset=utf-8"
 
@@ -1974,8 +1842,7 @@ def get_validation_dashboard(
         ge=MIN_WINDOW_DAYS,
         le=MAX_WINDOW_DAYS,
         description=(
-            "Latest evidence within this many days counts as ``FRESH`` "
-            "in the freshness rollup."
+            "Latest evidence within this many days counts as ``FRESH`` in the freshness rollup."
         ),
     ),
     aging_days: int = Query(
@@ -2040,8 +1907,7 @@ def get_validation_dashboard(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                f"fresh_days ({fresh_days}) must be strictly less than "
-                f"aging_days ({aging_days})"
+                f"fresh_days ({fresh_days}) must be strictly less than aging_days ({aging_days})"
             ),
         )
 
@@ -2081,9 +1947,7 @@ def get_validation_dashboard(
 @router.get(
     "/{project_id}/validation-dashboard/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export a project's validation dashboard as CSV, JSON, or Markdown"
-    ),
+    summary=("Export a project's validation dashboard as CSV, JSON, or Markdown"),
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
 def export_validation_dashboard(
@@ -2112,8 +1976,7 @@ def export_validation_dashboard(
         ge=MIN_WINDOW_DAYS,
         le=MAX_WINDOW_DAYS,
         description=(
-            "Latest evidence within this many days counts as ``FRESH`` "
-            "in the freshness rollup."
+            "Latest evidence within this many days counts as ``FRESH`` in the freshness rollup."
         ),
     ),
     aging_days: int = Query(
@@ -2133,17 +1996,13 @@ def export_validation_dashboard(
     if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; expected 'csv', "
-                "'json', or 'md'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv', 'json', or 'md'"),
         )
     if fresh_days >= aging_days:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                f"fresh_days ({fresh_days}) must be strictly less than "
-                f"aging_days ({aging_days})"
+                f"fresh_days ({fresh_days}) must be strictly less than aging_days ({aging_days})"
             ),
         )
 
@@ -2199,9 +2058,7 @@ def export_validation_dashboard(
 @router.get(
     "/{project_id}/assumptions/{assumption_id}/evidence-scorecard/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export an assumption's evidence scorecard as CSV, JSON, or Markdown"
-    ),
+    summary=("Export an assumption's evidence scorecard as CSV, JSON, or Markdown"),
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
 )
 def export_assumption_evidence_scorecard(
@@ -2230,10 +2087,7 @@ def export_assumption_evidence_scorecard(
     if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; expected 'csv', "
-                "'json', or 'md'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv', 'json', or 'md'"),
         )
 
     scorecard = get_assumption_evidence_scorecard(
@@ -2392,9 +2246,7 @@ async def export_validation_workbook(
             lines.append(f"- {filename} ({len(body)} bytes)")
         if failures:
             lines.append("")
-            lines.append(
-                "Sheets that could not be built are listed in errors.txt."
-            )
+            lines.append("Sheets that could not be built are listed in errors.txt.")
         lines.append("")
         lines.append(
             "assumptions.csv is import-shaped: edit offline and paste it back "
@@ -2408,9 +2260,7 @@ async def export_validation_workbook(
         if failures:
             archive.writestr(
                 "errors.txt",
-                "Some sheets failed to render:\n\n"
-                + "\n".join(failures)
-                + "\n",
+                "Some sheets failed to render:\n\n" + "\n".join(failures) + "\n",
             )
 
     zip_body = buffer.getvalue()
@@ -2418,9 +2268,7 @@ async def export_validation_workbook(
         iter([zip_body]),
         media_type="application/zip",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="validation-workbook-{project.id}.zip"'
-            ),
+            "Content-Disposition": (f'attachment; filename="validation-workbook-{project.id}.zip"'),
             "Content-Length": str(len(zip_body)),
             "Cache-Control": "no-store",
         },

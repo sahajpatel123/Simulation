@@ -18,6 +18,8 @@ import csv
 import io
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
     """Render the optional metadata block as ``(key, value)`` rows."""
@@ -59,13 +61,13 @@ def unit_economics_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     for key, value in _metadata_rows(metadata):
-        writer.writerow([key, value])
+        write_row(writer, [key, value])
     if metadata:
-        writer.writerow([])
+        write_row(writer, [])
 
     # Summary section.
-    writer.writerow(["section", "Unit Economics Summary"])
-    writer.writerow(["key", "value"])
+    write_row(writer, ["section", "Unit Economics Summary"])
+    write_row(writer, ["key", "value"])
     summary_keys = (
         "simulation_id",
         "project_id",
@@ -98,12 +100,13 @@ def unit_economics_to_csv(
         "clusters_with_data",
     )
     for key in summary_keys:
-        writer.writerow([key, _value(data.get(key))])
-    writer.writerow([])
+        write_row(writer, [key, _value(data.get(key))])
+    write_row(writer, [])
 
     # Cluster profiles.
-    writer.writerow(["section", "Cluster Unit Economics"])
-    writer.writerow(
+    write_row(writer, ["section", "Cluster Unit Economics"])
+    write_row(
+        writer,
         [
             "cluster_id",
             "cluster_name",
@@ -123,7 +126,7 @@ def unit_economics_to_csv(
             "payback_months",
             "affordable_cac",
             "verdict",
-        ]
+        ],
     )
     cluster_keys = (
         "cluster_id",
@@ -148,30 +151,30 @@ def unit_economics_to_csv(
     for profile in data.get("cluster_profiles") or []:
         if not isinstance(profile, dict):
             continue
-        writer.writerow([_value(profile.get(key)) for key in cluster_keys])
-    writer.writerow([])
+        write_row(writer, [_value(profile.get(key)) for key in cluster_keys])
+    write_row(writer, [])
 
     # CAC scenarios.
-    writer.writerow(["section", "CAC Scenarios"])
-    writer.writerow(
-        ["label", "cac_multiplier", "blended_cac", "blended_ltv_cac_ratio"]
-    )
+    write_row(writer, ["section", "CAC Scenarios"])
+    write_row(writer, ["label", "cac_multiplier", "blended_cac", "blended_ltv_cac_ratio"])
     for scenario in data.get("cac_scenarios") or []:
         if not isinstance(scenario, dict):
             continue
-        writer.writerow(
+        write_row(
+            writer,
             [
                 scenario.get("label", ""),
                 scenario.get("cac_multiplier", ""),
                 scenario.get("blended_cac", ""),
                 scenario.get("blended_ltv_cac_ratio", ""),
-            ]
+            ],
         )
-    writer.writerow([])
+    write_row(writer, [])
 
     # Price scenarios.
-    writer.writerow(["section", "Price Scenarios"])
-    writer.writerow(
+    write_row(writer, ["section", "Price Scenarios"])
+    write_row(
+        writer,
         [
             "label",
             "price_multiplier",
@@ -179,12 +182,13 @@ def unit_economics_to_csv(
             "blended_ltv",
             "blended_ltv_cac_ratio",
             "capped_share",
-        ]
+        ],
     )
     for scenario in data.get("price_scenarios") or []:
         if not isinstance(scenario, dict):
             continue
-        writer.writerow(
+        write_row(
+            writer,
             [
                 scenario.get("label", ""),
                 scenario.get("price_multiplier", ""),
@@ -192,19 +196,19 @@ def unit_economics_to_csv(
                 scenario.get("blended_ltv", ""),
                 scenario.get("blended_ltv_cac_ratio", ""),
                 scenario.get("capped_share", ""),
-            ]
+            ],
         )
-    writer.writerow([])
+    write_row(writer, [])
 
     # Recommendations.
-    writer.writerow(["section", "Recommendations"])
-    writer.writerow(["recommendation"])
+    write_row(writer, ["section", "Recommendations"])
+    write_row(writer, ["recommendation"])
     recommendations = data.get("recommendations") or []
     if recommendations:
         for recommendation in recommendations:
-            writer.writerow([recommendation])
+            write_row(writer, [recommendation])
     else:
-        writer.writerow([""])
+        write_row(writer, [""])
 
     return buffer.getvalue()
 

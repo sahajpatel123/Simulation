@@ -24,6 +24,8 @@ import json
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 FORMAT_VERSION = "1"
 
 
@@ -70,7 +72,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with formula-injection guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
@@ -308,14 +310,8 @@ def pricing_optimization_to_markdown(
     if metadata:
         generated_at = metadata.get("generated_at", "")
         lines.append(f"- Generated: {_escape_md_cell(generated_at)}")
-    lines.append(
-        f"- Simulation: "
-        f"{simulation_id if simulation_id is not None else '—'}"
-    )
-    lines.append(
-        f"- Project: "
-        f"{project_id if project_id is not None else '—'}"
-    )
+    lines.append(f"- Simulation: {simulation_id if simulation_id is not None else '—'}")
+    lines.append(f"- Project: {project_id if project_id is not None else '—'}")
     lines.append("")
 
     lines.append("## Summary")
@@ -330,9 +326,7 @@ def pricing_optimization_to_markdown(
     lines.append("")
     points = _as_list(data.get("price_points"))
     if points:
-        lines.append(
-            "| Price | Market Conversion | Market Revenue | Demand Retained |"
-        )
+        lines.append("| Price | Market Conversion | Market Revenue | Demand Retained |")
         lines.append("| --- | --- | --- | --- |")
         for item in points:
             if not isinstance(item, dict):
@@ -342,9 +336,7 @@ def pricing_optimization_to_markdown(
                     price=_fmt_price(item.get("price")),
                     conversion=_fmt_pct(item.get("market_conversion")),
                     revenue=_fmt_price(item.get("market_revenue")),
-                    retained=(
-                        f"{_safe_float(item.get('demand_retained_pct')):.1f}%"
-                    ),
+                    retained=(f"{_safe_float(item.get('demand_retained_pct')):.1f}%"),
                 )
             )
     else:
@@ -372,12 +364,8 @@ def pricing_optimization_to_markdown(
                     will_pay=_fmt_pct(item.get("will_pay_probability")),
                     conv=_fmt_pct(item.get("conversion_at_base_price")),
                     optimal=_fmt_price(item.get("optimal_price")),
-                    at_ceiling=(
-                        "Yes" if bool(item.get("at_ceiling")) else "No"
-                    ),
-                    gap=(
-                        f"{_safe_float(item.get('ceiling_gap_pct')):.1f}%"
-                    ),
+                    at_ceiling=("Yes" if bool(item.get("at_ceiling")) else "No"),
+                    gap=(f"{_safe_float(item.get('ceiling_gap_pct')):.1f}%"),
                 )
             )
     else:

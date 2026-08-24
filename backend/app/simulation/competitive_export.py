@@ -5,12 +5,15 @@ The route layer pulls ``competitive_json`` from the project and hands
 the competitor dicts here; this module stays deterministic and treats
 missing fields as empty strings.
 """
+
 from __future__ import annotations
 
 import csv
 import io
 import json
 from typing import Any
+
+from app.simulation.export_utils import write_row
 
 
 def _text(value: Any) -> str:
@@ -33,12 +36,13 @@ def competitors_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
-        writer.writerow(["user_id", _text(metadata.get("user_id"))])
-        writer.writerow(["format_version", _text(metadata.get("format_version", "1"))])
-        writer.writerow([])
+        write_row(writer, ["generated_at", _text(metadata.get("generated_at"))])
+        write_row(writer, ["user_id", _text(metadata.get("user_id"))])
+        write_row(writer, ["format_version", _text(metadata.get("format_version", "1"))])
+        write_row(writer, [])
 
-    writer.writerow(
+    write_row(
+        writer,
         [
             "name",
             "category",
@@ -50,10 +54,11 @@ def competitors_to_csv(
             "weaknesses",
             "india_presence",
             "threat_level",
-        ]
+        ],
     )
     for row in rows:
-        writer.writerow(
+        write_row(
+            writer,
             [
                 _text(row.get("name")),
                 _text(row.get("category")),
@@ -65,7 +70,7 @@ def competitors_to_csv(
                 _text(row.get("weaknesses")),
                 _text(row.get("india_presence")),
                 _text(row.get("threat_level")),
-            ]
+            ],
         )
     return buffer.getvalue()
 
@@ -79,17 +84,18 @@ def competitive_count_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
-        writer.writerow(["user_id", _text(metadata.get("user_id"))])
-        writer.writerow(["format_version", _text(metadata.get("format_version", "1"))])
-        writer.writerow([])
+        write_row(writer, ["generated_at", _text(metadata.get("generated_at"))])
+        write_row(writer, ["user_id", _text(metadata.get("user_id"))])
+        write_row(writer, ["format_version", _text(metadata.get("format_version", "1"))])
+        write_row(writer, [])
 
-    writer.writerow(["project_id", "competitive_count"])
-    writer.writerow(
+    write_row(writer, ["project_id", "competitive_count"])
+    write_row(
+        writer,
         [
             _text(row.get("project_id")),
             _text(row.get("competitive_count")),
-        ]
+        ],
     )
     return buffer.getvalue()
 

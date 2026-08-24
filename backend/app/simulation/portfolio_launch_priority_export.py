@@ -26,6 +26,8 @@ import io
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 # Canonical bucket order — same labels as the digest schema so the
 # spreadsheet stays stable if a new bucket is ever added.
 BUCKET_ORDER: tuple[str, ...] = (
@@ -102,7 +104,7 @@ def _safe_csv_cell(value: Any) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with the formula-injection guard on every cell."""
-    writer.writerow([_safe_csv_cell(_safe_text(value)) for value in row])
+    write_row(writer, [_safe_csv_cell(_safe_text(value)) for value in row])
 
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
@@ -132,9 +134,7 @@ def _bucket_rows(data: dict[str, Any]) -> list[tuple[str, int]]:
     for bucket in BUCKET_ORDER:
         items = buckets.get(bucket)
         if isinstance(items, list):
-            count = sum(
-                1 for item in _as_list(items) if isinstance(item, dict)
-            )
+            count = sum(1 for item in _as_list(items) if isinstance(item, dict))
         else:
             count = 0
         rows.append((bucket, count))
@@ -196,14 +196,8 @@ def _ranked_items(data: dict[str, Any]) -> list[dict[str, Any]]:
     ordered.extend(sorted(remaining, key=_rank_order_key))
 
     top_pick = data.get("top_pick")
-    top_pick_key = _project_key(
-        top_pick.get("project_id") if isinstance(top_pick, dict) else None
-    )
-    if (
-        isinstance(top_pick, dict)
-        and top_pick_key is not None
-        and top_pick_key not in seen
-    ):
+    top_pick_key = _project_key(top_pick.get("project_id") if isinstance(top_pick, dict) else None)
+    if isinstance(top_pick, dict) and top_pick_key is not None and top_pick_key not in seen:
         ordered.append(top_pick)
     return ordered
 

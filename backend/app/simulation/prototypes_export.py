@@ -5,11 +5,14 @@ The route layer pulls the prototype rows and hands them here as dicts;
 this module stays deterministic and treats missing fields as empty
 strings.
 """
+
 from __future__ import annotations
 
 import csv
 import io
 from typing import Any
+
+from app.simulation.export_utils import write_row
 
 
 def _text(value: Any) -> str:
@@ -27,29 +30,31 @@ def prototypes_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
-        writer.writerow(["user_id", _text(metadata.get("user_id"))])
-        writer.writerow(["format_version", _text(metadata.get("format_version", "1"))])
-        writer.writerow([])
+        write_row(writer, ["generated_at", _text(metadata.get("generated_at"))])
+        write_row(writer, ["user_id", _text(metadata.get("user_id"))])
+        write_row(writer, ["format_version", _text(metadata.get("format_version", "1"))])
+        write_row(writer, [])
 
-    writer.writerow(
+    write_row(
+        writer,
         [
             "id",
             "project_id",
             "html_content",
             "funnel_graph_json",
             "created_at",
-        ]
+        ],
     )
     for row in rows:
-        writer.writerow(
+        write_row(
+            writer,
             [
                 _text(row.get("id")),
                 _text(row.get("project_id")),
                 _text(row.get("html_content")),
                 _text(row.get("funnel_graph_json")),
                 _text(row.get("created_at")),
-            ]
+            ],
         )
     return buffer.getvalue()
 
@@ -63,17 +68,18 @@ def prototype_count_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
-        writer.writerow(["user_id", _text(metadata.get("user_id"))])
-        writer.writerow(["format_version", _text(metadata.get("format_version", "1"))])
-        writer.writerow([])
+        write_row(writer, ["generated_at", _text(metadata.get("generated_at"))])
+        write_row(writer, ["user_id", _text(metadata.get("user_id"))])
+        write_row(writer, ["format_version", _text(metadata.get("format_version", "1"))])
+        write_row(writer, [])
 
-    writer.writerow(["project_id", "prototype_count"])
-    writer.writerow(
+    write_row(writer, ["project_id", "prototype_count"])
+    write_row(
+        writer,
         [
             _text(row.get("project_id")),
             _text(row.get("prototype_count")),
-        ]
+        ],
     )
     return buffer.getvalue()
 

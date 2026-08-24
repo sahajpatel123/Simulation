@@ -23,6 +23,8 @@ import json
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 FORMAT_VERSION: str = "1"
 
 _OVERVIEW_KEYS: tuple[str, ...] = (
@@ -126,7 +128,7 @@ def _safe_csv_cell(value: object) -> object:
 
 
 def _write_row(writer: Any, row: list[object]) -> None:
-    writer.writerow([_csv_cell(value) for value in row])
+    write_row(writer, [_csv_cell(value) for value in row])
 
 
 def _json_safe(value: Any) -> Any:
@@ -204,14 +206,13 @@ def cohort_retention_to_csv(
         for point in row.get("retention_curve") or []:
             point_data = _as_dict(point)
             curve_rows.append(
-                [cluster_id]
-                + [_csv_cell(point_data.get(key)) for key in _CURVE_HEADERS[1:]]
+                [cluster_id] + [_csv_cell(point_data.get(key)) for key in _CURVE_HEADERS[1:]]
             )
     if curve_rows:
         _write_row(writer, ["section", "Retention Curve Points"])
         _write_row(writer, list(_CURVE_HEADERS))
         for curve_row in curve_rows:
-            writer.writerow(curve_row)
+            write_row(writer, curve_row)
         _write_row(writer, [])
 
     segments = data.get("segment_summary") or []
@@ -249,16 +250,19 @@ def cohort_retention_to_json(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     """Render a cohort-retention payload as a strict JSON envelope."""
-    return json.dumps(
-        {
-            "metadata": _json_safe(metadata or {}),
-            "cohort_retention": _json_safe(_as_dict(payload)),
-        },
-        default=str,
-        ensure_ascii=False,
-        indent=2,
-        allow_nan=False,
-    ) + "\n"
+    return (
+        json.dumps(
+            {
+                "metadata": _json_safe(metadata or {}),
+                "cohort_retention": _json_safe(_as_dict(payload)),
+            },
+            default=str,
+            ensure_ascii=False,
+            indent=2,
+            allow_nan=False,
+        )
+        + "\n"
+    )
 
 
 def _escape_md_cell(value: Any) -> str:
@@ -325,8 +329,7 @@ def cohort_retention_to_markdown(
     lines.append("# Cohort Retention")
     lines.append("")
     lines.append(
-        "Projected survival, churn risk, and lifetime value across the "
-        "simulated consumer clusters."
+        "Projected survival, churn risk, and lifetime value across the simulated consumer clusters."
     )
     lines.append("")
 
@@ -371,14 +374,9 @@ def cohort_retention_to_markdown(
         lines.append(f"**Weakest cohort: {_escape_md_cell(worst)}**")
         lines.append("")
 
-    viable_count = sum(
-        1 for raw in profiles if _as_dict(raw).get("reengagement_viable")
-    )
+    viable_count = sum(1 for raw in profiles if _as_dict(raw).get("reengagement_viable"))
     if profiles and viable_count:
-        lines.append(
-            f"*{viable_count} of {len(profiles)} clusters remain "
-            "re-engagement viable.*"
-        )
+        lines.append(f"*{viable_count} of {len(profiles)} clusters remain re-engagement viable.*")
         lines.append("")
 
     triggers = _as_dict(data.get("churn_trigger_distribution"))
@@ -396,9 +394,7 @@ def cohort_retention_to_markdown(
     if segments:
         lines.append("## Segments")
         lines.append("")
-        lines.append(
-            "| Segment | Clusters | Day-30 | Day-90 | Mean LTV score |"
-        )
+        lines.append("| Segment | Clusters | Day-30 | Day-90 | Mean LTV score |")
         lines.append("| --- | --- | --- | --- | --- |")
         for raw in segments:
             row = _as_dict(raw)

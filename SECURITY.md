@@ -463,4 +463,18 @@ For security concerns, please contact the project maintainers.
   A new systemic guard test asserts every route on the app is
   authenticated or rate-limited — new handlers fail CI until guarded or
   explicitly allowlisted with documented reasons.
+- 2026-08-25 - Closed spreadsheet formula injection across every CSV
+  export: 84 exporter modules wrote cells straight through raw
+  ``csv.writer`` calls, so user-controlled text (titles, assumptions,
+  tags, narratives, decision results) starting with ``=``, ``+``, ``-``,
+  ``@``, tab, or CR would execute as a formula when a founder or admin
+  opened the downloaded file in Excel/Sheets/LibreOffice. Only 2 of 86
+  CSV-producing modules carried their own narrower guard copies while
+  ``export_utils.safe_csv_cell``/``write_row`` existed as the documented
+  single source of truth. Every module now routes rows through
+  ``write_row`` (union-strength guard); two drifted private guards were
+  retired onto the canonical helper. A meta-test bans direct writerow
+  calls outside export_utils so new exporters cannot bypass the guard,
+  with hostile-payload round-trips pinning behaviour end to end through
+  real exporters.
 - [VERSION] - Initial security policy

@@ -23,6 +23,8 @@ import io
 import json
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
     """Render the optional metadata block as ``(key, value)`` rows."""
@@ -73,7 +75,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with the formula-injection guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def risk_register_to_csv(
@@ -182,12 +184,15 @@ def risk_register_to_json(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     """Render a risk register payload as an indented JSON document."""
-    return json.dumps(
-        {"metadata": metadata or {}, "risk_register": _as_dict(payload)},
-        default=str,
-        indent=2,
-        ensure_ascii=False,
-    ) + "\n"
+    return (
+        json.dumps(
+            {"metadata": metadata or {}, "risk_register": _as_dict(payload)},
+            default=str,
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n"
+    )
 
 
 __all__ = [

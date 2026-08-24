@@ -14,6 +14,7 @@ JSON is an envelope with stable metadata and the unmodified scorecard payload.
 Markdown is a founder-facing brief with a summary table, the assumption details,
 the ROI shift (before / after), the evidence history, and a recommendation.
 """
+
 from __future__ import annotations
 
 import csv
@@ -21,6 +22,8 @@ import io
 import json
 import math
 from typing import Any
+
+from app.simulation.export_utils import write_row
 
 FORMAT_VERSION: str = "1"
 
@@ -97,7 +100,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with the formula-injection guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
@@ -193,16 +196,19 @@ def evidence_scorecard_to_json(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     """Render an evidence-scorecard payload as an indented JSON envelope."""
-    return json.dumps(
-        {
-            "metadata": _json_safe(metadata or {}),
-            "evidence_scorecard": _json_safe(_as_dict(payload)),
-        },
-        default=str,
-        indent=2,
-        ensure_ascii=False,
-        allow_nan=False,
-    ) + "\n"
+    return (
+        json.dumps(
+            {
+                "metadata": _json_safe(metadata or {}),
+                "evidence_scorecard": _json_safe(_as_dict(payload)),
+            },
+            default=str,
+            indent=2,
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        + "\n"
+    )
 
 
 _PCT_LABELS: dict[str, str] = {

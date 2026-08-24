@@ -22,6 +22,8 @@ import json
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 FORMAT_VERSION: str = "1"
 
 _SUMMARY_KEYS: tuple[str, ...] = (
@@ -121,7 +123,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write one CSV row with the formula guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _json_safe(value: Any) -> Any:
@@ -196,9 +198,7 @@ def validation_timeline_to_csv(
             _write_row(
                 writer,
                 [
-                    _text(event_data.get(key))
-                    if event_data.get(key) is not None
-                    else ""
+                    _text(event_data.get(key)) if event_data.get(key) is not None else ""
                     for key in _EVENT_HEADERS
                 ],
             )
@@ -212,9 +212,7 @@ def validation_timeline_to_csv(
             _write_row(
                 writer,
                 [
-                    _text(snapshot_data.get(key))
-                    if snapshot_data.get(key) is not None
-                    else ""
+                    _text(snapshot_data.get(key)) if snapshot_data.get(key) is not None else ""
                     for key in _PROGRESS_HEADERS
                 ],
             )
@@ -228,9 +226,7 @@ def validation_timeline_to_csv(
             _write_row(
                 writer,
                 [
-                    _text(assumption_data.get(key))
-                    if assumption_data.get(key) is not None
-                    else ""
+                    _text(assumption_data.get(key)) if assumption_data.get(key) is not None else ""
                     for key in _ASSUMPTION_HEADERS
                 ],
             )
@@ -252,16 +248,19 @@ def validation_timeline_to_json(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     """Render a validation-timeline payload as a strict JSON envelope."""
-    return json.dumps(
-        {
-            "metadata": _json_safe(metadata or {}),
-            "validation_timeline": _json_safe(_as_dict(payload)),
-        },
-        default=str,
-        ensure_ascii=False,
-        indent=2,
-        allow_nan=False,
-    ) + "\n"
+    return (
+        json.dumps(
+            {
+                "metadata": _json_safe(metadata or {}),
+                "validation_timeline": _json_safe(_as_dict(payload)),
+            },
+            default=str,
+            ensure_ascii=False,
+            indent=2,
+            allow_nan=False,
+        )
+        + "\n"
+    )
 
 
 def _escape_md_cell(value: Any) -> str:
@@ -318,8 +317,7 @@ def validation_timeline_to_markdown(
     lines.append("# Validation Timeline")
     lines.append("")
     lines.append(
-        "Every logged experiment replayed chronologically with the "
-        "validation state it left behind."
+        "Every logged experiment replayed chronologically with the validation state it left behind."
     )
     lines.append("")
 
@@ -342,8 +340,7 @@ def validation_timeline_to_markdown(
     lines.append("## Milestones")
     lines.append("")
     milestone_lines = [
-        f"| {_escape_md_cell(_MILESTONE_LABELS[key])} "
-        f"| {_md_cell(milestones.get(key))} |"
+        f"| {_escape_md_cell(_MILESTONE_LABELS[key])} | {_md_cell(milestones.get(key))} |"
         for key in _MILESTONE_KEYS
         if milestones.get(key) is not None
     ]
@@ -365,16 +362,9 @@ def validation_timeline_to_markdown(
             lines.append(
                 "| {when} | {assumption} | {method} | {result} | {status} | {notes} |".format(
                     when=_md_date(event_data.get("created_at")),
-                    assumption=_escape_md_cell(
-                        str(event_data.get("assumption_text") or "")
-                    )
-                    or "—",
+                    assumption=_escape_md_cell(str(event_data.get("assumption_text") or "")) or "—",
                     method=_escape_md_cell(
-                        str(
-                            event_data.get("method_label")
-                            or event_data.get("method")
-                            or ""
-                        )
+                        str(event_data.get("method_label") or event_data.get("method") or "")
                     )
                     or "—",
                     result=_md_cell(event_data.get("result")),
@@ -393,9 +383,7 @@ def validation_timeline_to_markdown(
     if project_id:
         footer.append(f"Project {project_id}")
     if metadata and metadata.get("generated_at"):
-        footer.append(
-            f"Generated {_escape_md_cell(_text(metadata['generated_at']))}"
-        )
+        footer.append(f"Generated {_escape_md_cell(_text(metadata['generated_at']))}")
     lines.append(f"*{' · '.join(footer)}*")
     lines.append("")
 
