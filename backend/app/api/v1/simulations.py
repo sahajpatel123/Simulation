@@ -101,6 +101,7 @@ from app.schemas.founder_brief import FounderBriefOut
 from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
 from app.schemas.investor_readiness import InvestorReadinessOut
 from app.schemas.journey_analytics import JourneyAnalyticsOut
+from app.schemas.funnel_elasticity import FunnelElasticityOut
 from app.schemas.journey_benchmark import (
     JourneyBenchmarkOut,
     JourneyCategoryBenchmarkOut,
@@ -277,6 +278,7 @@ from app.simulation.founder_action_plan_export import (
 from app.simulation.founder_brief import build_founder_brief
 from app.simulation.go_no_go import build_go_no_go
 from app.simulation.investor_readiness import build_investor_readiness
+from app.simulation.funnel_elasticity import build_population_funnel_elasticity
 from app.simulation.journey_analytics import (
     build_journey_analytics,
     deserialise_per_cluster_matrices,
@@ -10199,6 +10201,95 @@ def get_simulation_journey_analytics(
         project_id=sim.project_id,
         status=sim.status,
         **payload,
+    )
+
+
+@router.get(
+    "/{simulation_id}/funnel-elasticity",
+    response_model=FunnelElasticityOut,
+    summary=(
+        "Funnel elasticity: which behavioural transition is worth improving "
+        "most, ranked by loop-adjusted conversion gain across the weighted "
+        "cluster mix"
+    ),
+    responses=_JSON_200,
+)
+def get_simulation_funnel_elasticity(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FunnelElasticityOut:
+    """
+    Population-level funnel transition elasticity for a completed simulation.
+
+    Rebuilds every cluster's architect-corrected transition matrix from the
+    persisted ``per_cluster_matrices`` payload, solves each as an absorbing
+    Markov chain (consideration loops give shoppers second chances the naive
+    stage-product headline writes off), and combines the per-edge lift,
+    headroom and elasticity figures with population weights. Also reports
+    how much of the audience-weighted cluster mix agrees on the top lever.
+    Pure post-hoc analytics — no Celery, no LLM, no DB writes.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(f"Simulation is {sim.status} — funnel elasticity requires completed results."),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    results = sim.results_json if isinstance(sim.results_json, dict) else {}
+    raw_matrices = results.get("per_cluster_matrices")
+    if not deserialise_per_cluster_matrices(raw_matrices):
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Funnel elasticity is unavailable for this simulation — "
+                "per-cluster journey data is persisted for runs started "
+                "after this version. Re-run the simulation to generate it."
+            ),
+        )
+
+    payload = build_population_funnel_elasticity(
+        raw_matrices,
+        results.get("cluster_weights"),
+    )
+    if payload is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Funnel elasticity is unavailable for this simulation — no "
+                "usable per-cluster transition data was persisted."
+            ),
+        )
+    conversion = payload["conversion"]
+    return FunnelElasticityOut(
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        naive_conversion=float(conversion["naive_product"]),
+        loop_adjusted_conversion=float(conversion["loop_adjusted"]),
+        loop_uplift_pp=float(conversion["loop_uplift_pp"]),
+        edges=payload["edges"],
+        ranking=payload["ranking"],
+        cluster_consensus=payload["cluster_consensus"],
+        per_cluster_top_edges=payload["per_cluster_top_edges"],
+        recommendation=payload["top_recommendation"],
+        meta={
+            "model": payload["model"],
+            "cluster_count": len(payload["per_cluster_top_edges"]),
+            "weighted": bool(results.get("cluster_weights")),
+        },
     )
 
 
