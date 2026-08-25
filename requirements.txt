@@ -8,8 +8,11 @@ pydantic-settings==2.15.0
 PyJWT==2.13.0
 bcrypt==5.0.0
 python-multipart==0.0.32
+anthropic==0.125.0
+openai==3.3.1
 anthropic==1.0.0
 openai==1.54.4
+main
 celery[redis]==5.6.3
 redis==5.2.1
 flower==2.1.0
