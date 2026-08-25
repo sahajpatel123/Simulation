@@ -36,14 +36,25 @@ For each forward edge we report:
 Pure module (no DB, no I/O, fully deterministic): callers pass any 7×7
 transition matrix in :data:`app.simulation.markov.STATES` order — typically
 ``ClusterTransitionMatrix.matrix`` — and get a JSON-ready dict back.
+:func:`build_population_funnel_elasticity` extends the same analysis to a
+whole simulation: it rebuilds every cluster's matrix from the persisted
+architect-override map, runs the per-cluster analysis, and combines the
+results with population weights so the recommendation reflects the audience
+mix rather than a single archetype.
 """
 
 from __future__ import annotations
 
+import math
+from collections import defaultdict
 from typing import Any
 
 import numpy as np
 
+from app.simulation.journey_analytics import (
+    build_cluster_matrix,
+    deserialise_per_cluster_matrices,
+)
 from app.simulation.markov import KEYWORD_RULES, STATE_INDEX, STATES, State
 
 MODEL: str = "funnel_elasticity_v1"
@@ -344,5 +355,187 @@ def build_funnel_elasticity(
         "ranking": [
             f"{row['from_state']}->{row['to_state']}" for row in ranked
         ],
+        "top_recommendation": recommendation,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Population-level entry point
+# ---------------------------------------------------------------------------
+
+
+def build_population_funnel_elasticity(
+    per_cluster_matrices: Any,
+    cluster_weights: dict[str, float] | None = None,
+    *,
+    step: float = DEFAULT_STEP,
+    target_probability: float = DEFAULT_TARGET_PROBABILITY,
+    relative_improvement: float = RELATIVE_IMPROVEMENT,
+) -> dict[str, Any] | None:
+    """Rank funnel edges by conversion gain across the whole audience mix.
+
+    A simulation is not one shopper — it is 52 population-weighted clusters
+    whose architect-corrected matrices disagree on where the money leaks.
+    This entry point consumes the persisted ``per_cluster_matrices`` payload
+    (``"FROM->TO" -> multiplier`` maps, the same shape
+    :func:`app.simulation.journey_analytics.deserialise_per_cluster_matrices`
+    reads), rebuilds each cluster's matrix exactly like the engine does
+    (multiplicative overrides on BASE_TRANSITIONS, clamped, row-normalised),
+    runs :func:`build_funnel_elasticity` per cluster, and combines:
+
+    * ``conversion`` — population-weighted naive vs loop-adjusted conversion;
+    * ``edges`` — weight-averaged lift/headroom/elasticity per edge;
+    * ``cluster_consensus`` — share of weighted clusters agreeing on each
+      edge as their top lift, so a recommendation nobody's audience supports
+      is visibly weak;
+    * ``ranking`` / ``top_recommendation`` — the mix-aware verdict.
+
+    Returns ``None`` when no usable cluster matrix exists, so callers can
+    fall back cleanly. Pure and deterministic.
+    """
+    matrices = deserialise_per_cluster_matrices(per_cluster_matrices)
+    if not matrices:
+        return None
+
+    sanitised_weights: dict[str, float] = {}
+    if isinstance(cluster_weights, dict):
+        for cid, raw in cluster_weights.items():
+            try:
+                parsed = float(raw)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(parsed) and parsed > 0.0:
+                sanitised_weights[str(cid)] = parsed
+
+    per_cluster: list[dict[str, Any]] = []
+    total_weight = 0.0
+    naive_total = 0.0
+    adjusted_total = 0.0
+    top_edge_votes: dict[tuple[str, str], float] = defaultdict(float)
+
+    for cid, overrides in sorted(matrices.items()):
+        weight = sanitised_weights.get(cid)
+        if weight is None:
+            weight = 1.0
+        matrix = build_cluster_matrix(overrides)
+        analysis = build_funnel_elasticity(
+            matrix,
+            step=step,
+            target_probability=target_probability,
+            relative_improvement=relative_improvement,
+        )
+        conv = analysis["conversion"]
+        naive_total += weight * float(conv["naive_product"])
+        adjusted_total += weight * float(conv["loop_adjusted"])
+        total_weight += weight
+
+        top_edge_votes[tuple(analysis["ranking"][0].split("->"))] += weight
+        per_cluster.append(
+            {
+                "cluster_id": cid,
+                "population_weight": round(weight, 6),
+                "loop_adjusted_conversion": float(conv["loop_adjusted"]),
+                "top_edge": analysis["ranking"][0],
+                "top_lift_pp": float(
+                    next(
+                        e["lift_per_gain_pp"]
+                        for e in analysis["edges"]
+                        if f"{e['from_state']}->{e['to_state']}"
+                        == analysis["ranking"][0]
+                    )
+                ),
+            }
+        )
+
+    if total_weight <= 0.0 or not per_cluster:
+        return None
+
+    # Weight-averaged edge stats come from re-running the cheap per-edge
+    # numbers rather than storing every cluster's rows above.
+    edge_rows: list[dict[str, Any]] = []
+    for order, (from_state, to_state) in enumerate(FUNNEL_EDGES):
+        lift_sum = headroom_sum = elast_sum = w_sum = 0.0
+        for cid, overrides in sorted(matrices.items()):
+            weight = sanitised_weights.get(cid, 1.0)
+            m = _validate_and_normalise(build_cluster_matrix(overrides))
+            fi = STATE_INDEX[State(from_state)]
+            ti = STATE_INDEX[State(to_state)]
+            base_prob = float(m[fi, ti])
+            adjusted = loop_adjusted_conversion(m)
+            if adjusted <= _ABSORPTION_EPS:
+                continue
+            lift_sum += weight * _edge_lift_pp(adjusted, m, fi, ti, base_prob, relative_improvement)
+            headroom_sum += weight * _edge_headroom_pp(adjusted, m, fi, ti, base_prob, target_probability)
+            elasticity = _edge_elasticity(adjusted, m, fi, ti, base_prob, step)
+            if elasticity is not None:
+                elast_sum += weight * elasticity
+            w_sum += weight
+        edge_rows.append(
+            {
+                "order": order,
+                "from_state": from_state,
+                "to_state": to_state,
+                "lift_per_gain_pp": round(lift_sum / max(w_sum, 1e-9), 4),
+                "headroom_lift_pp": round(headroom_sum / max(w_sum, 1e-9), 4),
+                "elasticity": (elast_sum / w_sum) if w_sum > 0.0 else None,
+                "related_keywords": _related_keywords(from_state, to_state),
+            }
+        )
+
+    ranked = sorted(
+        edge_rows,
+        key=lambda r: (-r["lift_per_gain_pp"], -r["headroom_lift_pp"], r["order"]),
+    )
+    for rank, row in enumerate(ranked, start=1):
+        row["rank"] = rank
+
+    consensus_total = sum(top_edge_votes.values()) or 1.0
+    cluster_consensus = [
+        {
+            "edge": f"{edge[0]}->{edge[1]}",
+            "weighted_vote_share": round(votes / consensus_total, 4),
+        }
+        for edge, votes in sorted(
+            top_edge_votes.items(), key=lambda kv: kv[1], reverse=True
+        )
+    ]
+
+    top = ranked[0]
+    top_share = next(
+        (
+            c["weighted_vote_share"]
+            for c in cluster_consensus
+            if c["edge"] == f"{top['from_state']}->{top['to_state']}"
+        ),
+        0.0,
+    )
+    loop_uplift_pp = max(0.0, (adjusted_total - naive_total)) * 100.0
+    recommendation = (
+        f"Across {len(per_cluster)} clusters, improving "
+        f"{top['from_state']}->{top['to_state']} buys the most: "
+        f"+{float(top['lift_per_gain_pp']):.2f}pp weighted conversion "
+        f"({top_share:.0%} of audience-weighted clusters agree it is their "
+        f"top lever)."
+    )
+    if loop_uplift_pp >= 0.5:
+        recommendation += (
+            f" Consideration loops add another {loop_uplift_pp:.1f}pp the naive "
+            "stage-product headline misses."
+        )
+
+    per_cluster.sort(key=lambda c: (-c["population_weight"], c["cluster_id"]))
+    return {
+        "model": MODEL,
+        "conversion": {
+            "naive_product": round(naive_total / total_weight, 6),
+            "loop_adjusted": round(adjusted_total / total_weight, 6),
+            "loop_uplift_pp": round(loop_uplift_pp, 4),
+        },
+        "edges": [
+            {k: v for k, v in row.items() if k != "order"} for row in edge_rows
+        ],
+        "ranking": [f"{row['from_state']}->{row['to_state']}" for row in ranked],
+        "cluster_consensus": cluster_consensus,
+        "per_cluster_top_edges": per_cluster,
         "top_recommendation": recommendation,
     }

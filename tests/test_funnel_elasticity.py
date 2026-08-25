@@ -35,9 +35,11 @@ from app.simulation.funnel_elasticity import (
     FUNNEL_EDGES,
     _perturb,
     build_funnel_elasticity,
+    build_population_funnel_elasticity,
     loop_adjusted_conversion,
     naive_conversion,
 )
+from app.simulation.journey_analytics import build_cluster_matrix
 from app.simulation.markov import BASE_TRANSITIONS, STATE_INDEX, STATES, State
 
 
@@ -347,3 +349,100 @@ def test_negative_entry_raises_value_error() -> None:
     m[2, 3] = -0.1
     with pytest.raises(ValueError):
         build_funnel_elasticity(m)
+
+
+# ---------------------------------------------------------------------------
+# 12. Population-level aggregation
+# ---------------------------------------------------------------------------
+
+def test_population_returns_none_without_usable_matrices() -> None:
+    assert build_population_funnel_elasticity(None) is None
+    assert build_population_funnel_elasticity({}) is None
+    assert build_population_funnel_elasticity({"c1": "not-a-dict"}) is None
+
+
+def test_population_payload_shape_and_ranking() -> None:
+    matrices = {
+        "cluster_a": {"DECIDE->PURCHASE": 1.6},
+        "cluster_b": {"CONSIDER->DECIDE": 1.4},
+        "cluster_c": {},
+    }
+    weights = {"cluster_a": 0.5, "cluster_b": 0.3, "cluster_c": 0.2}
+    payload = build_population_funnel_elasticity(matrices, weights)
+
+    assert payload is not None
+    assert set(payload.keys()) == {
+        "model",
+        "conversion",
+        "edges",
+        "ranking",
+        "cluster_consensus",
+        "per_cluster_top_edges",
+        "top_recommendation",
+    }
+    assert len(payload["edges"]) == len(FUNNEL_EDGES)
+    assert len(payload["ranking"]) == len(FUNNEL_EDGES)
+    # Every cluster contributed exactly one vote.
+    assert sum(
+        c["weighted_vote_share"] for c in payload["cluster_consensus"]
+    ) == pytest.approx(1.0, abs=1e-6)
+    top_key = payload["ranking"][0]
+    top_row = next(
+        e
+        for e in payload["edges"]
+        if f"{e['from_state']}->{e['to_state']}" == top_key
+    )
+    best_lift = max(e["lift_per_gain_pp"] for e in payload["edges"])
+    assert top_row["lift_per_gain_pp"] == pytest.approx(best_lift)
+    assert "Across" in payload["top_recommendation"]
+
+
+def test_population_weighting_changes_the_verdict_when_it_should() -> None:
+    """A heavy cluster's favourite edge must dominate a light cluster's."""
+    matrices = {
+        "heavy": {"DECIDE->PURCHASE": 1.8},
+        "light": {"ARRIVE->BROWSE": 1.8},
+    }
+    tilted = build_population_funnel_elasticity(
+        matrices, {"heavy": 9.0, "light": 1.0}
+    )
+    assert tilted is not None
+    heavy_only = build_funnel_elasticity(
+        build_cluster_matrix({"DECIDE->PURCHASE": 1.8})
+    )
+    assert (
+        tilted["ranking"][0] == heavy_only["ranking"][0]
+    ), "the 9:1 weighted mix should follow the heavy cluster"
+
+
+def test_population_conversion_is_weighted_mean_of_cluster_conversions() -> None:
+    matrices = {
+        "a": {"DECIDE->PURCHASE": 1.5},
+        "b": {"DECIDE->PURCHASE": 0.4},
+    }
+    weights = {"a": 3.0, "b": 1.0}
+    payload = build_population_funnel_elasticity(matrices, weights)
+    assert payload is not None
+
+    conv_a = build_funnel_elasticity(build_cluster_matrix(matrices["a"]))[
+        "conversion"
+    ]["loop_adjusted"]
+    conv_b = build_funnel_elasticity(build_cluster_matrix(matrices["b"]))[
+        "conversion"
+    ]["loop_adjusted"]
+    expected = (3.0 * conv_a + 1.0 * conv_b) / 4.0
+    assert payload["conversion"]["loop_adjusted"] == pytest.approx(
+        expected, abs=1e-4
+    )
+
+
+def test_population_is_deterministic_and_bad_weights_sanitised() -> None:
+    matrices = {"x": {"BROWSE->CONSIDER": 1.2}, "y": {}}
+    bad_weights = {"x": float("nan"), "y": -3, "z": "junk"}
+    first = build_population_funnel_elasticity(matrices, bad_weights)
+    second = build_population_funnel_elasticity(matrices, bad_weights)
+    assert first == second and first is not None
+    # NaN/negative/junk weights were dropped → both clusters fall back to
+    # equal weight, so y still appears with its own top edge.
+    tops = {c["cluster_id"]: c["top_edge"] for c in first["per_cluster_top_edges"]}
+    assert set(tops) == {"x", "y"}
