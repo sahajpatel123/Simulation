@@ -10,6 +10,7 @@ The route layer supplies ``results``, ``cluster_names`` and
 ``cluster_weights``; this module stays pure and deterministic. Missing or
 malformed fields degrade to neutral values instead of crashing the export.
 """
+
 from __future__ import annotations
 
 import csv
@@ -17,6 +18,8 @@ import io
 import json
 import math
 from typing import Any
+
+from app.simulation.export_utils import write_row
 
 
 def _coerce_results(value: Any) -> dict[str, Any]:
@@ -69,9 +72,7 @@ def _cluster_rows(
 ) -> list[dict[str, Any]]:
     names = cluster_names or {}
     weights = cluster_weights or {}
-    breakdown = results.get("cluster_breakdown") or results.get(
-        "cluster_summaries"
-    ) or {}
+    breakdown = results.get("cluster_breakdown") or results.get("cluster_summaries") or {}
     if not isinstance(breakdown, dict):
         return []
 
@@ -81,9 +82,7 @@ def _cluster_rows(
         conversion: float = 0.0
         weight: float = weights.get(cid, 0.0)
         if isinstance(raw, dict):
-            conversion = _safe_float(
-                raw.get("conversion_rate", raw.get("conversion", 0.0))
-            )
+            conversion = _safe_float(raw.get("conversion_rate", raw.get("conversion", 0.0)))
             weight = _safe_float(
                 raw.get("population_weight", weight),
                 default=weight,
@@ -159,12 +158,13 @@ def simulation_to_csv(export: dict[str, Any], metadata: dict[str, Any] | None = 
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", str(metadata.get("generated_at", ""))])
-        writer.writerow(["user_id", str(metadata.get("user_id", ""))])
-        writer.writerow(["format_version", str(metadata.get("format_version", "1"))])
-        writer.writerow([])
+        write_row(writer, ["generated_at", str(metadata.get("generated_at", ""))])
+        write_row(writer, ["user_id", str(metadata.get("user_id", ""))])
+        write_row(writer, ["format_version", str(metadata.get("format_version", "1"))])
+        write_row(writer, [])
 
-    writer.writerow(
+    write_row(
+        writer,
         [
             "simulation_id",
             "project_id",
@@ -177,10 +177,11 @@ def simulation_to_csv(export: dict[str, Any], metadata: dict[str, Any] | None = 
             "cluster_name",
             "population_weight",
             "conversion_rate",
-        ]
+        ],
     )
     for row in export.get("rows") or []:
-        writer.writerow(
+        write_row(
+            writer,
             [
                 export.get("simulation_id", ""),
                 export.get("project_id", ""),
@@ -193,7 +194,7 @@ def simulation_to_csv(export: dict[str, Any], metadata: dict[str, Any] | None = 
                 row.get("cluster_name", ""),
                 row.get("population_weight", ""),
                 row.get("conversion_rate", ""),
-            ]
+            ],
         )
     return buffer.getvalue()
 

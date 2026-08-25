@@ -10,7 +10,6 @@ from __future__ import annotations
 import math
 from typing import Any
 
-
 CHANNEL_KEYS: list[str] = [
     "organic_search",
     "paid_search",

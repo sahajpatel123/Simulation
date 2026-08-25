@@ -26,6 +26,7 @@ from app.api.v1.projects import (
     _STALE_CHECK_CACHE_NAMESPACE,
     _STATUS_BANNER_CACHE_NAMESPACE,
 )
+from app.api.v1.system_health import require_admin_in_production
 from app.api.v1.users import (
     _USER_ACCOUNT_HEALTH_CACHE_NAMESPACE,
     _USER_DASHBOARD_CACHE_NAMESPACE,
@@ -50,6 +51,7 @@ from app.api.v1.users import (
     _USER_USAGE_BY_WEEK_CACHE_NAMESPACE,
     _USER_WEEKLY_DIGEST_CACHE_NAMESPACE,
 )
+from app.core.celery_app import celery_app
 from app.core.deps import get_current_user, get_db
 from app.core.metrics import metrics
 from app.core.progress_bridge import progress_bridge
@@ -99,6 +101,7 @@ from app.schemas.founder_brief import FounderBriefOut
 from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
 from app.schemas.investor_readiness import InvestorReadinessOut
 from app.schemas.journey_analytics import JourneyAnalyticsOut
+from app.schemas.funnel_elasticity import FunnelElasticityOut
 from app.schemas.journey_benchmark import (
     JourneyBenchmarkOut,
     JourneyCategoryBenchmarkOut,
@@ -275,6 +278,7 @@ from app.simulation.founder_action_plan_export import (
 from app.simulation.founder_brief import build_founder_brief
 from app.simulation.go_no_go import build_go_no_go
 from app.simulation.investor_readiness import build_investor_readiness
+from app.simulation.funnel_elasticity import build_population_funnel_elasticity
 from app.simulation.journey_analytics import (
     build_journey_analytics,
     deserialise_per_cluster_matrices,
@@ -486,7 +490,6 @@ from app.tasks.simulation_tasks import (
     resolve_simulation_seed,
     run_full_simulation,
 )
-from app.worker import celery_app
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/simulations", tags=["simulations"])
@@ -558,9 +561,7 @@ def _stored_or_computed_fingerprint(sim: Simulation) -> str | None:
 def _signal_suggestions(sq: float, dist: dict) -> list[str]:
     tips: list[str] = []
     if sq < 0.50:
-        tips.append(
-            "Add externally validated claims (real user testing) to raise signal quality"
-        )
+        tips.append("Add externally validated claims (real user testing) to raise signal quality")
     if sq < 0.35:
         tips.append("Replace aspirational language with specific metrics and evidence")
     if (dist.get("ASPIRATIONAL") or 0) > 2:
@@ -603,11 +604,7 @@ def create_simulation(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.project_id == payload.project_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.project_id == payload.project_id).first()
     if not environment:
         raise HTTPException(
             status_code=400,
@@ -656,9 +653,7 @@ def create_simulation(
         status="QUEUED",
         consumer_volume=payload.consumer_volume,
         seed=payload.seed,
-        env_snapshot_json=build_environment_snapshot(
-            environment, payload.consumer_volume
-        ),
+        env_snapshot_json=build_environment_snapshot(environment, payload.consumer_volume),
     )
     db.add(sim)
     db.commit()
@@ -681,6 +676,10 @@ def create_simulation(
 @router.get(
     "/worker/health",
     summary="Probe Celery worker with a test task",
+    # Broadcasts a broker inspect with a 1s timeout per hit — anonymous and
+    # unbounded, this is a free amplifier against both API workers and the
+    # Celery broker.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60, fail_open=True))],
     responses=_JSON_200,
 )
 def worker_health():
@@ -695,6 +694,11 @@ def worker_health():
 @router.get(
     "/db-health",
     summary="Probe database connectivity with SELECT 1",
+    # Unauthenticated + a pool round-trip per hit: without a cap an
+    # anonymous loop could starve the real workload of connections through
+    # the probe itself. fail_open keeps the diagnostic honest during a
+    # limiter outage.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60, fail_open=True))],
     response_model=DatabaseHealthOut,
     responses={
         200: {"description": "Database is reachable"},
@@ -725,6 +729,8 @@ def db_health(
 @router.get(
     "/redis-health",
     summary="Probe Redis connectivity with PING",
+    # Same exposure as /db-health: anonymous + live I/O per hit.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60, fail_open=True))],
     response_model=RedisHealthOut,
     responses={
         200: {"description": "Redis is reachable or unconfigured"},
@@ -833,11 +839,7 @@ def rerun_simulation(
             detail=f"Simulation {running.id} is already {running.status} for this project.",
         )
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.project_id == source.project_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.project_id == source.project_id).first()
     if not environment:
         raise HTTPException(
             status_code=400,
@@ -867,8 +869,7 @@ def rerun_simulation(
     db.refresh(sim)
 
     logger.info(
-        "[API] Simulation rerun enqueued - source_id=%s simulation_id=%s "
-        "task_id=%s seed=%s",
+        "[API] Simulation rerun enqueued - source_id=%s simulation_id=%s task_id=%s seed=%s",
         source.id,
         sim.id,
         task.id,
@@ -1022,6 +1023,11 @@ def get_simulation_reproducibility(
 @router.get(
     "/clusters",
     summary="List 52 customer clusters and registry metadata",
+    # Public registry dump (demographic + behavioral profiles): cheap to
+    # serve but pure information exposure if scrapable without bound. The
+    # standard 30/min cap matches the sibling informational routes; unlike
+    # the probes it may fail closed like every other public route.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
     responses=_JSON_200,
 )
 def get_cluster_registry():
@@ -1084,10 +1090,7 @@ def export_simulation_comparison(
     if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; "
-                "expected 'csv', 'json', or 'md'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv', 'json', or 'md'"),
         )
 
     try:
@@ -1136,9 +1139,7 @@ def export_simulation_comparison(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    'attachment; filename="simulation-comparison.json"'
-                ),
+                "Content-Disposition": ('attachment; filename="simulation-comparison.json"'),
                 "Content-Length": str(len(body)),
                 "Cache-Control": "no-store",
             },
@@ -1153,9 +1154,7 @@ def export_simulation_comparison(
             iter([body]),
             media_type="text/markdown; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    'attachment; filename="simulation-comparison.md"'
-                ),
+                "Content-Disposition": ('attachment; filename="simulation-comparison.md"'),
                 "Content-Length": str(len(body)),
                 "Cache-Control": "no-store",
             },
@@ -1190,11 +1189,7 @@ def get_signal_quality(
     dist = sim.claim_confidence_distribution or {}
 
     # Re-score project assumptions to surface detailed counts for the UI
-    assumptions = (
-        db.query(Assumption)
-        .filter(Assumption.project_id == sim.project_id)
-        .all()
-    )
+    assumptions = db.query(Assumption).filter(Assumption.project_id == sim.project_id).all()
     assumption_dicts = [
         {"id": a.id, "text": a.text, "category": a.category, "impact_score": a.impact_score}
         for a in assumptions
@@ -1306,16 +1301,11 @@ def _load_simulations_for_comparison(
             detail="All simulations must belong to the same project.",
         )
 
-    incomplete = [
-        s.id for s in sims if s.status != "COMPLETED" or not s.results_json
-    ]
+    incomplete = [s.id for s in sims if s.status != "COMPLETED" or not s.results_json]
     if incomplete:
         raise HTTPException(
             status_code=409,
-            detail=(
-                "All simulations must be COMPLETED with results. "
-                f"Not ready: {incomplete}"
-            ),
+            detail=(f"All simulations must be COMPLETED with results. Not ready: {incomplete}"),
         )
 
     # Preserve caller order so winner labels A/B/C map to request order.
@@ -1366,9 +1356,7 @@ def get_simulation_batch_status(
     sort: str | None = Query(
         default=None,
         max_length=16,
-        description=(
-            "Sort column. Allowed: id, updated_at. Default: id."
-        ),
+        description=("Sort column. Allowed: id, updated_at. Default: id."),
     ),
     order: str | None = Query(
         default=None,
@@ -1399,6 +1387,7 @@ def get_simulation_batch_status(
         from app.simulation.sim_batch import (
             _normalise_sort as _nb_sort,
         )
+
         sort_key = _nb_sort(sort)
         order_key = _nb_order(order)
     except ValueError as exc:
@@ -1443,9 +1432,7 @@ def get_simulation_batch_status(
     if sort_key == "id":
         q = q.order_by(primary)
     else:
-        tiebreak = (
-            Simulation.id.asc() if order_key == "asc" else Simulation.id.desc()
-        )
+        tiebreak = Simulation.id.asc() if order_key == "asc" else Simulation.id.desc()
         q = q.order_by(primary, tiebreak)
 
     rows = q.all()
@@ -1490,10 +1477,7 @@ def aggregate_simulation_findings(
     top_n: int | None = Query(
         default=None,
         ge=1,
-        description=(
-            "How many top architects / top findings to surface "
-            "(cap 100). Default: 5."
-        ),
+        description=("How many top architects / top findings to surface (cap 100). Default: 5."),
     ),
     architect: str | None = Query(
         default=None,
@@ -1688,8 +1672,7 @@ def aggregate_simulation_clusters(
         default=None,
         ge=1,
         description=(
-            "How many top laggard / top performer cluster ids to "
-            "surface (cap 100). Default: 5."
+            "How many top laggard / top performer cluster ids to surface (cap 100). Default: 5."
         ),
     ),
     db: Session = Depends(get_db),
@@ -1717,10 +1700,7 @@ def aggregate_simulation_clusters(
 
     # Build a {cluster_id: name} lookup from the registered cluster
     # catalog so the response rows carry human-readable names.
-    cluster_names = {
-        cluster.cluster_id: cluster.name
-        for cluster in _registry.all_clusters()
-    }
+    cluster_names = {cluster.cluster_id: cluster.name for cluster in _registry.all_clusters()}
 
     rows = (
         db.query(Simulation.id, Simulation.results_json)
@@ -1733,9 +1713,7 @@ def aggregate_simulation_clusters(
         .all()
     )
     by_id = {r.id: r.results_json for r in rows}
-    ordered_results = [
-        by_id[sid] for sid in canonical_ids if sid in by_id
-    ]
+    ordered_results = [by_id[sid] for sid in canonical_ids if sid in by_id]
 
     aggregate = aggregate_clusters(
         ordered_results,
@@ -1748,9 +1726,7 @@ def aggregate_simulation_clusters(
 @router.get(
     "/aggregate/architect-accuracy",
     response_model=ArchitectAccuracyBridgeOut,
-    summary=(
-        "Cross-reference findings with outcomes to surface biased architects"
-    ),
+    summary=("Cross-reference findings with outcomes to surface biased architects"),
     # DB read of N (sim, outcome) pairs — same cap as the sibling
     # aggregate endpoints.
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
@@ -1775,10 +1751,7 @@ def aggregate_architect_accuracy(
     top_n: int | None = Query(
         default=None,
         ge=1,
-        description=(
-            "How many most-biased architects to surface "
-            "(cap 100). Default: 5."
-        ),
+        description=("How many most-biased architects to surface (cap 100). Default: 5."),
     ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -1832,9 +1805,7 @@ def aggregate_architect_accuracy(
     # Build ``(results_json, (predicted, actual))`` pairs in the
     # user's requested order; only the first (newest) outcome per
     # sim id is kept. Sims without any outcome get ``(None, None)``.
-    pairs: list[
-        tuple[dict | None, tuple[float | None, float | None]]
-    ] = []
+    pairs: list[tuple[dict | None, tuple[float | None, float | None]]] = []
     seen_sim_ids: set[int] = set()
     for sid in canonical_ids:
         if sid in seen_sim_ids:
@@ -1921,7 +1892,8 @@ def get_architect_leaderboard(
             Outcome.created_at,
         )
         .outerjoin(
-            Outcome, Outcome.simulation_id == Simulation.id,
+            Outcome,
+            Outcome.simulation_id == Simulation.id,
         )
         .join(Project, Simulation.project_id == Project.id)
         .filter(
@@ -1937,17 +1909,14 @@ def get_architect_leaderboard(
         if r.id in by_id:
             continue
         by_id[r.id] = r
-    outcome_pairs: list[
-        tuple[list[dict], tuple[float | None, float | None]]
-    ] = []
+    outcome_pairs: list[tuple[list[dict], tuple[float | None, float | None]]] = []
     for sid in canonical_ids:
         match = by_id.get(sid)
         if match is None:
             continue
         outcome_pairs.append(
             (
-                (match.results_json or {}).get("domain_findings")
-                or [],
+                (match.results_json or {}).get("domain_findings") or [],
                 (
                     match.predicted_conversion_rate,
                     match.actual_conversion_rate,
@@ -1967,8 +1936,7 @@ def get_architect_leaderboard(
     "/portfolio-summary",
     response_model=PortfolioSummaryOut,
     summary=(
-        "One-call dashboard payload fusing findings, outcomes, "
-        "clusters, and architect accuracy"
+        "One-call dashboard payload fusing findings, outcomes, clusters, and architect accuracy"
     ),
     # Composite of the four sibling aggregates → same cap.
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
@@ -2016,7 +1984,8 @@ def get_portfolio_summary(
             Outcome.created_at,
         )
         .outerjoin(
-            Outcome, Outcome.simulation_id == Simulation.id,
+            Outcome,
+            Outcome.simulation_id == Simulation.id,
         )
         .join(Project, Simulation.project_id == Project.id)
         .filter(
@@ -2034,9 +2003,7 @@ def get_portfolio_summary(
             continue
         by_id[r.id] = r
     ordered_results: list[dict] = []
-    outcome_pairs: list[
-        tuple[dict | None, tuple[float | None, float | None]]
-    ] = []
+    outcome_pairs: list[tuple[dict | None, tuple[float | None, float | None]]] = []
     for sid in canonical_ids:
         match = by_id.get(sid)
         if match is None:
@@ -2053,10 +2020,7 @@ def get_portfolio_summary(
         )
 
     # Cluster name lookup for the clusters aggregate.
-    cluster_names = {
-        cluster.cluster_id: cluster.name
-        for cluster in _registry.all_clusters()
-    }
+    cluster_names = {cluster.cluster_id: cluster.name for cluster in _registry.all_clusters()}
 
     # Run the four sub-aggregates. Each helper is pure-Python so
     # the total CPU cost is bounded by the 100-sim batch cap.
@@ -2147,10 +2111,7 @@ def get_portfolio_export_csv(
             detail=str(exc),
         )
 
-    cluster_names = {
-        cluster.cluster_id: cluster.name
-        for cluster in _registry.all_clusters()
-    }
+    cluster_names = {cluster.cluster_id: cluster.name for cluster in _registry.all_clusters()}
 
     if not canonical_ids:
         # Empty batch — same well-formed empty export, with
@@ -2167,7 +2128,8 @@ def get_portfolio_export_csv(
                 Outcome.created_at,
             )
             .outerjoin(
-                Outcome, Outcome.simulation_id == Simulation.id,
+                Outcome,
+                Outcome.simulation_id == Simulation.id,
             )
             .join(Project, Simulation.project_id == Project.id)
             .filter(
@@ -2184,9 +2146,7 @@ def get_portfolio_export_csv(
                 continue
             by_id[r.id] = r
         ordered_results: list[dict] = []
-        outcome_pairs: list[
-            tuple[dict | None, tuple[float | None, float | None]]
-        ] = []
+        outcome_pairs: list[tuple[dict | None, tuple[float | None, float | None]]] = []
         for sid in canonical_ids:
             match = by_id.get(sid)
             if match is None:
@@ -2254,9 +2214,7 @@ def get_portfolio_export_csv(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    'attachment; filename="thecee-portfolio.json"'
-                ),
+                "Content-Disposition": ('attachment; filename="thecee-portfolio.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -2267,9 +2225,7 @@ def get_portfolio_export_csv(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                'attachment; filename="thecee-portfolio.csv"'
-            ),
+            "Content-Disposition": ('attachment; filename="thecee-portfolio.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -2339,7 +2295,8 @@ def _build_window_portfolio(
             Outcome.created_at,
         )
         .outerjoin(
-            Outcome, Outcome.simulation_id == Simulation.id,
+            Outcome,
+            Outcome.simulation_id == Simulation.id,
         )
         .join(Project, Simulation.project_id == Project.id)
         .filter(*filters)
@@ -2355,9 +2312,7 @@ def _build_window_portfolio(
             continue
         by_id[r.id] = r
     ordered_results: list[dict] = []
-    outcome_pairs: list[
-        tuple[dict | None, tuple[float | None, float | None]]
-    ] = []
+    outcome_pairs: list[tuple[dict | None, tuple[float | None, float | None]]] = []
     for sid, match in by_id.items():
         ordered_results.append(match.results_json)
         outcome_pairs.append(
@@ -2405,8 +2360,7 @@ def _build_window_portfolio(
     "/portfolio-trend",
     response_model=PortfolioTrendOut,
     summary=(
-        "Diff two portfolio summaries across time windows so the "
-        "dashboard can render trend tiles"
+        "Diff two portfolio summaries across time windows so the dashboard can render trend tiles"
     ),
     # Composite of TWO portfolio summaries → same cap.
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
@@ -2415,10 +2369,7 @@ def get_portfolio_trend(
     since: str | None = Query(
         default=None,
         max_length=64,
-        description=(
-            "ISO 8601 timestamp (timezone-aware). Earlier window "
-            "starts here. Optional."
-        ),
+        description=("ISO 8601 timestamp (timezone-aware). Earlier window starts here. Optional."),
     ),
     until: str | None = Query(
         default=None,
@@ -2453,10 +2404,7 @@ def get_portfolio_trend(
     now = datetime.now(tz=UTC)
     later_until = until_dt or now
 
-    cluster_names = {
-        cluster.cluster_id: cluster.name
-        for cluster in _registry.all_clusters()
-    }
+    cluster_names = {cluster.cluster_id: cluster.name for cluster in _registry.all_clusters()}
 
     earlier_payload = _build_window_portfolio(
         db,
@@ -2479,10 +2427,7 @@ def get_portfolio_trend(
 @router.get(
     "/cluster-drill-down",
     response_model=ClusterDrillDownOut,
-    summary=(
-        "Drill into a single cluster: profile + per-sim "
-        "conversion history + aggregate stats"
-    ),
+    summary=("Drill into a single cluster: profile + per-sim conversion history + aggregate stats"),
     # DB read of N sim rows for one cluster — same cap as the
     # other aggregate endpoints.
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
@@ -2532,10 +2477,7 @@ def get_cluster_drill_down(
     # so the dashboard can show a clear "unknown cluster" error
     # rather than a silent empty payload.
     definition = next(
-        (
-            c for c in _registry.all_clusters()
-            if c.cluster_id == cluster_id
-        ),
+        (c for c in _registry.all_clusters() if c.cluster_id == cluster_id),
         None,
     )
     if definition is None:
@@ -2554,9 +2496,7 @@ def get_cluster_drill_down(
 
     threshold = normalise_drill_outlier(outlier_threshold)
 
-    per_sim_conversions: list[
-        tuple[int | None, object]
-    ] = []
+    per_sim_conversions: list[tuple[int | None, object]] = []
     if canonical_ids:
         rows = (
             db.query(
@@ -2581,9 +2521,7 @@ def get_cluster_drill_down(
                 per_sim_conversions.append((sid, None))
                 continue
             cluster_breakdown = breakdown.get("cluster_breakdown") or {}
-            per_sim_conversions.append(
-                (sid, cluster_breakdown.get(cluster_id))
-            )
+            per_sim_conversions.append((sid, cluster_breakdown.get(cluster_id)))
 
     payload = build_cluster_drill_down(
         cluster_id,
@@ -2619,8 +2557,7 @@ def get_cluster_diff(
         min_length=1,
         max_length=64,
         description=(
-            "First cluster id. Must match a registered cluster; "
-            "otherwise the route returns 404."
+            "First cluster id. Must match a registered cluster; otherwise the route returns 404."
         ),
     ),
     cluster_b: str = Query(
@@ -2708,19 +2645,11 @@ def get_cluster_diff(
             .all()
         )
         by_id: dict[int, dict] = {r.id: r.results_json for r in rows}
-        per_sim_a: list[
-            tuple[int | None, object]
-        ] = []
-        per_sim_b: list[
-            tuple[int | None, object]
-        ] = []
+        per_sim_a: list[tuple[int | None, object]] = []
+        per_sim_b: list[tuple[int | None, object]] = []
         for sid in canonical_ids:
             breakdown = by_id.get(sid)
-            cb = (
-                breakdown.get("cluster_breakdown")
-                if breakdown
-                else None
-            ) or {}
+            cb = (breakdown.get("cluster_breakdown") if breakdown else None) or {}
             per_sim_a.append((sid, cb.get(cluster_a)))
             per_sim_b.append((sid, cb.get(cluster_b)))
 
@@ -2729,14 +2658,10 @@ def get_cluster_diff(
         def _aggregate(per_sim):
             payload = build_cluster_drill_down(
                 cluster_a if per_sim is per_sim_a else cluster_b,
-                cluster_name=(
-                    def_a.name if per_sim is per_sim_a else def_b.name
-                ),
+                cluster_name=(def_a.name if per_sim is per_sim_a else def_b.name),
                 per_sim_conversions=per_sim,
                 outlier_threshold=threshold,
-                batch_overall_mean=_batch_overall_mean(
-                    by_id.values()
-                ),
+                batch_overall_mean=_batch_overall_mean(by_id.values()),
             )
             return payload["aggregate"]
 
@@ -2804,10 +2729,7 @@ def get_cluster_overlap_matrix(
 @router.get(
     "/cluster-overlap-matrix/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export the cluster-overlap matrix as CSV (or JSON "
-        "with ?format=json)"
-    ),
+    summary=("Export the cluster-overlap matrix as CSV (or JSON with ?format=json)"),
     # Same registry read as the JSON overlap endpoint; cap
     # polling so a dashboard loop can't drive repeated
     # matrix builds.
@@ -2877,9 +2799,7 @@ def export_cluster_overlap_matrix(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    'attachment; filename="cluster-overlap-matrix.json"'
-                ),
+                "Content-Disposition": ('attachment; filename="cluster-overlap-matrix.json"'),
                 "Content-Length": str(len(body)),
                 "Cache-Control": "no-store",
             },
@@ -2891,9 +2811,7 @@ def export_cluster_overlap_matrix(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                'attachment; filename="cluster-overlap-matrix.csv"'
-            ),
+            "Content-Disposition": ('attachment; filename="cluster-overlap-matrix.csv"'),
             "Content-Length": str(len(body)),
             "Cache-Control": "no-store",
         },
@@ -2918,18 +2836,12 @@ def _normalise_cluster_ids(
     if not canonical:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "cluster_ids must supply at least one non-empty "
-                "id"
-            ),
+            detail=("cluster_ids must supply at least one non-empty id"),
         )
     if len(canonical) > max_clusters:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"too many cluster_ids ({len(canonical)}); max "
-                f"is {max_clusters}"
-            ),
+            detail=(f"too many cluster_ids ({len(canonical)}); max is {max_clusters}"),
         )
     return canonical
 
@@ -2947,21 +2859,20 @@ def _build_cluster_overlap_entries(canonical_ids: list[str]) -> list[dict]:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Unknown cluster_id {cid!r}",
             )
-        entries.append({
-            "cluster_id": definition.cluster_id,
-            "cluster_name": definition.name,
-            "traits": dict(definition.base_traits),
-        })
+        entries.append(
+            {
+                "cluster_id": definition.cluster_id,
+                "cluster_name": definition.name,
+                "traits": dict(definition.base_traits),
+            }
+        )
     return entries
 
 
 @router.get(
     "/cluster-trend",
     response_model=ClusterTrendOut,
-    summary=(
-        "Per-cluster conversion trend over time — monthly / "
-        "weekly / daily bins"
-    ),
+    summary=("Per-cluster conversion trend over time — monthly / weekly / daily bins"),
     # DB read of N sim rows for one cluster — same cap as the
     # other drill-down endpoints.
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
@@ -2980,8 +2891,7 @@ def get_cluster_trend(
         default=None,
         max_length=64,
         description=(
-            "ISO 8601 timestamp (timezone-aware). Optional "
-            "lower bound on Simulation.created_at."
+            "ISO 8601 timestamp (timezone-aware). Optional lower bound on Simulation.created_at."
         ),
     ),
     until: str | None = Query(
@@ -2996,8 +2906,7 @@ def get_cluster_trend(
         default=None,
         max_length=8,
         description=(
-            "Bin granularity. ``month`` (default) / ``week`` "
-            "/ ``day``. Anything else raises 400."
+            "Bin granularity. ``month`` (default) / ``week`` / ``day``. Anything else raises 400."
         ),
     ),
     db: Session = Depends(get_db),
@@ -3012,10 +2921,7 @@ def get_cluster_trend(
     overall direction label.
     """
     definition = next(
-        (
-            c for c in _registry.all_clusters()
-            if c.cluster_id == cluster_id
-        ),
+        (c for c in _registry.all_clusters() if c.cluster_id == cluster_id),
         None,
     )
     if definition is None:
@@ -3065,8 +2971,7 @@ def get_cluster_trend(
     "/architect-bias-trend",
     response_model=ArchitectBiasTrendOut,
     summary=(
-        "Per-architect |calibration_variance| trend over "
-        "time — IMPROVING / DEGRADING / STABLE"
+        "Per-architect |calibration_variance| trend over time — IMPROVING / DEGRADING / STABLE"
     ),
     # DB read of N sim rows for one architect — same cap as
     # the other trend endpoint.
@@ -3087,8 +2992,7 @@ def get_architect_bias_trend(
         default=None,
         max_length=64,
         description=(
-            "ISO 8601 timestamp (timezone-aware). Optional "
-            "lower bound on Simulation.created_at."
+            "ISO 8601 timestamp (timezone-aware). Optional lower bound on Simulation.created_at."
         ),
     ),
     until: str | None = Query(
@@ -3103,8 +3007,7 @@ def get_architect_bias_trend(
         default=None,
         max_length=8,
         description=(
-            "Bin granularity. ``month`` (default) / ``week`` "
-            "/ ``day``. Anything else raises 400."
+            "Bin granularity. ``month`` (default) / ``week`` / ``day``. Anything else raises 400."
         ),
     ),
     db: Session = Depends(get_db),
@@ -3154,7 +3057,8 @@ def get_architect_bias_trend(
             Outcome.created_at,
         )
         .outerjoin(
-            Outcome, Outcome.simulation_id == Simulation.id,
+            Outcome,
+            Outcome.simulation_id == Simulation.id,
         )
         .join(Project, Simulation.project_id == Project.id)
         .filter(*filters)
@@ -3168,9 +3072,7 @@ def get_architect_bias_trend(
     # puts the newest outcome first, so we just take the first
     # row we see per Simulation.id.
     seen: set[int] = set()
-    trend_rows: list[
-        tuple[object, object, object, list[dict] | None]
-    ] = []
+    trend_rows: list[tuple[object, object, object, list[dict] | None]] = []
     for r in rows:
         if r.created_at is None:
             # Sim without a created_at — can't bin it on the
@@ -3184,10 +3086,7 @@ def get_architect_bias_trend(
                 r.created_at,
                 r.predicted_conversion_rate,
                 r.actual_conversion_rate,
-                (
-                    (r.results_json or {}).get("domain_findings")
-                    or []
-                ),
+                ((r.results_json or {}).get("domain_findings") or []),
             )
         )
 
@@ -3216,8 +3115,7 @@ def get_findings_trend(
         default=None,
         max_length=64,
         description=(
-            "ISO 8601 timestamp (timezone-aware). Optional "
-            "lower bound on Simulation.created_at."
+            "ISO 8601 timestamp (timezone-aware). Optional lower bound on Simulation.created_at."
         ),
     ),
     until: str | None = Query(
@@ -3232,17 +3130,14 @@ def get_findings_trend(
         default=None,
         max_length=8,
         description=(
-            "Bin granularity. ``day`` (default) / ``week`` "
-            "/ ``month``. Anything else raises 400."
+            "Bin granularity. ``day`` (default) / ``week`` / ``month``. Anything else raises 400."
         ),
     ),
     min_severity: str | None = Query(
         default=None,
         max_length=16,
         description=(
-            "Filter findings to >= this severity. "
-            "``INFO`` (default) / ``WARNING`` / "
-            "``CRITICAL``."
+            "Filter findings to >= this severity. ``INFO`` (default) / ``WARNING`` / ``CRITICAL``."
         ),
     ),
     db: Session = Depends(get_db),
@@ -3263,9 +3158,7 @@ def get_findings_trend(
         since_dt = parse_since(since)
         until_dt = parse_since(until)
         effective_bin = normalise_findings_bin(bin)
-        effective_severity = normalise_findings_severity(
-            min_severity
-        )
+        effective_severity = normalise_findings_severity(min_severity)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -3347,11 +3240,7 @@ def get_project_portfolio_rollup(
     if not canonical_ids:
         return ProjectPortfolioRollupOut()
 
-    threshold = (
-        confidence_threshold
-        if confidence_threshold is not None
-        else 0.02
-    )
+    threshold = confidence_threshold if confidence_threshold is not None else 0.02
 
     rows = (
         db.query(
@@ -3365,7 +3254,8 @@ def get_project_portfolio_rollup(
         .select_from(Simulation)
         .join(Project, Simulation.project_id == Project.id)
         .outerjoin(
-            Outcome, Outcome.simulation_id == Simulation.id,
+            Outcome,
+            Outcome.simulation_id == Simulation.id,
         )
         .filter(
             Simulation.id.in_(canonical_ids),
@@ -3383,9 +3273,7 @@ def get_project_portfolio_rollup(
         if r[2] in seen:
             continue
         seen.add(r[2])
-        rollup_rows.append(
-            (r[0], r[1], r[2], r[3], r[4], r[5])
-        )
+        rollup_rows.append((r[0], r[1], r[2], r[3], r[4], r[5]))
 
     payload = build_project_portfolio_rollup(
         rollup_rows,
@@ -3459,9 +3347,7 @@ def get_portfolio_launch_priority(
         .all()
     )
     if not projects:
-        return PortfolioLaunchPriorityOut(
-            **build_portfolio_launch_priority([])
-        )
+        return PortfolioLaunchPriorityOut(**build_portfolio_launch_priority([]))
 
     project_ids = [row.id for row in projects]
     projects_by_id = {row.id: row for row in projects}
@@ -3518,12 +3404,14 @@ def get_portfolio_launch_priority(
         bucket = assumptions_by_project.setdefault(row.project_id, [])
         if len(bucket) >= _PORTFOLIO_LAUNCH_PRIORITY_ASSUMPTIONS_PER_PROJECT:
             continue
-        bucket.append({
-            "category": row.category,
-            "sensitivity": row.sensitivity,
-            "is_hidden": row.is_hidden,
-            "created_at": row.created_at,
-        })
+        bucket.append(
+            {
+                "category": row.category,
+                "sensitivity": row.sensitivity,
+                "is_hidden": row.is_hidden,
+                "created_at": row.created_at,
+            }
+        )
 
     # Latest outcome timestamp per project (freshness + has-outcome).
     outcome_rows = (
@@ -3561,9 +3449,7 @@ def get_portfolio_launch_priority(
                 status=sim.status,
                 signal_quality=sim.signal_quality,
                 visible_assumption_count=sum(
-                    1
-                    for assumption in assumptions
-                    if not assumption["is_hidden"]
+                    1 for assumption in assumptions if not assumption["is_hidden"]
                 ),
             )
             trust_payload = build_simulation_quality(
@@ -3591,8 +3477,7 @@ def get_portfolio_launch_priority(
                 1
                 for competitor in competitors
                 if isinstance(competitor, dict)
-                and str(competitor.get("threat_level", "")).upper()
-                == "HIGH"
+                and str(competitor.get("threat_level", "")).upper() == "HIGH"
             )
             competitive_payload = {
                 "overall_competitive_position": (
@@ -3607,12 +3492,8 @@ def get_portfolio_launch_priority(
             if assumption["created_at"] is not None
         ]
         freshness_payload = {
-            "latest_sim_completed_at": (
-                sim.created_at if sim is not None else None
-            ),
-            "latest_assumption_at": (
-                max(assumption_times) if assumption_times else None
-            ),
+            "latest_sim_completed_at": (sim.created_at if sim is not None else None),
+            "latest_assumption_at": (max(assumption_times) if assumption_times else None),
             "latest_outcome_at": latest_outcomes.get(project_id),
         }
 
@@ -3635,20 +3516,18 @@ def get_portfolio_launch_priority(
             freshness=freshness_payload,
             coverage=coverage_payload,
             project_id=project_id,
-            latest_simulation_id=(
-                sim.id if sim is not None else None
-            ),
+            latest_simulation_id=(sim.id if sim is not None else None),
         )
 
-        project_payloads.append({
-            "project_id": project_id,
-            "project_title": project.title,
-            "latest_simulation_at": (
-                sim.created_at if sim is not None else None
-            ),
-            "has_outcomes": project_id in latest_outcomes,
-            "go_no_go": go_no_go.model_dump(),
-        })
+        project_payloads.append(
+            {
+                "project_id": project_id,
+                "project_title": project.title,
+                "latest_simulation_at": (sim.created_at if sim is not None else None),
+                "has_outcomes": project_id in latest_outcomes,
+                "go_no_go": go_no_go.model_dump(),
+            }
+        )
 
     payload = build_portfolio_launch_priority(project_payloads)
     return PortfolioLaunchPriorityOut(**payload)
@@ -3709,9 +3588,7 @@ def export_portfolio_launch_priority(
         "user_id": current_user.id,
         "project_count": data.get("project_count", 0),
         "evaluated_count": data.get("evaluated_count", 0),
-        "portfolio_verdict": data.get(
-            "portfolio_verdict", "INSUFFICIENT_DATA"
-        ),
+        "portfolio_verdict": data.get("portfolio_verdict", "INSUFFICIENT_DATA"),
         "format_version": "1",
     }
 
@@ -3739,9 +3616,7 @@ def export_portfolio_launch_priority(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                'attachment; filename="thecee-portfolio-launch-priority.csv"'
-            ),
+            "Content-Disposition": ('attachment; filename="thecee-portfolio-launch-priority.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -3750,10 +3625,7 @@ def export_portfolio_launch_priority(
 @router.get(
     "/sim-diff",
     response_model=SimDiffOut,
-    summary=(
-        "Side-by-side comparison of two sims — findings + "
-        "conversion + per-metric deltas"
-    ),
+    summary=("Side-by-side comparison of two sims — findings + conversion + per-metric deltas"),
     # DB read of 2 sim rows — same cap as the other
     # aggregate endpoints.
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
@@ -3762,16 +3634,12 @@ def get_sim_diff(
     sim_a: int = Query(
         ...,
         ge=1,
-        description=(
-            "First sim id. Must be an owned, COMPLETED sim."
-        ),
+        description=("First sim id. Must be an owned, COMPLETED sim."),
     ),
     sim_b: int = Query(
         ...,
         ge=1,
-        description=(
-            "Second sim id. Must differ from sim_a."
-        ),
+        description=("Second sim id. Must differ from sim_a."),
     ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -3803,7 +3671,8 @@ def get_sim_diff(
             Outcome.actual_conversion_rate,
         )
         .outerjoin(
-            Outcome, Outcome.simulation_id == Simulation.id,
+            Outcome,
+            Outcome.simulation_id == Simulation.id,
         )
         .join(Project, Simulation.project_id == Project.id)
         .filter(
@@ -3825,9 +3694,7 @@ def get_sim_diff(
             "created_at": r.created_at,
             "predicted_conversion_rate": r.predicted_conversion_rate,
             "actual_conversion_rate": r.actual_conversion_rate,
-            "domain_findings": (
-                (r.results_json or {}).get("domain_findings") or []
-            ),
+            "domain_findings": ((r.results_json or {}).get("domain_findings") or []),
         }
 
     if sim_a not in by_id or sim_b not in by_id:
@@ -3838,15 +3705,14 @@ def get_sim_diff(
             missing.append(f"sim_b={sim_b}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "unknown or non-owned sim(s): "
-                + ", ".join(missing)
-            ),
+            detail=("unknown or non-owned sim(s): " + ", ".join(missing)),
         )
 
     payload = build_sim_diff(
-        sim_a, by_id[sim_a],
-        sim_b, by_id[sim_b],
+        sim_a,
+        by_id[sim_a],
+        sim_b,
+        by_id[sim_b],
     )
     return SimDiffOut(**payload)
 
@@ -3911,7 +3777,8 @@ def get_outlier_detection(
             Outcome.actual_conversion_rate,
         )
         .outerjoin(
-            Outcome, Outcome.simulation_id == Simulation.id,
+            Outcome,
+            Outcome.simulation_id == Simulation.id,
         )
         .join(Project, Simulation.project_id == Project.id)
         .filter(
@@ -3950,7 +3817,8 @@ def _fetch_calibration_health_rows(
             Simulation.results_json,
         )
         .outerjoin(
-            Outcome, Outcome.simulation_id == Simulation.id,
+            Outcome,
+            Outcome.simulation_id == Simulation.id,
         )
         .join(Project, Simulation.project_id == Project.id)
         .filter(
@@ -3975,9 +3843,7 @@ def _fetch_calibration_health_rows(
         if r.id in seen:
             continue
         seen.add(r.id)
-        findings = (
-            (r.results_json or {}).get("domain_findings") or []
-        )
+        findings = (r.results_json or {}).get("domain_findings") or []
         health_rows.append(
             (
                 r.created_at,
@@ -4044,10 +3910,7 @@ def get_calibration_health(
 @router.get(
     "/calibration-health/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export the calibration-health payload as CSV (or JSON "
-        "with ?format=json)"
-    ),
+    summary=("Export the calibration-health payload as CSV (or JSON with ?format=json)"),
     # Same DB read cost as the JSON health endpoint; cap polling
     # so a dashboard loop can't drive repeated N-sim scans.
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
@@ -4124,9 +3987,7 @@ def export_calibration_health(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    'attachment; filename="calibration-health.json"'
-                ),
+                "Content-Disposition": ('attachment; filename="calibration-health.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -4137,9 +3998,7 @@ def export_calibration_health(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                'attachment; filename="calibration-health.csv"'
-            ),
+            "Content-Disposition": ('attachment; filename="calibration-health.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -4215,7 +4074,8 @@ def get_portfolio_narrative(
             Outcome.created_at,
         )
         .outerjoin(
-            Outcome, Outcome.simulation_id == Simulation.id,
+            Outcome,
+            Outcome.simulation_id == Simulation.id,
         )
         .join(Project, Simulation.project_id == Project.id)
         .filter(
@@ -4234,9 +4094,7 @@ def get_portfolio_narrative(
         by_id[r.id] = r
 
     ordered_results: list[dict] = []
-    outcome_pairs: list[
-        tuple[list[dict], tuple[float | None, float | None]]
-    ] = []
+    outcome_pairs: list[tuple[list[dict], tuple[float | None, float | None]]] = []
     health_rows: list[tuple] = []
     for sid in canonical_ids:
         match = by_id.get(sid)
@@ -4247,8 +4105,7 @@ def get_portfolio_narrative(
         ordered_results.append(match.results_json)
         outcome_pairs.append(
             (
-                (match.results_json or {}).get("domain_findings")
-                or [],
+                (match.results_json or {}).get("domain_findings") or [],
                 (
                     match.predicted_conversion_rate,
                     match.actual_conversion_rate,
@@ -4260,16 +4117,12 @@ def get_portfolio_narrative(
                 match.created_at,
                 match.predicted_conversion_rate,
                 match.actual_conversion_rate,
-                (match.results_json or {}).get("domain_findings")
-                or [],
+                (match.results_json or {}).get("domain_findings") or [],
             )
         )
 
     # Build the four sub-payloads.
-    cluster_names = {
-        c.cluster_id: c.name
-        for c in _registry.all_clusters()
-    }
+    cluster_names = {c.cluster_id: c.name for c in _registry.all_clusters()}
     findings_payload = aggregate_findings(
         ordered_results,
         min_severity=normalise_severity(None),
@@ -4394,15 +4247,9 @@ def get_architect_drill_down(
             detail=str(exc),
         )
 
-    threshold = (
-        outlier_finding_threshold
-        if outlier_finding_threshold is not None
-        else 5
-    )
+    threshold = outlier_finding_threshold if outlier_finding_threshold is not None else 5
 
-    per_sim_findings: list[
-        tuple[int | None, list[dict]]
-    ] = []
+    per_sim_findings: list[tuple[int | None, list[dict]]] = []
     if canonical_ids:
         rows = (
             db.query(Simulation.id, Simulation.results_json)
@@ -4415,19 +4262,13 @@ def get_architect_drill_down(
             .all()
         )
         by_id: dict[int, list[dict]] = {
-            r.id: (
-                (r.results_json or {}).get("domain_findings")
-                or []
-            )
-            for r in rows
+            r.id: ((r.results_json or {}).get("domain_findings") or []) for r in rows
         }
         # Preserve the user's requested order; missing sims
         # get an empty findings list so the per-sim history still
         # reflects the batch.
         for sid in canonical_ids:
-            per_sim_findings.append(
-                (sid, by_id.get(sid, []))
-            )
+            per_sim_findings.append((sid, by_id.get(sid, [])))
 
     # Compute batch_overall |calibration_variance| by running
     # the bridge on this same batch — keeps the peer comparison
@@ -4445,7 +4286,8 @@ def get_architect_drill_down(
                 Outcome.created_at,
             )
             .outerjoin(
-                Outcome, Outcome.simulation_id == Simulation.id,
+                Outcome,
+                Outcome.simulation_id == Simulation.id,
             )
             .join(Project, Simulation.project_id == Project.id)
             .filter(
@@ -4458,16 +4300,12 @@ def get_architect_drill_down(
         # Build (results_json, (predicted, actual)) pairs in user
         # order, keeping latest outcome per sim.
         seen: set[int] = set()
-        outcome_pairs: list[
-            tuple[list[dict], tuple[float | None, float | None]]
-        ] = []
+        outcome_pairs: list[tuple[list[dict], tuple[float | None, float | None]]] = []
         for sid in canonical_ids:
             if sid in seen:
                 continue
             seen.add(sid)
-            match = next(
-                (r for r in outcome_rows if r.id == sid), None
-            )
+            match = next((r for r in outcome_rows if r.id == sid), None)
             if match is None:
                 outcome_pairs.append(([], (None, None)))
                 continue
@@ -4483,13 +4321,8 @@ def get_architect_drill_down(
 
         bridge = bridge_architect_accuracy(outcome_pairs)
         for row in bridge.get("by_architect") or []:
-            if (
-                str(row.get("architect_name", "")).lower()
-                == architect_name.lower()
-            ):
-                calibration_variance = row.get(
-                    "calibration_variance"
-                )
+            if str(row.get("architect_name", "")).lower() == architect_name.lower():
+                calibration_variance = row.get("calibration_variance")
                 calibration_direction = row.get(
                     "calibration_direction",
                     "INSUFFICIENT_DATA",
@@ -4503,9 +4336,7 @@ def get_architect_drill_down(
             if r.get("calibration_variance") is not None
         ]
         if variances_abs:
-            batch_overall_abs_variance = (
-                sum(variances_abs) / len(variances_abs)
-            )
+            batch_overall_abs_variance = sum(variances_abs) / len(variances_abs)
 
     payload = build_architect_drill_down(
         architect_name,
@@ -4606,9 +4437,7 @@ def get_simulation_results(
         product_type_detected=results_json.get("product_type_detected", ""),
         cluster_narrative=results_json.get("cluster_narrative", ""),
         conductor_diagnostics=results_json.get("conductor_diagnostics", {}),
-        conductor_architect_timing=results_json.get(
-            "conductor_architect_timing", {}
-        ),
+        conductor_architect_timing=results_json.get("conductor_architect_timing", {}),
         pipeline_timing=results_json.get("pipeline_timing", {}),
         signal_quality=float(sim.signal_quality or 0.0),
         user_blindspots=user_blindspots,
@@ -4662,8 +4491,7 @@ def get_calibration_transparency(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Simulation is {sim.status} — calibration transparency "
-                "requires completed results."
+                f"Simulation is {sim.status} — calibration transparency requires completed results."
             ),
         )
     if not sim.results_json:
@@ -4672,17 +4500,16 @@ def get_calibration_transparency(
             detail="Simulation completed but results_json is empty.",
         )
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
         product_type = ProductType.SAAS
     product_type_value = product_type.value
 
-    correction_rows = db.execute(
-        text("""
+    correction_rows = (
+        db.execute(
+            text("""
             SELECT architect_name, product_type, product_attribute,
                    cluster_id, correction_scalar, confidence_weight,
                    effective_sample_count, scope
@@ -4690,8 +4517,11 @@ def get_calibration_transparency(
             WHERE product_type = :pt
             ORDER BY architect_name, cluster_id
         """),
-        {"pt": product_type_value},
-    ).mappings().all()
+            {"pt": product_type_value},
+        )
+        .mappings()
+        .all()
+    )
 
     diagnostics = (sim.results_json or {}).get("conductor_diagnostics") or {}
     if not isinstance(diagnostics, dict):
@@ -4814,10 +4644,7 @@ def cancel_simulation(
     if sim.status not in {"QUEUED", "RUNNING"}:
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"Simulation {simulation_id} is {sim.status} and "
-                "cannot be cancelled."
-            ),
+            detail=(f"Simulation {simulation_id} is {sim.status} and cannot be cancelled."),
         )
 
     if sim.task_id:
@@ -4826,9 +4653,9 @@ def cancel_simulation(
         except Exception as exc:
             logger.warning(
                 "[Simulation] revoke failed - simulation_id=%s task_id=%s error=%s",
-                log_safe(simulation_id),
-                sim.task_id,
-                log_safe(exc),
+                log_safe(simulation_id).replace("\n", " "),
+                log_safe(sim.task_id).replace("\n", " "),
+                log_safe(exc).replace("\n", " "),
             )
 
     cancelled_at = datetime.now(UTC)
@@ -4858,10 +4685,7 @@ def cancel_simulation(
         ).scalar()
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"Simulation {simulation_id} is {fresh_status} and "
-                "cannot be cancelled."
-            ),
+            detail=(f"Simulation {simulation_id} is {fresh_status} and cannot be cancelled."),
         )
 
     sim.status = "CANCELLED"
@@ -4893,18 +4717,17 @@ def cancel_simulation(
         )
     except Exception as exc:
         logger.warning(
-            "[Simulation] webhook enqueue on cancel skipped - "
-            "simulation_id=%s error=%s",
-            log_safe(simulation_id),
-            log_safe(exc),
+            "[Simulation] webhook enqueue on cancel skipped - simulation_id=%s error=%s",
+            log_safe(simulation_id).replace("\n", " "),
+            log_safe(exc).replace("\n", " "),
         )
 
     _invalidate_simulation_caches(current_user.id)
 
     logger.info(
         "[Simulation] Cancelled by user - simulation_id=%s task_id=%s",
-        log_safe(simulation_id),
-        sim.task_id,
+        log_safe(simulation_id).replace("\n", " "),
+        log_safe(sim.task_id).replace("\n", " "),
     )
 
     return SimulationCancelOut(
@@ -4920,6 +4743,9 @@ def cancel_simulation(
     "/ws/info",
     summary="WebSocket connection metadata for live progress",
     responses=_JSON_200,
+    # Exposes the live connection count — operator surface, not public
+    # API metadata. Same admin-in-production gate as the /system digests.
+    dependencies=[Depends(require_admin_in_production)],
 )
 def websocket_info():
     from app.core.websocket import ws_manager
@@ -4928,7 +4754,7 @@ def websocket_info():
         "active_connections": ws_manager.connection_count,
         "live_progress": progress_bridge.is_running(),
         "protocol": "ws",
-        "endpoint": "/api/v1/ws/simulation/{simulation_id} — auth: first JSON frame {\"type\":\"auth\",\"access_token\":\"<jwt>\"}",
+        "endpoint": '/api/v1/ws/simulation/{simulation_id} — auth: first JSON frame {"type":"auth","access_token":"<jwt>"}',
     }
 
 
@@ -5008,10 +4834,7 @@ def export_simulation_stress_scenarios(
     if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; "
-                "expected 'csv', 'json', or 'md'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv', 'json', or 'md'"),
         )
 
     result = get_simulation_stress_scenarios(
@@ -5062,9 +4885,7 @@ def export_simulation_stress_scenarios(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="stress-scenarios-{simulation_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="stress-scenarios-{simulation_id}.csv"'),
             "Content-Length": str(len(body)),
             "Cache-Control": "no-store",
         },
@@ -5222,10 +5043,7 @@ def export_what_if_batch(
     if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; "
-                "expected 'csv', 'json', or 'md'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv', 'json', or 'md'"),
         )
 
     result = post_what_if_batch(
@@ -5263,9 +5081,7 @@ def export_what_if_batch(
             iter([body]),
             media_type="text/markdown; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="what-if-batch-{simulation_id}.md"'
-                ),
+                "Content-Disposition": (f'attachment; filename="what-if-batch-{simulation_id}.md"'),
                 "Content-Length": str(len(body)),
                 "Cache-Control": "no-store",
             },
@@ -5277,9 +5093,7 @@ def export_what_if_batch(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="what-if-batch-{simulation_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="what-if-batch-{simulation_id}.csv"'),
             "Content-Length": str(len(body)),
             "Cache-Control": "no-store",
         },
@@ -5327,9 +5141,7 @@ def get_cohort_retention(
 
     # Fetch cluster_run_summaries for agent counts and drop triggers
     summary_rows = (
-        db.query(ClusterRunSummary)
-        .filter(ClusterRunSummary.simulation_id == sim.id)
-        .all()
+        db.query(ClusterRunSummary).filter(ClusterRunSummary.simulation_id == sim.id).all()
     )
     summaries = [
         {
@@ -5355,11 +5167,7 @@ def get_cohort_retention(
     # Get AOV from environment
     aov = 999.0
     if sim.environment_id:
-        env = (
-            db.query(Environment)
-            .filter(Environment.id == sim.environment_id)
-            .first()
-        )
+        env = db.query(Environment).filter(Environment.id == sim.environment_id).first()
         if env:
             aov = float(env.average_order_value or 999.0)
 
@@ -5415,10 +5223,7 @@ def export_cohort_retention(
     if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; "
-                "expected 'csv', 'json', or 'md'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv', 'json', or 'md'"),
         )
 
     result = get_cohort_retention(
@@ -5427,9 +5232,7 @@ def export_cohort_retention(
         current_user=current_user,
         cluster_limit=cluster_limit,
     )
-    result_data = (
-        result.model_dump() if hasattr(result, "model_dump") else dict(result)
-    )
+    result_data = result.model_dump() if hasattr(result, "model_dump") else dict(result)
 
     metadata = {
         "generated_at": datetime.now(tz=UTC).isoformat(),
@@ -5454,9 +5257,7 @@ def export_cohort_retention(
         )
 
     if fmt == "md":
-        body = cohort_retention_to_markdown(result, metadata=metadata).encode(
-            "utf-8"
-        )
+        body = cohort_retention_to_markdown(result, metadata=metadata).encode("utf-8")
         return StreamingResponse(
             iter([body]),
             media_type="text/markdown; charset=utf-8",
@@ -5475,9 +5276,7 @@ def export_cohort_retention(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="cohort-retention-{simulation_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="cohort-retention-{simulation_id}.csv"'),
             "Content-Length": str(len(body)),
             "Cache-Control": "no-store",
         },
@@ -5515,10 +5314,7 @@ def get_funnel_diagnosis(
     if sim.status != "COMPLETED":
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"Simulation is {sim.status} — funnel diagnosis requires "
-                "completed results."
-            ),
+            detail=(f"Simulation is {sim.status} — funnel diagnosis requires completed results."),
         )
     if not sim.results_json:
         raise HTTPException(
@@ -5530,9 +5326,7 @@ def get_funnel_diagnosis(
     limit = max(1, min(limit, 52))
 
     summary_rows = (
-        db.query(ClusterRunSummary)
-        .filter(ClusterRunSummary.simulation_id == sim.id)
-        .all()
+        db.query(ClusterRunSummary).filter(ClusterRunSummary.simulation_id == sim.id).all()
     )
     summaries = [
         {
@@ -5551,9 +5345,7 @@ def get_funnel_diagnosis(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
         cluster_summaries=summaries or None,
         cluster_limit=limit,
     )
@@ -5562,9 +5354,7 @@ def get_funnel_diagnosis(
 @router.get(
     "/{simulation_id}/funnel-diagnosis/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export the funnel diagnosis as CSV, JSON, or Markdown"
-    ),
+    summary=("Export the funnel diagnosis as CSV, JSON, or Markdown"),
     # Same DB read cost as the JSON funnel-diagnosis endpoint; cap polling
     # so a dashboard loop can't drive repeated reads.
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
@@ -5595,10 +5385,7 @@ def export_funnel_diagnosis(
     if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; "
-                "expected 'csv', 'json', or 'md'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv', 'json', or 'md'"),
         )
 
     payload = get_funnel_diagnosis(
@@ -5607,11 +5394,7 @@ def export_funnel_diagnosis(
         current_user=current_user,
     )
 
-    project = (
-        db.query(Project)
-        .filter(Project.id == payload.project_id)
-        .first()
-    )
+    project = db.query(Project).filter(Project.id == payload.project_id).first()
     project_name = project.title if project else None
 
     metadata = {
@@ -5652,9 +5435,7 @@ def export_funnel_diagnosis(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    'attachment; filename="funnel-diagnosis.json"'
-                ),
+                "Content-Disposition": ('attachment; filename="funnel-diagnosis.json"'),
                 "Content-Length": str(len(body)),
                 "Cache-Control": "no-store",
             },
@@ -5707,8 +5488,7 @@ def get_cluster_opportunities(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Simulation is {sim.status} — cluster opportunities require "
-                "completed results."
+                f"Simulation is {sim.status} — cluster opportunities require completed results."
             ),
         )
     if not sim.results_json:
@@ -5719,15 +5499,11 @@ def get_cluster_opportunities(
 
     effective_limit = limit if isinstance(limit, int) else 52
     effective_limit = max(1, min(effective_limit, 52))
-    effective_benchmark = (
-        float(benchmark) if isinstance(benchmark, (int, float)) else 0.05
-    )
+    effective_benchmark = float(benchmark) if isinstance(benchmark, (int, float)) else 0.05
     effective_benchmark = max(0.01, min(effective_benchmark, 0.5))
 
     summary_rows = (
-        db.query(ClusterRunSummary)
-        .filter(ClusterRunSummary.simulation_id == sim.id)
-        .all()
+        db.query(ClusterRunSummary).filter(ClusterRunSummary.simulation_id == sim.id).all()
     )
     summaries = [
         {
@@ -5753,9 +5529,7 @@ def get_cluster_opportunities(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
         cluster_summaries=summaries or None,
         cluster_registry=registry,
         benchmark=effective_benchmark,
@@ -5775,17 +5549,11 @@ def get_buyer_personas(
     current_user: User = Depends(get_current_user),
     limit: int = Query(
         default=10,
-        description=(
-            "Maximum number of ranked persona cards to return "
-            "(clamped to 1–52)."
-        ),
+        description=("Maximum number of ranked persona cards to return (clamped to 1–52)."),
     ),
     benchmark: float = Query(
         default=0.05,
-        description=(
-            "Conversion-rate benchmark used to score gaps "
-            "(clamped to 0.01–0.5)."
-        ),
+        description=("Conversion-rate benchmark used to score gaps (clamped to 0.01–0.5)."),
     ),
 ) -> BuyerPersonasOut:
     """
@@ -5810,10 +5578,7 @@ def get_buyer_personas(
     if sim.status != "COMPLETED":
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"Simulation is {sim.status} — buyer personas require "
-                "completed results."
-            ),
+            detail=(f"Simulation is {sim.status} — buyer personas require completed results."),
         )
     if not sim.results_json:
         raise HTTPException(
@@ -5823,15 +5588,11 @@ def get_buyer_personas(
 
     effective_limit = limit if isinstance(limit, int) else 10
     effective_limit = max(1, min(effective_limit, 52))
-    effective_benchmark = (
-        float(benchmark) if isinstance(benchmark, (int, float)) else 0.05
-    )
+    effective_benchmark = float(benchmark) if isinstance(benchmark, (int, float)) else 0.05
     effective_benchmark = max(0.01, min(effective_benchmark, 0.5))
 
     summary_rows = (
-        db.query(ClusterRunSummary)
-        .filter(ClusterRunSummary.simulation_id == sim.id)
-        .all()
+        db.query(ClusterRunSummary).filter(ClusterRunSummary.simulation_id == sim.id).all()
     )
     summaries = [
         {
@@ -5864,9 +5625,7 @@ def get_buyer_personas(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
         cluster_summaries=summaries or None,
         cluster_registry=registry,
         benchmark=effective_benchmark,
@@ -5905,8 +5664,7 @@ def get_market_concentration(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Simulation is {sim.status} — market concentration requires "
-                "completed results."
+                f"Simulation is {sim.status} — market concentration requires completed results."
             ),
         )
     if not sim.results_json:
@@ -5916,9 +5674,7 @@ def get_market_concentration(
         )
 
     summary_rows = (
-        db.query(ClusterRunSummary)
-        .filter(ClusterRunSummary.simulation_id == sim.id)
-        .all()
+        db.query(ClusterRunSummary).filter(ClusterRunSummary.simulation_id == sim.id).all()
     )
     summaries = [
         {
@@ -5942,9 +5698,7 @@ def get_market_concentration(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
         cluster_summaries=summaries or None,
         cluster_registry=registry,
     )
@@ -6081,10 +5835,7 @@ def _build_unit_economics_payload(
     if sim.status != "COMPLETED":
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"Simulation is {sim.status} — unit economics requires "
-                "completed results."
-            ),
+            detail=(f"Simulation is {sim.status} — unit economics requires completed results."),
         )
     if not sim.results_json:
         raise HTTPException(
@@ -6092,11 +5843,7 @@ def _build_unit_economics_payload(
             detail="Simulation completed but results_json is empty.",
         )
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     aov = 999.0
     price_sensitivity = 0.5
     market_maturity = 0.3
@@ -6105,9 +5852,7 @@ def _build_unit_economics_payload(
         price_sensitivity = float(environment.price_sensitivity or 0.5)
         market_maturity = float(environment.market_maturity or 0.3)
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
@@ -6149,9 +5894,7 @@ def _build_unit_economics_payload(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
         conductor_results=conductor_results,
         cluster_registry=registry,
         average_order_value=aov,
@@ -6164,10 +5907,7 @@ def _build_unit_economics_payload(
 @router.get(
     "/{simulation_id}/unit-economics/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export the unit-economics analysis as CSV (or JSON with "
-        "?format=json)"
-    ),
+    summary=("Export the unit-economics analysis as CSV (or JSON with ?format=json)"),
     # Same DB read cost as the JSON unit-economics endpoint; cap polling
     # so a dashboard loop can't drive repeated Conductor recomputes.
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
@@ -6233,9 +5973,7 @@ def export_unit_economics(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    'attachment; filename="unit-economics.json"'
-                ),
+                "Content-Disposition": ('attachment; filename="unit-economics.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -6255,10 +5993,7 @@ def export_unit_economics(
 @router.get(
     "/{simulation_id}/pricing-optimization",
     response_model=PricingOptimizationOut,
-    summary=(
-        "Pricing optimization: demand curve, revenue-optimal price and "
-        "elasticity"
-    ),
+    summary=("Pricing optimization: demand curve, revenue-optimal price and elasticity"),
     responses=_JSON_200,
 )
 def get_pricing_optimization(
@@ -6288,8 +6023,7 @@ def get_pricing_optimization(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Simulation is {sim.status} — pricing optimization requires "
-                "completed results."
+                f"Simulation is {sim.status} — pricing optimization requires completed results."
             ),
         )
     if not sim.results_json:
@@ -6298,11 +6032,7 @@ def get_pricing_optimization(
             detail="Simulation completed but results_json is empty.",
         )
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     aov = 999.0
     price_sensitivity = 0.5
     market_maturity = 0.3
@@ -6311,9 +6041,7 @@ def get_pricing_optimization(
         price_sensitivity = float(environment.price_sensitivity or 0.5)
         market_maturity = float(environment.market_maturity or 0.3)
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
@@ -6355,9 +6083,7 @@ def get_pricing_optimization(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
         conductor_results=conductor_results,
         cluster_registry=registry,
         average_order_value=aov,
@@ -6367,9 +6093,7 @@ def get_pricing_optimization(
 @router.get(
     "/{simulation_id}/pricing-optimization/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export pricing optimization as CSV, JSON, or Markdown"
-    ),
+    summary=("Export pricing optimization as CSV, JSON, or Markdown"),
     # Same DB read + conductor recompute cost as the JSON pricing
     # optimization endpoint; cap polling so a dashboard loop can't
     # drive repeated scenario recomputes.
@@ -6395,10 +6119,7 @@ def export_pricing_optimization(
     if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; "
-                "expected 'csv', 'json', or 'md'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv', 'json', or 'md'"),
         )
 
     payload = get_pricing_optimization(
@@ -6407,11 +6128,7 @@ def export_pricing_optimization(
         current_user=current_user,
     )
 
-    project = (
-        db.query(Project)
-        .filter(Project.id == payload.project_id)
-        .first()
-    )
+    project = db.query(Project).filter(Project.id == payload.project_id).first()
     project_name = project.title if project else None
 
     metadata = {
@@ -6432,8 +6149,7 @@ def export_pricing_optimization(
             media_type="application/json; charset=utf-8",
             headers={
                 "Content-Disposition": (
-                    'attachment; filename="pricing-optimization-'
-                    f'{simulation_id}.json"'
+                    f'attachment; filename="pricing-optimization-{simulation_id}.json"'
                 ),
                 "Content-Length": str(len(body)),
             },
@@ -6453,8 +6169,7 @@ def export_pricing_optimization(
             media_type="text/markdown; charset=utf-8",
             headers={
                 "Content-Disposition": (
-                    'attachment; filename="pricing-optimization-'
-                    f'{simulation_id}.md"'
+                    f'attachment; filename="pricing-optimization-{simulation_id}.md"'
                 ),
                 "Content-Length": str(len(body)),
             },
@@ -6470,8 +6185,7 @@ def export_pricing_optimization(
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": (
-                'attachment; filename="pricing-optimization-'
-                f'{simulation_id}.csv"'
+                f'attachment; filename="pricing-optimization-{simulation_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },
@@ -6517,11 +6231,7 @@ def get_sensitivity_analysis(
         )
 
     # Fetch environment params
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     env_params: dict = {}
     if environment:
         env_params = {
@@ -6551,10 +6261,7 @@ def get_sensitivity_analysis(
 @router.get(
     "/{simulation_id}/sensitivity/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export the sensitivity analysis as CSV (or JSON with "
-        "?format=json)"
-    ),
+    summary=("Export the sensitivity analysis as CSV (or JSON with ?format=json)"),
     # Same DB read + Markov recompute cost as the JSON sensitivity
     # endpoint; cap polling so a dashboard loop can't drive repeated
     # scenario recomputes.
@@ -6610,9 +6317,7 @@ def export_sensitivity_analysis(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    'attachment; filename="sensitivity.json"'
-                ),
+                "Content-Disposition": ('attachment; filename="sensitivity.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -6633,8 +6338,7 @@ def export_sensitivity_analysis(
     "/{simulation_id}/feature-prioritization",
     response_model=FeaturePrioritizationOut,
     summary=(
-        "Prioritize features by demand-weighted adoption, upside, and "
-        "founder brief alignment"
+        "Prioritize features by demand-weighted adoption, upside, and founder brief alignment"
     ),
     responses=_JSON_200,
 )
@@ -6670,8 +6374,7 @@ def get_feature_prioritization(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Simulation is {sim.status} — feature prioritization "
-                "requires completed results."
+                f"Simulation is {sim.status} — feature prioritization requires completed results."
             ),
         )
     if not sim.results_json:
@@ -6680,11 +6383,7 @@ def get_feature_prioritization(
             detail="Simulation completed but results_json is empty.",
         )
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     aov = 999.0
     price_sensitivity = 0.5
     market_maturity = 0.3
@@ -6693,9 +6392,7 @@ def get_feature_prioritization(
         price_sensitivity = float(environment.price_sensitivity or 0.5)
         market_maturity = float(environment.market_maturity or 0.3)
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
@@ -6733,19 +6430,13 @@ def get_feature_prioritization(
     ]
 
     brief_features: list[str] = []
-    project = (
-        db.query(Project)
-        .filter(Project.id == sim.project_id)
-        .first()
-    )
+    project = db.query(Project).filter(Project.id == sim.project_id).first()
     if project is not None and project.brief_features_json:
         try:
             parsed = json.loads(project.brief_features_json)
             if isinstance(parsed, list):
                 brief_features = [
-                    str(feature).strip()
-                    for feature in parsed
-                    if str(feature).strip()
+                    str(feature).strip() for feature in parsed if str(feature).strip()
                 ][:5]
         except (ValueError, TypeError):
             brief_features = []
@@ -6755,9 +6446,7 @@ def get_feature_prioritization(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
         conductor_results=conductor_results,
         cluster_registry=registry,
         product_type=product_type_name,
@@ -6768,9 +6457,7 @@ def get_feature_prioritization(
 @router.get(
     "/{simulation_id}/feature-prioritization/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export feature prioritization as CSV, JSON, or Markdown"
-    ),
+    summary=("Export feature prioritization as CSV, JSON, or Markdown"),
     # Same DB read + conductor recompute cost as the JSON feature
     # prioritization endpoint; cap polling so a dashboard loop can't
     # drive repeated scenario recomputes.
@@ -6796,10 +6483,7 @@ def export_feature_prioritization(
     if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; "
-                "expected 'csv', 'json', or 'md'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv', 'json', or 'md'"),
         )
 
     payload = get_feature_prioritization(
@@ -6808,11 +6492,7 @@ def export_feature_prioritization(
         current_user=current_user,
     )
 
-    project = (
-        db.query(Project)
-        .filter(Project.id == payload.project_id)
-        .first()
-    )
+    project = db.query(Project).filter(Project.id == payload.project_id).first()
     project_name = project.title if project else None
 
     metadata = {
@@ -6833,8 +6513,7 @@ def export_feature_prioritization(
             media_type="application/json; charset=utf-8",
             headers={
                 "Content-Disposition": (
-                    'attachment; filename="feature-prioritization-'
-                    f'{simulation_id}.json"'
+                    f'attachment; filename="feature-prioritization-{simulation_id}.json"'
                 ),
                 "Content-Length": str(len(body)),
             },
@@ -6854,8 +6533,7 @@ def export_feature_prioritization(
             media_type="text/markdown; charset=utf-8",
             headers={
                 "Content-Disposition": (
-                    'attachment; filename="feature-prioritization-'
-                    f'{simulation_id}.md"'
+                    f'attachment; filename="feature-prioritization-{simulation_id}.md"'
                 ),
                 "Content-Length": str(len(body)),
             },
@@ -6871,8 +6549,7 @@ def export_feature_prioritization(
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": (
-                'attachment; filename="feature-prioritization-'
-                f'{simulation_id}.csv"'
+                f'attachment; filename="feature-prioritization-{simulation_id}.csv"'
             ),
             "Content-Length": str(len(body)),
         },
@@ -6883,8 +6560,7 @@ def export_feature_prioritization(
     "/{simulation_id}/activation-funnel",
     response_model=ActivationFunnelOut,
     summary=(
-        "Activation funnel: first-run completion, blockers, and "
-        "highest-impact activation levers"
+        "Activation funnel: first-run completion, blockers, and highest-impact activation levers"
     ),
     responses=_JSON_200,
 )
@@ -6933,11 +6609,7 @@ def get_activation_funnel(
             detail="Simulation completed but results_json is empty.",
         )
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     aov = 999.0
     price_sensitivity = 0.5
     market_maturity = 0.3
@@ -6959,17 +6631,13 @@ def get_activation_funnel(
             "text": assumption.text,
             "sensitivity": str(assumption.sensitivity or "MEDIUM"),
             "impact_score": float(
-                assumption.impact_score
-                if assumption.impact_score is not None
-                else 5.0
+                assumption.impact_score if assumption.impact_score is not None else 5.0
             ),
         }
         for assumption in assumptions
     ]
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
@@ -7014,9 +6682,7 @@ def get_activation_funnel(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
         conductor_results=conductor_results,
         cluster_registry=registry,
         product_type=product_type_name,
@@ -7071,8 +6737,7 @@ def get_virality_growth(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Simulation is {sim.status} — virality-growth analysis "
-                "requires completed results."
+                f"Simulation is {sim.status} — virality-growth analysis requires completed results."
             ),
         )
     if not sim.results_json:
@@ -7081,11 +6746,7 @@ def get_virality_growth(
             detail="Simulation completed but results_json is empty.",
         )
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     aov = 999.0
     price_sensitivity = 0.5
     market_maturity = 0.3
@@ -7108,17 +6769,13 @@ def get_virality_growth(
             "text": assumption.text,
             "sensitivity": str(assumption.sensitivity or "MEDIUM"),
             "impact_score": float(
-                assumption.impact_score
-                if assumption.impact_score is not None
-                else 5.0
+                assumption.impact_score if assumption.impact_score is not None else 5.0
             ),
         }
         for assumption in assumptions
     ]
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
@@ -7163,9 +6820,7 @@ def get_virality_growth(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
         conductor_results=conductor_results,
         cluster_registry=registry,
         product_type=product_type_name,
@@ -7235,11 +6890,7 @@ def get_distribution_channels(
             detail="Simulation completed but results_json is empty.",
         )
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     aov = 999.0
     price_sensitivity = 0.5
     market_maturity = 0.3
@@ -7262,9 +6913,7 @@ def get_distribution_channels(
             "text": assumption.text,
             "sensitivity": str(assumption.sensitivity or "MEDIUM"),
             "impact_score": float(
-                assumption.impact_score
-                if assumption.impact_score is not None
-                else 5.0
+                assumption.impact_score if assumption.impact_score is not None else 5.0
             ),
         }
         for assumption in assumptions
@@ -7319,9 +6968,7 @@ def get_distribution_channels(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
         conductor_results=conductor_results,
         cluster_registry=registry,
         product_type=product_type_name,
@@ -7373,8 +7020,7 @@ def get_trust_barriers(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Simulation is {sim.status} — trust-barriers analysis "
-                "requires completed results."
+                f"Simulation is {sim.status} — trust-barriers analysis requires completed results."
             ),
         )
     if not sim.results_json:
@@ -7383,11 +7029,7 @@ def get_trust_barriers(
             detail="Simulation completed but results_json is empty.",
         )
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     aov = 999.0
     price_sensitivity = 0.5
     market_maturity = 0.3
@@ -7409,17 +7051,13 @@ def get_trust_barriers(
             "text": assumption.text,
             "sensitivity": str(assumption.sensitivity or "MEDIUM"),
             "impact_score": float(
-                assumption.impact_score
-                if assumption.impact_score is not None
-                else 5.0
+                assumption.impact_score if assumption.impact_score is not None else 5.0
             ),
         }
         for assumption in assumptions
     ]
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
@@ -7464,9 +7102,7 @@ def get_trust_barriers(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
         conductor_results=conductor_results,
         cluster_registry=registry,
         product_type=product_type_name,
@@ -7529,11 +7165,7 @@ def get_support_friction(
             detail="Simulation completed but results_json is empty.",
         )
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     aov = 999.0
     price_sensitivity = 0.5
     market_maturity = 0.3
@@ -7556,17 +7188,13 @@ def get_support_friction(
             "text": assumption.text,
             "sensitivity": str(assumption.sensitivity or "MEDIUM"),
             "impact_score": float(
-                assumption.impact_score
-                if assumption.impact_score is not None
-                else 5.0
+                assumption.impact_score if assumption.impact_score is not None else 5.0
             ),
         }
         for assumption in assumptions
     ]
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
@@ -7611,9 +7239,7 @@ def get_support_friction(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
         conductor_results=conductor_results,
         cluster_registry=registry,
         product_type=product_type_name,
@@ -7664,8 +7290,7 @@ def get_cultural_fit(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Simulation is {sim.status} — cultural-fit analysis "
-                "requires completed results."
+                f"Simulation is {sim.status} — cultural-fit analysis requires completed results."
             ),
         )
     if not sim.results_json:
@@ -7674,11 +7299,7 @@ def get_cultural_fit(
             detail="Simulation completed but results_json is empty.",
         )
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     aov = 999.0
     price_sensitivity = 0.5
     market_maturity = 0.3
@@ -7701,17 +7322,13 @@ def get_cultural_fit(
             "text": assumption.text,
             "sensitivity": str(assumption.sensitivity or "MEDIUM"),
             "impact_score": float(
-                assumption.impact_score
-                if assumption.impact_score is not None
-                else 5.0
+                assumption.impact_score if assumption.impact_score is not None else 5.0
             ),
         }
         for assumption in assumptions
     ]
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
@@ -7756,9 +7373,7 @@ def get_cultural_fit(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
         conductor_results=conductor_results,
         cluster_registry=registry,
         product_type=product_type_name,
@@ -7820,11 +7435,7 @@ def get_ecosystem_compatibility(
             detail="Simulation completed but results_json is empty.",
         )
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     aov = 999.0
     price_sensitivity = 0.5
     market_maturity = 0.3
@@ -7847,17 +7458,13 @@ def get_ecosystem_compatibility(
             "text": assumption.text,
             "sensitivity": str(assumption.sensitivity or "MEDIUM"),
             "impact_score": float(
-                assumption.impact_score
-                if assumption.impact_score is not None
-                else 5.0
+                assumption.impact_score if assumption.impact_score is not None else 5.0
             ),
         }
         for assumption in assumptions
     ]
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
@@ -7902,9 +7509,7 @@ def get_ecosystem_compatibility(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
         conductor_results=conductor_results,
         cluster_registry=registry,
         product_type=product_type_name,
@@ -7958,8 +7563,7 @@ def get_setup_friction(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Simulation is {sim.status} — setup-friction analysis "
-                "requires completed results."
+                f"Simulation is {sim.status} — setup-friction analysis requires completed results."
             ),
         )
     if not sim.results_json:
@@ -7968,11 +7572,7 @@ def get_setup_friction(
             detail="Simulation completed but results_json is empty.",
         )
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     aov = 999.0
     price_sensitivity = 0.5
     market_maturity = 0.3
@@ -7995,9 +7595,7 @@ def get_setup_friction(
             "text": assumption.text,
             "sensitivity": str(assumption.sensitivity or "MEDIUM"),
             "impact_score": float(
-                assumption.impact_score
-                if assumption.impact_score is not None
-                else 5.0
+                assumption.impact_score if assumption.impact_score is not None else 5.0
             ),
         }
         for assumption in assumptions
@@ -8012,9 +7610,7 @@ def get_setup_friction(
         for assumption in assumptions
     )
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
@@ -8059,9 +7655,7 @@ def get_setup_friction(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
         conductor_results=conductor_results,
         cluster_registry=registry,
         product_type=product_type_name,
@@ -8116,8 +7710,7 @@ def get_retention_churn(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Simulation is {sim.status} — retention-churn analysis "
-                "requires completed results."
+                f"Simulation is {sim.status} — retention-churn analysis requires completed results."
             ),
         )
     if not sim.results_json:
@@ -8126,11 +7719,7 @@ def get_retention_churn(
             detail="Simulation completed but results_json is empty.",
         )
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     aov = 999.0
     price_sensitivity = 0.5
     market_maturity = 0.3
@@ -8152,17 +7741,13 @@ def get_retention_churn(
             "text": assumption.text,
             "sensitivity": str(assumption.sensitivity or "MEDIUM"),
             "impact_score": float(
-                assumption.impact_score
-                if assumption.impact_score is not None
-                else 5.0
+                assumption.impact_score if assumption.impact_score is not None else 5.0
             ),
         }
         for assumption in assumptions
     ]
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
@@ -8207,9 +7792,7 @@ def get_retention_churn(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
         conductor_results=conductor_results,
         cluster_registry=registry,
         product_type=product_type_name,
@@ -8265,8 +7848,7 @@ def get_market_timing(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Simulation is {sim.status} — market-timing analysis "
-                "requires completed results."
+                f"Simulation is {sim.status} — market-timing analysis requires completed results."
             ),
         )
     if not sim.results_json:
@@ -8275,11 +7857,7 @@ def get_market_timing(
             detail="Simulation completed but results_json is empty.",
         )
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     aov = 999.0
     price_sensitivity = 0.5
     market_maturity = 0.3
@@ -8302,17 +7880,13 @@ def get_market_timing(
             "text": assumption.text,
             "sensitivity": str(assumption.sensitivity or "MEDIUM"),
             "impact_score": float(
-                assumption.impact_score
-                if assumption.impact_score is not None
-                else 5.0
+                assumption.impact_score if assumption.impact_score is not None else 5.0
             ),
         }
         for assumption in assumptions
     ]
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
@@ -8357,9 +7931,7 @@ def get_market_timing(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
         conductor_results=conductor_results,
         cluster_registry=registry,
         product_type=product_type_name,
@@ -8421,11 +7993,7 @@ def get_competitive_moat(
             detail="Simulation completed but results_json is empty.",
         )
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     aov = 999.0
     price_sensitivity = 0.5
     market_maturity = 0.3
@@ -8449,17 +8017,13 @@ def get_competitive_moat(
             "text": assumption.text,
             "sensitivity": str(assumption.sensitivity or "MEDIUM"),
             "impact_score": float(
-                assumption.impact_score
-                if assumption.impact_score is not None
-                else 5.0
+                assumption.impact_score if assumption.impact_score is not None else 5.0
             ),
         }
         for assumption in assumptions
     ]
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
@@ -8504,9 +8068,7 @@ def get_competitive_moat(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
         conductor_results=conductor_results,
         cluster_registry=registry,
         product_type=product_type_name,
@@ -8546,8 +8108,7 @@ def get_validation_roi(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Simulation is {sim.status} — validation-ROI analysis requires "
-                "completed results."
+                f"Simulation is {sim.status} — validation-ROI analysis requires completed results."
             ),
         )
     if not sim.results_json:
@@ -8557,11 +8118,7 @@ def get_validation_roi(
         )
 
     # Fetch environment params
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     env_params: dict = {}
     if environment:
         env_params = {
@@ -8585,9 +8142,7 @@ def get_validation_roi(
         base_results=sim.results_json,
         env_params=env_params,
         existing_assumptions=assumptions,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
     )
 
 
@@ -8705,25 +8260,19 @@ def get_simulation_comparison(
         if row.status == "FAILED":
             raise HTTPException(
                 status_code=422,
-                detail=(
-                    f"{role} simulation failed: "
-                    f"{row.error_message or 'unknown error'}"
-                ),
+                detail=(f"{role} simulation failed: {row.error_message or 'unknown error'}"),
             )
         if row.status != "COMPLETED":
             raise HTTPException(
                 status_code=409,
                 detail=(
-                    f"{role} simulation is {row.status} — comparison "
-                    "requires completed results."
+                    f"{role} simulation is {row.status} — comparison requires completed results."
                 ),
             )
         if not row.results_json:
             raise HTTPException(
                 status_code=422,
-                detail=(
-                    f"{role} simulation completed but results_json is empty."
-                ),
+                detail=(f"{role} simulation completed but results_json is empty."),
             )
 
     return build_run_diff(
@@ -8731,13 +8280,9 @@ def get_simulation_comparison(
         baseline_id=baseline.id,
         current_results=sim.results_json or {},
         baseline_results=baseline.results_json or {},
-        current_signal=(
-            float(sim.signal_quality) if sim.signal_quality is not None else None
-        ),
+        current_signal=(float(sim.signal_quality) if sim.signal_quality is not None else None),
         baseline_signal=(
-            float(baseline.signal_quality)
-            if baseline.signal_quality is not None
-            else None
+            float(baseline.signal_quality) if baseline.signal_quality is not None else None
         ),
         project_id=sim.project_id,
     )
@@ -8974,10 +8519,7 @@ def get_simulation_quality(
     if sim.status != "COMPLETED":
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"Simulation is {sim.status} — quality analysis requires "
-                "completed results."
-            ),
+            detail=(f"Simulation is {sim.status} — quality analysis requires completed results."),
         )
     if not sim.results_json:
         raise HTTPException(
@@ -8990,9 +8532,7 @@ def get_simulation_quality(
         project_id=sim.project_id,
         base_results=sim.results_json,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
     )
 
 
@@ -9087,11 +8627,7 @@ def _load_what_if_context(
     db: Session,
 ) -> tuple[dict, list[Assumption]]:
     """Load env params + visible assumptions needed to run what-if projections."""
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     env_params: dict = {}
     if environment:
         env_params = {
@@ -9464,10 +9000,7 @@ def get_market_sizing(
     if sim.status != "COMPLETED":
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"Simulation is {sim.status} — market sizing requires "
-                "completed results."
-            ),
+            detail=(f"Simulation is {sim.status} — market sizing requires completed results."),
         )
     if not sim.results_json:
         raise HTTPException(
@@ -9493,11 +9026,7 @@ def get_market_sizing(
         average_order_value=average_order_value,
         purchase_frequency_per_year=purchase_frequency_per_year,
         cluster_registry=registry,
-        signal_quality=(
-            float(sim.signal_quality)
-            if sim.signal_quality is not None
-            else None
-        ),
+        signal_quality=(float(sim.signal_quality) if sim.signal_quality is not None else None),
     )
     return MarketSizingOut(**payload)
 
@@ -9569,11 +9098,7 @@ def get_first_customers(
         status=sim.status,
         monthly_visitors=monthly_visitors,
         cluster_registry=registry,
-        signal_quality=(
-            float(sim.signal_quality)
-            if sim.signal_quality is not None
-            else None
-        ),
+        signal_quality=(float(sim.signal_quality) if sim.signal_quality is not None else None),
     )
     return FirstCustomersOut(**payload)
 
@@ -9622,8 +9147,7 @@ def get_after_sales(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Simulation is {sim.status} — after-sales analysis "
-                "requires completed results."
+                f"Simulation is {sim.status} — after-sales analysis requires completed results."
             ),
         )
     if not sim.results_json:
@@ -9632,11 +9156,7 @@ def get_after_sales(
             detail="Simulation completed but results_json is empty.",
         )
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     aov = 999.0
     price_sensitivity = 0.5
     market_maturity = 0.3
@@ -9658,17 +9178,13 @@ def get_after_sales(
             "text": assumption.text,
             "sensitivity": str(assumption.sensitivity or "MEDIUM"),
             "impact_score": float(
-                assumption.impact_score
-                if assumption.impact_score is not None
-                else 5.0
+                assumption.impact_score if assumption.impact_score is not None else 5.0
             ),
         }
         for assumption in assumptions
     ]
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
@@ -9762,10 +9278,7 @@ def get_launch_checklist(
     if sim.status != "COMPLETED":
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"Simulation is {sim.status} — launch checklist requires "
-                "completed results."
-            ),
+            detail=(f"Simulation is {sim.status} — launch checklist requires completed results."),
         )
     if not sim.results_json:
         raise HTTPException(
@@ -9779,9 +9292,7 @@ def get_launch_checklist(
         .all()
     )
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
@@ -9802,9 +9313,7 @@ def get_launch_checklist(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
         visible_assumption_count=len(assumptions),
         product_type=product_type_name,
         cluster_registry=registry,
@@ -9814,9 +9323,7 @@ def get_launch_checklist(
 @router.get(
     "/{simulation_id}/launch-checklist/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export the launch readiness checklist as CSV, JSON, or Markdown"
-    ),
+    summary=("Export the launch readiness checklist as CSV, JSON, or Markdown"),
 )
 def export_launch_checklist(
     simulation_id: int,
@@ -9845,8 +9352,7 @@ def export_launch_checklist(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Simulation is {sim.status} — launch checklist export "
-                "requires completed results."
+                f"Simulation is {sim.status} — launch checklist export requires completed results."
             ),
         )
     if not sim.results_json:
@@ -9857,11 +9363,7 @@ def export_launch_checklist(
 
     checklist = get_launch_checklist(simulation_id, db, current_user)
 
-    project = (
-        db.query(Project)
-        .filter(Project.id == sim.project_id)
-        .first()
-    )
+    project = db.query(Project).filter(Project.id == sim.project_id).first()
     project_name = project.title if project else None
 
     metadata = {
@@ -9876,10 +9378,7 @@ def export_launch_checklist(
     if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=422,
-            detail=(
-                f"Unsupported export format: {format}. "
-                "Choose csv, json, or md."
-            ),
+            detail=(f"Unsupported export format: {format}. Choose csv, json, or md."),
         )
     if fmt == "json":
         body = launch_checklist_to_json(checklist, metadata=metadata).encode("utf-8")
@@ -9920,9 +9419,7 @@ def export_launch_checklist(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="launch-checklist-{simulation_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="launch-checklist-{simulation_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -9983,10 +9480,7 @@ def get_founder_brief(
     if sim.status != "COMPLETED":
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"Simulation is {sim.status} — founder brief requires "
-                "completed results."
-            ),
+            detail=(f"Simulation is {sim.status} — founder brief requires completed results."),
         )
     if not sim.results_json:
         raise HTTPException(
@@ -10000,9 +9494,7 @@ def get_founder_brief(
         .all()
     )
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
@@ -10023,9 +9515,7 @@ def get_founder_brief(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
         visible_assumption_count=len(assumptions),
         product_type=product_type_name,
         cluster_registry=registry,
@@ -10069,11 +9559,7 @@ def _build_investor_readiness_payload(
             detail="Simulation completed but results_json is empty.",
         )
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     aov = 999.0
     price_sensitivity = 0.5
     market_maturity = 0.3
@@ -10095,17 +9581,13 @@ def _build_investor_readiness_payload(
             "text": assumption.text,
             "sensitivity": str(assumption.sensitivity or "MEDIUM"),
             "impact_score": float(
-                assumption.impact_score
-                if assumption.impact_score is not None
-                else 5.0
+                assumption.impact_score if assumption.impact_score is not None else 5.0
             ),
         }
         for assumption in assumptions
     ]
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
@@ -10152,9 +9634,7 @@ def _build_investor_readiness_payload(
     }
 
     results = sim.results_json
-    signal_quality = (
-        float(sim.signal_quality) if sim.signal_quality is not None else None
-    )
+    signal_quality = float(sim.signal_quality) if sim.signal_quality is not None else None
 
     market = build_market_sizing(
         results,
@@ -10339,8 +9819,7 @@ def get_fix_leverage(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Simulation is {sim.status} — fix-leverage projection "
-                "requires completed results."
+                f"Simulation is {sim.status} — fix-leverage projection requires completed results."
             ),
         )
     if not sim.results_json:
@@ -10354,9 +9833,7 @@ def get_fix_leverage(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=(
-            float(sim.signal_quality) if sim.signal_quality is not None else None
-        ),
+        signal_quality=(float(sim.signal_quality) if sim.signal_quality is not None else None),
     )
 
 
@@ -10364,8 +9841,7 @@ def get_fix_leverage(
     "/{simulation_id}/founder-action-plan",
     response_model=FounderActionPlanOut,
     summary=(
-        "Founder action plan: ranked, effort-weighted next actions with "
-        "quick-win prioritisation"
+        "Founder action plan: ranked, effort-weighted next actions with quick-win prioritisation"
     ),
     responses=_JSON_200,
 )
@@ -10393,8 +9869,7 @@ def get_founder_action_plan(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Simulation is {sim.status} — founder action plan requires "
-                "completed results."
+                f"Simulation is {sim.status} — founder action plan requires completed results."
             ),
         )
     if not sim.results_json:
@@ -10403,9 +9878,7 @@ def get_founder_action_plan(
             detail="Simulation completed but results_json is empty.",
         )
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
@@ -10418,18 +9891,14 @@ def get_founder_action_plan(
         project_id=sim.project_id,
         status=sim.status,
         product_type=product_type_name,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
     )
 
 
 @router.get(
     "/{simulation_id}/founder-action-plan/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export the founder action plan as CSV (or JSON with ?format=json)"
-    ),
+    summary=("Export the founder action plan as CSV (or JSON with ?format=json)"),
     # Same DB read cost as the JSON founder-action-plan endpoint; cap
     # polling so a dashboard loop can't drive repeated reads.
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
@@ -10485,9 +9954,7 @@ def export_founder_action_plan(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    'attachment; filename="founder-action-plan.json"'
-                ),
+                "Content-Disposition": ('attachment; filename="founder-action-plan.json"'),
                 "Content-Length": str(len(body)),
                 "Cache-Control": "no-store",
             },
@@ -10510,8 +9977,7 @@ def export_founder_action_plan(
     "/{simulation_id}/assumption-postmortem",
     response_model=AssumptionPostmortemOut,
     summary=(
-        "Assumption postmortem: which assumptions did launch outcomes "
-        "invalidate or validate?"
+        "Assumption postmortem: which assumptions did launch outcomes invalidate or validate?"
     ),
     responses=_JSON_200,
 )
@@ -10540,8 +10006,7 @@ def get_assumption_postmortem(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Simulation is {sim.status} — assumption postmortem requires "
-                "completed results."
+                f"Simulation is {sim.status} — assumption postmortem requires completed results."
             ),
         )
     if not sim.results_json:
@@ -10642,10 +10107,7 @@ def get_prediction_range(
     if sim.status != "COMPLETED":
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"Simulation is {sim.status} — prediction range requires "
-                "completed results."
-            ),
+            detail=(f"Simulation is {sim.status} — prediction range requires completed results."),
         )
     if not sim.results_json:
         raise HTTPException(
@@ -10710,10 +10172,7 @@ def get_simulation_journey_analytics(
     if sim.status != "COMPLETED":
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"Simulation is {sim.status} — journey analytics requires "
-                "completed results."
-            ),
+            detail=(f"Simulation is {sim.status} — journey analytics requires completed results."),
         )
     if not sim.results_json:
         raise HTTPException(
@@ -10742,6 +10201,95 @@ def get_simulation_journey_analytics(
         project_id=sim.project_id,
         status=sim.status,
         **payload,
+    )
+
+
+@router.get(
+    "/{simulation_id}/funnel-elasticity",
+    response_model=FunnelElasticityOut,
+    summary=(
+        "Funnel elasticity: which behavioural transition is worth improving "
+        "most, ranked by loop-adjusted conversion gain across the weighted "
+        "cluster mix"
+    ),
+    responses=_JSON_200,
+)
+def get_simulation_funnel_elasticity(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FunnelElasticityOut:
+    """
+    Population-level funnel transition elasticity for a completed simulation.
+
+    Rebuilds every cluster's architect-corrected transition matrix from the
+    persisted ``per_cluster_matrices`` payload, solves each as an absorbing
+    Markov chain (consideration loops give shoppers second chances the naive
+    stage-product headline writes off), and combines the per-edge lift,
+    headroom and elasticity figures with population weights. Also reports
+    how much of the audience-weighted cluster mix agrees on the top lever.
+    Pure post-hoc analytics — no Celery, no LLM, no DB writes.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(f"Simulation is {sim.status} — funnel elasticity requires completed results."),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    results = sim.results_json if isinstance(sim.results_json, dict) else {}
+    raw_matrices = results.get("per_cluster_matrices")
+    if not deserialise_per_cluster_matrices(raw_matrices):
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Funnel elasticity is unavailable for this simulation — "
+                "per-cluster journey data is persisted for runs started "
+                "after this version. Re-run the simulation to generate it."
+            ),
+        )
+
+    payload = build_population_funnel_elasticity(
+        raw_matrices,
+        results.get("cluster_weights"),
+    )
+    if payload is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Funnel elasticity is unavailable for this simulation — no "
+                "usable per-cluster transition data was persisted."
+            ),
+        )
+    conversion = payload["conversion"]
+    return FunnelElasticityOut(
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        naive_conversion=float(conversion["naive_product"]),
+        loop_adjusted_conversion=float(conversion["loop_adjusted"]),
+        loop_uplift_pp=float(conversion["loop_uplift_pp"]),
+        edges=payload["edges"],
+        ranking=payload["ranking"],
+        cluster_consensus=payload["cluster_consensus"],
+        per_cluster_top_edges=payload["per_cluster_top_edges"],
+        recommendation=payload["top_recommendation"],
+        meta={
+            "model": payload["model"],
+            "cluster_count": len(payload["per_cluster_top_edges"]),
+            "weighted": bool(results.get("cluster_weights")),
+        },
     )
 
 
@@ -10777,10 +10325,7 @@ def _journey_data_for_simulation(
     if sim.status != "COMPLETED":
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"Simulation is {sim.status} — journey analytics requires "
-                "completed results."
-            ),
+            detail=(f"Simulation is {sim.status} — journey analytics requires completed results."),
         )
     if not sim.results_json:
         raise HTTPException(
@@ -10805,10 +10350,7 @@ def _journey_data_for_simulation(
 @router.get(
     "/{simulation_id}/journey/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export the journey-analytics payload as CSV (or JSON with "
-        "?format=json)"
-    ),
+    summary=("Export the journey-analytics payload as CSV (or JSON with ?format=json)"),
 )
 def export_simulation_journey_analytics(
     simulation_id: int,
@@ -10837,10 +10379,7 @@ def export_simulation_journey_analytics(
     if fmt not in {"csv", "json"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; expected 'csv' or "
-                "'json'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv' or 'json'"),
         )
 
     sim = _get_owned_simulation(simulation_id, current_user.id, db)
@@ -10867,9 +10406,7 @@ def export_simulation_journey_analytics(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    'attachment; filename="journey-analytics.json"'
-                ),
+                "Content-Disposition": ('attachment; filename="journey-analytics.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -10880,9 +10417,7 @@ def export_simulation_journey_analytics(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                'attachment; filename="journey-analytics.csv"'
-            ),
+            "Content-Disposition": ('attachment; filename="journey-analytics.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -10977,8 +10512,7 @@ def get_simulation_journey_benchmark(
     "/{simulation_id}/journey/trend",
     response_model=JourneyTrendOut,
     summary=(
-        "Journey trend: how funnel health has evolved across the founder's "
-        "completed simulations"
+        "Journey trend: how funnel health has evolved across the founder's completed simulations"
     ),
     responses=_JSON_200,
 )
@@ -11022,9 +10556,7 @@ def get_simulation_journey_trend(
 
     trend_rows: list[dict[str, Any]] = []
     for row in rows:
-        row_results = (
-            row.results_json if isinstance(row.results_json, dict) else {}
-        )
+        row_results = row.results_json if isinstance(row.results_json, dict) else {}
         summary = summarise_journey_matrices(
             row_results.get("per_cluster_matrices"),
             row_results.get("cluster_weights"),
@@ -11050,9 +10582,7 @@ def get_simulation_journey_trend(
 @router.get(
     "/{simulation_id}/journey/trend/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export the journey trend as CSV (or JSON with ?format=json)"
-    ),
+    summary=("Export the journey trend as CSV (or JSON with ?format=json)"),
 )
 def export_simulation_journey_trend(
     simulation_id: int,
@@ -11083,10 +10613,7 @@ def export_simulation_journey_trend(
     if fmt not in {"csv", "json"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; expected 'csv' or "
-                "'json'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv' or 'json'"),
         )
 
     trend = get_simulation_journey_trend(
@@ -11110,9 +10637,7 @@ def export_simulation_journey_trend(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    'attachment; filename="journey-trend.json"'
-                ),
+                "Content-Disposition": ('attachment; filename="journey-trend.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -11123,9 +10648,7 @@ def export_simulation_journey_trend(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                'attachment; filename="journey-trend.csv"'
-            ),
+            "Content-Disposition": ('attachment; filename="journey-trend.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -11222,9 +10745,8 @@ def get_simulation_journey_category_benchmark(
             )
         except (TypeError, ValidationError):
             logger.warning(
-                "journey-category-benchmark: discarding invalid cached "
-                "payload for simulation %s",
-                log_safe(simulation_id),
+                "journey-category-benchmark: discarding invalid cached payload for simulation %s",
+                log_safe(simulation_id).replace("\n", " "),
             )
 
     rows = (
@@ -11288,8 +10810,7 @@ def get_simulation_journey_category_benchmark(
     "/{simulation_id}/journey/benchmark/export",
     response_class=StreamingResponse,
     summary=(
-        "Export a journey benchmark (portfolio or category) as CSV "
-        "(or JSON with ?format=json)"
+        "Export a journey benchmark (portfolio or category) as CSV (or JSON with ?format=json)"
     ),
     responses=_JSON_200,
     # Both benchmark scopes scan completed simulations; cap path-spam at
@@ -11341,20 +10862,14 @@ def export_simulation_journey_benchmark(
     if fmt not in {"csv", "json"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; expected 'csv' or "
-                "'json'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv' or 'json'"),
         )
 
     scope_value = (scope or "portfolio").strip().lower()
     if scope_value not in {"portfolio", "category"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported benchmark scope {scope!r}; expected "
-                "'portfolio' or 'category'"
-            ),
+            detail=(f"unsupported benchmark scope {scope!r}; expected 'portfolio' or 'category'"),
         )
 
     if scope_value == "category":
@@ -11389,9 +10904,7 @@ def export_simulation_journey_benchmark(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    'attachment; filename="journey-benchmark.json"'
-                ),
+                "Content-Disposition": ('attachment; filename="journey-benchmark.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -11402,9 +10915,7 @@ def export_simulation_journey_benchmark(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                'attachment; filename="journey-benchmark.csv"'
-            ),
+            "Content-Disposition": ('attachment; filename="journey-benchmark.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -11444,8 +10955,7 @@ def get_channel_attribution(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Simulation is {sim.status} — channel attribution "
-                "requires completed results."
+                f"Simulation is {sim.status} — channel attribution requires completed results."
             ),
         )
     if not sim.results_json:
@@ -11454,11 +10964,7 @@ def get_channel_attribution(
             detail="Simulation completed but results_json is empty.",
         )
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     aov = 999.0
     price_sensitivity = 0.5
     market_maturity = 0.3
@@ -11477,17 +10983,13 @@ def get_channel_attribution(
             "text": assumption.text,
             "sensitivity": str(assumption.sensitivity or "MEDIUM"),
             "impact_score": float(
-                assumption.impact_score
-                if assumption.impact_score is not None
-                else 5.0
+                assumption.impact_score if assumption.impact_score is not None else 5.0
             ),
         }
         for assumption in assumptions
     ]
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
@@ -11526,9 +11028,7 @@ def get_channel_attribution(
         simulation_id=sim.id,
         project_id=sim.project_id,
         status=sim.status,
-        signal_quality=float(sim.signal_quality)
-        if sim.signal_quality is not None
-        else None,
+        signal_quality=float(sim.signal_quality) if sim.signal_quality is not None else None,
         conductor_results=conductor_results,
         cluster_registry=registry,
         product_type=product_type_name,
@@ -11591,11 +11091,7 @@ def get_sustainability_positioning(
             detail="Simulation completed but results_json is empty.",
         )
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     aov = 999.0
     price_sensitivity = 0.5
     market_maturity = 0.3
@@ -11614,17 +11110,13 @@ def get_sustainability_positioning(
             "text": assumption.text,
             "sensitivity": str(assumption.sensitivity or "MEDIUM"),
             "impact_score": float(
-                assumption.impact_score
-                if assumption.impact_score is not None
-                else 5.0
+                assumption.impact_score if assumption.impact_score is not None else 5.0
             ),
         }
         for assumption in assumptions
     ]
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
@@ -11732,11 +11224,7 @@ def get_assumption_cascade(
             detail="Simulation completed but results_json is empty.",
         )
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.id == sim.environment_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.id == sim.environment_id).first()
     aov = 999.0
     price_sensitivity = 0.5
     market_maturity = 0.3
@@ -11755,17 +11243,13 @@ def get_assumption_cascade(
             "text": assumption.text,
             "sensitivity": str(assumption.sensitivity or "MEDIUM"),
             "impact_score": float(
-                assumption.impact_score
-                if assumption.impact_score is not None
-                else 5.0
+                assumption.impact_score if assumption.impact_score is not None else 5.0
             ),
         }
         for assumption in assumptions
     ]
 
-    product_type_name = str(
-        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
-    )
+    product_type_name = str((sim.results_json or {}).get("product_type_detected", "saas") or "saas")
     try:
         product_type = ProductType(product_type_name)
     except ValueError:
@@ -11861,10 +11345,7 @@ def get_simulation_export(
     if sim.status != "COMPLETED":
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"Simulation is {sim.status} — export requires "
-                "completed results."
-            ),
+            detail=(f"Simulation is {sim.status} — export requires completed results."),
         )
     if not sim.results_json:
         raise HTTPException(
@@ -11873,13 +11354,9 @@ def get_simulation_export(
         )
 
     product_type = str(
-        (sim.results_json or {}).get("product_type_detected", "saas")
-        or "saas"
+        (sim.results_json or {}).get("product_type_detected", "saas") or "saas"
     ).lower()
-    cluster_names = {
-        cluster.cluster_id: cluster.name
-        for cluster in _registry.all_clusters()
-    }
+    cluster_names = {cluster.cluster_id: cluster.name for cluster in _registry.all_clusters()}
     cluster_weights = {
         cluster.cluster_id: float(cluster.population_weight or 0.0)
         for cluster in _registry.all_clusters()
@@ -11923,9 +11400,7 @@ def get_simulation_export(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="simulation-{simulation_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="simulation-{simulation_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -11936,9 +11411,7 @@ def get_simulation_export(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="simulation-{simulation_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="simulation-{simulation_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -12015,9 +11488,7 @@ def export_cluster_run_summaries(
         .all()
     )
 
-    cluster_names = {
-        cluster_id: cluster.name for cluster_id, cluster in _clusters_map.items()
-    }
+    cluster_names = {cluster_id: cluster.name for cluster_id, cluster in _clusters_map.items()}
     export = build_cluster_run_summary_export(
         summary_rows,
         simulation_id=sim.id,
@@ -12072,8 +11543,7 @@ def export_cluster_run_summaries(
 @router.get(
     "/{simulation_id}/findings/export",
     summary=(
-        "Export one simulation's domain findings as CSV, JSON, or a "
-        "founder-facing Markdown brief"
+        "Export one simulation's domain findings as CSV, JSON, or a founder-facing Markdown brief"
     ),
     response_class=StreamingResponse,
 )
@@ -12102,10 +11572,7 @@ def get_findings_export(
     if sim.status != "COMPLETED":
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"Simulation is {sim.status} — findings export requires "
-                "completed results."
-            ),
+            detail=(f"Simulation is {sim.status} — findings export requires completed results."),
         )
     if not sim.results_json:
         raise HTTPException(
@@ -12137,9 +11604,7 @@ def get_findings_export(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="findings-{simulation_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="findings-{simulation_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -12161,9 +11626,7 @@ def get_findings_export(
             iter([body]),
             media_type="text/markdown; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="findings-{simulation_id}.md"'
-                ),
+                "Content-Disposition": (f'attachment; filename="findings-{simulation_id}.md"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -12179,9 +11642,7 @@ def get_findings_export(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="findings-{simulation_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="findings-{simulation_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -12217,8 +11678,7 @@ def get_findings_count_export(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Simulation is {sim.status} — findings-count export requires "
-                "completed results."
+                f"Simulation is {sim.status} — findings-count export requires completed results."
             ),
         )
     if not sim.results_json:
@@ -12265,9 +11725,7 @@ def get_findings_count_export(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="findings-count-{simulation_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="findings-count-{simulation_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )

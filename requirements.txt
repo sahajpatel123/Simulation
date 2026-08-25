@@ -5,12 +5,14 @@ psycopg2-binary==2.9.12
 alembic==1.19.1
 pydantic==2.13.4
 pydantic-settings==2.15.0
-python-jose[cryptography]==3.5.0
-passlib==1.7.4
+PyJWT==2.13.0
 bcrypt==5.0.0
 python-multipart==0.0.32
 anthropic==0.125.0
 openai==3.3.1
+anthropic==1.0.0
+openai==1.54.4
+main
 celery[redis]==5.6.3
 redis==5.2.1
 flower==2.1.0
@@ -26,6 +28,8 @@ playwright==1.62.0
 sentry-sdk[fastapi]==2.68.0
 pytest==9.1.1
 tiktoken==0.14.0
-# Parsed by tools/validate_ci.py (CI hygiene enforcer) and its tests;
-# workflow-validation.yml installs this same pin for the standalone job.
+# Direct pins are resolved into hash-locked files by
+# tools/gen_dependency_lock.py (requirements-lock.txt /
+# requirements-pytest-lock.txt / requirements-tools-lock.txt) — CI and the
+# Dockerfile install only from those, with --require-hashes.
 pyyaml==6.0.3

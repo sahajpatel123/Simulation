@@ -8,6 +8,7 @@ import types
 
 import pytest
 from fastapi import HTTPException
+
 from app.simulation.conductor import Conductor as _RealConductor
 from app.simulation.product_type import ProductType
 

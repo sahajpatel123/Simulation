@@ -22,13 +22,13 @@ from app.schemas.distribution_channels import (
     VERDICT_ONLINE_FIRST,
     DistributionChannelsOut,
 )
+from app.simulation.architects.distribution_channel import DistributionChannelArchitect
+from app.simulation.conductor import ARCHITECT_STACKS
 from app.simulation.distribution_channels import (
     BLOCKER_ORDER,
     DISTRIBUTION_PRODUCT_TYPES,
     build_distribution_channels,
 )
-from app.simulation.architects.distribution_channel import DistributionChannelArchitect
-from app.simulation.conductor import ARCHITECT_STACKS
 
 
 def _registry(clusters: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -287,10 +287,12 @@ def test_levers_are_ranked_and_actions_formatted() -> None:
     assert len(keys) == 6
     assert keys[0] == "offline_distribution"
     assert all(0.0 <= lever.opportunity_share <= 1.0 for lever in out.levers)
-    offline = next(l for l in out.levers if l.key == "offline_distribution")
+    offline = next(lever for lever in out.levers if lever.key == "offline_distribution")
     assert offline.market_value == 0.3
     assert "30%" in offline.action
-    try_before_buy = next(l for l in out.levers if l.key == "try_before_buy_program")
+    try_before_buy = next(
+        lever for lever in out.levers if lever.key == "try_before_buy_program"
+    )
     assert try_before_buy.opportunity_share == 0.3
     assert "test first" in try_before_buy.action
 

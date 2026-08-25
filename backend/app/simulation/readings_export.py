@@ -10,12 +10,15 @@ in an empty readings table rather than a failed export. Entries whose
 label and body are both blank after trimming are dropped so counts and
 exported rows never include empty readings.
 """
+
 from __future__ import annotations
 
 import csv
 import io
 import json
 from typing import Any, TypedDict
+
+from app.simulation.export_utils import write_row
 
 FORMAT_VERSION = "2"
 
@@ -114,30 +117,28 @@ def readings_to_csv(
     buffer = io.StringIO()
     writer = csv.writer(buffer, lineterminator="\n")
 
-    writer.writerow(["project_id", _text(row.get("project_id"))])
+    write_row(writer, ["project_id", _text(row.get("project_id"))])
     if metadata:
-        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
-        writer.writerow(["user_id", _text(metadata.get("user_id"))])
-        writer.writerow(
-            ["format_version", _text(metadata.get("format_version", FORMAT_VERSION))]
-        )
-        writer.writerow([])
+        write_row(writer, ["generated_at", _text(metadata.get("generated_at"))])
+        write_row(writer, ["user_id", _text(metadata.get("user_id"))])
+        write_row(writer, ["format_version", _text(metadata.get("format_version", FORMAT_VERSION))])
+        write_row(writer, [])
 
     payload = readings_payload(row.get("readings_json"))
     readings = payload["readings"]
     ledger = payload["ledger"]
 
-    writer.writerow(["index", "label", "body"])
+    write_row(writer, ["index", "label", "body"])
     for index, reading in enumerate(readings, start=1):
-        writer.writerow([index, reading["label"], reading["body"]])
+        write_row(writer, [index, reading["label"], reading["body"]])
 
     if ledger:
-        writer.writerow([])
-        writer.writerow(["key", "value"])
+        write_row(writer, [])
+        write_row(writer, ["key", "value"])
         for key in ("deck_line", "section_rubric", "status_rubric", "folio_blurb"):
             value = ledger.get(key)
             if value is not None:
-                writer.writerow([key, value])
+                write_row(writer, [key, value])
     return buffer.getvalue()
 
 
@@ -150,17 +151,18 @@ def readings_count_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
-        writer.writerow(["user_id", _text(metadata.get("user_id"))])
-        writer.writerow(["format_version", _text(metadata.get("format_version", "1"))])
-        writer.writerow([])
+        write_row(writer, ["generated_at", _text(metadata.get("generated_at"))])
+        write_row(writer, ["user_id", _text(metadata.get("user_id"))])
+        write_row(writer, ["format_version", _text(metadata.get("format_version", "1"))])
+        write_row(writer, [])
 
-    writer.writerow(["project_id", "readings_count"])
-    writer.writerow(
+    write_row(writer, ["project_id", "readings_count"])
+    write_row(
+        writer,
         [
             _text(row.get("project_id")),
             _text(row.get("readings_count")),
-        ]
+        ],
     )
     return buffer.getvalue()
 

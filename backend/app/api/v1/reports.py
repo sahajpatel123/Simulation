@@ -104,7 +104,7 @@ def generate_report(
 
     logger.info(
         "[Report] Generating PDF — project_id=%s has_sim=%s assumptions=%s outcomes=%s",
-        log_safe(project_id),
+        log_safe(project_id).replace("\n", " "),
         latest_sim is not None,
         len(assumptions),
         len(outcomes),
@@ -114,7 +114,10 @@ def generate_report(
         generator = ReportGenerator()
         pdf_bytes = generator.generate(report_data)
     except Exception as exc:
-        logger.exception("[Report] PDF generation failed — project_id=%s", log_safe(project_id))
+        logger.exception(
+            "[Report] PDF generation failed — project_id=%s",
+            log_safe(project_id).replace("\n", " "),
+        )
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(exc)}")
 
     filename = f"TheCee_Report_{_safe_filename(project.title or 'project')}.pdf"

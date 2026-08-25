@@ -5,12 +5,15 @@ The route layer pulls the decision rows and hands them here as dicts;
 this module stays deterministic and treats missing/malformed fields as
 empty strings.
 """
+
 from __future__ import annotations
 
 import csv
 import io
 import json
 from typing import Any
+
+from app.simulation.export_utils import write_row
 
 
 def _text(value: Any) -> str:
@@ -33,12 +36,13 @@ def decisions_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
-        writer.writerow(["user_id", _text(metadata.get("user_id"))])
-        writer.writerow(["format_version", _text(metadata.get("format_version", "1"))])
-        writer.writerow([])
+        write_row(writer, ["generated_at", _text(metadata.get("generated_at"))])
+        write_row(writer, ["user_id", _text(metadata.get("user_id"))])
+        write_row(writer, ["format_version", _text(metadata.get("format_version", "1"))])
+        write_row(writer, [])
 
-    writer.writerow(
+    write_row(
+        writer,
         [
             "id",
             "project_id",
@@ -47,10 +51,11 @@ def decisions_to_csv(
             "task_id",
             "created_at",
             "result_json",
-        ]
+        ],
     )
     for decision in decisions:
-        writer.writerow(
+        write_row(
+            writer,
             [
                 _text(decision.get("id")),
                 _text(decision.get("project_id")),
@@ -59,7 +64,7 @@ def decisions_to_csv(
                 _text(decision.get("task_id")),
                 _text(decision.get("created_at")),
                 _text(decision.get("result")),
-            ]
+            ],
         )
     return buffer.getvalue()
 
@@ -73,17 +78,18 @@ def decision_count_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
-        writer.writerow(["user_id", _text(metadata.get("user_id"))])
-        writer.writerow(["format_version", _text(metadata.get("format_version", "1"))])
-        writer.writerow([])
+        write_row(writer, ["generated_at", _text(metadata.get("generated_at"))])
+        write_row(writer, ["user_id", _text(metadata.get("user_id"))])
+        write_row(writer, ["format_version", _text(metadata.get("format_version", "1"))])
+        write_row(writer, [])
 
-    writer.writerow(["project_id", "decision_count"])
-    writer.writerow(
+    write_row(writer, ["project_id", "decision_count"])
+    write_row(
+        writer,
         [
             _text(row.get("project_id")),
             _text(row.get("decision_count")),
-        ]
+        ],
     )
     return buffer.getvalue()
 

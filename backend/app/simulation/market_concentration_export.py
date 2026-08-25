@@ -24,6 +24,8 @@ import json
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 FORMAT_VERSION: str = "1"
 
 SEGMENT_CSV_HEADERS: list[str] = [
@@ -94,7 +96,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with the formula-injection guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
@@ -233,15 +235,18 @@ def market_concentration_to_json(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     """Render a market-concentration payload as an indented JSON doc."""
-    return json.dumps(
-        {
-            "metadata": metadata or {},
-            "market_concentration": _as_dict(payload),
-        },
-        default=str,
-        indent=2,
-        ensure_ascii=False,
-    ) + "\n"
+    return (
+        json.dumps(
+            {
+                "metadata": metadata or {},
+                "market_concentration": _as_dict(payload),
+            },
+            default=str,
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n"
+    )
 
 
 __all__ = [

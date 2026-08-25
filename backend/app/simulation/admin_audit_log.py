@@ -11,6 +11,7 @@ hands plain row dicts to the serializers, while :func:`apply_admin_audit_filters
 returns SQLAlchemy clauses so the filtering logic can be unit-tested without
 a live database.
 """
+
 from __future__ import annotations
 
 import csv
@@ -22,6 +23,7 @@ from typing import Any
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.audit_log import ApiAuditLog
+from app.simulation.export_utils import write_row
 
 FORMAT_VERSION = "1"
 
@@ -78,8 +80,7 @@ def apply_admin_audit_filters(
         normalized = method.strip().upper()
         if normalized not in MUTATING_METHODS:
             raise ValueError(
-                f"unsupported audit method {method!r}; expected one of "
-                f"{sorted(MUTATING_METHODS)}"
+                f"unsupported audit method {method!r}; expected one of {sorted(MUTATING_METHODS)}"
             )
         clauses.append(ApiAuditLog.method == normalized)
 
@@ -119,18 +120,8 @@ def _text(value: Any) -> str:
     return str(value)
 
 
-def _safe_csv_cell(value: Any) -> object:
-    """Neutralise spreadsheet formula injection while leaving data intact."""
-    # Excel/Sheets also treat values with leading whitespace as formulas once
-    # they are trimmed, so guard the first non-whitespace character too.
-    if isinstance(value, str) and value.lstrip()[:1] in ("=", "+", "-", "@"):
-        return f"'{value}"
-    return value
-
-
-def _write_row(writer: Any, row: list[object]) -> None:
-    """Write a CSV row with the formula guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+# Formula guarding is delegated to export_utils.write_row — the union of
+# every historical private guard, including this module's former copy.
 
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
@@ -165,13 +156,13 @@ def admin_audit_log_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     for key, value in _metadata_rows(metadata):
-        _write_row(writer, [key, value])
+        write_row(writer, [key, value])
     if metadata:
-        writer.writerow([])
+        write_row(writer, [])
 
-    _write_row(writer, CSV_HEADERS)
+    write_row(writer, CSV_HEADERS)
     for row in rows or []:
-        _write_row(
+        write_row(
             writer,
             [
                 _text(row.get("id")),

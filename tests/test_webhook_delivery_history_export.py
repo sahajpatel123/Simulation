@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import types
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
@@ -47,8 +47,8 @@ def _row(
 
 
 def test_webhook_deliveries_to_csv_renders_rows_newest_first() -> None:
-    older = _row(id=1, delivered_at=datetime(2026, 1, 2, tzinfo=timezone.utc))
-    newer = _row(id=2, delivered_at=datetime(2026, 1, 3, tzinfo=timezone.utc))
+    older = _row(id=1, delivered_at=datetime(2026, 1, 2, tzinfo=UTC))
+    newer = _row(id=2, delivered_at=datetime(2026, 1, 3, tzinfo=UTC))
     csv_text = webhook_deliveries_to_csv(
         [older, newer],
         metadata={
@@ -74,13 +74,13 @@ def test_webhook_deliveries_to_csv_sorts_by_created_at_matching_list_order() -> 
     # export order is created_at desc, so CSV must not silently reorder.
     older = _row(
         id=1,
-        delivered_at=datetime(2026, 1, 5, tzinfo=timezone.utc),
-        created_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        delivered_at=datetime(2026, 1, 5, tzinfo=UTC),
+        created_at=datetime(2026, 1, 2, tzinfo=UTC),
     )
     newer = _row(
         id=2,
-        delivered_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        created_at=datetime(2026, 1, 3, tzinfo=timezone.utc),
+        delivered_at=datetime(2026, 1, 1, tzinfo=UTC),
+        created_at=datetime(2026, 1, 3, tzinfo=UTC),
     )
 
     csv_text = webhook_deliveries_to_csv([older, newer])
@@ -93,7 +93,7 @@ def test_webhook_deliveries_to_csv_sorts_by_created_at_matching_list_order() -> 
 def test_webhook_deliveries_to_csv_handles_json_body_and_blanks() -> None:
     row = _row(
         id=3,
-        delivered_at=datetime(2026, 1, 4, tzinfo=timezone.utc),
+        delivered_at=datetime(2026, 1, 4, tzinfo=UTC),
         request_body={"event": "simulation.completed", "simulation_id": 11},
     )
     row["http_status"] = None
@@ -106,7 +106,7 @@ def test_webhook_deliveries_to_csv_handles_json_body_and_blanks() -> None:
 
 
 def test_webhook_deliveries_to_csv_guards_spreadsheet_formulas() -> None:
-    row = _row(id=4, delivered_at=datetime(2026, 1, 5, tzinfo=timezone.utc))
+    row = _row(id=4, delivered_at=datetime(2026, 1, 5, tzinfo=UTC))
     row["error"] = "=HYPERLINK(\"https://evil.example\")"
     csv_text = webhook_deliveries_to_csv([row])
 
@@ -114,7 +114,7 @@ def test_webhook_deliveries_to_csv_guards_spreadsheet_formulas() -> None:
 
 
 def test_webhook_deliveries_to_csv_guards_formula_after_leading_whitespace() -> None:
-    row = _row(id=6, delivered_at=datetime(2026, 1, 7, tzinfo=timezone.utc))
+    row = _row(id=6, delivered_at=datetime(2026, 1, 7, tzinfo=UTC))
     row["error"] = " \t=2+2"
     csv_text = webhook_deliveries_to_csv([row])
 
@@ -122,7 +122,7 @@ def test_webhook_deliveries_to_csv_guards_formula_after_leading_whitespace() -> 
 
 
 def test_webhook_deliveries_to_json_renders_envelope() -> None:
-    row = _row(id=5, delivered_at=datetime(2026, 1, 6, tzinfo=timezone.utc))
+    row = _row(id=5, delivered_at=datetime(2026, 1, 6, tzinfo=UTC))
     text = webhook_deliveries_to_json([row], metadata={"total": 1})
 
     assert '"total": 1' in text
@@ -164,7 +164,7 @@ class _Delivery:
 
 
 def _delivery(id: int) -> _Delivery:
-    dt = datetime(2026, 1, 2, tzinfo=timezone.utc)
+    dt = datetime(2026, 1, 2, tzinfo=UTC)
     return _Delivery(
         id=id,
         webhook_subscription_id=7,

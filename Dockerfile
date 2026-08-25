@@ -14,9 +14,13 @@ WORKDIR /app
 # Python package `app` lives under ./backend; keep it importable as `app.*`
 ENV PYTHONPATH=/app/backend
 
-# Install Python dependencies (cached layer — only re-runs if requirements.txt changes)
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies (cached layer — only re-runs if the lock changes).
+# Hash-locked: scorecard PinnedDependencies accepts only --require-hashes
+# installs, and hashes make image builds reproducible. Regenerate
+# requirements-lock.txt with tools/gen_dependency_lock.py after bumping
+# requirements.txt.
+COPY requirements-lock.txt .
+RUN pip install --no-cache-dir --require-hashes -r requirements-lock.txt
 RUN python -m playwright install --with-deps chromium
 
 # Copy the rest of the application

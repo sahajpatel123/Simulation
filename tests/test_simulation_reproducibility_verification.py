@@ -371,16 +371,16 @@ class _FakeQuery:
         self._first = first
         self._all_rows = all_rows or []
 
-    def join(self, *args, **kwargs) -> "_FakeQuery":
+    def join(self, *args, **kwargs) -> _FakeQuery:
         return self
 
-    def filter(self, *args, **kwargs) -> "_FakeQuery":
+    def filter(self, *args, **kwargs) -> _FakeQuery:
         return self
 
-    def order_by(self, *args, **kwargs) -> "_FakeQuery":
+    def order_by(self, *args, **kwargs) -> _FakeQuery:
         return self
 
-    def limit(self, *args, **kwargs) -> "_FakeQuery":
+    def limit(self, *args, **kwargs) -> _FakeQuery:
         return self
 
     def first(self) -> object | None:

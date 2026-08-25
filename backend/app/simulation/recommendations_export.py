@@ -20,6 +20,8 @@ import io
 import json
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
     """Render the optional metadata block as ``(key, value)`` rows."""
@@ -71,8 +73,7 @@ def _safe_csv_cell(value: object) -> object:
     if isinstance(value, str):
         stripped = value.lstrip()
         if value[:1] in ("=", "+", "-", "@", "\t", "\r") or (
-            stripped[:1] in ("=", "+", "-", "@", "\t", "\r")
-            and stripped != value
+            stripped[:1] in ("=", "+", "-", "@", "\t", "\r") and stripped != value
         ):
             return f"'{value}"
     return value
@@ -80,7 +81,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with formula-injection guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def recommendations_to_csv(

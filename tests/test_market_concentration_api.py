@@ -8,7 +8,6 @@ import types
 import pytest
 from fastapi import HTTPException
 
-
 if "razorpay" not in sys.modules:
     stub = types.ModuleType("razorpay")
     stub.Client = object  # type: ignore[attr-defined]

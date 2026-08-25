@@ -6,11 +6,11 @@
 
 <br>
 
-[![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-306998?style=flat&logo=python&logoColor=white)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-306998?style=flat&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=flat&logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat&logo=postgresql&logoColor=white)](https://postgresql.org)
-[![Celery](https://img.shields.io/badge/Celery-5.4-37814A?style=flat&logo=celery&logoColor=white)](https://docs.celeryq.dev)
+[![Celery](https://img.shields.io/badge/Celery-5.6-37814A?style=flat&logo=celery&logoColor=white)](https://docs.celeryq.dev)
 [![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat&logo=redis&logoColor=white)](https://redis.io)
 [![Railway](https://img.shields.io/badge/Deployed%20on-Railway-0B0D0E?style=flat&logo=railway&logoColor=white)](https://railway.app)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=flat)](LICENSE)
@@ -18,7 +18,7 @@
 <br>
 
 > **Before you write a line of product code — simulate 10,000 consumers across 52 psychographic clusters,**
-> **evaluate 20 business domains, and know exactly why your idea will succeed or fail.**
+> **evaluate 35 business domains, and know exactly why your idea will succeed or fail.**
 
 [✨ Try the API](#-api-documentation) • [🧠 How It Works](#-how-it-works) • [⚡ Quick Start](#-quick-start) • [📊 Learn More](ARCHITECTURE.md)
 
@@ -31,7 +31,7 @@ flowchart LR
     F[👤 Founder Input] --> A[🤖 Assumption<br>Extraction]
     A --> S[🧮 Score<br>Assumptions]
     S --> G[👥 Generate<br>10K Agents]
-    G --> C[🎯 Conductor<br>52 Clusters × 23 Architects]
+    G --> C[🎯 Conductor<br>52 Clusters × 35 Architects]
     C --> M[📉 Markov<br>Funnel]
     M --> R[📊 Results<br>Aggregator]
     R --> E[⚖️ Accountability<br>Engine]
@@ -54,7 +54,7 @@ flowchart LR
 
 ## 🔮 **Forget Surveys. Forget Focus Groups.**
 
-TheCee replaces expensive user research with a **behavioral simulation engine** that pits your startup idea against **52 distinct consumer archetypes**, evaluated by **24 domain-specialist AI architects**, all flowing through a **Markov decision funnel**.
+TheCee replaces expensive user research with a **behavioral simulation engine** that pits your startup idea against **52 distinct consumer archetypes**, evaluated by **35 domain-specialist AI architects**, all flowing through a **Markov decision funnel**.
 
 **What you get:**
 - 🎯 **Predicted conversion rate** with confidence intervals
@@ -78,7 +78,7 @@ price_sensitivity │ risk_aversion │ patience_score │ social_orientation
 
 These aren't stereotypes. They're **data-calibrated behavioral vectors** that evolve as real founder outcomes flow back into the system.
 
-### 2. 🏛️ The 24 Architects
+### 2. 🏛️ The 35 Architects
 
 Domain specialists that evaluate one business dimension each:
 
@@ -94,9 +94,9 @@ Domain specialists that evaluate one business dimension each:
 | `MacroeconomicArchitect` | Economic headwinds/tailwinds |
 | `RegulatoryComplianceArchitect` | Privacy, certification & refund-policy exposure |
 | `AccessibilityInclusionArchitect` | Disability, language, age & literacy inclusion gaps |
-| *+ 12 more domain specialists* | Hardware, health, ecosystem, etc. |
+| *+ 25 more domain specialists* | Hardware, health, ecosystem, procurement, etc. |
 
-Each architect calls `.compute()` per cluster — **1,248 evaluations per simulation** — then outputs override deltas to the Markov matrix.
+Each architect calls `.compute()` per cluster — a full-stack simulation runs **up to 1,820 evaluations** (52 × 35; hardware-only architects activate by product type) — then outputs override deltas to the Markov matrix.
 
 ### 3. 📉 The Markov Funnel
 
@@ -127,8 +127,11 @@ The `CalibrationEngine` compares **predicted vs actual** conversion rates from r
 
 ### Prerequisites
 ```
-🐍 Python 3.12+    📦 Node.js 18+    🐘 PostgreSQL    📡 Redis
+🐍 Python 3.11    📦 Node.js 18+    🐘 PostgreSQL    📡 Redis
 ```
+
+> Python **3.11 specifically** — the dependency pins (numpy/scipy) are
+> chosen for 3.11 compatibility and enforced in CI; 3.12+ will fail to resolve.
 
 ### 🖥️ Backend
 
@@ -170,7 +173,7 @@ npm run dev                 # → http://localhost:3000
 ## 🧪 **Testing**
 
 ```bash
-# Backend (51 tests, all green ✅)
+# Backend
 source .venv/bin/activate
 pytest tests/ -v
 
@@ -244,14 +247,14 @@ curl http://localhost:8000/api/v1/projects \
 thecee/
 ├── backend/app/          # 🐍 Python FastAPI (the engine)
 │   ├── api/v1/           #   14 route modules
-│   ├── simulation/       #   Core engine: conductor, 20 architects, Markov funnel
+│   ├── simulation/       #   Core engine: conductor, 35 architects, Markov funnel
 │   ├── models/           #   17 SQLAlchemy ORM models
 │   ├── schemas/          #   16 Pydantic schemas
 │   ├── tasks/            #   8 Celery task modules
 │   ├── core/             #   Config, DB, auth, LLM client
 │   └── hardware/         #   Hardware product simulation pipeline
 ├── src/                  # 🎨 Next.js 16 frontend
-├── tests/                # 🧪 pytest suite (51 tests)
+├── tests/                # 🧪 pytest suite
 ├── AGENTS.md             # 🤖 AI coding guide
 ├── CLAUDE.md             # 📘 Full architecture reference
 └── ARCHITECTURE.md       # 📐 Deep-dive architecture doc
@@ -274,9 +277,10 @@ thecee/
 ## 🔒 Security
 
 See [SECURITY.md](SECURITY.md) for the security policy and reporting process. CI runs
-Bandit, pip-audit, safety, npm audit, Trivy, gitleaks, CodeQL, OpenSSF Scorecard,
-dependency review, and a workflow validator that enforces pinned actions and
-least-privilege workflow permissions.
+Bandit, pip-audit, safety, an OSV scan of every pinned dependency version, npm audit,
+Trivy, gitleaks, CodeQL, OpenSSF Scorecard, dependency review, and a workflow
+validator that enforces SHA-pinned actions, hash-locked installs, and least-privilege
+workflow permissions.
 
 ---
 

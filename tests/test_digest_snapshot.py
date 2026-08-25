@@ -5,8 +5,7 @@ a DB.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
+from datetime import UTC, datetime
 
 
 def test_public_allowlist_matches_callers() -> None:
@@ -61,7 +60,7 @@ def test_snapshot_timestamp_uses_now() -> None:
 def test_snapshot_timestamp_uses_override() -> None:
     from app.simulation.digest_snapshot import build_digest_snapshot
 
-    fixed = datetime(2026, 1, 5, 10, 30, 0, tzinfo=timezone.utc)
+    fixed = datetime(2026, 1, 5, 10, 30, 0, tzinfo=UTC)
     out = build_digest_snapshot(
         None, None, None, None, None, now=fixed,
     )

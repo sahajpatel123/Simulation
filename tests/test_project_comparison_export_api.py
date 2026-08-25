@@ -6,7 +6,7 @@ import asyncio
 import json
 import sys
 import types
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -25,7 +25,7 @@ class _FakeProject:
         self.id = project_id
         self.title = f"Project {project_id}"
         self.status = "ACTIVE"
-        self.brief_completed_at = datetime.now(timezone.utc)
+        self.brief_completed_at = datetime.now(UTC)
 
 
 class _FakeSimulation:
@@ -60,13 +60,13 @@ class _FakeQuery:
         self.count_value = count
         self.all_items = all_items if all_items is not None else []
 
-    def join(self, *args: Any, **kwargs: Any) -> "_FakeQuery":
+    def join(self, *args: Any, **kwargs: Any) -> _FakeQuery:
         return self
 
-    def filter(self, *args: Any, **kwargs: Any) -> "_FakeQuery":
+    def filter(self, *args: Any, **kwargs: Any) -> _FakeQuery:
         return self
 
-    def order_by(self, *args: Any, **kwargs: Any) -> "_FakeQuery":
+    def order_by(self, *args: Any, **kwargs: Any) -> _FakeQuery:
         return self
 
     def first(self) -> Any:

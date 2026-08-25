@@ -1,10 +1,10 @@
 """Tests for the launch-checklist export serializers and route."""
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 import types
-import asyncio
 from typing import Any
 
 import pytest
@@ -16,7 +16,6 @@ from app.simulation.launch_checklist_export import (
     launch_checklist_to_json,
     launch_checklist_to_markdown,
 )
-
 
 if "razorpay" not in sys.modules:
     stub = types.ModuleType("razorpay")

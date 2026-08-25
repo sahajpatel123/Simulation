@@ -22,6 +22,8 @@ import json
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 
 def _as_dict(payload: Any) -> dict[str, Any]:
     """Coerce a Pydantic model or plain dict into a plain dict."""
@@ -57,7 +59,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with formula-injection guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
@@ -251,42 +253,26 @@ def launch_checklist_to_markdown(
     lines.append("")
     lines.append("| Metric | Value |")
     lines.append("| --- | ---: |")
-    lines.append(
-        "| Verdict | "
-        f"{_escape_md_cell(data.get('verdict'))} |"
-    )
-    lines.append(
-        "| Readiness score | "
-        f"{_safe_float(data.get('readiness_score')):.2f} |"
-    )
+    lines.append(f"| Verdict | {_escape_md_cell(data.get('verdict'))} |")
+    lines.append(f"| Readiness score | {_safe_float(data.get('readiness_score')):.2f} |")
     if data.get("signal_quality") is not None:
-        lines.append(
-            "| Signal quality | "
-            f"{_safe_float(data.get('signal_quality')):.2f} |"
-        )
+        lines.append(f"| Signal quality | {_safe_float(data.get('signal_quality')):.2f} |")
     if data.get("visible_assumptions") is not None:
-        lines.append(
-            "| Visible assumptions | "
-            f"{_safe_text(data.get('visible_assumptions'))} |"
-        )
+        lines.append(f"| Visible assumptions | {_safe_text(data.get('visible_assumptions'))} |")
     if data.get("product_type"):
-        lines.append(
-            "| Product type | "
-            f"{_escape_md_cell(data.get('product_type'))} |"
-        )
-    lines.append("| Total items | " f"{summary.get('total_items', 0)} |")
-    lines.append("| Passed / Warned / Failed | "
-                 f"{summary.get('passed_items', 0)} / "
-                 f"{summary.get('warned_items', 0)} / "
-                 f"{summary.get('failed_items', 0)} |")
+        lines.append(f"| Product type | {_escape_md_cell(data.get('product_type'))} |")
+    lines.append(f"| Total items | {summary.get('total_items', 0)} |")
+    lines.append(
+        "| Passed / Warned / Failed | "
+        f"{summary.get('passed_items', 0)} / "
+        f"{summary.get('warned_items', 0)} / "
+        f"{summary.get('failed_items', 0)} |"
+    )
     if "coverage" in meta:
         coverage = _safe_float(meta.get("coverage"))
         lines.append(f"| Cluster coverage | {coverage:.0%} |")
     if "expected_clusters" in meta:
-        lines.append(
-            "| Expected clusters | "
-            f"{_safe_text(meta.get('expected_clusters'))} |"
-        )
+        lines.append(f"| Expected clusters | {_safe_text(meta.get('expected_clusters'))} |")
     lines.append("")
 
     lines.append("## Checklist")

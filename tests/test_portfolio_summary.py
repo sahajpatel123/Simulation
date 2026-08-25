@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Public surface
 # ---------------------------------------------------------------------------
@@ -577,13 +576,12 @@ def test_summary_next_action_falls_back_for_unknown_health() -> None:
     """Defensive — unknown health strings fall back to the
     INSUFFICIENT_DATA CTA so the dashboard never shows blank
     text."""
+    # Force an unknown health by monkey-patching the helper.
+    from app.simulation import portfolio_summary as mod
     from app.simulation.portfolio_summary import (
         NEXT_ACTION_INSUFFICIENT_DATA,
         build_portfolio_summary,
     )
-
-    # Force an unknown health by monkey-patching the helper.
-    from app.simulation import portfolio_summary as mod
 
     original = mod._overall_health
     mod._overall_health = lambda **_: "SOMETHING_NEW"  # type: ignore[assignment]

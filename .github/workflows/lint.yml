@@ -39,10 +39,12 @@ jobs:
           python-version: "3.11"
 
       - name: Install ruff
-        # Pin to a specific version to prevent CI breakage when newer ruff
-        # releases introduce stricter rules. Bump in lockstep with the
-        # ruff-pre-commit hook rev in .pre-commit-config.yaml.
-        run: pip install --quiet "ruff==0.16.0"
+        # Ruff's pin lives in requirements-tools-lock.txt (hash-locked so
+        # scorecard PinnedDependencies accepts the install and CI stays
+        # reproducible). Bump in lockstep with the ruff-pre-commit hook rev
+        # in .pre-commit-config.yaml, then regenerate the lock via
+        # tools/gen_dependency_lock.py.
+        run: pip install --no-cache-dir --require-hashes -r requirements-tools-lock.txt
 
       - name: Run ruff check
         # Rule selection lives in pyproject.toml — the workflow

@@ -20,6 +20,8 @@ import io
 import json
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
     """Render the optional metadata block as ``(key, value)`` rows."""
@@ -65,7 +67,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with the formula-injection guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def founder_action_plan_to_csv(
@@ -102,7 +104,14 @@ def founder_action_plan_to_csv(
         "verdict",
     )
     for key in summary_keys:
-        if key in ("total_actions", "total_critical", "total_warning", "quick_win_count", "estimated_total_conversion_impact", "verdict"):
+        if key in (
+            "total_actions",
+            "total_critical",
+            "total_warning",
+            "quick_win_count",
+            "estimated_total_conversion_impact",
+            "verdict",
+        ):
             _write_row(writer, [key, _value(summary.get(key))])
         else:
             _write_row(writer, [key, _value(data.get(key))])
@@ -141,9 +150,7 @@ def founder_action_plan_to_csv(
         _write_row(
             writer,
             [
-                action.get(key)
-                if key != "related_cluster_ids"
-                else related_text
+                action.get(key) if key != "related_cluster_ids" else related_text
                 for key in action_keys
             ],
         )

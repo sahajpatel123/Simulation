@@ -33,6 +33,22 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 EXPIRES_IN_SECONDS = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
 
+# How recently a token may have been revoked before its replay counts as a
+# breach signal rather than an innocent concurrent double-fire. Two
+# simultaneous refresh requests with the same token resolve in milliseconds
+# (one wins the atomic claim, the loser then sees revoked=TRUE); treating
+# that loser as theft would log the user out everywhere on every double
+# fire. A replayed token revoked longer than this window ago, however, is
+# the classic stolen-credential signature — the legitimate owner rotated
+# past it long ago, so only an attacker still holds it.
+REFRESH_REUSE_GRACE_SECONDS = 60
+
+# A real bcrypt digest of a throwaway secret. The unknown-email branch of
+# ``login`` verifies against it so both failure paths burn one bcrypt round
+# — otherwise "no such user" returns measurably faster than "wrong
+# password" and response latency becomes an account-enumeration oracle.
+_DUMMY_PASSWORD_HASH = get_password_hash("timing-equalizer-not-a-credential")
+
 
 def _store_refresh_token(db: Session, user_id: int, raw_token: str) -> None:
     token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
@@ -46,25 +62,9 @@ def _store_refresh_token(db: Session, user_id: int, raw_token: str) -> None:
         {
             "uid": user_id,
             "hash": token_hash,
-            "expires_at": datetime.now(UTC)
-            + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+            "expires_at": datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         },
     )
-
-
-def _revoke_refresh_token(db: Session, raw_token: str) -> int:
-    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-    result = db.execute(
-        text(
-            """
-            UPDATE refresh_tokens
-            SET revoked = TRUE
-            WHERE token_hash = :hash AND revoked = FALSE
-            """
-        ),
-        {"hash": token_hash},
-    )
-    return int(result.rowcount or 0)
 
 
 def _revoke_user_refresh_tokens(db: Session, user_id: int) -> int:
@@ -72,7 +72,7 @@ def _revoke_user_refresh_tokens(db: Session, user_id: int) -> int:
         text(
             """
             UPDATE refresh_tokens
-            SET revoked = TRUE
+            SET revoked = TRUE, revoked_at = NOW()
             WHERE user_id = :uid AND revoked = FALSE
             """
         ),
@@ -91,6 +91,11 @@ def _revoke_user_refresh_tokens(db: Session, user_id: int) -> int:
 def register(payload: UserCreate, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == payload.email).first()
     if existing:
+        # Burn one bcrypt round so "email already registered" costs the
+        # same as a real registration's hashing step — otherwise response
+        # latency enumerates which addresses have accounts (the login
+        # path below carries the identical guard).
+        verify_password(payload.password, _DUMMY_PASSWORD_HASH)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Email already registered",
@@ -128,7 +133,17 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
 )
 def login(payload: UserLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email).first()
-    if not user or not verify_password(payload.password, user.hashed_password):
+    if user is None:
+        # Unknown email — burn the same bcrypt work as the wrong-password
+        # branch below so timing can't separate registered addresses from
+        # unregistered ones.
+        verify_password(payload.password, _DUMMY_PASSWORD_HASH)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not verify_password(payload.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -166,24 +181,54 @@ def refresh_access_token(payload: RefreshRequest, db: Session = Depends(get_db))
     # read-then-write race where a valid token could be rotated twice
     # (e.g. when two requests fire simultaneously) and produce duplicate
     # access sessions.
-    claim = db.execute(
-        text(
-            """
+    claim = (
+        db.execute(
+            text(
+                """
             UPDATE refresh_tokens
-            SET revoked = TRUE
+            SET revoked = TRUE, revoked_at = NOW()
             WHERE token_hash = :hash
               AND revoked = FALSE
               AND (expires_at IS NULL OR expires_at > NOW())
             RETURNING user_id
             """
-        ),
-        {"hash": token_hash},
-    ).mappings().first()
+            ),
+            {"hash": token_hash},
+        )
+        .mappings()
+        .first()
+    )
 
     if not claim:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
+        # Reuse detection: the atomic claim failed, so this token was never
+        # issued, expired unused, or was already rotated. Only the third
+        # case is a breach signal — replaying a credential the legitimate
+        # owner surrendered long ago means it was copied, so revoke every
+        # session for that user. Tokens revoked within the grace window are
+        # excluded by the SQL (concurrent double-fires) and unknown or
+        # merely-expired tokens match nothing (normal lifecycle, no
+        # side effects). The response stays uniform either way.
+        cutoff = datetime.now(UTC) - timedelta(seconds=REFRESH_REUSE_GRACE_SECONDS)
+        breach = (
+            db.execute(
+                text(
+                    """
+                SELECT user_id FROM refresh_tokens
+                WHERE token_hash = :hash
+                  AND revoked = TRUE
+                  AND revoked_at IS NOT NULL
+                  AND revoked_at < :cutoff
+                """
+                ),
+                {"hash": token_hash, "cutoff": cutoff},
+            )
+            .mappings()
+            .first()
         )
+        if breach:
+            _revoke_user_refresh_tokens(db, int(breach["user_id"]))
+            db.commit()
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
     user_id = int(claim["user_id"])
     new_refresh = create_refresh_token()
@@ -226,9 +271,7 @@ def update_me(
 
     if "email" in data and data["email"] and data["email"] != current_user.email:
         taken = (
-            db.query(User)
-            .filter(User.email == data["email"], User.id != current_user.id)
-            .first()
+            db.query(User).filter(User.email == data["email"], User.id != current_user.id).first()
         )
         if taken:
             raise HTTPException(

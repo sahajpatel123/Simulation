@@ -1,7 +1,8 @@
 """Tests for the pure outcome-tracker CSV export helper."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.simulation.outcome_tracker_export import (
     outcome_tracker_count_to_csv,
@@ -57,9 +58,7 @@ def test_csv_contains_header_rows_and_metadata() -> None:
         "actual_revenue,predicted_conversion_rate,predicted_revenue,"
         "variance,notes"
     ) in csv_text
-    assert (
-        "1,7,12,2026-08-01T00:00:00+00:00,0.05,500.0,0.04,400.0,25.0,"
-    ) in csv_text
+    assert ("1,7,12,2026-08-01T00:00:00+00:00,0.05,500.0,0.04,400.0,25.0,") in csv_text
 
 
 def test_csv_empty_rows_only_has_header() -> None:
@@ -78,6 +77,9 @@ def test_csv_backfills_variance_when_stored_column_null() -> None:
     )
 
     assert "1,7,12,2026-08-01T00:00:00+00:00,0.06,,0.05,,20.0," in csv_text
+    # A backfilled negative variance is a signed pure number — spreadsheets
+    # parse it as a numeric cell, never a formula, so the guard leaves it
+    # intact rather than prefixing a quote into the founder's data.
     assert "2,7,12,2026-08-01T00:00:00+00:00,0.04,,0.05,,-20.0," in csv_text
 
 
@@ -113,7 +115,7 @@ def test_csv_handles_datetime_and_malformed_timestamps() -> None:
         [
             _row(
                 1,
-                recorded_at=datetime(2026, 8, 1, tzinfo=timezone.utc),
+                recorded_at=datetime(2026, 8, 1, tzinfo=UTC),
                 actual=0.05,
             ),
             _row(2, recorded_at="not-a-timestamp", actual=0.06),

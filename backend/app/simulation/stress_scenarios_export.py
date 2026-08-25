@@ -23,6 +23,8 @@ import json
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 FORMAT_VERSION: str = "1"
 
 _SUMMARY_KEYS: tuple[str, ...] = (
@@ -84,7 +86,7 @@ def _csv_cell(value: Any) -> object:
 
 
 def _write_row(writer: Any, row: list[object]) -> None:
-    writer.writerow([_csv_cell(value) for value in row])
+    write_row(writer, [_csv_cell(value) for value in row])
 
 
 def _json_safe(value: Any) -> Any:
@@ -188,16 +190,19 @@ def stress_scenarios_to_json(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     """Render a stress-scenario payload as a strict JSON envelope."""
-    return json.dumps(
-        {
-            "metadata": _json_safe(metadata or {}),
-            "stress_scenarios": _json_safe(_as_dict(payload)),
-        },
-        default=str,
-        ensure_ascii=False,
-        indent=2,
-        allow_nan=False,
-    ) + "\n"
+    return (
+        json.dumps(
+            {
+                "metadata": _json_safe(metadata or {}),
+                "stress_scenarios": _json_safe(_as_dict(payload)),
+            },
+            default=str,
+            ensure_ascii=False,
+            indent=2,
+            allow_nan=False,
+        )
+        + "\n"
+    )
 
 
 def _escape_md_cell(value: Any) -> str:
@@ -275,11 +280,7 @@ def stress_scenarios_to_markdown(
         ("scenario_count", "Scenarios evaluated"),
     )
     for key, label in summary_labels:
-        value = (
-            len(impacts)
-            if key == "scenario_count"
-            else data.get(key)
-        )
+        value = len(impacts) if key == "scenario_count" else data.get(key)
         lines.append(f"| {label} | {_md_cell(value)} |")
     lines.append("")
 
@@ -298,8 +299,7 @@ def stress_scenarios_to_markdown(
             name = _text(match.get("scenario_name")) or vulnerable
             summary_text = _text(match.get("impact_summary"))
             lines.append(
-                f"**Most vulnerable: {_escape_md_cell(name)}**"
-                f" — {_escape_md_cell(summary_text)}"
+                f"**Most vulnerable: {_escape_md_cell(name)}** — {_escape_md_cell(summary_text)}"
             )
             lines.append("")
 
@@ -308,9 +308,7 @@ def stress_scenarios_to_markdown(
     if not impacts:
         lines.append("_No scenarios returned._")
     else:
-        lines.append(
-            "| Scenario | Risk | Projected CR | Δ% | Vulnerability | Mitigation |"
-        )
+        lines.append("| Scenario | Risk | Projected CR | Δ% | Vulnerability | Mitigation |")
         lines.append("| --- | --- | --- | --- | --- | --- |")
         for raw in impacts:
             impact = _as_dict(raw)

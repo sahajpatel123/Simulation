@@ -30,6 +30,8 @@ through.
 """
 from __future__ import annotations
 
+import math
+
 # Priority thresholds on the composite score. Below 0.005 →
 # NONE (effectively no actionable signal). Below 0.02 → LOW.
 # Below 0.05 → MEDIUM. Above → HIGH.
@@ -52,7 +54,6 @@ MAX_LEADERS: int = 50
 
 def _safe_float(raw: object) -> float | None:
     """Coerce to a finite float or return None."""
-    import math
     if raw is None or isinstance(raw, bool):
         return None
     if isinstance(raw, (int, float)):

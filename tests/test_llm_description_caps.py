@@ -21,7 +21,6 @@ from app.schemas.competitive import CompetitiveAnalysisRequest
 from app.schemas.intervention import InterventionRequest
 from app.schemas.premortem import PremortemRequest
 
-
 CAP = 5000
 
 

@@ -27,7 +27,6 @@ from typing import Any
 
 import numpy as np
 
-
 # ---------------------------------------------------------------------------
 # State / matrix constants
 # ---------------------------------------------------------------------------
@@ -138,7 +137,7 @@ def test_build_transition_matrix_no_nan_or_inf() -> None:
 
 def test_build_transition_matrix_clips_negative_pricing_impact() -> None:
     """High price_sensitivity must not produce negative probabilities."""
-    from app.simulation.markov import MarkovBehaviourModel, STATE_INDEX, State
+    from app.simulation.markov import STATE_INDEX, MarkovBehaviourModel, State
 
     model = MarkovBehaviourModel()
     matrix = model.build_transition_matrix(
@@ -151,7 +150,7 @@ def test_build_transition_matrix_clips_negative_pricing_impact() -> None:
 
 
 def test_build_transition_matrix_pricing_keyword_reduces_decide_to_purchase() -> None:
-    from app.simulation.markov import MarkovBehaviourModel, STATE_INDEX, State
+    from app.simulation.markov import STATE_INDEX, MarkovBehaviourModel, State
 
     model = MarkovBehaviourModel()
     base = model.build_transition_matrix(_env(), [], seed=42)
@@ -167,7 +166,7 @@ def test_build_transition_matrix_pricing_keyword_reduces_decide_to_purchase() ->
 
 
 def test_build_transition_matrix_trust_keyword_reduces_browse_to_consider() -> None:
-    from app.simulation.markov import MarkovBehaviourModel, STATE_INDEX, State
+    from app.simulation.markov import STATE_INDEX, MarkovBehaviourModel, State
 
     model = MarkovBehaviourModel()
     base = model.build_transition_matrix(_env(), [], seed=42)
@@ -188,7 +187,7 @@ def test_build_transition_matrix_trust_keyword_reduces_browse_to_consider() -> N
 
 
 def test_build_transition_matrix_retention_keyword_increases_purchase_to_return() -> None:
-    from app.simulation.markov import MarkovBehaviourModel, STATE_INDEX, State
+    from app.simulation.markov import STATE_INDEX, MarkovBehaviourModel, State
 
     model = MarkovBehaviourModel()
     base = model.build_transition_matrix(_env(), [], seed=42)
@@ -206,7 +205,7 @@ def test_build_transition_matrix_keyword_fires_only_once_per_assumption() -> Non
     """An assumption whose text matches multiple keyword rules should only
     pick the FIRST matching rule (the producer has an inner ``break``).
     This locks the documented first-match-wins contract."""
-    from app.simulation.markov import MarkovBehaviourModel, STATE_INDEX, State
+    from app.simulation.markov import STATE_INDEX, MarkovBehaviourModel, State
 
     model = MarkovBehaviourModel()
     # "pric" matches the first pricing rule; if the implementation
@@ -269,7 +268,7 @@ def test_build_transition_matrix_sensitivity_weight_scales_magnitude() -> None:
 
 
 def test_build_transition_matrix_env_price_sensitivity_reduces_d2p() -> None:
-    from app.simulation.markov import MarkovBehaviourModel, STATE_INDEX, State
+    from app.simulation.markov import STATE_INDEX, MarkovBehaviourModel, State
 
     model = MarkovBehaviourModel()
     low = model.build_transition_matrix(_env(price_sensitivity=0.0), [], seed=42)
@@ -280,7 +279,7 @@ def test_build_transition_matrix_env_price_sensitivity_reduces_d2p() -> None:
 
 
 def test_build_transition_matrix_env_market_maturity_reduces_b2c() -> None:
-    from app.simulation.markov import MarkovBehaviourModel, STATE_INDEX, State
+    from app.simulation.markov import STATE_INDEX, MarkovBehaviourModel, State
 
     model = MarkovBehaviourModel()
     low = model.build_transition_matrix(_env(market_maturity=0.0), [], seed=42)

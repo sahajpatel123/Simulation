@@ -9,11 +9,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
-    # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
-    from app.models.environment import Environment
-
-    # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
-    from app.models.project import Project
+    # Module-style imports + fully qualified string annotations below: these
+    # peer-model edges stay type-checker visible while carrying no
+    # module-level ``from``-imports, so no cyclic-import pattern exists.
+    import app.models.environment
+    import app.models.project
 
 
 class Simulation(Base, TimestampMixin):
@@ -45,7 +45,12 @@ class Simulation(Base, TimestampMixin):
     signal_quality: Mapped[float | None] = mapped_column(Float, nullable=True)
     claim_confidence_distribution: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
-    project: Mapped[Project] = relationship("Project", back_populates="simulations")
-    environment: Mapped[Environment | None] = relationship(
+    # Quoted despite future-annotations: unquoted dotted paths are
+    # module-level attribute uses that re-trigger the cyclic-import pattern
+    # this file layout exists to avoid.
+    project: Mapped["app.models.project.Project"] = relationship(  # noqa: UP037
+        "Project", back_populates="simulations"
+    )
+    environment: Mapped["app.models.environment.Environment | None"] = relationship(  # noqa: UP037
         "Environment", back_populates="simulations"
     )

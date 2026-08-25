@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Public surface
 # ---------------------------------------------------------------------------
@@ -48,10 +47,10 @@ def test_similarity_label_allowlist_pinned() -> None:
 
 def test_required_traits_pinned_to_eight() -> None:
     """The 8 trait keys must match ClusterDefinition.REQUIRED_TRAITS."""
+    from app.simulation.cluster_diff import REQUIRED_TRAITS as DIFF_REQUIRED_TRAITS
     from app.simulation.clusters.definitions import REQUIRED_TRAITS
-    from app.simulation.cluster_diff import REQUIRED_TRAITS
 
-    assert set(REQUIRED_TRAITS) == set(REQUIRED_TRAITS)
+    assert set(DIFF_REQUIRED_TRAITS) == set(REQUIRED_TRAITS)
 
 
 # ---------------------------------------------------------------------------

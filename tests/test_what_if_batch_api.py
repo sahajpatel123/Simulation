@@ -7,12 +7,11 @@ import types
 import pytest
 from fastapi import HTTPException
 
+from app.schemas.what_if import WhatIfAssumption
 from app.schemas.what_if_batch import (
     WhatIfBatchRequest,
     WhatIfBatchScenarioInput,
 )
-from app.schemas.what_if import WhatIfAssumption
-
 
 if "razorpay" not in sys.modules:
     stub = types.ModuleType("razorpay")

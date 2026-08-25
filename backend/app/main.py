@@ -3,24 +3,24 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 import sentry_sdk
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy import text
 
 from app.api.v1 import api_router
 from app.core.audit_middleware import AuditLogMiddleware
+from app.core.celery_app import celery_app as _celery_app
 from app.core.config import settings
 from app.core.database import engine, init_extensions
 from app.core.errors import TheCeeError, generic_error_handler, thecee_error_handler
 from app.core.logging_config import configure_logging
 from app.core.metrics import metrics
 from app.core.progress_bridge import progress_bridge
+from app.core.rate_limiter import rate_limit
 from app.core.redis_client import get_redis_client
 from app.core.request_id_middleware import RequestIdMiddleware
-from app.core.safe_errors import safe_error_label
 from app.core.timing_middleware import TimingMiddleware
-from app.worker import celery_app as _celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,12 @@ if settings.SENTRY_DSN:
 async def lifespan(app: FastAPI):
     configure_logging()
     init_extensions()
-    logger.info("TheCee backend running — pgvector enabled")
+    # Effective environment in the deploy's first log line: whether guards
+    # were explicitly set or platform-inferred is visible in Railway logs.
+    logger.info(
+        "TheCee backend running — environment=%s, pgvector enabled",
+        settings.ENVIRONMENT,
+    )
     # Live progress relay: subscribes this process to the Redis progress
     # channel so WebSocket clients receive Celery-task progress even though
     # the worker runs in a separate process. No-op-safe when Redis is down.
@@ -44,6 +49,7 @@ async def lifespan(app: FastAPI):
 
     from app.core.database import SessionLocal
     from app.simulation.clusters.registry import ClusterRegistry
+
     db = SessionLocal()
     try:
         ClusterRegistry().sync_to_db(db)
@@ -69,11 +75,7 @@ app = FastAPI(
     # the deployment surface matches what we intend to expose.
     docs_url="/docs" if settings.ENVIRONMENT.lower() != "production" else None,
     redoc_url="/redoc" if settings.ENVIRONMENT.lower() != "production" else None,
-    openapi_url=(
-        "/openapi.json"
-        if settings.ENVIRONMENT.lower() != "production"
-        else None
-    ),
+    openapi_url=("/openapi.json" if settings.ENVIRONMENT.lower() != "production" else None),
     lifespan=lifespan,
 )
 
@@ -133,7 +135,9 @@ async def set_security_headers(request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     if settings.ENVIRONMENT.lower() == "production":
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains; preload"
+        )
     # Generated-UI serve endpoints are intentionally embedded in iframes on the
     # frontend.  They control framing via Content-Security-Policy: frame-ancestors
     # set in the route handler itself, so we skip the global DENY here.
@@ -191,11 +195,27 @@ def _service_health() -> tuple[dict[str, object], int]:
     return report, status_code
 
 
+# The root-level probes below are deliberately unauthenticated (load
+# balancers and Prometheus cannot present JWTs) but NOT unlimited: each
+# performs live infrastructure I/O, so an anonymous loop would otherwise
+# churn the DB pool / broker / Redis for free. Every probe limit uses
+# fail_open=True — if Redis is down the limiter must not convert health
+# probes into failures, or the load balancer would drop instances exactly
+# when the outage they diagnose is happening.
 @app.get(
     "/celery/status",
     tags=["system"],
     summary="Celery worker and broker status",
-    responses={200: {"description": "Broker URL and worker reachability", "content": {"application/json": {}}}},
+    # Each hit broadcasts a broker inspect with a 2s timeout — the most
+    # expensive probe here. 10/min/IP keeps dashboards working while making
+    # it worthless as a free amplifier.
+    dependencies=[Depends(rate_limit(limit=10, window_s=60, fail_open=True))],
+    responses={
+        200: {
+            "description": "Broker URL and worker reachability",
+            "content": {"application/json": {}},
+        }
+    },
 )
 async def celery_status():
     try:
@@ -217,7 +237,10 @@ async def celery_status():
     "/",
     tags=["system"],
     summary="API service metadata",
-    responses={200: {"description": "Service name and version", "content": {"application/json": {}}}},
+    dependencies=[Depends(rate_limit(limit=60, window_s=60, fail_open=True))],
+    responses={
+        200: {"description": "Service name and version", "content": {"application/json": {}}}
+    },
 )
 async def root():
     return {
@@ -231,6 +254,9 @@ async def root():
     "/health",
     tags=["system"],
     summary="Liveness probe",
+    # LB/K8s poll this every few seconds from shared infra IPs — the
+    # highest legitimate volume of any probe, hence the generous cap.
+    dependencies=[Depends(rate_limit(limit=120, window_s=60, fail_open=True))],
     responses={200: {"description": "Health status", "content": {"application/json": {}}}},
 )
 async def health():
@@ -249,8 +275,14 @@ async def health():
     "/readyz",
     tags=["system"],
     summary="Readiness probe (DB + Redis reachable)",
+    # Hits the DB and Redis on every call — bounded so anonymous hammering
+    # can't exhaust the connection pool through the readiness path itself.
+    dependencies=[Depends(rate_limit(limit=60, window_s=60, fail_open=True))],
     responses={
-        200: {"description": "Process is ready to serve traffic", "content": {"application/json": {}}},
+        200: {
+            "description": "Process is ready to serve traffic",
+            "content": {"application/json": {}},
+        },
         503: {"description": "Process is not yet ready", "content": {"application/json": {}}},
     },
 )
@@ -267,9 +299,12 @@ async def readyz() -> JSONResponse:
         db_ok = True
     except Exception as exc:
         logger.error("readiness database check failed: %s", exc, exc_info=True)
+        # Deliberately no error detail in the body: this endpoint is
+        # unauthenticated, so even a class-derived label advertises
+        # dependency internals to anyone who can reach it. Full diagnosis
+        # detail lives in the server-side log line above.
         checks["database"] = {
             "status": "error",
-            "error": safe_error_label(exc),
         }
         db_ok = False
 
@@ -287,9 +322,10 @@ async def readyz() -> JSONResponse:
             redis_ok = True
         except Exception as exc:
             logger.error("readiness Redis check failed: %s", exc, exc_info=True)
+            # Same policy as the database branch above: status only in the
+            # response; exception detail stays in server-side logs.
             checks["redis"] = {
                 "status": "error",
-                "error": safe_error_label(exc),
             }
             redis_ok = False
 
@@ -311,7 +347,17 @@ _PROM_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
     "/metrics",
     tags=["system"],
     summary="Prometheus metrics endpoint",
-    responses={200: {"description": "Metrics in Prometheus text exposition format", "content": {"text/plain": {}}}},
+    # A single Prometheus scraper polls at 15–30s intervals (2–4/min), so
+    # 30/min/IP leaves scraping unaffected while capping anonymous
+    # telemetry-scraping of operational internals. fail_open keeps
+    # observability alive during the incidents it exists to diagnose.
+    dependencies=[Depends(rate_limit(limit=30, window_s=60, fail_open=True))],
+    responses={
+        200: {
+            "description": "Metrics in Prometheus text exposition format",
+            "content": {"text/plain": {}},
+        }
+    },
 )
 async def prometheus_metrics() -> Response:
     # Refresh the worker gauge right before render so the snapshot reflects
@@ -341,4 +387,6 @@ async def prometheus_metrics() -> Response:
         logger.debug("db pool gauge refresh failed", exc_info=True)
 
     body = metrics.render()
-    return Response(content=body, media_type="text/plain", headers={"Content-Type": _PROM_CONTENT_TYPE})
+    return Response(
+        content=body, media_type="text/plain", headers={"Content-Type": _PROM_CONTENT_TYPE}
+    )

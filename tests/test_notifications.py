@@ -5,8 +5,7 @@ a DB.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
+from datetime import UTC, datetime, timedelta
 
 
 def test_public_allowlist_matches_callers() -> None:
@@ -121,7 +120,7 @@ def test_notifications_premortem_critical_summary() -> None:
 def test_notifications_sorted_newest_first() -> None:
     from app.simulation.notifications import build_notifications
 
-    now = datetime(2026, 1, 10, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 10, tzinfo=UTC)
     out = build_notifications(
         pending_decisions=[
             {
@@ -147,7 +146,7 @@ def test_notifications_capped() -> None:
     pending_decisions = [
         {
             "id": i, "title": f"d{i}", "status": "PENDING",
-            "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+            "created_at": datetime(2026, 1, 1, tzinfo=UTC),
         }
         for i in range(50)
     ]

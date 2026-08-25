@@ -3,7 +3,9 @@ import json
 import logging
 import re
 import secrets
+from html.parser import HTMLParser
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, Response
@@ -46,8 +48,24 @@ _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}
 _HTML_200 = {200: {"description": "HTML document", "content": {"text/html": {}}}}
 _PDF_200 = {200: {"description": "PDF file", "content": {"application/pdf": {}}}}
 
-ALLOWED_CDNS = ["tailwindcss", "cdn.tailwindcss", "images.unsplash.com", "unpkg.com", "fonts.googleapis.com", "fonts.gstatic.com"]
+# Exact hosts allowed to serve <script src=...> in generated prototypes.
+# Comparison is host-exact via urlparse — a substring test ("tailwindcss"
+# in tag) also matched lookalike URLs such as
+# https://evil.com/cdn.tailwindcss.com/x.js and let them through the filter.
+ALLOWED_CDNS = frozenset(
+    {
+        "cdn.tailwindcss.com",
+        "images.unsplash.com",
+        "unpkg.com",
+        "fonts.googleapis.com",
+        "fonts.gstatic.com",
+    }
+)
 TAILWIND_CDN = '<script src="https://cdn.tailwindcss.com"></script>'
+
+# Extracts the value of any src=/href= attribute so CDN presence can be
+# decided on parsed URL hosts rather than raw substring containment.
+_ATTR_URL_RE = re.compile(r"""(?:src|href)\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
 
 
 def _load_conductor_results(
@@ -128,16 +146,83 @@ def _next_ui_version(db: Session, project_id: int) -> int:
     return int(latest or 0) + 1
 
 
-def _strip_unsafe_scripts(html: str) -> str:
-    def is_safe(tag: str) -> bool:
-        return any(cdn in tag for cdn in ALLOWED_CDNS)
+class _ScriptSrcHostFilter(HTMLParser):
+    """Locate ``<script src=...>`` elements whose src host is not allowlisted.
 
-    return re.sub(
-        r'<script[^>]*src=["\'][^"\']+["\'][^>]*></script>',
-        lambda m: m.group(0) if is_safe(m.group(0)) else "",
-        html,
-        flags=re.IGNORECASE,
-    )
+    The stdlib parser reports exact character offsets for each tag, so the
+    caller can delete disallowed elements byte-for-byte. Deciding on parsed
+    attributes (not pattern matching over raw markup) means an attribute
+    value containing ``>``, unusual spacing, or mixed-case tags cannot make
+    the filter mis-locate the element boundaries the way a hand-written
+    regular expression could.
+    """
+
+    def __init__(self, html: str) -> None:
+        super().__init__(convert_charrefs=False)
+        self._html = html
+        # Offset of each line start, so parser (line, col) positions map to
+        # absolute indices in the original string.
+        self._line_starts = [0]
+        for index, char in enumerate(html):
+            if char == "\n":
+                self._line_starts.append(index + 1)
+        self.spans: list[tuple[int, int]] = []
+        self._evil_open_start: int | None = None
+
+    def _abs(self) -> int:
+        line, col = self.getpos()
+        return self._line_starts[line - 1] + col
+
+    def _is_disallowed(self, attrs: list[tuple[str, str | None]]) -> bool:
+        src = dict(attrs).get("src")
+        if not src:
+            # Inline scripts are out of scope here; _build_safe_html and the
+            # serve-time CSP handle script bodies.
+            return False
+        host = (urlparse(src).hostname or "").lower()
+        return host not in ALLOWED_CDNS
+
+    def handle_starttag(self, tag, attrs) -> None:
+        if tag == "script" and self._is_disallowed(attrs):
+            self._evil_open_start = self._abs()
+
+    def handle_startendtag(self, tag, attrs) -> None:
+        # Self-closing <script src="…" /> never reaches handle_endtag.
+        if tag != "script" or not self._is_disallowed(attrs):
+            return
+        start = self._abs()
+        end = start + len(self.get_starttag_text() or "")
+        self.spans.append((start, end))
+
+    def handle_endtag(self, tag) -> None:
+        if tag != "script" or self._evil_open_start is None:
+            return
+        pos = self._abs()
+        gt = self._html.find(">", pos)
+        end = gt + 1 if gt != -1 else pos + len("</script>")
+        self.spans.append((self._evil_open_start, end))
+        self._evil_open_start = None
+
+
+def _strip_unsafe_scripts(html: str) -> str:
+    """Drop every ``<script src=...>`` element whose URL host is not allowlisted.
+
+    Element boundaries come from the stdlib HTML parser and are deleted from
+    the original string verbatim — the whole element (attributes *and*
+    inline body) goes, so a disallowed remote script can't survive by
+    carrying content between its tags.
+    """
+    finder = _ScriptSrcHostFilter(html)
+    try:
+        finder.feed(html)
+        finder.close()
+    except Exception as exc:  # noqa: BLE001 - filtering must not brick generation
+        logger.warning("script-src filter fell back to no-op: %s", log_safe(exc))
+        return html
+    result = html
+    for start, end in sorted(finder.spans, reverse=True):
+        result = result[:start] + result[end:]
+    return result
 
 
 def _strip_markdown_fences(raw: str) -> str:
@@ -238,10 +323,17 @@ def _strip_injected_tags(html: str) -> str:
 
 
 def _ensure_cdns(html: str) -> str:
-    """Guarantee the Tailwind CDN is present — the prototype's styling depends on it."""
-    lower = html.lower()
-    if "cdn.tailwindcss.com" in lower or "tailwindcss" in lower:
-        return html
+    """Guarantee the Tailwind CDN is present — the prototype's styling depends on it.
+
+    Detection parses each ``src``/``href`` attribute value and compares the
+    URL *host* exactly (via ``urlparse``) instead of a loose substring test —
+    a bare ``"tailwindcss" in html`` check also matches page text and would
+    wrongly skip injecting the stylesheet dependency.
+    """
+    for match in _ATTR_URL_RE.finditer(html):
+        host = (urlparse(match.group(1)).hostname or "").lower()
+        if host == "cdn.tailwindcss.com":
+            return html
     if re.search(r"</head\s*>", html, re.IGNORECASE):
         return re.sub(r"</head\s*>", TAILWIND_CDN + "</head>", html, count=1, flags=re.IGNORECASE)
     if re.search(r"<body\b[^>]*>", html, re.IGNORECASE):
@@ -469,7 +561,10 @@ def _build_safe_html(raw: str) -> str:
     doc = _inject_js_boilerplate(doc)
     is_valid, msg = validate_generated_html(doc)
     if not is_valid:
-        logger.warning("[UI] Generated HTML validation: %s", msg)
+        logger.warning(
+            "[UI] Generated HTML validation: %s",
+            log_safe(msg).replace("\n", " "),
+        )
     return doc
 
 
@@ -534,7 +629,7 @@ async def generate_ui(
     html = _build_safe_html(raw)
     logger.info(
         "generate-ui ok project=%s raw_len=%s html_len=%s",
-        log_safe(project_id),
+        log_safe(project_id).replace("\n", " "),
         len(raw),
         len(html),
     )
@@ -792,7 +887,7 @@ async def diff_ui_versions(
             # A malformed CHANGES manifest degrades to an empty diff list.
             logger.debug(
                 "CHANGES manifest unparseable for version %s",
-                to_version,
+                log_safe(to_version).replace("\n", " "),
                 exc_info=True,
             )
 

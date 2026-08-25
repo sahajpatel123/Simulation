@@ -17,6 +17,7 @@ It mirrors ``outcome_tracker_read``:
 
 No DB / I/O — the route layer pulls the rows and hands them here.
 """
+
 from __future__ import annotations
 
 import csv
@@ -24,6 +25,8 @@ import io
 import math
 from datetime import UTC, datetime
 from typing import Any
+
+from app.simulation.export_utils import write_row
 
 FORMAT_VERSION = "1"
 
@@ -87,15 +90,16 @@ def outcome_tracker_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
-        writer.writerow(["user_id", _text(metadata.get("user_id"))])
-        writer.writerow(["project_id", _text(metadata.get("project_id"))])
+        write_row(writer, ["generated_at", _text(metadata.get("generated_at"))])
+        write_row(writer, ["user_id", _text(metadata.get("user_id"))])
+        write_row(writer, ["project_id", _text(metadata.get("project_id"))])
         if metadata.get("total") is not None:
-            writer.writerow(["total", _text(metadata.get("total"))])
-        writer.writerow(["format_version", _text(metadata.get("format_version", FORMAT_VERSION))])
-        writer.writerow([])
+            write_row(writer, ["total", _text(metadata.get("total"))])
+        write_row(writer, ["format_version", _text(metadata.get("format_version", FORMAT_VERSION))])
+        write_row(writer, [])
 
-    writer.writerow(
+    write_row(
+        writer,
         [
             "id",
             "project_id",
@@ -107,7 +111,7 @@ def outcome_tracker_to_csv(
             "predicted_revenue",
             "variance",
             "notes",
-        ]
+        ],
     )
     for row in sorted(rows or [], key=lambda r: _sort_key(r.get("recorded_at"))):
         actual = row.get("actual_conversion_rate")
@@ -115,7 +119,8 @@ def outcome_tracker_to_csv(
         variance = _safe_float(row.get("variance"))
         if variance is None:
             variance = _variance_pct(actual, predicted)
-        writer.writerow(
+        write_row(
+            writer,
             [
                 _text(row.get("id")),
                 _text(row.get("project_id")),
@@ -127,7 +132,7 @@ def outcome_tracker_to_csv(
                 _text(row.get("predicted_revenue")),
                 _text(variance),
                 _text(row.get("notes")),
-            ]
+            ],
         )
     return buffer.getvalue()
 
@@ -141,17 +146,18 @@ def outcome_tracker_count_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", _text(metadata.get("generated_at"))])
-        writer.writerow(["user_id", _text(metadata.get("user_id"))])
-        writer.writerow(["format_version", _text(metadata.get("format_version", "1"))])
-        writer.writerow([])
+        write_row(writer, ["generated_at", _text(metadata.get("generated_at"))])
+        write_row(writer, ["user_id", _text(metadata.get("user_id"))])
+        write_row(writer, ["format_version", _text(metadata.get("format_version", "1"))])
+        write_row(writer, [])
 
-    writer.writerow(["project_id", "outcome_tracker_count"])
-    writer.writerow(
+    write_row(writer, ["project_id", "outcome_tracker_count"])
+    write_row(
+        writer,
         [
             _text(row.get("project_id")),
             _text(row.get("outcome_tracker_count")),
-        ]
+        ],
     )
     return buffer.getvalue()
 

@@ -22,6 +22,8 @@ import json
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 FORMAT_VERSION: str = "1"
 
 _SUMMARY_KEYS: tuple[str, ...] = (
@@ -101,7 +103,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write one CSV row with the formula guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _json_safe(value: Any) -> Any:
@@ -271,16 +273,19 @@ def validation_dashboard_to_json(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     """Render a validation-dashboard payload as a strict JSON envelope."""
-    return json.dumps(
-        {
-            "metadata": _json_safe(metadata or {}),
-            "validation_dashboard": _json_safe(_as_dict(payload)),
-        },
-        default=str,
-        ensure_ascii=False,
-        indent=2,
-        allow_nan=False,
-    ) + "\n"
+    return (
+        json.dumps(
+            {
+                "metadata": _json_safe(metadata or {}),
+                "validation_dashboard": _json_safe(_as_dict(payload)),
+            },
+            default=str,
+            ensure_ascii=False,
+            indent=2,
+            allow_nan=False,
+        )
+        + "\n"
+    )
 
 
 # Summary metrics stored as 0–1 fractions but read best as percentages in
@@ -347,9 +352,7 @@ _FRESHNESS_LABELS: dict[str, str] = {
     "oldest_days_since_evidence": "Oldest evidence (days)",
 }
 
-_FRESHNESS_PCT_KEYS: frozenset[str] = frozenset(
-    {"fresh_share_of_tested_pct", "stale_share_pct"}
-)
+_FRESHNESS_PCT_KEYS: frozenset[str] = frozenset({"fresh_share_of_tested_pct", "stale_share_pct"})
 
 _QUEUE_HEADERS: tuple[str, ...] = (
     "assumption_id",
@@ -431,13 +434,8 @@ def validation_dashboard_to_markdown(
         if key not in summary_rows:
             continue
         value = summary_rows[key]
-        rendered = (
-            _md_pct(value) if key in _PCT_SUMMARY_KEYS else _md_cell(value)
-        )
-        lines.append(
-            f"| {_escape_md_cell(_SUMMARY_LABELS.get(key, key))} "
-            f"| {rendered} |"
-        )
+        rendered = _md_pct(value) if key in _PCT_SUMMARY_KEYS else _md_cell(value)
+        lines.append(f"| {_escape_md_cell(_SUMMARY_LABELS.get(key, key))} | {rendered} |")
     lines.append("")
 
     lines.append("## Validation Milestones")
@@ -446,9 +444,7 @@ def validation_dashboard_to_markdown(
     lines.append("| --- | --- |")
     for key in _MILESTONE_KEYS:
         event_id = milestones.get(key)
-        rendered = (
-            _escape_md_cell(event_id) if event_id is not None else "—"
-        )
+        rendered = _escape_md_cell(event_id) if event_id is not None else "—"
         lines.append(f"| {_MILESTONE_LABELS[key]} | {rendered} |")
     lines.append("")
 
@@ -460,15 +456,8 @@ def validation_dashboard_to_markdown(
         lines.append("| --- | --- |")
         for key in _FRESHNESS_LABELS:
             value = freshness.get(key)
-            rendered = (
-                _md_pct(value)
-                if key in _FRESHNESS_PCT_KEYS
-                else _md_cell(value)
-            )
-            lines.append(
-                f"| {_escape_md_cell(_FRESHNESS_LABELS[key])} "
-                f"| {rendered} |"
-            )
+            rendered = _md_pct(value) if key in _FRESHNESS_PCT_KEYS else _md_cell(value)
+            lines.append(f"| {_escape_md_cell(_FRESHNESS_LABELS[key])} | {rendered} |")
         lines.append("")
 
         queue = data.get("retest_queue_top")
@@ -477,9 +466,7 @@ def validation_dashboard_to_markdown(
             if actionable:
                 lines.append("### Top Re-tests")
                 lines.append("")
-                lines.append(
-                    "| Assumption | Days since evidence | Freshness |"
-                )
+                lines.append("| Assumption | Days since evidence | Freshness |")
                 lines.append("| --- | ---: | --- |")
                 for raw_row in actionable:
                     item = _as_dict(raw_row)
@@ -495,8 +482,7 @@ def validation_dashboard_to_markdown(
         lines.append("## Assumptions")
         lines.append("")
         header = (
-            "| # | Assumption | Category | Sensitivity | Evidence | "
-            "Latest | Confidence | Status |"
+            "| # | Assumption | Category | Sensitivity | Evidence | Latest | Confidence | Status |"
         )
         lines.append(header)
         lines.append("| ---: | --- | --- | --- | ---: | --- | --- | --- |")

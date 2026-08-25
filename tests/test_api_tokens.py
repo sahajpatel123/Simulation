@@ -8,6 +8,7 @@ Uses an in-memory SQLite database so no PostgreSQL/Redis is required.
 
 from __future__ import annotations
 
+import hashlib
 import sys
 import types
 from datetime import UTC, datetime, timedelta
@@ -138,16 +139,103 @@ def test_generate_token_is_prefixed_unique_and_hashed() -> None:
     b = generate_api_token()
     assert a.startswith(API_TOKEN_PREFIX)
     assert a != b
-    # Characterization of at-rest hashing: 64-char lowercase hex,
-    # deterministic per token, distinct across tokens. (Deliberately
-    # does NOT recompute SHA-256 here — the primitive choice lives in
-    # app/core/security.py with its own justification.)
+    # Characterization of at-rest hashing: "v2:" prefix + 64-char lowercase
+    # hex (HMAC-SHA256), deterministic per token, distinct across tokens.
+    # (Deliberately does NOT recompute the HMAC here — the primitive choice
+    # lives in app/core/security.py with its own justification.)
     digest_a = hash_api_token(a)
-    assert len(digest_a) == 64
-    assert digest_a == digest_a.lower()
-    assert all(ch in "0123456789abcdef" for ch in digest_a)
+    assert digest_a.startswith("v2:")
+    hex_part = digest_a.removeprefix("v2:")
+    assert len(hex_part) == 64
+    assert hex_part == hex_part.lower()
+    assert all(ch in "0123456789abcdef" for ch in hex_part)
     assert hash_api_token(a) == digest_a
     assert digest_a != hash_api_token(b)
+
+
+def test_lookup_matches_legacy_sha256_rows() -> None:
+    """Pre-upgrade rows hold a bare SHA-256 hex digest and must still auth."""
+    from app.core.security import api_token_hash_candidates
+
+    # Fixed sample rather than generate_api_token(): the property under
+    # test is digest-format compatibility for an arbitrary presented
+    # token, so a hermetic literal exercises exactly the same mapping.
+    plaintext = (
+        "thecee_legacy_sample_presented_token_for_digest_format_checks"
+    )
+    legacy_hash = hashlib.sha256(plaintext.encode("utf-8")).hexdigest()
+
+    candidates = api_token_hash_candidates(plaintext)
+    assert candidates[0] == hash_api_token(plaintext)  # current form first
+    assert legacy_hash in candidates  # legacy row keeps matching
+    assert len(candidates) == 2
+
+
+def test_lookup_upgrades_legacy_row_to_v2_digest(db_session) -> None:
+    """A matching legacy bare-SHA256 row is rewritten to the v2 HMAC form."""
+    from app.core.deps import lookup_api_token_row
+    from app.core.security import API_TOKEN_HASH_V2_PREFIX
+
+    user = _user(db_session)
+    # Hermetic literal: same reasoning as the digest-format test above.
+    plaintext = (
+        "thecee_legacy_sample_presented_token_for_upgrade_path_checks"
+    )
+    row = ApiToken(
+        user_id=user.id,
+        name="legacy",
+        token_hash=hashlib.sha256(plaintext.encode("utf-8")).hexdigest(),
+        scope="read",
+        expires_at=api_token_expiry(90),
+    )
+    db_session.add(row)
+    db_session.commit()
+    db_session.refresh(row)
+
+    resolved = lookup_api_token_row(db_session, plaintext)
+
+    assert resolved is not None and resolved.id == row.id
+    db_session.refresh(row)
+    assert row.token_hash.startswith(API_TOKEN_HASH_V2_PREFIX)
+    assert row.token_hash == hash_api_token(plaintext)
+
+
+def test_lookup_leaves_v2_rows_untouched(db_session) -> None:
+    """A current-form row resolves without any digest rewrite."""
+    from app.core.deps import lookup_api_token_row
+
+    user = _user(db_session)
+    plaintext = generate_api_token()
+    original_hash = hash_api_token(plaintext)
+    row = ApiToken(
+        user_id=user.id,
+        name="current",
+        token_hash=original_hash,
+        scope="read",
+        expires_at=api_token_expiry(90),
+    )
+    db_session.add(row)
+    db_session.commit()
+    db_session.refresh(row)
+
+    resolved = lookup_api_token_row(db_session, plaintext)
+
+    assert resolved is not None and resolved.id == row.id
+    db_session.refresh(row)
+    assert row.token_hash == original_hash
+
+
+def test_lookup_of_unknown_token_is_none_without_writes(db_session) -> None:
+    """An unmatched presented token resolves to None and writes nothing."""
+    from app.core.deps import lookup_api_token_row
+
+    _user(db_session)
+    row, _ = _token_row(db_session, user_id=7)
+    before = row.token_hash
+
+    assert lookup_api_token_row(db_session, generate_api_token()) is None
+    db_session.refresh(row)
+    assert row.token_hash == before
 
 
 def test_api_token_expiry_defaults_and_bounds() -> None:

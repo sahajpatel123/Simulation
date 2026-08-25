@@ -10,7 +10,6 @@ from fastapi import HTTPException
 
 from app.simulation.launch_checklist import build_launch_checklist
 
-
 if "razorpay" not in sys.modules:
     stub = types.ModuleType("razorpay")
     stub.Client = object  # type: ignore[attr-defined]

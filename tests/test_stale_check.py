@@ -5,8 +5,7 @@ a DB.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
+from datetime import UTC, datetime, timedelta
 
 
 def test_public_allowlist_matches_callers() -> None:
@@ -45,7 +44,7 @@ def test_digest_fresh_everything_is_zero_stale() -> None:
         build_stale_check,
     )
 
-    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 1, tzinfo=UTC)
     fresh = now - timedelta(days=1)
     out = build_stale_check(
         fresh, fresh, fresh, fresh, fresh, fresh, now=now,
@@ -57,12 +56,12 @@ def test_digest_fresh_everything_is_zero_stale() -> None:
 def test_digest_sim_at_threshold_is_watch() -> None:
     """Sim source 14d old (threshold) -> watch, not critical."""
     from app.simulation.stale_check import (
-        SIM_STALE_DAYS,
         SIGNAL_WATCH,
+        SIM_STALE_DAYS,
         build_stale_check,
     )
 
-    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 1, tzinfo=UTC)
     sim_at = now - timedelta(days=SIM_STALE_DAYS)
     out = build_stale_check(
         None, sim_at, None, None, None, None, now=now,
@@ -76,12 +75,12 @@ def test_digest_sim_at_threshold_is_watch() -> None:
 def test_digest_sim_at_double_threshold_is_critical() -> None:
     """Sim source 28d old (>2x threshold) -> critical."""
     from app.simulation.stale_check import (
-        SIM_STALE_DAYS,
         SIGNAL_CRITICAL,
+        SIM_STALE_DAYS,
         build_stale_check,
     )
 
-    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 1, tzinfo=UTC)
     sim_at = now - timedelta(days=SIM_STALE_DAYS * 2)
     out = build_stale_check(
         None, sim_at, None, None, None, None, now=now,
@@ -96,7 +95,7 @@ def test_digest_sim_at_double_threshold_is_critical() -> None:
 def test_digest_naive_datetime_coerced_to_utc() -> None:
     from app.simulation.stale_check import build_stale_check
 
-    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 1, tzinfo=UTC)
     naive = datetime(2026, 5, 20)  # 12 days ago
     out = build_stale_check(None, naive, None, None, None, None,
                             now=now)
@@ -128,7 +127,7 @@ def test_digest_key_signal_watch_at_1_stale() -> None:
     )
 
     # 5 sources fresh + 1 missing = 1 stale = watch.
-    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 1, tzinfo=UTC)
     fresh = now - timedelta(days=1)
     out = build_stale_check(
         fresh, fresh, fresh, fresh, fresh, None, now=now,
@@ -161,7 +160,7 @@ def test_digest_narrative_critical_sources_mention() -> None:
 def test_digest_narrative_fresh_message() -> None:
     from app.simulation.stale_check import build_stale_check
 
-    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 1, tzinfo=UTC)
     fresh = now - timedelta(days=1)
     out = build_stale_check(
         fresh, fresh, fresh, fresh, fresh, fresh, now=now,
@@ -175,7 +174,7 @@ def test_digest_recommendation_text_for_watch() -> None:
         build_stale_check,
     )
 
-    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 1, tzinfo=UTC)
     dec_at = now - timedelta(days=DECISIONS_STALE_DAYS + 1)
     out = build_stale_check(
         None, None, None, dec_at, None, None, now=now,
@@ -232,7 +231,7 @@ def test_digest_schema_default_shape() -> None:
 def test_digest_each_source_has_recommendation() -> None:
     from app.simulation.stale_check import build_stale_check
 
-    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 1, tzinfo=UTC)
     fresh = now - timedelta(days=1)
     very_old = now - timedelta(days=100)
     out = build_stale_check(

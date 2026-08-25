@@ -6,7 +6,6 @@ a DB.
 from __future__ import annotations
 
 
-
 def test_public_allowlist_matches_callers() -> None:
     from app.simulation import recommendations_digest
 

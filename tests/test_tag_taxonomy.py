@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 
-
 def test_public_allowlist_matches_callers():
     from app.simulation import tag_taxonomy
     assert set(tag_taxonomy.__all__) == {

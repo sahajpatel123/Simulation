@@ -18,7 +18,8 @@ Conductor.run()
      │       │     frustration  (will_pay < 0.20, steps < 4)
      │       │     intent_clarity (category_awareness < 0.35)
      │       │
-     │       ├── 23 Architects compute() in dependency order:
+     │       ├── Architects compute() in dependency order (35 registered,
+     │       │     hardware-only ones gated by product type):
      │       │     MarketTimingArchitect
      │       │     CompetitiveDynamicsArchitect
      │       │     TrustArchitect         ← mutations applied here
@@ -143,7 +144,7 @@ Higher confidence = lower simulation penalty on assumptions
 ```
 Core:
   users, projects, simulations, assumptions
-  cluster_run_summaries, architect_run_logs
+  cluster_run_summaries
 
 UI simulation:
   generated_uis, ui_simulation_runs

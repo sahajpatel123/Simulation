@@ -9,11 +9,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
-    # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
-    from app.models.api_token import ApiToken
-
-    # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
-    from app.models.project import Project
+    # Module-style imports + fully qualified string annotations below: these
+    # peer-model edges stay type-checker visible while carrying no
+    # module-level ``from``-imports, so no cyclic-import pattern exists.
+    import app.models.api_token
+    import app.models.project
 
 
 class User(Base, TimestampMixin):
@@ -49,9 +49,12 @@ class User(Base, TimestampMixin):
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     retention_email_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    projects: Mapped[list[Project]] = relationship(
+    # Quoted despite future-annotations: unquoted dotted paths are
+    # module-level attribute uses that re-trigger the cyclic-import pattern
+    # this file layout exists to avoid.
+    projects: Mapped[list["app.models.project.Project"]] = relationship(  # noqa: UP037
         "Project", back_populates="user", cascade="all, delete-orphan"
     )
-    api_tokens: Mapped[list[ApiToken]] = relationship(
+    api_tokens: Mapped[list["app.models.api_token.ApiToken"]] = relationship(  # noqa: UP037
         "ApiToken", back_populates="user", cascade="all, delete-orphan"
     )

@@ -23,6 +23,8 @@ import json
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 FORMAT_VERSION: str = "1"
 
 _SUMMARY_KEYS: tuple[str, ...] = (
@@ -99,7 +101,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write one CSV row with the formula guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _cell(item: dict[str, Any], key: str) -> object:
@@ -163,9 +165,7 @@ def _flatten_actions(data: dict[str, Any]) -> list[dict[str, Any]]:
                     "title": act.get("title", ""),
                     "method_label": act.get("method_label", ""),
                     "cost_tier": act.get("cost_tier", ""),
-                    "estimated_duration_days": act.get(
-                        "estimated_duration_days"
-                    ),
+                    "estimated_duration_days": act.get("estimated_duration_days"),
                     "success_threshold": act.get("success_threshold", ""),
                 }
             )
@@ -194,9 +194,7 @@ def recovery_plan_to_csv(
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             _write_row(writer, [key, value])
         else:
-            _write_row(
-                writer, [key, _text(value) if value is not None else ""]
-            )
+            _write_row(writer, [key, _text(value) if value is not None else ""])
     for theme, count in sorted((_as_dict(data.get("theme_counts"))).items()):
         _write_row(writer, [f"theme:{theme}", count])
     _write_row(writer, [])
@@ -229,16 +227,19 @@ def recovery_plan_to_json(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     """Render a recovery-plan payload as a strict JSON envelope."""
-    return json.dumps(
-        {
-            "metadata": _json_safe(metadata or {}),
-            "recovery_plan": _json_safe(_as_dict(payload)),
-        },
-        default=str,
-        ensure_ascii=False,
-        indent=2,
-        allow_nan=False,
-    ) + "\n"
+    return (
+        json.dumps(
+            {
+                "metadata": _json_safe(metadata or {}),
+                "recovery_plan": _json_safe(_as_dict(payload)),
+            },
+            default=str,
+            ensure_ascii=False,
+            indent=2,
+            allow_nan=False,
+        )
+        + "\n"
+    )
 
 
 def _escape_md_cell(value: Any) -> str:
@@ -287,8 +288,7 @@ def recovery_plan_to_markdown(
     lines.append("| --- | --- |")
     for key in _SUMMARY_KEYS:
         lines.append(
-            f"| {_escape_md_cell(_SUMMARY_LABELS.get(key, key))} "
-            f"| {_md_cell(data.get(key))} |"
+            f"| {_escape_md_cell(_SUMMARY_LABELS.get(key, key))} | {_md_cell(data.get(key))} |"
         )
     themes = _as_dict(data.get("theme_counts"))
     for theme, count in sorted(themes.items()):
@@ -299,8 +299,7 @@ def recovery_plan_to_markdown(
         lines.append("## Recovery Plays")
         lines.append("")
         lines.append(
-            "| # | Assumption | Trigger | Theme | Play | Method "
-            "| Cost | Days | Success bar |"
+            "| # | Assumption | Trigger | Theme | Play | Method | Cost | Days | Success bar |"
         )
         lines.append("| ---: | --- | --- | --- | --- | --- | --- | ---: | --- |")
         for raw_row in rows:
@@ -340,9 +339,7 @@ def recovery_plan_to_markdown(
     if project_id:
         footer.append(f"Project {project_id}")
     if metadata and metadata.get("generated_at"):
-        footer.append(
-            f"Generated {_escape_md_cell(_text(metadata['generated_at']))}"
-        )
+        footer.append(f"Generated {_escape_md_cell(_text(metadata['generated_at']))}")
     lines.append(f"*{' · '.join(footer)}*")
     lines.append("")
 

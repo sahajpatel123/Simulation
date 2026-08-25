@@ -6,15 +6,26 @@ is verifiable in tests without spinning up Postgres.
 
 The plaintext token is never persisted — only its SHA-256 hex digest.
 """
+
 from __future__ import annotations
 
 import hashlib
+import json
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 DEFAULT_TTL_DAYS = 30
 TOKEN_BYTES = 32  # 32 bytes → 43-char URL-safe base64 (no padding)
+
+# Share links are credentials minted by the owner but read by anyone who
+# receives them, so their lifetime must stay bounded even if a future
+# version of the (currently empty, deliberately reserved) mint-request body
+# starts accepting a client-supplied TTL. Clamping here means every expiry
+# in the system flows through one auditable bound — no caller can mint a
+# effectively never-expiring link or a negative-TTL one.
+MIN_TTL_DAYS = 1
+MAX_TTL_DAYS = 365
 
 
 # ---------------------------------------------------------------------------
@@ -38,11 +49,15 @@ def hash_token(token: str) -> str:
 
 
 def compute_expiry(now: datetime | None = None, ttl_days: int = DEFAULT_TTL_DAYS) -> datetime:
-    """Return UTC expiry = now + ttl_days. Caller is responsible for tz."""
+    """Return UTC expiry = now + ttl_days, clamped to [MIN_TTL_DAYS, MAX_TTL_DAYS].
+
+    Caller is responsible for tz.
+    """
     base = now or datetime.now(UTC)
     if base.tzinfo is None:
         base = base.replace(tzinfo=UTC)
-    return base + timedelta(days=ttl_days)
+    clamped = max(MIN_TTL_DAYS, min(int(ttl_days), MAX_TTL_DAYS))
+    return base + timedelta(days=clamped)
 
 
 def is_expired(expires_at: datetime, now: datetime | None = None) -> bool:
@@ -74,10 +89,8 @@ def _coerce_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
     if isinstance(value, str):
-        import json as _json
-
         try:
-            parsed = _json.loads(value)
+            parsed = json.loads(value)
             return parsed if isinstance(parsed, dict) else {}
         except (ValueError, TypeError):
             return {}
@@ -122,10 +135,7 @@ def anonymise_simulation(
                 ),
                 "severity": str(f.get("severity") or "INFO").upper(),
                 "narrative": str(
-                    f.get("narrative")
-                    or f.get("description")
-                    or f.get("summary")
-                    or ""
+                    f.get("narrative") or f.get("description") or f.get("summary") or ""
                 ),
             }
         )
@@ -142,8 +152,7 @@ def anonymise_simulation(
 
     return {
         "project_title": project_title,
-        "product_type_detected": str(results.get("product_type_detected") or "")
-        or None,
+        "product_type_detected": str(results.get("product_type_detected") or "") or None,
         "status": str(sim_row.get("status") or "UNKNOWN").upper(),
         "signal_quality": (
             _safe_float(sim_row.get("signal_quality"))
@@ -151,14 +160,12 @@ def anonymise_simulation(
             else None
         ),
         "population_weighted_conversion": _safe_float(
-            results.get("population_weighted_conversion")
-            or results.get("conversion_rate")
+            results.get("population_weighted_conversion") or results.get("conversion_rate")
         ),
         "revenue_projection": (
             _safe_float(revenue_projection) if revenue_projection is not None else None
         ),
-        "primary_failure_domain": str(results.get("primary_failure_domain") or "")
-        or None,
+        "primary_failure_domain": str(results.get("primary_failure_domain") or "") or None,
         "funnel": funnel,
         "domain_findings": domain_findings,
         "shared_at": shared_at.isoformat(),
@@ -168,6 +175,8 @@ def anonymise_simulation(
 
 __all__ = [
     "DEFAULT_TTL_DAYS",
+    "MIN_TTL_DAYS",
+    "MAX_TTL_DAYS",
     "generate_token",
     "hash_token",
     "compute_expiry",

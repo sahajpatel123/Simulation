@@ -7,10 +7,9 @@ razorpay stub (same pattern as the other route tests).
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Public surface
@@ -283,7 +282,6 @@ def test_feed_narrative_mentions_counts() -> None:
 
 def test_feed_key_signals_recent_failures() -> None:
     from app.simulation.activity_feed import (
-        SIGNAL_CRITICAL,
         SIGNAL_WATCH,
         build_activity_feed,
     )
@@ -343,7 +341,7 @@ def test_feed_handles_datetime_objects() -> None:
         sims=[{
             "id": 1, "status": "PENDING",
             "created_at": datetime(
-                2026, 1, 1, tzinfo=timezone.utc,
+                2026, 1, 1, tzinfo=UTC,
             ),
         }],
     )

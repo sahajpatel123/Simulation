@@ -7,6 +7,7 @@ versioned finding shapes (``domain_findings``, ``findings``, or a raw
 list) with safe defaults for missing fields. It supports both
 spreadsheet-friendly CSV and a founder-facing Markdown brief.
 """
+
 from __future__ import annotations
 
 import csv
@@ -15,6 +16,8 @@ import json
 import math
 import re
 from typing import Any
+
+from app.simulation.export_utils import write_row
 
 
 def _coerce_results(value: Any) -> Any:
@@ -75,12 +78,13 @@ def findings_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", _safe_text(metadata.get("generated_at"))])
-        writer.writerow(["user_id", _safe_text(metadata.get("user_id"))])
-        writer.writerow(["format_version", _safe_text(metadata.get("format_version", "1"))])
-        writer.writerow([])
+        write_row(writer, ["generated_at", _safe_text(metadata.get("generated_at"))])
+        write_row(writer, ["user_id", _safe_text(metadata.get("user_id"))])
+        write_row(writer, ["format_version", _safe_text(metadata.get("format_version", "1"))])
+        write_row(writer, [])
 
-    writer.writerow(
+    write_row(
+        writer,
         [
             "simulation_id",
             "project_id",
@@ -92,10 +96,11 @@ def findings_to_csv(
             "metric_affected",
             "recommended_action",
             "conversion_impact",
-        ]
+        ],
     )
     for finding in findings:
-        writer.writerow(
+        write_row(
+            writer,
             [
                 _safe_text(simulation_id),
                 _safe_text(project_id),
@@ -107,7 +112,7 @@ def findings_to_csv(
                 _safe_text(finding.get("metric_affected", "")),
                 _safe_text(finding.get("recommended_action", "")),
                 f"{_safe_float(finding.get('conversion_impact')):.4f}",
-            ]
+            ],
         )
     return buffer.getvalue()
 
@@ -139,9 +144,7 @@ def findings_to_markdown(
     critical = [row for row in rows if row["severity"] == "CRITICAL"]
     warning = [row for row in rows if row["severity"] == "WARNING"]
     info = [row for row in rows if row["severity"] == "INFO"]
-    other = [
-        row for row in rows if row["severity"] not in ("CRITICAL", "WARNING", "INFO")
-    ]
+    other = [row for row in rows if row["severity"] not in ("CRITICAL", "WARNING", "INFO")]
     total_impact = sum(_safe_float(row.get("conversion_impact")) for row in rows)
     table_limit = max(0, int(max_table_rows))
     top_rows = rows[:table_limit] if table_limit else []
@@ -174,10 +177,7 @@ def findings_to_markdown(
         lines.append(f"| Other | {len(other)} |")
     lines.append(f"| Combined conversion impact | {total_impact:.2%} |")
     if primary_failure_domain:
-        lines.append(
-            "| Primary failure domain | "
-            f"{_escape_md_cell(str(primary_failure_domain))} |"
-        )
+        lines.append(f"| Primary failure domain | {_escape_md_cell(str(primary_failure_domain))} |")
     lines.append("")
 
     lines.append("## Top Findings")
@@ -197,12 +197,9 @@ def findings_to_markdown(
             finding = _escape_md_cell(_safe_text(row.get("finding")))
             impact = _safe_float(row.get("conversion_impact"))
             lines.append(
-                f"| {index} | {severity} | {architect} | {cluster} | {finding} | "
-                f"{impact:.2%} |"
+                f"| {index} | {severity} | {architect} | {cluster} | {finding} | {impact:.2%} |"
             )
-        lines.append(
-            ""
-        )
+        lines.append("")
     else:
         lines.append("")
 
@@ -213,9 +210,7 @@ def findings_to_markdown(
         lines.append("No recommended actions are available for the current findings.")
     else:
         for action, impacted in actions:
-            bullets = " ".join(
-                f"`{_escape_md_cell(str(item))}`" for item in impacted[:6]
-            )
+            bullets = " ".join(f"`{_escape_md_cell(str(item))}`" for item in impacted[:6])
             lines.append(f"- **{_escape_md_cell(action)}**")
             if bullets:
                 lines.append(f"  {bullets}")
@@ -301,17 +296,18 @@ def findings_count_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     if metadata:
-        writer.writerow(["generated_at", _safe_text(metadata.get("generated_at"))])
-        writer.writerow(["user_id", _safe_text(metadata.get("user_id"))])
-        writer.writerow(["format_version", _safe_text(metadata.get("format_version", "1"))])
-        writer.writerow([])
+        write_row(writer, ["generated_at", _safe_text(metadata.get("generated_at"))])
+        write_row(writer, ["user_id", _safe_text(metadata.get("user_id"))])
+        write_row(writer, ["format_version", _safe_text(metadata.get("format_version", "1"))])
+        write_row(writer, [])
 
-    writer.writerow(["simulation_id", "findings_count"])
-    writer.writerow(
+    write_row(writer, ["simulation_id", "findings_count"])
+    write_row(
+        writer,
         [
             _safe_text(row.get("simulation_id")),
             _safe_text(row.get("findings_count")),
-        ]
+        ],
     )
     return buffer.getvalue()
 

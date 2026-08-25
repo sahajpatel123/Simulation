@@ -36,7 +36,7 @@ Output shape
 """
 from __future__ import annotations
 
-from datetime import UTC
+from datetime import UTC, datetime
 
 # Cap on top_interventions — dashboard tile stays readable.
 MAX_TOP: int = 5
@@ -92,7 +92,6 @@ def _is_quick_win(item: dict) -> bool:
 def _format_stale_flag(generated_at: object | None, now: object) -> bool:
     if not generated_at:
         return True
-    from datetime import datetime
 
     gen = generated_at
     if isinstance(gen, str):

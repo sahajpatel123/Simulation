@@ -20,14 +20,13 @@ from typing import Any
 import pytest
 
 from app.simulation.profiles import (
+    SCENARIO_TRAIT_ADJUSTMENTS,
     AgentProfile,
     AgentProfileGenerator,
     DeviceType,
     IncomeBracket,
     Region,
-    SCENARIO_TRAIT_ADJUSTMENTS,
 )
-
 
 # ---------------------------------------------------------------------------
 # AgentProfile dataclass

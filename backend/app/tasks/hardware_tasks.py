@@ -8,13 +8,13 @@ logger = logging.getLogger(__name__)
 
 from sqlalchemy import text
 
+from app.core.celery_app import celery_app
 from app.core.database import SessionLocal
 from app.core.tier_enforcement import enforce_hardware_access
 from app.hardware.physics_engine import PhysicsSimulationEngine
 from app.hardware.test_configs import TestConfigBuilder
 from app.models.project import Project
 from app.models.user import User
-from app.worker import celery_app
 
 engine = PhysicsSimulationEngine()
 builder = TestConfigBuilder()

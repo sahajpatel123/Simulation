@@ -1,8 +1,7 @@
 """Tests for the per-user recent-outcomes helper."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
+from datetime import UTC, datetime
 
 
 def test_public_allowlist_matches_callers():
@@ -40,7 +39,7 @@ def test_normalizes_alternate_field_names():
         {
             "id": 1, "project_id": 2,
             "actual_cr": 0.05,
-            "recorded_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+            "recorded_at": datetime(2026, 1, 1, tzinfo=UTC),
         },
     ])
     assert out["outcomes"][0]["outcome_id"] == 1
@@ -67,7 +66,7 @@ def test_handles_datetime_object():
         {
             "outcome_id": 1, "project_id": 1,
             "actual_conversion_rate": 0.05,
-            "created_at": datetime(2026, 1, 5, tzinfo=timezone.utc),
+            "created_at": datetime(2026, 1, 5, tzinfo=UTC),
         },
     ])
     assert "2026-01-05" in out["outcomes"][0]["created_at"]

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import sys
 import types
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -14,7 +14,6 @@ from app.simulation.project_comparison import (
     build_project_comparison,
     normalise_confidence_score,
 )
-
 
 if "razorpay" not in sys.modules:
     _razorpay_stub = types.ModuleType("razorpay")
@@ -168,7 +167,7 @@ class _FakeProject:
         self.id = project_id
         self.title = f"Project {project_id}"
         self.status = "ACTIVE"
-        self.brief_completed_at = datetime.now(timezone.utc)
+        self.brief_completed_at = datetime.now(UTC)
 
 
 class _FakeSimulation:

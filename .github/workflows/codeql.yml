@@ -39,17 +39,30 @@ jobs:
           persist-credentials: false
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           languages: ${{ matrix.language }}
           # security-and-quality covers the full default security suite plus
           # maintainability/correctness queries for both Python and JavaScript.
+          #
+          # NOTE: the in-repo model pack (codeql-custom-queries-python/, which
+          # teaches CodeQL that app.core.security.log_safe() strips CR/LF) is
+          # deliberately NOT wired here yet. The `packs:` input resolves
+          # `scope/name[@version][:path]` specs exclusively from the GitHub
+          # Container registry — `:path` selects queries WITHIN a published
+          # pack and cannot point at a local directory (confirmed against
+          # codeql-action v4.37.7 src/config/db-config.ts, its packaging
+          # PR-checks, and the GitHub docs). Wiring options for unpublished
+          # in-repo extension packs need proof before going live. Every
+          # py/log-injection finding was meanwhile eliminated at the source —
+          # untrusted values reach logs only through app.core.security.log_safe()
+          # — so nothing currently depends on the pack being wired.
           queries: security-and-quality
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/autobuild@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           category: '/language:${{ matrix.language }}'

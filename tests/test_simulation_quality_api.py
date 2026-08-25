@@ -9,7 +9,6 @@ from fastapi import HTTPException
 
 from app.simulation.clusters.registry import ClusterRegistry
 
-
 if "razorpay" not in sys.modules:
     stub = types.ModuleType("razorpay")
     stub.Client = object  # type: ignore[attr-defined]

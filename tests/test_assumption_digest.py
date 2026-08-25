@@ -7,10 +7,9 @@ razorpay stub (same pattern as the other route tests).
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Public surface
@@ -232,7 +231,7 @@ def test_digest_handles_datetime_objects() -> None:
             "id": 1, "text": "x", "sensitivity": "MEDIUM",
             "impact_score": 5.0, "is_hidden": False,
             "created_at": datetime(
-                2026, 1, 1, tzinfo=timezone.utc,
+                2026, 1, 1, tzinfo=UTC,
             ),
         },
     ])

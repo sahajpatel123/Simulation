@@ -23,6 +23,8 @@ import json
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 FORMAT_VERSION: str = "1"
 
 _HEADLINE_KEYS: tuple[str, ...] = (
@@ -167,35 +169,31 @@ def simulation_compare_to_csv(
     writer = csv.writer(buffer)
 
     for row in _metadata_rows(metadata):
-        writer.writerow(row)
+        write_row(writer, row)
 
-    writer.writerow([])
-    writer.writerow(["Headline"])
-    writer.writerow(["metric", "value"])
+    write_row(writer, [])
+    write_row(writer, ["Headline"])
+    write_row(writer, ["metric", "value"])
     for key in _HEADLINE_KEYS:
-        writer.writerow([key, _num_cell(headline.get(key))])
+        write_row(writer, [key, _num_cell(headline.get(key))])
 
-    writer.writerow([])
-    writer.writerow(["Stage Deltas"])
-    writer.writerow(list(_STAGE_HEADERS))
+    write_row(writer, [])
+    write_row(writer, ["Stage Deltas"])
+    write_row(writer, list(_STAGE_HEADERS))
     for raw in data.get("stage_deltas") or []:
         row = _as_dict(raw)
-        writer.writerow(
-            [_num_cell(row.get(key)) for key in _STAGE_HEADERS]
-        )
+        write_row(writer, [_num_cell(row.get(key)) for key in _STAGE_HEADERS])
 
-    writer.writerow([])
-    writer.writerow(["Cluster Movers"])
-    writer.writerow(list(_CLUSTER_HEADERS))
+    write_row(writer, [])
+    write_row(writer, ["Cluster Movers"])
+    write_row(writer, list(_CLUSTER_HEADERS))
     for raw in data.get("cluster_deltas") or []:
         row = _as_dict(raw)
-        writer.writerow(
-            [_num_cell(row.get(key)) for key in _CLUSTER_HEADERS]
-        )
+        write_row(writer, [_num_cell(row.get(key)) for key in _CLUSTER_HEADERS])
 
-    writer.writerow([])
-    writer.writerow(["Narrative", _csv_cell(data.get("narrative"))])
-    writer.writerow(["format_version", FORMAT_VERSION])
+    write_row(writer, [])
+    write_row(writer, ["Narrative", _csv_cell(data.get("narrative"))])
+    write_row(writer, ["format_version", FORMAT_VERSION])
 
     return buffer.getvalue()
 

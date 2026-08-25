@@ -19,6 +19,7 @@ a database.
 """
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from app.schemas.simulation_trend import RunDetail, RunSummary
@@ -44,9 +45,8 @@ def _coerce_results_dict(value: Any) -> dict[str, Any]:
         return value
     if isinstance(value, str):
         try:
-            import json as _json
 
-            parsed = _json.loads(value)
+            parsed = json.loads(value)
             return parsed if isinstance(parsed, dict) else {}
         except (ValueError, TypeError):
             return {}

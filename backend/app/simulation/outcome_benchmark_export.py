@@ -21,6 +21,8 @@ import json
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 FORMAT_VERSION = "1"
 
 
@@ -102,7 +104,7 @@ def _safe_csv_cell(value: Any) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with the formula-injection guard on every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:

@@ -1,8 +1,7 @@
 """Tests for the per-user decision-velocity helper."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
+from datetime import UTC, datetime, timedelta
 
 
 def test_public_allowlist_matches_callers():
@@ -28,7 +27,7 @@ def test_fast_verdict_when_under_4_hours():
     from app.simulation.decision_velocity import (
         build_decision_velocity,
     )
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_decision_velocity([
         (now, now + timedelta(hours=2)),
         (now, now + timedelta(hours=3)),
@@ -42,7 +41,7 @@ def test_normal_verdict_when_under_24_hours():
     from app.simulation.decision_velocity import (
         build_decision_velocity,
     )
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_decision_velocity([
         (now, now + timedelta(hours=10)),
     ])
@@ -53,7 +52,7 @@ def test_slow_verdict_when_over_24_hours():
     from app.simulation.decision_velocity import (
         build_decision_velocity,
     )
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_decision_velocity([
         (now, now + timedelta(hours=48)),
     ])
@@ -64,7 +63,7 @@ def test_skips_pairs_with_none_values():
     from app.simulation.decision_velocity import (
         build_decision_velocity,
     )
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_decision_velocity([
         (None, now + timedelta(hours=2)),
         (now, None),
@@ -78,7 +77,7 @@ def test_skips_negative_gaps():
     from app.simulation.decision_velocity import (
         build_decision_velocity,
     )
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_decision_velocity([
         (now, now - timedelta(hours=5)),  # negative
         (now, now + timedelta(hours=2)),  # valid
@@ -94,8 +93,8 @@ def test_skips_non_list_entries():
     out = build_decision_velocity([
         "not-a-list",
         None,
-        (datetime(2026, 1, 1, tzinfo=timezone.utc),
-         datetime(2026, 1, 1, 1, tzinfo=timezone.utc)),
+        (datetime(2026, 1, 1, tzinfo=UTC),
+         datetime(2026, 1, 1, 1, tzinfo=UTC)),
     ])
     assert out["sample_count"] == 1
 
@@ -104,7 +103,7 @@ def test_median_calculation_even_count():
     from app.simulation.decision_velocity import (
         build_decision_velocity,
     )
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_decision_velocity([
         (now, now + timedelta(hours=1)),
         (now, now + timedelta(hours=3)),
@@ -117,7 +116,7 @@ def test_median_calculation_odd_count():
     from app.simulation.decision_velocity import (
         build_decision_velocity,
     )
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_decision_velocity([
         (now, now + timedelta(hours=1)),
         (now, now + timedelta(hours=2)),
@@ -131,7 +130,7 @@ def test_fastest_and_slowest():
     from app.simulation.decision_velocity import (
         build_decision_velocity,
     )
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_decision_velocity([
         (now, now + timedelta(hours=1)),
         (now, now + timedelta(hours=10)),
@@ -167,7 +166,7 @@ def test_key_signal_present_when_data_exists():
     from app.simulation.decision_velocity import (
         build_decision_velocity,
     )
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_decision_velocity([
         (now, now + timedelta(hours=1)),
     ])
@@ -186,7 +185,7 @@ def test_narrative_mentions_verdict():
     from app.simulation.decision_velocity import (
         build_decision_velocity,
     )
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     out = build_decision_velocity([
         (now, now + timedelta(hours=2)),
     ])
@@ -215,7 +214,7 @@ def test_schema_round_trip():
     from app.simulation.decision_velocity import (
         build_decision_velocity,
     )
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     payload = build_decision_velocity([
         (now, now + timedelta(hours=3)),
     ])

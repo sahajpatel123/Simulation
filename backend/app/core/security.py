@@ -1,15 +1,14 @@
 import hashlib
+import hmac
 import re
 import secrets
 import string
 from datetime import UTC, datetime, timedelta
 
-from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
+import jwt
 
 from app.core.config import settings
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Matches CR/LF (log-forging line breaks) and other C0 control chars that
 # corrupt single-line log records.
@@ -28,16 +27,39 @@ def log_safe(value: object) -> str:
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    """Verify ``plain`` against a stored bcrypt digest.
+
+    Calls the maintained ``bcrypt`` package directly: passlib 1.7.4 is
+    unmaintained and its backend probe crashes against bcrypt ≥ 5 (the
+    ``__about__`` attribute it reads was removed), turning every hash or
+    verify into a ``ValueError`` regardless of input length. A malformed
+    or non-bcrypt digest in storage must read as "wrong password", never
+    as a crashed login.
+    """
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except ValueError:
+        return False
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    """Hash with bcrypt at the default cost (12 rounds), same as passlib wrote."""
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("ascii")
+
+
+# bcrypt only digests the first 72 bytes of any secret, and the backend
+# raises ``ValueError`` on longer input rather than silently truncating.
+# Enforce the ceiling at validation time so every caller gets one
+# consistent, client-visible rejection instead of a 500 — and so a hash
+# can never silently cover just the prefix of what the user typed.
+BCRYPT_MAX_PASSWORD_BYTES = 72
 
 
 def validate_password_strength(password: str) -> str:
     if len(password) < 10:
         raise ValueError("Password must be at least 10 characters")
+    if len(password.encode("utf-8")) > BCRYPT_MAX_PASSWORD_BYTES:
+        raise ValueError("Password must be at most 72 bytes (bcrypt limit)")
     if not any(ch.islower() for ch in password):
         raise ValueError("Password must include a lowercase letter")
     if not any(ch.isupper() for ch in password):
@@ -72,24 +94,60 @@ API_TOKEN_DEFAULT_DAYS: int = 90
 API_TOKEN_MIN_DAYS: int = 1
 API_TOKEN_MAX_DAYS: int = 365
 
+# Prefix marking the current (HMAC-keyed) digest generation in the
+# ``token_hash`` column; unprefixed rows are legacy bare SHA-256 hex digests.
+API_TOKEN_HASH_V2_PREFIX = "v2:"
+
 
 def generate_api_token() -> str:
     """Generate a fresh opaque API token (``thecee_`` + 256 bits of entropy)."""
     return f"{API_TOKEN_PREFIX}{secrets.token_urlsafe(32)}"
 
 
-def hash_api_token(token: str) -> str:
-    """Return the SHA-256 hex digest persisted instead of the plaintext token.
+def _api_token_digest_key() -> bytes:
+    """Domain-separated HMAC key for API-token digests.
 
-    SHA-256 is the right primitive here: the input is a 256-bit high-entropy
-    opaque token (``secrets.token_urlsafe``), not a human-chosen password, so
-    brute-forcing the digest is infeasible and a slow KDF would only add
-    per-request latency. Human passwords use bcrypt via ``pwd_context``.
+    Derived from ``SECRET_KEY`` through a labelled SHA-256 step so the
+    token-digest key and the JWT-signing key are independent streams even
+    though they share a root secret. Computed per call (microsecond cost)
+    so a rotated ``SECRET_KEY`` takes effect without a process restart.
     """
-    # codeql[py/weak-sensitive-data-hashing]: high-entropy opaque token (secrets.token_urlsafe),
-    # not a human password — brute-forcing SHA-256 of it is infeasible and a slow KDF would
-    # only add per-request latency; bcrypt covers actual passwords via pwd_context above.
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+    return hashlib.sha256(
+        b"thecee:api-token-digest:v2:" + settings.SECRET_KEY.encode("utf-8")
+    ).digest()
+
+
+def hash_api_token(token: str) -> str:
+    """Return the digest persisted instead of the plaintext token.
+
+    The current generation is a domain-separated HMAC-SHA256 (``v2:``
+    prefix): verifying a leaked database row against a guessed token now
+    also requires ``SECRET_KEY``, so the hash alone is no longer an
+    offline oracle. The token itself carries 256 bits of
+    ``secrets.token_urlsafe`` entropy, so this is defence-in-depth rather
+    than the primary barrier; human passwords still use bcrypt directly.
+    Rows written before this change hold a bare SHA-256
+    hex digest and keep authenticating through ``api_token_hash_candidates``
+    until they are revoked or re-issued.
+    """
+    return (
+        API_TOKEN_HASH_V2_PREFIX
+        + hmac.new(_api_token_digest_key(), token.encode("utf-8"), hashlib.sha256).hexdigest()
+    )
+
+
+def api_token_hash_candidates(token: str) -> list[str]:
+    """Every persisted digest form that could match ``token``.
+
+    Lookup sites must match against all accepted digest generations so a
+    pre-upgrade row keeps working until rotation while newly minted tokens
+    always store the strongest current form. Ordered newest-first so fresh
+    tokens hit on the first candidate.
+    """
+    return [
+        hash_api_token(token),
+        hashlib.sha256(token.encode("utf-8")).hexdigest(),
+    ]
 
 
 def api_token_expiry(expires_in_days: int | None = None) -> datetime:
@@ -132,9 +190,6 @@ def decode_token(token: str, token_type: str = "access") -> str | None:
     classic ``alg=none`` / HS-vs-RS confusion attacks, and explicitly
     requires ``exp``, ``sub`` and ``type`` so a token missing any of
     those claims fails closed rather than silently bypassing checks.
-
-    python-jose uses ``require_<claim>`` keys (not a ``require`` array)
-    to gate claim presence — see ``jose.jwt._validate_claims``.
     """
     try:
         payload = jwt.decode(
@@ -142,13 +197,11 @@ def decode_token(token: str, token_type: str = "access") -> str | None:
             settings.SECRET_KEY,
             algorithms=[settings.ALGORITHM],
             options={
-                "require_exp": True,
-                "require_sub": True,
-                "require_type": True,
+                "require": ["exp", "sub", "type"],
                 "verify_exp": True,
             },
         )
-    except JWTError:
+    except jwt.PyJWTError:
         return None
     if payload.get("type") != token_type:
         return None

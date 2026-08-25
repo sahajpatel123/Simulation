@@ -16,7 +16,6 @@ behaviour:
 """
 from __future__ import annotations
 
-
 from app.core.sanitiser import (
     MAX_ASSUMPTION_LENGTH,
     MAX_DESCRIPTION_LENGTH,
@@ -26,7 +25,6 @@ from app.core.sanitiser import (
     sanitise_dict,
     sanitise_text,
 )
-
 
 # ---------------------------------------------------------------------------
 # Empty / None / non-string inputs

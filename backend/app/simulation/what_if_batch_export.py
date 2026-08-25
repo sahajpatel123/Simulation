@@ -21,6 +21,7 @@ import json
 from typing import Any
 
 from app.schemas.what_if import WhatIfOut
+from app.simulation.export_utils import write_row
 
 
 def _as_dict(payload: Any) -> dict[str, Any]:
@@ -62,7 +63,7 @@ def _markdown_cell(value: object) -> str:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with the formula-injection guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
@@ -292,9 +293,7 @@ def what_if_batch_to_markdown(
     lines: list[str] = []
     lines.append(f"# What-If Batch — Simulation {data.get('simulation_id', '')}")
     lines.append("")
-    lines.append(
-        f"Project {data.get('project_id', '')} · status `{data.get('status', '')}`"
-    )
+    lines.append(f"Project {data.get('project_id', '')} · status `{data.get('status', '')}`")
     if metadata:
         lines.append(f"Exported {metadata.get('generated_at', '')}")
     lines.append("")
@@ -314,7 +313,9 @@ def what_if_batch_to_markdown(
     if not scenarios:
         lines.append("_No scenarios returned._")
     else:
-        lines.append("| Rank | Label | Base CR | Projected CR | Δ% | Direction | Sensitivity | Matched categories |")
+        lines.append(
+            "| Rank | Label | Base CR | Projected CR | Δ% | Direction | Sensitivity | Matched categories |"
+        )
         lines.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
         for ranked in scenarios:
             cells = [_markdown_cell(cell) for cell in _scenario_markdown_row(ranked)]
@@ -336,12 +337,8 @@ def what_if_batch_to_markdown(
             f"- Projected conversion: "
             f"{_markdown_cell(scenario.get('projected_conversion_rate', ''))}"
         )
-        lines.append(
-            f"- Delta %: {_markdown_cell(scenario.get('conversion_delta_pct', ''))}"
-        )
-        lines.append(
-            f"- Direction: {_markdown_cell(meta.get('dominant_direction', ''))}"
-        )
+        lines.append(f"- Delta %: {_markdown_cell(scenario.get('conversion_delta_pct', ''))}")
+        lines.append(f"- Direction: {_markdown_cell(meta.get('dominant_direction', ''))}")
         lines.append("")
 
     return "\n".join(lines)

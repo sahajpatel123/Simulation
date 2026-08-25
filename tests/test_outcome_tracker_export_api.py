@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import types
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 if "razorpay" not in sys.modules:
     stub = types.ModuleType("razorpay")
@@ -168,7 +168,7 @@ def test_export_outcome_tracker_json_uses_iso_timestamps() -> None:
         rows=[
             _TrackerRow(
                 1,
-                recorded_at=datetime(2026, 8, 1, tzinfo=timezone.utc),
+                recorded_at=datetime(2026, 8, 1, tzinfo=UTC),
                 actual=0.05,
             )
         ]

@@ -27,6 +27,8 @@ import json
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 CSV_HEADERS: list[str] = [
     "rank",
     "assumption_text",
@@ -86,7 +88,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with the formula-injection guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
@@ -216,15 +218,18 @@ def validation_experiment_plan_to_json(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     """Render a validation-experiment-plan payload as an indented JSON doc."""
-    return json.dumps(
-        {
-            "metadata": metadata or {},
-            "validation_experiment_plan": _as_dict(payload),
-        },
-        default=str,
-        indent=2,
-        ensure_ascii=False,
-    ) + "\n"
+    return (
+        json.dumps(
+            {
+                "metadata": metadata or {},
+                "validation_experiment_plan": _as_dict(payload),
+            },
+            default=str,
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n"
+    )
 
 
 _SUMMARY_LABELS: dict[str, str] = {

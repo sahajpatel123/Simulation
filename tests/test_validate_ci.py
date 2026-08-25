@@ -216,12 +216,144 @@ class TestWorkflowHygiene:
         errors = vci.validate_permissions()
         assert any("actions: write" in e for e in errors)
 
+    def test_workflow_level_write_scope_flagged(self, vci, tmp_path):
+        # The b39f77b1 pattern: writes belong on the job that needs them so
+        # a future job can't inherit them by accident.
+        _write_workflow(
+            tmp_path,
+            MINIMAL_WORKFLOW.replace(
+                "permissions:\n  contents: read",
+                "permissions:\n  contents: read\n  security-events: write",
+            ),
+        )
+        errors = vci.validate_permissions()
+        assert any("workflow-level write" in e and "security-events" in e for e in errors)
+
+    def test_job_level_write_scope_passes(self, vci, tmp_path):
+        body = MINIMAL_WORKFLOW.replace(
+            "jobs:",
+            "jobs:\n"
+            "  uploader:\n"
+            "    runs-on: ubuntu-latest\n"
+            "    timeout-minutes: 5\n"
+            "    permissions:\n"
+            "      security-events: write\n"
+            "    steps:\n"
+            "      - run: true",
+        )
+        _write_workflow(tmp_path, body)
+        assert vci.validate_permissions() == []
+
+    def test_string_permissions_rejected_without_crash(self, vci, tmp_path):
+        # ``permissions: read-all`` used to hit dict.get on a str.
+        _write_workflow(
+            tmp_path,
+            MINIMAL_WORKFLOW.replace(
+                "permissions:\n  contents: read", "permissions: read-all"
+            ),
+        )
+        errors = vci.validate_permissions()
+        assert len(errors) == 1
+        assert "scope map" in errors[0]
+
+    def test_job_level_string_permissions_rejected(self, vci, tmp_path):
+        body = MINIMAL_WORKFLOW.replace(
+            "jobs:",
+            "jobs:\n"
+            "  j2:\n"
+            "    runs-on: ubuntu-latest\n"
+            "    timeout-minutes: 5\n"
+            "    permissions: write-all\n"
+            "    steps:\n"
+            "      - run: true",
+        )
+        _write_workflow(tmp_path, body)
+        errors = vci.validate_permissions()
+        assert any("job j2" in e and "scope map" in e for e in errors)
+
     def test_minimal_valid_workflow_passes_hygiene(self, vci, tmp_path):
         _write_workflow(tmp_path, MINIMAL_WORKFLOW)
         assert vci.validate_permissions() == []
         assert vci.validate_timeouts() == []
         assert vci.validate_concurrency() == []
         assert vci.validate_workflow_dispatch() == []
+
+
+class TestLockSync:
+    """requirements.txt bumps must reach the hash-locked files CI installs."""
+
+    def _write(self, tmp_path: Path, requirements: str, lock: str, pytest_lock: str | None = None) -> None:
+        (tmp_path / "requirements.txt").write_text(textwrap.dedent(requirements))
+        (tmp_path / "requirements-lock.txt").write_text(textwrap.dedent(lock))
+        if pytest_lock is not None:
+            (tmp_path / "requirements-pytest-lock.txt").write_text(
+                textwrap.dedent(pytest_lock)
+            )
+
+    def test_in_sync_passes(self, vci, tmp_path):
+        self._write(
+            tmp_path,
+            """
+            fastapi==0.100.0
+            uvicorn[standard]==0.20.0
+            """,
+            """
+            # header comment
+            fastapi==0.100.0 \\
+                --hash=sha256:abcd
+            uvicorn[standard]==0.20.0 \\
+                --hash=sha256:beef
+            """,
+            """
+            fastapi==0.100.0 \\
+                --hash=sha256:abcd
+            uvicorn[standard]==0.20.0 \\
+                --hash=sha256:beef
+            pytest==9.1.1 \\
+                --hash=sha256:c0de
+            """,
+        )
+        assert vci.validate_lock_sync() == []
+
+    def test_version_drift_flagged(self, vci, tmp_path):
+        self._write(
+            tmp_path,
+            "fastapi==0.101.0\n",
+            "fastapi==0.100.0 \\\n    --hash=sha256:abcd\n",
+            "fastapi==0.100.0 \\\n    --hash=sha256:abcd\n",
+        )
+        errors = vci.validate_lock_sync()
+        assert len(errors) == 2
+        assert all("drifted" in e for e in errors)
+
+    def test_missing_package_flagged(self, vci, tmp_path):
+        self._write(
+            tmp_path,
+            "fastapi==0.100.0\nnewpkg==1.0.0\n",
+            "fastapi==0.100.0 \\\n    --hash=sha256:abcd\n",
+            "fastapi==0.100.0 \\\n    --hash=sha256:abcd\n",
+        )
+        errors = vci.validate_lock_sync()
+        assert len(errors) == 2
+        assert all("absent from the lock" in e and "newpkg" in e for e in errors)
+
+    def test_missing_lock_file_flagged(self, vci, tmp_path):
+        (tmp_path / "requirements.txt").write_text("fastapi==0.100.0\n")
+        errors = vci.validate_lock_sync()
+        assert len(errors) == 2
+        assert all("missing or has no pins" in e for e in errors)
+
+    def test_name_normalisation_and_comments_ignored(self, vci, tmp_path):
+        self._write(
+            tmp_path,
+            "# a comment\n\nPython_Multipart==0.0.20  # trailing comment\n",
+            "python-multipart==0.0.20 \\\n    --hash=sha256:abcd\n",
+            "python-multipart==0.0.20 \\\n    --hash=sha256:abcd\n",
+        )
+        assert vci.validate_lock_sync() == []
+
+    def test_no_requirements_txt_is_noop(self, vci, tmp_path):
+        assert vci.validate_lock_sync() == []
 
 
 class TestZizmorConfig:
@@ -240,3 +372,65 @@ class TestZizmorConfig:
         gh.mkdir(parents=True)
         (gh / "zizmor.yml").write_text("rules: {}\n")
         assert vci.validate_zizmor_config() == []
+
+
+class TestPreCommitPins:
+    @staticmethod
+    def _config(tmp_path: Path, body: str) -> None:
+        (tmp_path / ".pre-commit-config.yaml").write_text(textwrap.dedent(body))
+
+    def test_mutable_tag_flagged(self, vci, tmp_path):
+        self._config(
+            tmp_path,
+            """\
+            repos:
+              - repo: https://github.com/astral-sh/ruff-pre-commit
+                rev: v0.16.0
+                hooks:
+                  - id: ruff
+            """,
+        )
+        errors = vci.validate_pre_commit_pins()
+        assert len(errors) == 1
+        assert "ruff-pre-commit" in errors[0]
+        assert "40-hex" in errors[0]
+
+    def test_sha_pin_with_local_repo_passes(self, vci, tmp_path):
+        self._config(
+            tmp_path,
+            """\
+            repos:
+              - repo: https://github.com/pre-commit/pre-commit-hooks
+                rev: cef0300fd0fc4d2a87a85fa2093c6b283ea36f4b # v5.0.0
+                hooks:
+                  - id: trailing-whitespace
+              - repo: local
+                hooks:
+                  - id: validate-ci-hygiene
+                    entry: python3 tools/validate_ci.py
+                    language: system
+            """,
+        )
+        assert vci.validate_pre_commit_pins() == []
+
+    def test_short_sha_still_rejected(self, vci, tmp_path):
+        self._config(
+            tmp_path,
+            """\
+            repos:
+              - repo: https://github.com/PyCQA/bandit
+                rev: 36fd6505 # 1.7.10 (abbreviated)
+                hooks:
+                  - id: bandit
+            """,
+        )
+        assert len(vci.validate_pre_commit_pins()) == 1
+
+    def test_missing_file_is_noop(self, vci, tmp_path):
+        assert vci.validate_pre_commit_pins() == []
+
+    def test_malformed_entry_reported_without_crash(self, vci, tmp_path):
+        self._config(tmp_path, "repos:\n  - just-a-string\n")
+        errors = vci.validate_pre_commit_pins()
+        assert len(errors) == 1
+        assert "malformed" in errors[0]

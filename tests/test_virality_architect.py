@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # Cluster fixture
 # ---------------------------------------------------------------------------
@@ -453,8 +452,8 @@ def test_generate_report_empty_list_returns_info() -> None:
 
 
 def test_generate_report_collects_viral_clusters() -> None:
-    from app.simulation.architects.virality import ViralityArchitect
     from app.simulation.architects.base import ArchitectOutput
+    from app.simulation.architects.virality import ViralityArchitect
 
     a = ViralityArchitect()
     viral = ArchitectOutput(

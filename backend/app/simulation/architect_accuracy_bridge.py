@@ -33,6 +33,7 @@ O(N * F) for N sims — bounded by the 100-sim batch cap.
 """
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 
 # Default + cap for the top-of-list (architects with the largest
@@ -149,7 +150,6 @@ def _safe_float(raw: object) -> float | None:
     string / bool / NaN doesn't poison the per-architect
     averages.
     """
-    import math
     if raw is None or isinstance(raw, bool):
         return None
     if isinstance(raw, (int, float)):

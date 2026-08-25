@@ -1,6 +1,6 @@
 from app.simulation.sensitivity_matrix import (
-    compute_simulation_sensitivity_matrix,
     SENSITIVITY_TRAITS,
+    compute_simulation_sensitivity_matrix,
 )
 
 

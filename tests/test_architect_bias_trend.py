@@ -8,10 +8,9 @@ via the route-registration pattern (gated by scipy).
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Public surface
@@ -79,8 +78,8 @@ def test_direction_from_variance_uses_label_improving() -> None:
     TREND_UP.
     """
     from app.simulation.architect_bias_trend import (
-        LABEL_IMPROVING,
         LABEL_DEGRADING,
+        LABEL_IMPROVING,
         LABEL_STABLE,
         _direction_from_variance,
     )
@@ -121,7 +120,7 @@ def test_trend_dedupes_to_latest_outcome_per_sim() -> None:
     # newest (Outcome.created_at DESC → first row per sim).
     post_dedup_rows = [
         (
-            datetime(2026, 3, 20, tzinfo=timezone.utc),
+            datetime(2026, 3, 20, tzinfo=UTC),
             0.30,  # newest outcome: predicted
             0.05,  # actual
             findings,
@@ -139,7 +138,7 @@ def test_trend_dedupes_to_latest_outcome_per_sim() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             None,
             0.10,
             [
@@ -150,7 +149,7 @@ def test_trend_dedupes_to_latest_outcome_per_sim() -> None:
             ],
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             0.10,
             None,
             [
@@ -173,7 +172,7 @@ def test_trend_skips_sims_without_findings_for_target() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             0.10,
             0.05,
             [
@@ -198,7 +197,7 @@ def test_trend_case_insensitive_architect_match() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             0.10,
             0.05,
             [
@@ -225,19 +224,19 @@ def test_trend_groups_by_month_by_default() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 5, tzinfo=timezone.utc),
+            datetime(2026, 1, 5, tzinfo=UTC),
             0.10,
             0.05,
             [{"architect_name": "PricingArchitect"}],
         ),
         (
-            datetime(2026, 1, 25, tzinfo=timezone.utc),
+            datetime(2026, 1, 25, tzinfo=UTC),
             0.20,
             0.10,
             [{"architect_name": "PricingArchitect"}],
         ),
         (
-            datetime(2026, 2, 10, tzinfo=timezone.utc),
+            datetime(2026, 2, 10, tzinfo=UTC),
             0.30,
             0.15,
             [{"architect_name": "PricingArchitect"}],
@@ -262,19 +261,19 @@ def test_trend_groups_by_week_when_requested() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 5, tzinfo=timezone.utc),  # Monday
+            datetime(2026, 1, 5, tzinfo=UTC),  # Monday
             0.10,
             0.05,
             [{"architect_name": "PricingArchitect"}],
         ),
         (
-            datetime(2026, 1, 7, tzinfo=timezone.utc),  # Wed same week
+            datetime(2026, 1, 7, tzinfo=UTC),  # Wed same week
             0.15,
             0.05,
             [{"architect_name": "PricingArchitect"}],
         ),
         (
-            datetime(2026, 1, 12, tzinfo=timezone.utc),  # next week
+            datetime(2026, 1, 12, tzinfo=UTC),  # next week
             0.20,
             0.10,
             [{"architect_name": "PricingArchitect"}],
@@ -304,13 +303,13 @@ def test_trend_signed_variance_carries_direction() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             0.30,
             0.10,  # variance +0.20 (over)
             [{"architect_name": "PricingArchitect"}],
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             0.05,
             0.20,  # variance -0.15 (under)
             [{"architect_name": "PricingArchitect"}],
@@ -336,13 +335,13 @@ def test_trend_overall_direction_improving_when_bias_shrinks() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             0.30,
             0.10,
             [{"architect_name": "PricingArchitect"}],
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             0.10,
             0.05,
             [{"architect_name": "PricingArchitect"}],
@@ -363,13 +362,13 @@ def test_trend_overall_direction_degrading_when_bias_grows() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             0.10,
             0.05,
             [{"architect_name": "PricingArchitect"}],
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             0.30,
             0.10,
             [{"architect_name": "PricingArchitect"}],
@@ -388,13 +387,13 @@ def test_trend_overall_direction_stable_within_threshold() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             0.10,
             0.05,
             [{"architect_name": "PricingArchitect"}],
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             0.105,
             0.05,
             [{"architect_name": "PricingArchitect"}],
@@ -419,13 +418,13 @@ def test_trend_current_bias_label_well_calibrated_below_threshold() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             0.10,
             0.10,
             [{"architect_name": "PricingArchitect"}],
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             0.10,
             0.09,  # variance 0.01 < 0.02 → WELL
             [{"architect_name": "PricingArchitect"}],
@@ -444,13 +443,13 @@ def test_trend_current_bias_label_biased_above_threshold() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             0.30,
             0.10,
             [{"architect_name": "PricingArchitect"}],
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             0.30,
             0.20,  # variance 0.10 ≥ 0.02 → BIASED
             [{"architect_name": "PricingArchitect"}],
@@ -479,7 +478,7 @@ def test_trend_skips_invalid_iso_strings() -> None:
             [{"architect_name": "PricingArchitect"}],
         ),
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             0.10,
             0.05,
             [{"architect_name": "PricingArchitect"}],
@@ -521,13 +520,13 @@ def test_architect_bias_trend_out_round_trips_helper_payload() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             0.30,
             0.10,
             [{"architect_name": "PricingArchitect"}],
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             0.10,
             0.05,
             [{"architect_name": "PricingArchitect"}],
@@ -574,21 +573,21 @@ def test_trend_direction_distribution_classifies_by_signed() -> None:
     rows = [
         # Jan: predicted > actual → +0.05 → over.
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             0.10,
             0.05,
             [{"architect_name": "PricingArchitect"}],
         ),
         # Feb: predicted < actual → -0.05 → under.
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             0.05,
             0.10,
             [{"architect_name": "PricingArchitect"}],
         ),
         # Mar: predicted == actual → 0 → balanced.
         (
-            datetime(2026, 3, 15, tzinfo=timezone.utc),
+            datetime(2026, 3, 15, tzinfo=UTC),
             0.10,
             0.10,
             [{"architect_name": "PricingArchitect"}],
@@ -610,7 +609,7 @@ def test_trend_direction_distribution_skips_empty_buckets() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             0.20,
             0.05,
             [{"architect_name": "PricingArchitect"}],
@@ -646,19 +645,19 @@ def test_trend_peak_bias_bin_picks_highest_mean_abs() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             0.10,
             0.05,  # variance 0.05
             [{"architect_name": "PricingArchitect"}],
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             0.30,
             0.10,  # variance 0.20 (highest)
             [{"architect_name": "PricingArchitect"}],
         ),
         (
-            datetime(2026, 3, 15, tzinfo=timezone.utc),
+            datetime(2026, 3, 15, tzinfo=UTC),
             0.20,
             0.15,  # variance 0.05
             [{"architect_name": "PricingArchitect"}],
@@ -680,13 +679,13 @@ def test_trend_peak_bias_bin_tiebreak_by_latest_bin() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             0.10,
             0.05,
             [{"architect_name": "PricingArchitect"}],
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             0.15,
             0.10,
             [{"architect_name": "PricingArchitect"}],
@@ -706,13 +705,13 @@ def test_trend_peak_bias_bin_direction_labels() -> None:
 
     rows = [
         (
-            datetime(2026, 1, 15, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, tzinfo=UTC),
             0.05,
             0.20,  # -0.15 (under)
             [{"architect_name": "PricingArchitect"}],
         ),
         (
-            datetime(2026, 2, 15, tzinfo=timezone.utc),
+            datetime(2026, 2, 15, tzinfo=UTC),
             0.30,
             0.10,  # +0.20 (over, peak)
             [{"architect_name": "PricingArchitect"}],

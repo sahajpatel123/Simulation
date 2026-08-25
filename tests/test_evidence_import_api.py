@@ -21,6 +21,8 @@ if "razorpay" not in sys.modules:
     stub.Client = object  # type: ignore[attr-defined]
     sys.modules["razorpay"] = stub
 
+from app.api.v1 import assumption_evidence as ev_mod  # noqa: E402
+
 
 class _FakeProject:
     def __init__(self, project_id: int = 10) -> None:
@@ -61,13 +63,9 @@ class _ImportSession:
         assumptions: list | None = None,
     ) -> None:
         self.project = (
-            None
-            if project_missing
-            else (project if project is not None else _FakeProject())
+            None if project_missing else (project if project is not None else _FakeProject())
         )
-        self.assumptions = (
-            assumptions if assumptions is not None else [_FakeAssumption(100)]
-        )
+        self.assumptions = assumptions if assumptions is not None else [_FakeAssumption(100)]
         self.added_rows: list = []
         self.commit_count = 0
 
@@ -100,7 +98,6 @@ def _row(
 
 
 def _call_import(session: _ImportSession, rows: list[dict]):
-    from app.api.v1 import assumption_evidence as ev_mod
 
     payload = ev_mod.EvidenceImportRequest.model_validate({"rows": rows})
     return ev_mod.import_assumption_evidence(
@@ -112,13 +109,10 @@ def _call_import(session: _ImportSession, rows: list[dict]):
 
 
 def test_import_route_registered() -> None:
-    from app.api.v1 import assumption_evidence as ev_mod
 
     methods_by_path: dict[str, set[str]] = {}
     for route in ev_mod.router.routes:
-        methods_by_path.setdefault(route.path, set()).update(
-            route.methods or set()
-        )
+        methods_by_path.setdefault(route.path, set()).update(route.methods or set())
     path = "/projects/{project_id}/assumptions/evidence/import"
     assert "POST" in methods_by_path.get(path, set())
 
@@ -169,10 +163,7 @@ def test_import_skips_unknown_assumptions_with_reasons() -> None:
         (0, 999),
         (2, 555),
     ]
-    assert all(
-        "does not exist in this project" in s.reason
-        for s in out.skipped_rows
-    )
+    assert all("does not exist in this project" in s.reason for s in out.skipped_rows)
     assert len(session.added_rows) == 1
     assert session.commit_count == 1
 
@@ -199,19 +190,15 @@ def test_import_missing_project_raises_404() -> None:
 
 
 def test_import_request_rejects_empty_batch() -> None:
-    from app.api.v1 import assumption_evidence as ev_mod
 
     with pytest.raises(ValidationError):
         ev_mod.EvidenceImportRequest.model_validate({"rows": []})
 
 
 def test_import_request_rejects_oversized_batch() -> None:
-    from app.api.v1 import assumption_evidence as ev_mod
 
     with pytest.raises(ValidationError):
-        ev_mod.EvidenceImportRequest.model_validate(
-            {"rows": [_row(100)] * 201}
-        )
+        ev_mod.EvidenceImportRequest.model_validate({"rows": [_row(100)] * 201})
 
 
 def test_import_request_rejects_unknown_fields_and_results() -> None:
@@ -240,9 +227,6 @@ class _FakeCsvRequest:
 
 
 def _call_csv_import(session: _ImportSession, csv_text: str):
-    import asyncio
-
-    from app.api.v1 import assumption_evidence as ev_mod
 
     return asyncio.run(
         ev_mod.import_assumption_evidence_csv(
@@ -258,13 +242,10 @@ _CSV_HEADER = "assumption_id,method,result,observed_metric,notes\n"
 
 
 def test_csv_import_route_registered() -> None:
-    from app.api.v1 import assumption_evidence as ev_mod
 
     methods_by_path: dict[str, set[str]] = {}
     for route in ev_mod.router.routes:
-        methods_by_path.setdefault(route.path, set()).update(
-            route.methods or set()
-        )
+        methods_by_path.setdefault(route.path, set()).update(route.methods or set())
     path = "/projects/{project_id}/assumptions/evidence/import/csv"
     assert "POST" in methods_by_path.get(path, set())
 
@@ -332,11 +313,7 @@ def test_csv_import_skips_blank_lines_without_shifting_indices() -> None:
 
     out = _call_csv_import(
         session,
-        _CSV_HEADER
-        + "\n"
-        + "100,USER_INTERVIEWS,FAIL,,\n"
-        + "\n"
-        + "100,USER_INTERVIEWS,FAIL,,\n",
+        _CSV_HEADER + "\n" + "100,USER_INTERVIEWS,FAIL,,\n" + "\n" + "100,USER_INTERVIEWS,FAIL,,\n",
     )
 
     assert out.imported_count == 2
@@ -344,9 +321,6 @@ def test_csv_import_skips_blank_lines_without_shifting_indices() -> None:
 
 
 def test_csv_import_handles_utf8_bom() -> None:
-    import asyncio
-
-    from app.api.v1 import assumption_evidence as ev_mod
 
     session = _ImportSession(assumptions=[_FakeAssumption(100)])
     body = (
@@ -407,7 +381,6 @@ class _TextAssumption:
 
 
 def test_json_import_resolves_rows_by_assumption_text() -> None:
-    from app.api.v1 import assumption_evidence as ev_mod
 
     session = _ImportSession(
         assumptions=[
@@ -450,7 +423,6 @@ def test_json_import_resolves_rows_by_assumption_text() -> None:
 
 
 def test_json_import_row_without_id_or_text_is_rejected() -> None:
-    from app.api.v1 import assumption_evidence as ev_mod
 
     with pytest.raises(ValidationError) as exc:
         ev_mod.EvidenceImportRequest.model_validate(
@@ -464,7 +436,6 @@ def test_json_import_row_without_id_or_text_is_rejected() -> None:
 
 
 def test_json_import_prefers_id_when_both_given() -> None:
-    from app.api.v1 import assumption_evidence as ev_mod
 
     session = _ImportSession(
         assumptions=[
@@ -498,11 +469,8 @@ def test_json_import_prefers_id_when_both_given() -> None:
 
 
 def test_csv_import_resolves_blank_ids_by_text_column() -> None:
-    from app.api.v1 import assumption_evidence as ev_mod
 
-    session = _ImportSession(
-        assumptions=[_TextAssumption(100, "Users will pay ₹999 monthly")]
-    )
+    session = _ImportSession(assumptions=[_TextAssumption(100, "Users will pay ₹999 monthly")])
 
     body = (
         "assumption_text,method,result,observed_metric,notes\n"
@@ -527,15 +495,11 @@ def test_csv_import_resolves_blank_ids_by_text_column() -> None:
 
 def test_csv_import_requires_method_and_result_headers_only() -> None:
     """The id column is optional now; method/result stay mandatory."""
-    from app.api.v1 import assumption_evidence as ev_mod
 
     session = _ImportSession()
 
     # assumption_text alone satisfies the per-row key requirement.
-    body = (
-        "assumption_text,method,result\n"
-        "Some claim,USER_INTERVIEWS,FAIL\n"
-    )
+    body = "assumption_text,method,result\nSome claim,USER_INTERVIEWS,FAIL\n"
     out = asyncio.run(
         ev_mod.import_assumption_evidence_csv(
             project_id=10,

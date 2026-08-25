@@ -1,9 +1,12 @@
 """Pure helper for exporting a project's activity feed as CSV."""
+
 from __future__ import annotations
 
 import csv
 import io
 from typing import Any
+
+from app.simulation.export_utils import write_row
 
 
 def _text(value: Any) -> str:
@@ -24,8 +27,7 @@ def _safe_csv_cell(value: object) -> object:
     if isinstance(value, str):
         stripped = value.lstrip()
         if value[:1] in ("=", "+", "-", "@", "\t", "\r") or (
-            stripped[:1] in ("=", "+", "-", "@", "\t", "\r")
-            and stripped != value
+            stripped[:1] in ("=", "+", "-", "@", "\t", "\r") and stripped != value
         ):
             return f"'{value}"
     return value
@@ -33,7 +35,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with formula-injection guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def activity_feed_to_csv(
@@ -68,7 +70,7 @@ def activity_feed_to_csv(
                 _text(event.get("title")),
                 _text(event.get("summary")),
                 _text(event.get("severity")),
-            ]
+            ],
         )
     return buffer.getvalue()
 

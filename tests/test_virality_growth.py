@@ -21,13 +21,13 @@ from app.schemas.virality_growth import (
     VERDICT_VIRAL,
     ViralityGrowthOut,
 )
+from app.simulation.architects.virality import ViralityArchitect
+from app.simulation.conductor import ARCHITECT_STACKS
 from app.simulation.virality_growth import (
     BLOCKER_ORDER,
     VIRALITY_PRODUCT_TYPES,
     build_virality_growth,
 )
-from app.simulation.architects.virality import ViralityArchitect
-from app.simulation.conductor import ARCHITECT_STACKS
 
 
 def _registry(clusters: list[dict[str, Any]]) -> list[dict[str, Any]]:

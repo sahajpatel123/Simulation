@@ -3,17 +3,22 @@
 
 repos:
   # Ruff - fast Python linter and formatter
+  # Revs are pinned to full commit SHAs for the same reason every GitHub
+  # Action in .github/workflows is: a mutable tag can be repointed to swap
+  # code into what runs on your machine. tools/validate_ci.py enforces it.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.0
+    rev: cb8c523fd4835aba42af70f4cad5568db4df0b6c # v0.16.0
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
-        files: ^\.venv/ || ^backend/
+        # Python regex — ``||`` is not alternation here; scope formatting to
+        # the backend package explicitly.
+        files: ^backend/app/
 
   # Trailing whitespace
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: cef0300fd0fc4d2a87a85fa2093c6b283ea36f4b # v5.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -29,7 +34,7 @@ repos:
 
   # Check for sensitive data
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: cef0300fd0fc4d2a87a85fa2093c6b283ea36f4b # v5.0.0
     hooks:
       - id: check-private-key
       - id: detect-aws-credentials
@@ -38,7 +43,7 @@ repos:
 
   # Check for inadvertently committed files
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: cef0300fd0fc4d2a87a85fa2093c6b283ea36f4b # v5.0.0
     hooks:
       - id: check-case-conflict
       - id: check-submodule
@@ -46,7 +51,7 @@ repos:
 
   # Python security scanning with bandit
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.10
+    rev: 36fd65054fc8864b4037d0918904f9331512feb5 # 1.7.10
     hooks:
       - id: bandit
         args: ["-r", "backend/app", "--skip", "B101,B311"]
@@ -55,7 +60,7 @@ repos:
 
   # Secret scanning with gitleaks (same config as CI)
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.24.3
+    rev: 107a41827bb6698dbbff756b2300537774a1d84c # v8.24.3
     hooks:
       - id: gitleaks
         args: ["--config", ".github/gitleaks.toml"]
@@ -70,7 +75,10 @@ repos:
         entry: python3 tools/validate_ci.py
         language: system
         pass_filenames: false
-        files: ^\.github/workflows/|^\.github/zizmor\.yml$|^tools/validate_ci\.py$|^SECURITY\.md$|^AGENTS\.md$|^Dockerfile$
+        # Includes requirements*.txt and the lock generator because the
+        # validator's lock-sync check reads them — a dependency bump must
+        # trip the gate locally, not only in workflow-validation.yml.
+        files: ^\.github/workflows/|^\.github/zizmor\.yml$|^tools/validate_ci\.py$|^tools/gen_dependency_lock\.py$|^requirements(-.*)?\.txt$|^SECURITY\.md$|^AGENTS\.md$|^Dockerfile$
 
       - id: zizmor
         name: zizmor workflow security

@@ -21,6 +21,8 @@ import json
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 FORMAT_VERSION: str = "1"
 
 _COUNT_KEYS: tuple[str, ...] = (
@@ -141,7 +143,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write one CSV row with the formula guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _json_safe(value: Any) -> Any:
@@ -233,16 +235,19 @@ def validation_momentum_to_json(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     """Render a validation-momentum payload as a strict JSON envelope."""
-    return json.dumps(
-        {
-            "metadata": _json_safe(metadata or {}),
-            "validation_momentum": _json_safe(_as_dict(payload)),
-        },
-        default=str,
-        ensure_ascii=False,
-        indent=2,
-        allow_nan=False,
-    ) + "\n"
+    return (
+        json.dumps(
+            {
+                "metadata": _json_safe(metadata or {}),
+                "validation_momentum": _json_safe(_as_dict(payload)),
+            },
+            default=str,
+            ensure_ascii=False,
+            indent=2,
+            allow_nan=False,
+        )
+        + "\n"
+    )
 
 
 def _escape_md_cell(value: Any) -> str:
@@ -286,7 +291,9 @@ def _md_cell(value: Any) -> str:
     return _escape_md_cell(str(value))
 
 
-def _md_section(lines: list[str], title: str, keys: tuple[str, ...], section: dict[str, Any]) -> None:
+def _md_section(
+    lines: list[str], title: str, keys: tuple[str, ...], section: dict[str, Any]
+) -> None:
     """Append one Metric/Value Markdown table for the given keys."""
     lines.append(f"## {title}")
     lines.append("")
@@ -295,9 +302,7 @@ def _md_section(lines: list[str], title: str, keys: tuple[str, ...], section: di
     for key in keys:
         value = section.get(key)
         rendered = _md_pct(value) if key in _PCT_KEYS else _md_cell(value)
-        lines.append(
-            f"| {_escape_md_cell(_LABELS.get(key, key))} | {rendered} |"
-        )
+        lines.append(f"| {_escape_md_cell(_LABELS.get(key, key))} | {rendered} |")
     lines.append("")
 
 

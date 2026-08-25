@@ -8,16 +8,15 @@ from typing import Any
 
 import pytest
 
+from app.schemas.sensitivity import (
+    SensitivityOut,
+    SensitivityPoint,
+)
 from app.simulation.sensitivity_analysis import (
     IMPACT_LEVELS,
     _sensitivity_tier,
     build_sensitivity_analysis,
 )
-from app.schemas.sensitivity import (
-    SensitivityOut,
-    SensitivityPoint,
-)
-
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers

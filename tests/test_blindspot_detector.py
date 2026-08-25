@@ -57,7 +57,7 @@ class _FakeDB:
 
 # Monkeypatch helpers used inside BlindspotDetector so SQLAlchemy never
 # actually runs during these tests.
-import app.simulation.blindspot_detector as _bd_mod  # noqa: E402
+from app.simulation import blindspot_detector as _bd_mod  # noqa: E402
 
 
 def _install_fake_helpers(

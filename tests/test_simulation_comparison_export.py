@@ -7,7 +7,7 @@ import io
 import json
 import sys
 import types
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -275,7 +275,7 @@ class _FakeSimulation:
         self.project_id = project_id
         self.status = status
         self.signal_quality = 0.7
-        self.created_at = datetime.now(timezone.utc)
+        self.created_at = datetime.now(UTC)
         self.results_json = {
             "population_weighted_conversion": 0.03 if sim_id == 1 else 0.08,
             "conversion_rate": 0.03 if sim_id == 1 else 0.08,
@@ -298,10 +298,10 @@ class _FakeQuery:
     def __init__(self, items: list[Any]) -> None:
         self.items = items
 
-    def join(self, *args: Any, **kwargs: Any) -> "_FakeQuery":
+    def join(self, *args: Any, **kwargs: Any) -> _FakeQuery:
         return self
 
-    def filter(self, *args: Any, **kwargs: Any) -> "_FakeQuery":
+    def filter(self, *args: Any, **kwargs: Any) -> _FakeQuery:
         return self
 
     def all(self) -> list[Any]:

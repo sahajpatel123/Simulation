@@ -19,6 +19,8 @@ import io
 import json
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
     """Render the optional metadata block as ``(key, value)`` rows."""
@@ -64,7 +66,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with formula-injection guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _join_list(value: Any) -> str:
@@ -148,7 +150,7 @@ def sensitivity_to_csv(
             "triggers_markov_rules",
             "affected_transitions",
             "recommendation",
-        ]
+        ],
     )
     assumption_keys = (
         "assumption_text",

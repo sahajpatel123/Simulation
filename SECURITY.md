@@ -15,7 +15,8 @@ We take security seriously. If you discover a security vulnerability in TheCee, 
 ### How to Report
 
 1. **Do not** open a public GitHub issue for security vulnerabilities
-2. Email security reports to the maintainers
+2. Use GitHub's private vulnerability reporting:
+   <https://github.com/sahajpatel123/Simulation/security/advisories/new>
 3. Include the following in your report:
    - Description of the vulnerability
    - Steps to reproduce
@@ -33,9 +34,7 @@ We take security seriously. If you discover a security vulnerability in TheCee, 
 
 ### GitHub Repository Security Features
 
-This public repository enables every free GitHub-native security feature
-(verified/enforced via the API; re-check with
-`gh api repos/<owner>/<repo> --jq .security_and_analysis`):
+This public repository runs every free GitHub-native security feature:
 
 - **Secret scanning** — detects known credential formats pushed anywhere in
   the repo, including the full git history.
@@ -48,8 +47,13 @@ This public repository enables every free GitHub-native security feature
 - **Dependabot security updates** — automatic PRs for dependencies with known
   CVEs, complementing the weekly pip-audit/Safety/Trivy scans.
 
-If any of these show `disabled`, re-enable them — they are part of the
-project's security posture, not optional extras.
+> **Status 2026-08-25**: an API audit found all five of these flipped to
+> `disabled` (they had been enabled on 2026-08-23). Re-enablement via the
+> REST API (`PATCH /repos/…` → `security_and_analysis`) was attempted and is
+> pending; if the token lacks the required admin scope, enable them under
+> **Settings → Code security and analysis** — they are part of the project's
+> security posture, not optional extras. Re-check anytime with
+> `gh api repos/<owner>/<repo> --jq .security_and_analysis`.
 
 ### CI/CD Security Checks
 
@@ -60,6 +64,9 @@ This repository runs automated security scans:
 - **Safety**: Python dependency vulnerability scanner (`lint.yml`, `security-scan.yml`)
 - **Trivy**: Container, filesystem, and Dockerfile configuration scanner (`security-scan.yml`)
 - **npm audit**: Frontend dependency vulnerability scanner (`security-scan.yml`)
+- **OSV scan**: queries OpenSSF's OSV database — the same one Scorecard's
+  `Vulnerabilities` check uses — for every pinned Python and npm version;
+  stdlib-only tool at `tools/osv_scan.py` (`security-scan.yml`)
 - **CodeQL**: Semantic code analysis with the `security-and-quality` query suite (`codeql.yml`)
 - **Scorecard**: OpenSSF supply-chain health checks with SARIF uploaded to Code Scanning (`scorecard.yml`)
 - **Dependency Review**: PR-time gate on high-severity dependency changes (`dependency-review.yml`)
@@ -69,9 +76,13 @@ This repository runs automated security scans:
 
 The `workflow-validation.yml` job also enforces that every GitHub Action ref is pinned
 to a full 40-hex commit SHA (with the release version kept as a trailing comment),
-that every pip install in a workflow pins an exact version, that every workflow
-declares least-privilege permissions, and that no workflow grants `actions: write`.
-YAML files are parsed and invalid workflow files fail the validator.
+that every non-`-r` pip install in a workflow pins an exact version, that direct pins
+in `requirements.txt` match the generated hash-locked files CI installs from, that
+every workflow declares least-privilege permissions and keeps zizmor's audits enabled,
+and that no workflow grants `actions: write`. YAML files are parsed and invalid
+workflow files fail the validator. (The `--require-hashes` flags themselves are repo
+convention — visible in every install step above — not separately parsed by the
+validator; the lock-sync check is what fails when locks go stale.)
 
 Run `python3 tools/validate_ci.py` locally to check the same supply-chain,
 permissions, YAML/TOML, security-policy, env-file tracking, and job-timeout
@@ -81,10 +92,18 @@ rules before pushing.
 
 - Every action ref is pinned to a full 40-hex commit SHA (version kept as a
   trailing comment).
+- Every external repo in `.pre-commit-config.yaml` is likewise pinned to a
+  full 40-hex commit SHA — pre-commit runs that code locally on every
+  commit, so mutable tags carry the same risk as unpinned actions.
+  Dependabot has no pre-commit ecosystem, so these revs are bumped
+  manually: resolve each release tag to its commit SHA and update the
+  `rev:` line, keeping the version comment.
 - The Dockerfile pins its base image by sha256 digest (`FROM python:3.11-slim@sha256:…`).
-- Every workflow declares a top-level least-privilege `permissions` block.
+- Every workflow declares a top-level least-privilege `permissions` block;
+  write scopes (e.g. `id-token`, `security-events`) are scoped to the job
+  that needs them, not the workflow.
 - No workflow grants `actions: write`; `id-token: write` is only allowed in
-  `scorecard.yml`.
+  the scorecard analysis job.
 - Every checkout sets `persist-credentials: false`.
 - Every job sets a positive `timeout-minutes`.
 - Every workflow has a `workflow_dispatch` trigger.
@@ -120,30 +139,40 @@ uvx zizmor@1.28.0 --config .github/zizmor.yml .github/workflows
 
 - Dependabot automatically creates security updates for dependencies
 - Dependabot watches Python, npm, GitHub Actions, and the Docker base image
-- All dependencies are pinned to specific versions in `requirements.txt`
+- Direct dependencies are pinned to exact versions in `requirements.txt`;
+  CI installs resolve through hash-locked files (see above)
 - Regular audits are recommended
 
-#### Dependency hash-pinning deferral (deliberate exception)
+#### Dependency hash-locking (enforced)
 
-OpenSSF Scorecard's `PinnedDependencies` check prefers `pip install
---require-hashes` with a fully hash-locked requirements file (a per-artifact
-SHA-256 for every wheel/sdist). This repo pins **exact versions**
-(`package==X.Y.Z`) for every direct dependency and every CI pip install,
-enforced by `tools/validate_ci.py`, with Dependabot keeping the pins fresh
-weekly — but we deliberately defer per-artifact hash-locking:
+Every pip install in CI and the Dockerfile is hash-locked:
+`pip install --no-cache-dir --require-hashes -r <lock>`. OpenSSF Scorecard's
+`PinnedDependencies` probe treats any non-flag argument to `pip install`
+(including `package==version`) as unpinned; `--require-hashes` installs are
+the accepted shape, and the per-artifact SHA-256s make builds reproducible.
 
-1. Generating a correct lockfile requires resolving wheels on the **target
-   platform** (Linux x86_64, the CI runner). Hashes resolved on macOS pick
-   different wheel artifacts and would fail or silently diverge in CI.
-2. The residual risk hash-pinning closes — a compromised index serving a
-   trojaned wheel under a correct version number — is largely mitigated here
-   by exact-version pins plus three independent advisory scanners
-   (pip-audit, Safety, Trivy) running on every push and weekly.
+Three locks are generated by `tools/gen_dependency_lock.py` (resolves via
+`pip --dry-run --report`, fetches every file's sha256 from the PyPI JSON API):
 
-If/when the project adopts a Linux-based lockfile step (e.g. `pip-compile
---generate-hashes` in a container), this exception should be revisited and
-hash-locking enabled. Until then, the Scorecard `PinnedDependencies` findings
-against `pip install` lines are accepted, documented risk.
+- `requirements-lock.txt` — runtime image (Dockerfile).
+- `requirements-pytest-lock.txt` — backend-ci superset; separate because the
+  tools closure pins pydantic 2.9.2 (via safety-schemas) while runtime uses
+  2.13.4.
+- `requirements-tools-lock.txt` — ruff, bandit, pip-audit, safety, zizmor,
+  PyYAML across lint / security-scan / workflow-validation.
+
+After bumping `requirements.txt`, regenerate all three and verify locally
+with one command:
+
+```bash
+tools/regen_locks.sh   # or: tools/regen_locks.sh runtime|pytest|tools
+```
+
+Resolution deliberately stays local: a workflow would need bare
+`pip install --report` steps, which scorecard's PinnedDependencies probe
+flags — the exact findings hash-locking closed. The per-lock spec files
+(`tools/lock-specs/`) pin every direct requirement with `==`, so the same
+python 3.11 / pip 26.2.1 pair reproduces identical output.
 
 ### Secrets Management
 
@@ -254,4 +283,237 @@ For security concerns, please contact the project maintainers.
   `FROM` to pin its base image by sha256 digest, and digest-pinned
   `python:3.11-slim` — closing the last mutable-ref supply-chain surface
   (mutable base-image tags repoint when maintainers push).
+- 2026-08-24 - Shipped full dependency hash-locking: `tools/gen_dependency_lock.py`
+  plus three generated locks (`requirements-lock.txt`,
+  `requirements-pytest-lock.txt`, `requirements-tools-lock.txt`); every CI and
+  Dockerfile pip install now runs `--require-hashes`, closing the Scorecard
+  `PinnedDependencies` findings that the earlier deferral documented.
+- 2026-08-24 - Added a private vulnerability reporting link to this policy so
+  the Scorecard `Security-Policy` check finds contactable content, replaced
+  the obsolete hash-pinning-deferral exception with the enforced hash-locking
+  flow, and refreshed the Actions hardening checklist for job-scoped write
+  permissions.
+- 2026-08-25 - Closed the last osv_scan parity gap: nested package-lock
+  copies are now scanned (and deduplicated), matching scorecard's
+  recursive osv-scanner — a vulnerable nested pin can no longer be
+  CLEAN here but flagged there. Dependabot's lack of a pre-commit
+  ecosystem documented as manual rev maintenance.
+- 2026-08-25 - Extended the SHA-everywhere pinning policy to
+  `.pre-commit-config.yaml`: all five external hook repos now pin full
+  commit SHAs (versions kept as trailing comments), and a new
+  `validate_pre_commit_pins` check in `tools/validate_ci.py` rejects any
+  mutable tag so the policy cannot silently regress.
+- 2026-08-24 - Extended `tools/osv_scan.py` to cover every Python pin source
+  scorecard's recursive osv-scanner sees (`requirements*.txt`, all generated
+  locks, `tools/lock-specs/*.txt`) instead of direct pins only — surfacing
+  two frozen-transitive findings the earlier scans missed.
+- 2026-08-24 - Removed the last unfixable advisory surface: replaced
+  `python-jose[cryptography]` with `PyJWT==2.13.0` (python-jose depends on
+  `ecdsa`, which OSV marks affected from version 0 with no fixed release —
+  Minerva timing attack on P-256). JWT behavior is pinned by
+  `tests/test_security_jwt_required_claims.py`. Also bumped the CI tools
+  spec from pip 25.2 to 26.2.1 to clear eleven published pip advisories.
+- 2026-08-25 - Audited every secret-comparison path: Razorpay webhook
+  signatures (`billing.py`) and UI preview tokens (`ui_generation.py`)
+  both verify through `hmac.compare_digest`, and API-token digests use
+  keyed HMAC-SHA256 — no raw `==` secret comparisons exist. Also proved,
+  against the raw SARIF of the newest CodeQL Python analysis, that the
+  three oldest open Python alerts (stack-trace exposure, bad tag filter,
+  incomplete URL sanitization) have zero current detections: their code
+  was fixed weeks ago and GitHub's alert state machine simply never
+  transitioned them to fixed. They stay open pending a maintainer
+  dismissal decision; do not re-audit their flagged lines.
+- 2026-08-25 - Completed a repo-wide parameterized-SQL audit: every
+  dynamic statement binds values through named parameters and the only
+  interpolated DDL uses static identifier tuples. Hardened the cluster
+  sync's bulk UPDATE to emit row chunks bounded below PostgreSQL's
+  65,535 per-statement bind-parameter ceiling (previously one statement
+  sized `rows × 3`, which would fail opaquely if the registry grew),
+  hoisted its function-local SQLAlchemy import to module top, and pinned
+  the parameterized-SQL property with a regression test
+  (`tests/test_cluster_sync.py`).
+- 2026-08-25 - Hoisted all remaining function-local stdlib imports (26
+  sites across 24 files — `json`, `datetime`, `math`, `collections`,
+  `re`) to module tops per the repo's no-local-imports rule, and added a
+  repo-wide AST guard (`tests/test_import_hygiene.py`) that fails any
+  future function-local stdlib import. App-internal lazy imports stay
+  allowed: several are deliberate cycle-breakers, and heavy optional
+  dependencies (playwright) are legitimately deferred to use.
+- 2026-08-25 - API audit caught a silent posture regression: all five
+  GitHub-native security features (secret scanning, push protection,
+  validity checks, non-provider patterns, Dependabot security updates)
+  had been flipped back to disabled since their 2026-08-23 enablement.
+  Feature list corrected to carry a live status note; re-enablement
+  tracked until `.security_and_analysis` shows every feature enabled.
+- 2026-08-25 - Closed a config-defaults footgun: every production guard in
+  `Settings` (JWT-secret strength, HTTPS frontend URL, CORS lockdown,
+  disabled OpenAPI surface) keyed off `ENVIRONMENT`, which defaults to
+  `"development"` — a deploy that omitted that single env var silently
+  disarmed all of them. A `mode="before"` validator now promotes an
+  omitted `ENVIRONMENT` to `"production"` whenever Railway's
+  auto-injected `RAILWAY_ENVIRONMENT` is present (previews included),
+  so guards can no longer be skipped by omission on the deploy target;
+  explicit values still win as deliberate opt-outs. Pinned by
+  `tests/test_config_platform_inference.py`.
+- 2026-08-25 - Polished the platform-inference flag: the startup log line
+  now reports the effective environment (so a deploy whose guards fired
+  or were inferred is visible in Railway logs), and `.env.example` /
+  CLAUDE.md document the inference and its explicit opt-out.
+- 2026-08-25 - Closed an unauthenticated information-disclosure surface:
+  the ten `/system/*` observability digests (per-route traffic and error
+  statistics, LLM provider health, broker queue depths, pool utilization,
+  live simulation IDs) answered anonymous callers everywhere. A new
+  `require_admin_in_production` dependency now keys them off the
+  effective environment — open in development tooling, admin-only on a
+  public deploy (401 anonymous / 403 non-admin). An AST regression test
+  pins that no future `/system` route can ship without the guard
+  (`tests/test_system_health_guard.py`). Coarse reachability probes
+  (`/health`, `/api/v1/simulations/*-health`) stay public for load
+  balancers by design.
+- 2026-08-25 - Polished the live-progress delivery surface: the
+  WebSocket auth handshake now rejects syntactically valid but
+  non-object frames (`[]`, `5`, `"x"`) with a clean 4001 close instead
+  of crashing the handler on an unhandled `AttributeError`, and
+  `/simulations/ws/info` — which exposes the live connection count —
+  joined the same admin-in-production gate as the `/system` digests,
+  with an AST pin keeping both in place.
+- 2026-08-25 - Refined the share-link credential lifecycle: audited the
+  full share-token system (256-bit URL-safe generation, hash-only
+  persistence, owner-scoped mint/revoke/list, anonymised public payload,
+  rate limits) and closed its one defensive gap — `compute_expiry` now
+  clamps TTLs to `[1, 365]` days, so a future client-supplied TTL from
+  the deliberately reserved mint-request body can never mint an
+  effectively never-expiring (or already-inverted) public link. Pinned
+  by clamp tests in `tests/test_share_token.py`.
+- 2026-08-25 - Unbroke the password credential path: the pinned
+  `passlib==1.7.4` + `bcrypt==5.0.0` pairing is non-functional — passlib's
+  backend probe crashes against bcrypt ≥ 5 (`__about__` removed) and every
+  `hash()`/`verify()` raised `ValueError` regardless of input length, so
+  registration, login, and password change all failed under the locked
+  dependency set with no test exercising a real bcrypt roundtrip.
+  `security.py` now calls the maintained `bcrypt` package directly and the
+  dead passlib pin was dropped from all three dependency files; a hash →
+  verify roundtrip test plus a malformed-digest-as-false test now guard the
+  pairing. Also capped password length at bcrypt's real 72-byte limit
+  (measured in UTF-8 bytes — multi-byte characters consume the budget
+  faster than character count) instead of letting long secrets truncate or
+  crash mid-hash, and equalized login timing by burning a bcrypt round on
+  the unknown-email branch against a dummy digest so response latency can
+  no longer enumerate which addresses are registered.
+- 2026-08-25 - Added refresh-token reuse detection: replaying an
+  already-rotated refresh token (the stolen-credential signature — the
+  legitimate owner surrendered it when they rotated) now revokes every
+  refresh session for that user instead of returning a bare 401. The
+  lookup keys off a new `refresh_tokens.revoked_at` timestamp with a
+  60-second grace window so benign concurrent double-fires (two
+  simultaneous requests, one loses the atomic claim milliseconds later)
+  are never mistaken for theft; expired-unused and unknown tokens match
+  nothing and stay side-effect free. Migration is additive (`ADD COLUMN
+  IF NOT EXISTS`); all revocation paths stamp `revoked_at`. Pinned by
+  four new tests in `tests/test_auth_refresh_rotation.py`.
+- 2026-08-25 - Added refresh-token retention hygiene: auth flows never
+  deleted rows (every login and rotation inserts one; only ``revoked``
+  flips), so dead credential hashes accumulated forever and widened the
+  offline-cracking target after any future database leak. A daily Celery
+  beat sweep (`maintenance.purge_stale_refresh_tokens`) now deletes rows
+  that have been unusable — revoked or expired — for longer than 90 days,
+  preserving recent history for reuse-detection forensics. Legacy rows
+  revoked before the `revoked_at` column fall back to `expires_at`; live
+  tokens match none of the purge predicates. Also removed the dead
+  `_revoke_refresh_token` helper. Six tests pin cutoff math, SQL shape,
+  rollback-on-failure, and beat registration.
+- 2026-08-25 - Closed the webhook abuse surface: `/billing/webhook` was
+  the only billing route without a rate limit — signature verification
+  rejects forged events but invalid-signature spam still burned an HMAC
+  comparison + log line per hit, and valid events lacking a dedupeable
+  event id re-ran their state transitions on every replay. Now capped at
+  a generous 120/min/IP (far above real Razorpay burst rates, whose
+  retries are backoff-driven) with `fail_open=True` so payment state
+  keeps flowing if the limiter itself is down; a route-introspection test
+  pins the guard so it cannot silently disappear. The daily retention
+  sweep also now covers dead API-token rows (revoked or expired past the
+  same 90-day window), and the task was renamed to
+  `maintenance.purge_stale_auth_tokens` to match its scope.
+- 2026-08-25 - Fixed rate-limit bucket spoofing via `X-Forwarded-For`:
+  bucketing took the LEFTMOST XFF entry, but proxies append hops, so that
+  value is attacker-supplied whenever a request traverses any chaining
+  client — one actor could rotate a spoofed header to mint unlimited
+  buckets and bypass every rate limit in the codebase. Bucket identity now
+  uses the rightmost entry (written by the closest trusted platform edge,
+  un-spoofable by clients), falling back to peer address then per-call
+  anon buckets. Five tests pin rightmost selection, whitespace stripping,
+  blank-header fallback, and anonymous bucketing.
+- 2026-08-25 - Closed the register-path timing oracle: "email already
+  registered" returned instantly while a real registration burned a
+  bcrypt hash, letting response latency enumerate which addresses have
+  accounts. The 409 branch now burns one bcrypt round against the same
+  dummy digest the login path uses; pinned by a test asserting exactly
+  one verify call with the caller-supplied password.
+- 2026-08-25 - Eliminated the last unbounded anonymous routes: a full
+  runtime sweep of all 440 registered endpoints found nine GETs with
+  neither auth nor rate limiting — the root-level `/`, `/health`,
+  `/readyz`, `/metrics`, `/celery/status` probes and four simulations
+  diagnostics/registry routes. Each performs live infrastructure I/O per
+  hit (DB pool round-trips, broker inspects with 1–2s timeouts, Redis
+  pings), so an anonymous loop could starve real workloads for free, and
+  unbounded `/metrics` exposed operational telemetry. All nine now carry
+  IP-bounded limits; probes use `fail_open=True` so a limiter outage can't
+  turn health checks into failures (LB cascade) or blind observability,
+  and `/simulations/clusters` fails closed like every other public route.
+  A new systemic guard test asserts every route on the app is
+  authenticated or rate-limited — new handlers fail CI until guarded or
+  explicitly allowlisted with documented reasons.
+- 2026-08-25 - Closed spreadsheet formula injection across every CSV
+  export: 84 exporter modules wrote cells straight through raw
+  ``csv.writer`` calls, so user-controlled text (titles, assumptions,
+  tags, narratives, decision results) starting with ``=``, ``+``, ``-``,
+  ``@``, tab, or CR would execute as a formula when a founder or admin
+  opened the downloaded file in Excel/Sheets/LibreOffice. Only 2 of 86
+  CSV-producing modules carried their own narrower guard copies while
+  ``export_utils.safe_csv_cell``/``write_row`` existed as the documented
+  single source of truth. Every module now routes rows through
+  ``write_row`` (union-strength guard); two drifted private guards were
+  retired onto the canonical helper. A meta-test bans direct writerow
+  calls outside export_utils so new exporters cannot bypass the guard,
+  with hostile-payload round-trips pinning behaviour end to end through
+  real exporters.
+- 2026-08-25 - Refined the CSV formula guard to stop mangling signed
+  numeric data: ``safe_csv_cell`` prefixed every sign-leading string, so a
+  backfilled variance of ``-20.0`` exported as ``'-20.0`` and broke the
+  founder's spreadsheet math. Spreadsheets parse signed pure numbers
+  (``-20.0``, ``+3``, ``2.5e-3``) as numeric cells — never formulas — so
+  they now pass through untouched, while any sign followed by non-numeric
+  content (``-2+3+cmd|…``, DDE payloads) keeps the full guard. Pinned by
+  parametrized exact-match tests covering both sides of the exemption.
+- 2026-08-25 - Bounded the WebSocket pre-auth resource surface: the
+  endpoint accepted an anonymous socket and waited 20s for an auth frame
+  read via ``receive_text()``, which buffers the whole message before any
+  size check — one anonymous connection could force a large allocation,
+  and every idle socket pinned a TCP slot plus an asyncio task for the
+  full window. The pre-auth window is now 5s (a real frontend sends its
+  auth frame immediately), and a shared receive helper enforces the 64KB
+  cap BEFORE handlers see payload on every read: oversized or binary
+  first frames are closed (4001) without parsing, while an oversized
+  mid-stream frame still draws the in-band error message instead of
+  dropping the connection. Flow tests drive the full handler against a
+  fake socket to pin each behaviour.
+- 2026-08-25 - Audited pagination bounds across the whole API surface
+  (274 ``Query(...)`` defaults AST-scanned for pagination-shaped params):
+  every ``limit``-style parameter either declares ``le=`` at the schema
+  or clamps inside its handler — no route lets an authenticated caller
+  request an unbounded result set. The audit is now a permanent guard:
+  a meta-test re-runs the scan and fails on any new pagination param
+  without declared bounds, with a stale-entry-checked allowlist for the
+  two deliberate clamp-in-handler contracts (project search coerces via
+  ``_normalise_limit`` → [1, 100]; buyer personas clamp to [1, 52]) and
+  unit tests pinning that both clamps actually hold.
+- 2026-08-25 - Extended the bounds audit to free-text query params:
+  every ``str``-typed ``Query(...)`` in the API now declares
+  ``max_length`` (or a constraining ``pattern``) — previously five
+  params accepted unbounded strings into filters and JSONB round-trips.
+  Three domain-findings filter params gained explicit ceilings, the two
+  already-pattern-constrained audit-log params satisfy the invariant as
+  they were, and the pagination guard test was generalized into a
+  query-param-bounds guard enforcing both invariants with zero
+  allowlist entries on the string side.
 - [VERSION] - Initial security policy

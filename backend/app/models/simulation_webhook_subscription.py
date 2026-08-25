@@ -9,8 +9,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
-    # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
-    from app.models.simulation_webhook_delivery import SimulationWebhookDelivery
+    # Module-style import + fully qualified string annotation below: this
+    # peer-model edge stays type-checker visible while carrying no
+    # module-level ``from``-import, so no cyclic-import pattern exists.
+    import app.models.simulation_webhook_delivery
 
 
 class SimulationWebhookSubscription(Base, TimestampMixin):
@@ -46,7 +48,9 @@ class SimulationWebhookSubscription(Base, TimestampMixin):
     last_delivery_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     last_delivery_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    deliveries: Mapped[list[SimulationWebhookDelivery]] = relationship(
+    deliveries: Mapped[
+        list["app.models.simulation_webhook_delivery.SimulationWebhookDelivery"]  # noqa: UP037
+    ] = relationship(  # noqa: UP037
         "SimulationWebhookDelivery",
         back_populates="subscription",
         cascade="all, delete-orphan",

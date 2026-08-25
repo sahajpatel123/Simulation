@@ -4,16 +4,16 @@
 
 ## 1. What This Project Is
 
-**TheCee** is a pre-launch behavioral simulation engine designed to predict how 10,000 AI consumers will respond to a startup idea. It evaluates consumer decision-making through a Markov funnel, calibrated by 52 consumer clusters and 21 domain architects.
+**TheCee** is a pre-launch behavioral simulation engine designed to predict how 10,000 AI consumers will respond to a startup idea. It evaluates consumer decision-making through a Markov funnel, calibrated by 52 consumer clusters and 35 domain architects.
 
 ## 2. Architecture Overview
 
-- **Frontend**: Next.js 15 (React, TypeScript), located under `src/` and `app/` (for page routing in the frontend).
-- **Backend**: FastAPI (Python), located under `backend/app/`. (Note: Historically there was an `app/` directory at root; prefer `backend/app/` for the modern structure utilizing NVIDIA NIMs).
+- **Frontend**: Next.js 16 (React, TypeScript), located under `src/` and `app/` (for page routing in the frontend).
+- **Backend**: FastAPI (Python), located under `backend/app/`. (Note: Historically there was an `app/` directory at root; prefer `backend/app/` for the modern structure.)
 - **Worker/Task Queue**: Celery (Python) for asynchronous simulation tasks.
 - **Database**: PostgreSQL (using SQLAlchemy ORM).
 - **Cache/Broker**: Redis.
-- **LLM Provider**: NVIDIA NIMs (OpenAI-compatible) and Anthropic (Legacy). The backend has been shifting towards using NVIDIA NIMs (`NVIDIA_API_KEY`) via `backend/app/core/claude_client.py`.
+- **LLM Provider**: Grok (x.ai, OpenAI-compatible API — `GROK_API_KEY`, `GROK_MODEL`, `GROK_BASE_URL` in `app/core/config.py`) and Anthropic (assumption extraction, prototype generation) via `backend/app/core/claude_client.py`. There is no NVIDIA integration despite older notes mentioning it.
 
 ## 3. Key Components
 
@@ -22,7 +22,7 @@
 - Each cluster possesses 8 normalized traits (income, literacy, motivation, trust, price sensitivity, risk aversion, patience, social orientation).
 
 ### 3.2 Domain Architects (`backend/app/simulation/architects/`)
-- 20 specialists that evaluate domains like pricing, onboarding, trust, market timing, etc., for all clusters.
+- 35 specialists (registered in `backend/app/simulation/architect_registry.py`) that evaluate domains like pricing, onboarding, trust, market timing, etc., for all clusters.
 - Architects output adjustments to Markov transition matrices and identify failure modes.
 
 ### 3.3 Markov Funnel (`backend/app/simulation/markov.py`)

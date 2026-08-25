@@ -12,7 +12,6 @@ from app.simulation.pricing_optimization import (
     build_pricing_optimization,
 )
 
-
 AOV = 999.0
 
 

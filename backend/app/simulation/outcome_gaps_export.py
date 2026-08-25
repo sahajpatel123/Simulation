@@ -28,6 +28,8 @@ import json
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 FORMAT_VERSION: str = "1"
 
 _PROJECT_SUMMARY_KEYS: tuple[str, ...] = (
@@ -173,7 +175,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with the formula-injection guard on every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
@@ -194,11 +196,7 @@ def _summary_rows(data: dict[str, Any]) -> list[tuple[str, object]]:
     summary = data.get("summary") or {}
     if not isinstance(summary, dict):
         summary = {}
-    keys = (
-        _PORTFOLIO_SUMMARY_KEYS
-        if "user_id" in data
-        else _PROJECT_SUMMARY_KEYS
-    )
+    keys = _PORTFOLIO_SUMMARY_KEYS if "user_id" in data else _PROJECT_SUMMARY_KEYS
     rows: list[tuple[str, object]] = []
     for key in keys:
         if key not in summary:
@@ -227,16 +225,11 @@ def _is_portfolio(data: dict[str, Any]) -> bool:
     """Whether a payload carries per-project attribution on its items."""
     if "user_id" in data:
         return True
-    return any(
-        isinstance(row, dict) and "project_id" in row
-        for row in data.get("items") or []
-    )
+    return any(isinstance(row, dict) and "project_id" in row for row in data.get("items") or [])
 
 
 def _items(data: dict[str, Any]) -> list[dict[str, Any]]:
-    return [
-        row for row in data.get("items") or [] if isinstance(row, dict)
-    ]
+    return [row for row in data.get("items") or [] if isinstance(row, dict)]
 
 
 def _csv_bool(value: Any) -> str:
@@ -263,9 +256,9 @@ def _item_values(
         _safe_int(row.get("simulation_id")) or "",
         _safe_text(row.get("created_at")),
         _safe_int(row.get("age_days")),
-        "" if row.get("signal_quality") is None
-        else _bounded_rate(row.get("signal_quality")),
-        "" if row.get("predicted_conversion_rate") is None
+        "" if row.get("signal_quality") is None else _bounded_rate(row.get("signal_quality")),
+        ""
+        if row.get("predicted_conversion_rate") is None
         else _bounded_rate(row.get("predicted_conversion_rate")),
         _safe_text(row.get("product_type_detected")),
         _safe_text(row.get("primary_failure_domain")),
@@ -314,16 +307,19 @@ def outcome_gaps_to_json(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     """Render an outcome-gaps digest payload as a strict JSON document."""
-    return json.dumps(
-        {
-            "metadata": _json_safe(metadata or {}),
-            "outcome_gaps": _json_safe(_as_dict(payload)),
-        },
-        default=str,
-        ensure_ascii=False,
-        indent=2,
-        allow_nan=False,
-    ) + "\n"
+    return (
+        json.dumps(
+            {
+                "metadata": _json_safe(metadata or {}),
+                "outcome_gaps": _json_safe(_as_dict(payload)),
+            },
+            default=str,
+            ensure_ascii=False,
+            indent=2,
+            allow_nan=False,
+        )
+        + "\n"
+    )
 
 
 def _escape_md_cell(value: Any) -> str:
@@ -389,11 +385,7 @@ def outcome_gaps_to_markdown(
     summary = data.get("summary") or {}
     if not isinstance(summary, dict):
         summary = {}
-    keys = (
-        _PORTFOLIO_SUMMARY_KEYS
-        if "user_id" in data
-        else _PROJECT_SUMMARY_KEYS
-    )
+    keys = _PORTFOLIO_SUMMARY_KEYS if "user_id" in data else _PROJECT_SUMMARY_KEYS
 
     lines: list[str] = []
     lines.append("# Outcome Feedback Gaps")
@@ -443,14 +435,11 @@ def outcome_gaps_to_markdown(
         "Urgency | Recommendation |"
     )
     lines.append(
-        f"| ---: {project_align}| --- | ---: | ---: | ---: | --- | --- | "
-        "--- | --- | --- |"
+        f"| ---: {project_align}| --- | ---: | ---: | ---: | --- | --- | --- | --- | --- |"
     )
     for row in rows:
         project_cells = (
-            f"| {_safe_int(row.get('project_id')) or '—'} "
-            if include_project_id
-            else ""
+            f"| {_safe_int(row.get('project_id')) or '—'} " if include_project_id else ""
         )
         lines.append(
             "| {sim} {project}| {created} | {age} | {signal} | {predicted} | "
@@ -461,14 +450,11 @@ def outcome_gaps_to_markdown(
                 age=_safe_int(row.get("age_days")),
                 signal=_md_pct(row.get("signal_quality")),
                 predicted=_md_pct(row.get("predicted_conversion_rate")),
-                product=_escape_md_cell(row.get("product_type_detected"))
-                or "—",
-                domain=_escape_md_cell(row.get("primary_failure_domain"))
-                or "—",
+                product=_escape_md_cell(row.get("product_type_detected")) or "—",
+                domain=_escape_md_cell(row.get("primary_failure_domain")) or "—",
                 eligible=_md_yes_no(row.get("learning_eligible")),
                 urgency=_escape_md_cell(row.get("urgency")) or "—",
-                recommendation=_escape_md_cell(row.get("recommendation"))
-                or "—",
+                recommendation=_escape_md_cell(row.get("recommendation")) or "—",
             )
         )
     lines.append("")
@@ -483,9 +469,7 @@ def outcome_gaps_to_markdown(
     elif project_id:
         footer.append(f"Project {project_id}")
     if data.get("generated_at"):
-        footer.append(
-            f"Generated {_escape_md_cell(data.get('generated_at'))}"
-        )
+        footer.append(f"Generated {_escape_md_cell(data.get('generated_at'))}")
     lines.append(f"*{' · '.join(footer)}*")
     lines.append("")
 

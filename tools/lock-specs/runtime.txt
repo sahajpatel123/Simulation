@@ -1,0 +1,3 @@
+# Runtime lock spec: mirrors requirements.txt exactly.
+# Consumed by tools/regen_locks.sh via pip --dry-run --report.
+-r ../../requirements.txt

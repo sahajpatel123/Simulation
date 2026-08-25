@@ -21,6 +21,8 @@ import io
 import json
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
     """Render the optional metadata block as ``(key, value)`` rows."""
@@ -55,9 +57,7 @@ def _breakdown_cell(breakdown: Any) -> str:
     """Render the sensitivity breakdown as a compact ``KEY=count`` cell."""
     if not isinstance(breakdown, dict) or not breakdown:
         return ""
-    return "; ".join(
-        f"{key}={_value(value)}" for key, value in sorted(breakdown.items())
-    )
+    return "; ".join(f"{key}={_value(value)}" for key, value in sorted(breakdown.items()))
 
 
 def _safe_csv_cell(value: object) -> object:
@@ -74,7 +74,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with formula-injection guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def coverage_gaps_to_csv(

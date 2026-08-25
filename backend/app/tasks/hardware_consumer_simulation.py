@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 from sqlalchemy import text
 
 from app.browser.utils import cluster_to_agent_profile
+from app.core.celery_app import celery_app
 from app.core.database import SessionLocal
 from app.core.tier_enforcement import enforce_hardware_access
 from app.models.project import Project
@@ -23,7 +24,6 @@ from app.simulation.clusters.registry import ClusterRegistry
 from app.simulation.cognitive_state import CognitiveStateMutator
 from app.simulation.conductor import Conductor, ConductorResult
 from app.simulation.product_type import ProductType
-from app.worker import celery_app
 
 _conductor = Conductor()
 _mutator = CognitiveStateMutator()

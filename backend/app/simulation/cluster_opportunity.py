@@ -19,6 +19,7 @@ No DB / I/O — verifiable without FastAPI or PostgreSQL.
 """
 from __future__ import annotations
 
+import json
 import math
 from collections import defaultdict
 from datetime import UTC, datetime
@@ -67,9 +68,8 @@ def _coerce_results(value: Any) -> dict[str, Any]:
         return value
     if isinstance(value, str):
         try:
-            import json as _json
 
-            parsed = _json.loads(value)
+            parsed = json.loads(value)
             return parsed if isinstance(parsed, dict) else {}
         except (ValueError, TypeError):
             return {}

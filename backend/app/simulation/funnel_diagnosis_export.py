@@ -23,6 +23,8 @@ import json
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 
 def _as_dict(payload: Any) -> dict[str, Any]:
     """Coerce a Pydantic model or plain dict into a plain dict."""
@@ -67,7 +69,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with the formula-injection guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
@@ -319,45 +321,27 @@ def funnel_diagnosis_to_markdown(
     lines.append("")
     lines.append("| Metric | Value |")
     lines.append("| --- | ---: |")
+    lines.append(f"| Overall conversion | {_safe_float(data.get('overall_conversion')):.2%} |")
     lines.append(
-        "| Overall conversion | "
-        f"{_safe_float(data.get('overall_conversion')):.2%} |"
+        "| Converted agents | "
+        f"{_safe_int(data.get('converted_agents'))} "
+        f"/ {_safe_int(data.get('total_agents'))} |"
     )
-    lines.append("| Converted agents | "
-                 f"{_safe_int(data.get('converted_agents'))} "
-                 f"/ {_safe_int(data.get('total_agents'))} |")
-    lines.append(
-        "| Primary bottleneck | "
-        f"{_escape_md_cell(data.get('primary_bottleneck'))} |"
-    )
-    lines.append(
-        "| Bottleneck severity | "
-        f"{_escape_md_cell(data.get('bottleneck_severity'))} |"
-    )
-    lines.append(
-        "| Health score | "
-        f"{_safe_int(data.get('health_score'))}/100 |"
-    )
+    lines.append(f"| Primary bottleneck | {_escape_md_cell(data.get('primary_bottleneck'))} |")
+    lines.append(f"| Bottleneck severity | {_escape_md_cell(data.get('bottleneck_severity'))} |")
+    lines.append(f"| Health score | {_safe_int(data.get('health_score'))}/100 |")
     if data.get("recoverable_conversion") is not None:
         lines.append(
-            "| Recoverable conversion | "
-            f"{_safe_float(data.get('recoverable_conversion')):.2%} |"
+            f"| Recoverable conversion | {_safe_float(data.get('recoverable_conversion')):.2%} |"
         )
     if data.get("signal_quality") is not None:
-        lines.append(
-            "| Signal quality | "
-            f"{_safe_float(data.get('signal_quality')):.2f} |"
-        )
+        lines.append(f"| Signal quality | {_safe_float(data.get('signal_quality')):.2f} |")
     if data.get("primary_failure_domain"):
         lines.append(
-            "| Primary failure domain | "
-            f"{_escape_md_cell(data.get('primary_failure_domain'))} |"
+            f"| Primary failure domain | {_escape_md_cell(data.get('primary_failure_domain'))} |"
         )
     if data.get("product_type_detected"):
-        lines.append(
-            "| Product type | "
-            f"{_escape_md_cell(data.get('product_type_detected'))} |"
-        )
+        lines.append(f"| Product type | {_escape_md_cell(data.get('product_type_detected'))} |")
     lines.append("")
 
     lines.append("## Stage Diagnosis")

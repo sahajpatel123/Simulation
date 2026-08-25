@@ -1,9 +1,8 @@
 """Tests for the what-if recommendation list cap + dedupe helper."""
 from __future__ import annotations
 
-
-from app.simulation.what_if import _dedupe_and_cap_recommendations, build_what_if_scenario
 from app.schemas.what_if import WhatIfRecommendation
+from app.simulation.what_if import _dedupe_and_cap_recommendations, build_what_if_scenario
 
 
 def _rec(title: str, priority: int = 1) -> WhatIfRecommendation:

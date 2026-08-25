@@ -8,29 +8,17 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
-    # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
-    from app.models.ab_test_experiment import AbTestExperiment
-
-    # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
-    from app.models.assumption import Assumption
-
-    # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
-    from app.models.decision import Decision
-
-    # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
-    from app.models.environment import Environment
-
-    # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
-    from app.models.outcome import Outcome
-
-    # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
-    from app.models.outcome_tracker import OutcomeTracker
-
-    # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
-    from app.models.simulation import Simulation
-
-    # codeql[py/unsafe-cyclic-import]: TYPE_CHECKING-guarded import — never executes at runtime, so no runtime cycle exists
-    from app.models.user import User
+    # Module-style imports + fully qualified string annotations below: these
+    # peer-model edges stay type-checker visible while carrying no
+    # module-level ``from``-imports, so no cyclic-import pattern exists.
+    import app.models.ab_test_experiment
+    import app.models.assumption
+    import app.models.decision
+    import app.models.environment
+    import app.models.outcome
+    import app.models.outcome_tracker
+    import app.models.simulation
+    import app.models.user
 
 
 class Project(Base, TimestampMixin):
@@ -87,38 +75,38 @@ class Project(Base, TimestampMixin):
         server_default=text("'[]'::jsonb"),
     )
 
-    user: Mapped["User"] = relationship("User", back_populates="projects")
-    assumptions: Mapped[list["Assumption"]] = relationship(
+    user: Mapped["app.models.user.User"] = relationship("User", back_populates="projects")
+    assumptions: Mapped[list["app.models.assumption.Assumption"]] = relationship(
         "Assumption", back_populates="project", cascade="all, delete-orphan"
     )
-    simulations: Mapped[list["Simulation"]] = relationship(
+    simulations: Mapped[list["app.models.simulation.Simulation"]] = relationship(
         "Simulation", back_populates="project", cascade="all, delete-orphan"
     )
-    environment: Mapped["Environment | None"] = relationship(
+    environment: Mapped["app.models.environment.Environment | None"] = relationship(
         "Environment",
         back_populates="project",
         uselist=False,
         cascade="all, delete-orphan",
     )
-    decisions: Mapped[list["Decision"]] = relationship(
+    decisions: Mapped[list["app.models.decision.Decision"]] = relationship(
         "Decision",
         back_populates="project",
         cascade="all, delete-orphan",
         order_by="Decision.created_at.desc()",
     )
-    outcomes: Mapped[list["Outcome"]] = relationship(
+    outcomes: Mapped[list["app.models.outcome.Outcome"]] = relationship(
         "Outcome",
         back_populates="project",
         cascade="all, delete-orphan",
         order_by="Outcome.created_at.desc()",
     )
-    outcome_trackers: Mapped[list["OutcomeTracker"]] = relationship(
+    outcome_trackers: Mapped[list["app.models.outcome_tracker.OutcomeTracker"]] = relationship(
         "OutcomeTracker",
         back_populates="project",
         cascade="all, delete-orphan",
         order_by="OutcomeTracker.recorded_at.desc()",
     )
-    ab_test_experiments: Mapped[list["AbTestExperiment"]] = relationship(
+    ab_test_experiments: Mapped[list["app.models.ab_test_experiment.AbTestExperiment"]] = relationship(
         "AbTestExperiment",
         back_populates="project",
         cascade="all, delete-orphan",

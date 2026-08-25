@@ -1,8 +1,7 @@
 """Tests for the per-user oldest-open-item helper."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
+from datetime import UTC, datetime, timedelta
 
 
 def test_public_allowlist_matches_callers():
@@ -28,7 +27,7 @@ def test_picks_oldest():
     from app.simulation.oldest_open_item import (
         build_oldest_open_item,
     )
-    now = datetime(2026, 1, 10, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 10, tzinfo=UTC)
     out = build_oldest_open_item(
         [
             (now - timedelta(days=5), "sim", 1),
@@ -46,7 +45,7 @@ def test_handles_naive_datetime():
     from app.simulation.oldest_open_item import (
         build_oldest_open_item,
     )
-    now = datetime(2026, 1, 10, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 10, tzinfo=UTC)
     out = build_oldest_open_item(
         [
             (datetime(2026, 1, 1), "sim", 1),  # naive
@@ -61,11 +60,11 @@ def test_handles_aware_datetime():
     from app.simulation.oldest_open_item import (
         build_oldest_open_item,
     )
-    now = datetime(2026, 1, 10, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 10, tzinfo=UTC)
     out = build_oldest_open_item(
         [
             (
-                datetime(2026, 1, 5, tzinfo=timezone.utc),
+                datetime(2026, 1, 5, tzinfo=UTC),
                 "sim", 1,
             ),
         ],
@@ -81,7 +80,7 @@ def test_skips_non_list_entries():
     out = build_oldest_open_item([
         "not-a-tuple",
         None,
-        (datetime(2026, 1, 1, tzinfo=timezone.utc), "sim", 1),
+        (datetime(2026, 1, 1, tzinfo=UTC), "sim", 1),
     ])
     assert out["oldest_type"] == "sim"
 
@@ -91,8 +90,8 @@ def test_skips_short_entries():
         build_oldest_open_item,
     )
     out = build_oldest_open_item([
-        (datetime(2026, 1, 1, tzinfo=timezone.utc),),
-        (datetime(2026, 1, 1, tzinfo=timezone.utc), "sim", 1),
+        (datetime(2026, 1, 1, tzinfo=UTC),),
+        (datetime(2026, 1, 1, tzinfo=UTC), "sim", 1),
     ])
     assert out["oldest_type"] == "sim"
 
@@ -102,7 +101,7 @@ def test_severity_critical_above_30_days():
         SIGNAL_CRITICAL,
         build_oldest_open_item,
     )
-    now = datetime(2026, 1, 10, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 10, tzinfo=UTC)
     out = build_oldest_open_item(
         [
             (now - timedelta(days=45), "sim", 1),
@@ -118,7 +117,7 @@ def test_severity_watch_between_14_and_30_days():
         SIGNAL_WATCH,
         build_oldest_open_item,
     )
-    now = datetime(2026, 1, 10, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 10, tzinfo=UTC)
     out = build_oldest_open_item(
         [
             (now - timedelta(days=20), "sim", 1),
@@ -134,7 +133,7 @@ def test_severity_ok_below_14_days():
         SIGNAL_OK,
         build_oldest_open_item,
     )
-    now = datetime(2026, 1, 10, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 10, tzinfo=UTC)
     out = build_oldest_open_item(
         [
             (now - timedelta(days=5), "sim", 1),
@@ -157,7 +156,7 @@ def test_narrative_mentions_age_when_data():
     from app.simulation.oldest_open_item import (
         build_oldest_open_item,
     )
-    now = datetime(2026, 1, 10, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 10, tzinfo=UTC)
     out = build_oldest_open_item(
         [
             (now - timedelta(days=5), "sim", 1),
@@ -182,7 +181,7 @@ def test_schema_round_trip():
     from app.simulation.oldest_open_item import (
         build_oldest_open_item,
     )
-    now = datetime(2026, 1, 10, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 10, tzinfo=UTC)
     payload = build_oldest_open_item(
         [
             (now - timedelta(days=5), "sim", 1),

@@ -11,6 +11,7 @@ from celery.exceptions import MaxRetriesExceededError
 from sqlalchemy import text, update
 from sqlalchemy.orm import Session
 
+from app.core.celery_app import celery_app
 from app.core.database import SessionLocal
 from app.core.metrics import metrics
 from app.core.tier_enforcement import enforce_simulation_limit, increment_simulation_count
@@ -41,7 +42,6 @@ from app.simulation.simulation_webhook_delivery import (
     deliver_webhook_event,
 )
 from app.simulation.webhook_delivery_history import record_webhook_delivery
-from app.worker import celery_app
 
 logger = logging.getLogger(__name__)
 

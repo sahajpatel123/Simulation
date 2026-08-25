@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # Cluster fixture
 # ---------------------------------------------------------------------------
@@ -488,8 +487,8 @@ def test_generate_report_empty_list_returns_info() -> None:
 
 
 def test_generate_report_collects_critical_and_no_parity_clusters() -> None:
-    from app.simulation.architects.competitive_dynamics import CompetitiveDynamicsArchitect
     from app.simulation.architects.base import ArchitectOutput
+    from app.simulation.architects.competitive_dynamics import CompetitiveDynamicsArchitect
 
     a = CompetitiveDynamicsArchitect()
     crit = ArchitectOutput(

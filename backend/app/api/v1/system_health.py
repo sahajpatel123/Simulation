@@ -7,7 +7,7 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -18,9 +18,10 @@ from app.core import response_cache as response_cache_module
 from app.core import simulation_health as simulation_health_module
 from app.core import worker_health as worker_health_module
 from app.core.cache_health import build_cache_health
+from app.core.celery_app import celery_app
 from app.core.config import settings
 from app.core.database import engine
-from app.core.deps import get_db
+from app.core.deps import get_current_user_optional, get_db, require_admin
 from app.core.metrics import metrics
 from app.core.progress_bridge import (
     CIRCUIT_BREAKER_SECONDS,
@@ -44,6 +45,7 @@ from app.core.websocket_health import (
     build_websocket_health,
     record_websocket_gauges,
 )
+from app.models.user import User
 from app.schemas.system_health import (
     CacheHealthOut,
     DatabasePoolHealthOut,
@@ -56,13 +58,36 @@ from app.schemas.system_health import (
     WebsocketHealthOut,
     WorkerHealthOut,
 )
-from app.worker import celery_app
 
 router = APIRouter(prefix="/system", tags=["system"])
 
 logger = logging.getLogger(__name__)
 
 _JSON_200 = {200: {"description": "Success", "content": {"application/json": {}}}}
+
+
+def require_admin_in_production(
+    current_user: User | None = Depends(get_current_user_optional),
+) -> None:
+    """Gate every ``/system/*`` observability digest behind admin auth in production.
+
+    Together these digests are an operations dashboard: per-route traffic
+    and error statistics (a richer route map than the OpenAPI surface
+    production already disables), LLM provider health, broker queue depths,
+    pool utilization, and live simulation IDs. Anonymous access is fine for
+    local development tooling but must not ship on a public deploy, so the
+    guard keys off the effective environment like every other production
+    guard: 401 for anonymous callers, ``require_admin()`` otherwise.
+    """
+    if settings.ENVIRONMENT.lower() != "production":
+        return
+    if current_user is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required for system diagnostics",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    require_admin(current_user)
 
 
 def build_health_summary(
@@ -134,6 +159,7 @@ def _worker_status() -> dict[str, Any]:
     summary="Combined database, Redis, and worker health probe",
     responses=_JSON_200,
     response_model=SystemHealthOut,
+    dependencies=[Depends(require_admin_in_production)],
 )
 def system_health(
     db: Session = Depends(get_db),
@@ -151,6 +177,7 @@ def system_health(
     summary="In-process per-route request health (latency percentiles + error rates)",
     responses=_JSON_200,
     response_model=RequestHealthOut,
+    dependencies=[Depends(require_admin_in_production)],
 )
 def request_health(
     limit: int = Query(
@@ -185,6 +212,7 @@ def request_health(
     summary="In-process database query health (latency percentiles, error rates, slow statements)",
     responses=_JSON_200,
     response_model=QueryHealthOut,
+    dependencies=[Depends(require_admin_in_production)],
 )
 def query_health(
     limit: int = Query(
@@ -216,6 +244,7 @@ def query_health(
     summary="In-process LLM call health (success rates, failure reasons, latency percentiles)",
     responses=_JSON_200,
     response_model=LLMHealthOut,
+    dependencies=[Depends(require_admin_in_production)],
 )
 def llm_health(
     limit: int = Query(
@@ -252,7 +281,8 @@ def llm_health(
     # Redis is down, the Redis-backed limiter must not 503 the one probe
     # that would report the outage.
     dependencies=[
-        Depends(rate_limit(limit=10, window_s=60, fail_open=True))
+        Depends(rate_limit(limit=10, window_s=60, fail_open=True)),
+        Depends(require_admin_in_production),
     ],
 )
 def cache_health() -> dict[str, Any]:
@@ -276,10 +306,7 @@ def cache_health() -> dict[str, Any]:
 
 @router.get(
     "/worker-health",
-    summary=(
-        "Celery worker and queue health (backlog depth, concurrency, "
-        "in-flight tasks)"
-    ),
+    summary=("Celery worker and queue health (backlog depth, concurrency, in-flight tasks)"),
     responses=_JSON_200,
     response_model=WorkerHealthOut,
     # Probes every worker (ping/stats/active/reserved/scheduled/queues) and
@@ -287,7 +314,8 @@ def cache_health() -> dict[str, Any]:
     # other observability digests are bounded. Fails open so the probe that
     # would report a broker outage is not 503ed by the Redis-backed limiter.
     dependencies=[
-        Depends(rate_limit(limit=10, window_s=60, fail_open=True))
+        Depends(rate_limit(limit=10, window_s=60, fail_open=True)),
+        Depends(require_admin_in_production),
     ],
 )
 def worker_health(
@@ -296,8 +324,7 @@ def worker_health(
         ge=1,
         le=worker_health_module.MAX_BACKLOG_THRESHOLD,
         description=(
-            "Total broker queue depth at which the digest reports WATCH "
-            "instead of HEALTHY."
+            "Total broker queue depth at which the digest reports WATCH instead of HEALTHY."
         ),
     ),
 ) -> dict[str, Any]:
@@ -324,12 +351,10 @@ def worker_health(
 
 @router.get(
     "/simulation-health",
-    summary=(
-        "Simulation pipeline health (completion rates, latency "
-        "percentiles, failure buckets)"
-    ),
+    summary=("Simulation pipeline health (completion rates, latency percentiles, failure buckets)"),
     responses=_JSON_200,
     response_model=SimulationHealthOut,
+    dependencies=[Depends(require_admin_in_production)],
 )
 def simulation_health(
     db: Session = Depends(get_db),
@@ -337,10 +362,7 @@ def simulation_health(
         default=simulation_health_module.DEFAULT_WINDOW_DAYS,
         ge=1,
         le=simulation_health_module.MAX_WINDOW_DAYS,
-        description=(
-            "Number of recent days of simulation history to include in "
-            "the digest."
-        ),
+        description=("Number of recent days of simulation history to include in the digest."),
     ),
     recent_failures_limit: int = Query(
         default=simulation_health_module.DEFAULT_RECENT_FAILURES_LIMIT,
@@ -374,12 +396,10 @@ def simulation_health(
 
 @router.get(
     "/database-pool-health",
-    summary=(
-        "Database connection-pool health (in-use connections, "
-        "utilization, server headroom)"
-    ),
+    summary=("Database connection-pool health (in-use connections, utilization, server headroom)"),
     responses=_JSON_200,
     response_model=DatabasePoolHealthOut,
+    dependencies=[Depends(require_admin_in_production)],
 )
 def database_pool_health(
     db: Session = Depends(get_db),
@@ -416,6 +436,7 @@ def database_pool_health(
     ),
     responses=_JSON_200,
     response_model=WebsocketHealthOut,
+    dependencies=[Depends(require_admin_in_production)],
 )
 def websocket_health() -> WebsocketHealthOut:
     """Return a digest of the live progress-delivery path.
@@ -442,9 +463,7 @@ def websocket_health() -> WebsocketHealthOut:
         bridge_running=progress_bridge.is_running(),
         connection_count=ws_manager.connection_count,
         connected_simulation_ids=ws_manager.connected_simulation_ids(),
-        last_publish_failure_age_seconds=(
-            progress_bridge.last_publish_failure_age_seconds()
-        ),
+        last_publish_failure_age_seconds=(progress_bridge.last_publish_failure_age_seconds()),
         channel=progress_bridge.channel_name or PROGRESS_CHANNEL,
         reconnect_delay_seconds=RECONNECT_DELAY_SECONDS,
         circuit_breaker_seconds=CIRCUIT_BREAKER_SECONDS,
@@ -464,7 +483,8 @@ def websocket_health() -> WebsocketHealthOut:
     # observability digests are bounded. Fails open so the overview is
     # still reachable when the Redis-backed limiter itself is down.
     dependencies=[
-        Depends(rate_limit(limit=5, window_s=60, fail_open=True))
+        Depends(rate_limit(limit=5, window_s=60, fail_open=True)),
+        Depends(require_admin_in_production),
     ],
 )
 def system_overview(
@@ -492,9 +512,7 @@ def system_overview(
     )
     query_digest = query_health_module.build_query_health(
         snapshot,
-        slow_queries=slow_queries_snapshot(
-            limit=query_health_module.DEFAULT_LIMIT
-        ),
+        slow_queries=slow_queries_snapshot(limit=query_health_module.DEFAULT_LIMIT),
         generated_at=generated_at,
     )
     llm_digest = llm_health_module.build_llm_health(
@@ -528,9 +546,7 @@ def system_overview(
     simulation_digest = simulation_health_module.build_simulation_health(
         **simulation_snapshot,
         window_days=simulation_health_module.DEFAULT_WINDOW_DAYS,
-        recent_failures_limit=(
-            simulation_health_module.DEFAULT_RECENT_FAILURES_LIMIT
-        ),
+        recent_failures_limit=(simulation_health_module.DEFAULT_RECENT_FAILURES_LIMIT),
         generated_at=generated_at,
     )
 
@@ -553,17 +569,11 @@ def system_overview(
     redis_configured = redis_probe.get("status") != "unconfigured"
     websocket_digest = build_websocket_health(
         redis_configured=redis_configured,
-        redis_reachable=(
-            redis_probe.get("status") == "ok"
-            if redis_configured
-            else None
-        ),
+        redis_reachable=(redis_probe.get("status") == "ok" if redis_configured else None),
         bridge_running=progress_bridge.is_running(),
         connection_count=ws_manager.connection_count,
         connected_simulation_ids=ws_manager.connected_simulation_ids(),
-        last_publish_failure_age_seconds=(
-            progress_bridge.last_publish_failure_age_seconds()
-        ),
+        last_publish_failure_age_seconds=(progress_bridge.last_publish_failure_age_seconds()),
         channel=progress_bridge.channel_name or PROGRESS_CHANNEL,
         reconnect_delay_seconds=RECONNECT_DELAY_SECONDS,
         circuit_breaker_seconds=CIRCUIT_BREAKER_SECONDS,

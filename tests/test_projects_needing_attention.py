@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 
-
 def test_public_allowlist_matches_callers():
     from app.simulation import projects_needing_attention
     assert set(projects_needing_attention.__all__) == {

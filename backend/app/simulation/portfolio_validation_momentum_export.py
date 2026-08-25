@@ -23,6 +23,8 @@ import json
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 FORMAT_VERSION: str = "1"
 
 _SUMMARY_KEYS: tuple[str, ...] = (
@@ -138,7 +140,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write one CSV row with the formula guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _json_safe(value: Any) -> Any:
@@ -215,9 +217,7 @@ def portfolio_validation_momentum_to_csv(
             _write_row(
                 writer,
                 [
-                    _text(project_data.get(key))
-                    if project_data.get(key) is not None
-                    else ""
+                    _text(project_data.get(key)) if project_data.get(key) is not None else ""
                     for key in _PROJECT_HEADERS
                 ],
             )
@@ -239,16 +239,19 @@ def portfolio_validation_momentum_to_json(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     """Render a portfolio-momentum payload as a strict JSON envelope."""
-    return json.dumps(
-        {
-            "metadata": _json_safe(metadata or {}),
-            "portfolio_validation_momentum": _json_safe(_as_dict(payload)),
-        },
-        default=str,
-        ensure_ascii=False,
-        indent=2,
-        allow_nan=False,
-    ) + "\n"
+    return (
+        json.dumps(
+            {
+                "metadata": _json_safe(metadata or {}),
+                "portfolio_validation_momentum": _json_safe(_as_dict(payload)),
+            },
+            default=str,
+            ensure_ascii=False,
+            indent=2,
+            allow_nan=False,
+        )
+        + "\n"
+    )
 
 
 def _escape_md_cell(value: Any) -> str:
@@ -332,9 +335,7 @@ def portfolio_validation_momentum_to_markdown(
     for key in _SUMMARY_KEYS:
         value = summary.get(key)
         rendered = _md_pct(value) if key in _PCT_KEYS else _md_cell(value)
-        lines.append(
-            f"| {_escape_md_cell(_LABELS.get(key, key))} | {rendered} |"
-        )
+        lines.append(f"| {_escape_md_cell(_LABELS.get(key, key))} | {rendered} |")
     lines.append("")
 
     if insights:
@@ -355,8 +356,7 @@ def portfolio_validation_momentum_to_markdown(
         lines.append("## Projects")
         lines.append("")
         lines.append(
-            "| Rank | Project | Status | De-risked | Pending | "
-            "Coverage | Weeks to target |"
+            "| Rank | Project | Status | De-risked | Pending | Coverage | Weeks to target |"
         )
         lines.append("| --- | --- | --- | --- | --- | --- | --- |")
         for project in projects:
@@ -365,19 +365,12 @@ def portfolio_validation_momentum_to_markdown(
                 "| {rank} | {title} | {status} | {derisked} | {pending} | "
                 "{coverage} | {weeks} |".format(
                     rank=_md_cell(project_data.get("rank")),
-                    title=_escape_md_cell(
-                        str(project_data.get("project_title") or "")
-                    )
-                    or "—",
+                    title=_escape_md_cell(str(project_data.get("project_title") or "")) or "—",
                     status=_md_cell(project_data.get("status")),
                     derisked=_md_cell(project_data.get("de_risked_count")),
                     pending=_md_cell(project_data.get("pending_count")),
-                    coverage=_md_pct(
-                        project_data.get("evidence_coverage_pct")
-                    ),
-                    weeks=_md_cell(
-                        project_data.get("weeks_to_de_risked_target")
-                    ),
+                    coverage=_md_pct(project_data.get("evidence_coverage_pct")),
+                    weeks=_md_cell(project_data.get("weeks_to_de_risked_target")),
                 )
             )
         lines.append("")
@@ -385,11 +378,7 @@ def portfolio_validation_momentum_to_markdown(
     lines.append("---")
     lines.append("")
     footer = ["Portfolio validation momentum"]
-    user_id = (
-        _text(metadata.get("user_id"))
-        if metadata
-        else _text(data.get("user_id"))
-    )
+    user_id = _text(metadata.get("user_id")) if metadata else _text(data.get("user_id"))
     if user_id:
         footer.append(f"User {user_id}")
     if metadata and metadata.get("generated_at"):

@@ -171,7 +171,6 @@ export function useBrief(projectId: number | string) {
 }
 
 export function useSaveBrief(projectId: number | string) {
-  const qc = useQueryClient()
   return useCeeMutation(
     (payload: {
       positioning?: string

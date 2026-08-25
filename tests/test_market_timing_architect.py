@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # Cluster fixture
 # ---------------------------------------------------------------------------
@@ -72,8 +71,8 @@ def test_market_timing_name_constant() -> None:
 
 
 def test_market_timing_product_types_is_all() -> None:
-    from app.simulation.architects.market_timing import MarketTimingArchitect
     from app.simulation.architects.base import BaseArchitect
+    from app.simulation.architects.market_timing import MarketTimingArchitect
 
     pt = MarketTimingArchitect().product_types
     assert set(pt) == set(BaseArchitect.ALL_PRODUCT_TYPES)
@@ -529,8 +528,8 @@ def test_generate_report_empty_list_returns_info() -> None:
 
 
 def test_generate_report_collects_critical_and_blocked_clusters() -> None:
-    from app.simulation.architects.market_timing import MarketTimingArchitect
     from app.simulation.architects.base import ArchitectOutput
+    from app.simulation.architects.market_timing import MarketTimingArchitect
 
     a = MarketTimingArchitect()
     crit = ArchitectOutput(

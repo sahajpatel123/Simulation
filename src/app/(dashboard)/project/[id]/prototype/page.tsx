@@ -14,7 +14,6 @@ import { useProject } from '@/hooks/useProjects'
 import { apiError, apiLong } from '@/lib/api'
 
 type PrototypeGenerateResponse = GeneratedUI & { project_id?: number }
-type UISimulationStartResponse = { ui_simulation_run_id: number }
 
 const MOCK_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -135,7 +134,6 @@ const PAGE_ENTER = { opacity: 1, y: 0 }
 const PAGE_HIDDEN = { opacity: 0, y: 10 }
 const PAGE_GONE = { opacity: 0, y: -10 }
 const EASE_IN: [number, number, number, number] = [0.22, 1, 0.36, 1]
-const EASE_OUT: [number, number, number, number] = [0.4, 0, 1, 1]
 
 const EDIT_SUGGESTIONS = [
   'Make the hero headline bolder and more compelling',
@@ -172,7 +170,6 @@ export default function PrototypePage() {
   /* Edit mode state */
   const [editMode, setEditMode] = useState(false)
   const [editPrompt, setEditPrompt] = useState('')
-  const [editApplied, setEditApplied] = useState(false)
   const [revisions, setRevisions] = useState<Revision[]>([])
 
   const { data: uiHistory, isLoading: isLoadingUiHistory } = useQuery({
@@ -228,21 +225,10 @@ export default function PrototypePage() {
       setRevisions(prev => prev.map((r, i) => i === 0 ? { ...r, status: 'applied' as const } : r))
       setUiPreviewPath(data.html_preview_url)
       setGeneratedUiId(data.id)
-      setEditApplied(true)
       void qc.invalidateQueries({ queryKey: ['generated-uis', projectId] })
     },
     onError: (err) => {
       setRevisions(prev => prev.map((r, i) => i === 0 ? { ...r, status: 'error' as const, errorMsg: apiError(err) } : r))
-    },
-  })
-
-  const simulateMutation = useMutation({
-    mutationFn: async (uiId: number): Promise<UISimulationStartResponse> => {
-      const { data } = await apiLong.post<UISimulationStartResponse>(`/projects/${projectId}/generated-uis/${uiId}/simulate`)
-      return data
-    },
-    onSuccess: (data) => {
-      setSimStatus(`Simulation queued — run #${data.ui_simulation_run_id}`)
     },
   })
 
@@ -296,7 +282,6 @@ export default function PrototypePage() {
   const hasBuiltOnce = Boolean(legacyPrototypeHtml) || Boolean(uiPreviewPath)
   const iframeServeUrl = uiPreviewPath ? previewAbsoluteUrl(uiPreviewPath) : null
   const generateError = generateMutation.isError ? apiError(generateMutation.error) : null
-  const refineError = refineMutation.isError ? apiError(refineMutation.error) : null
 
   const handlePullProof = () => {
     if (!prompt.trim() || !Number.isFinite(projectId)) return
@@ -321,10 +306,7 @@ export default function PrototypePage() {
   }
 
   const hasRevised = revisions.length > 0
-  const appliedRevisionCount = revisions.filter(r => r.status === 'applied').length
   const isRefining = revisions[0]?.status === 'pending'
-  const canApplyEdit = editPrompt.trim().length > 0 && !isRefining
-  const editCharOverSoftLimit = editPrompt.length > 400
 
   const handleApplyEdit = () => {
     if (!editPrompt.trim() || generatedUiId == null || isRefining) return

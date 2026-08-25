@@ -24,6 +24,8 @@ import json
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 
 def _as_dict(payload: Any) -> dict[str, Any]:
     """Coerce a Pydantic model or plain dict into a plain dict."""
@@ -108,7 +110,7 @@ def _safe_csv_cell(value: object) -> object:
 
 
 def _write_row(writer: Any, row: list[object]) -> None:
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
@@ -195,9 +197,7 @@ def simulation_comparison_to_csv(
         "verdict",
     ):
         value = summary.get(key)
-        if key in {"best_simulation_id", "worst_simulation_id"} and isinstance(
-            value, int
-        ):
+        if key in {"best_simulation_id", "worst_simulation_id"} and isinstance(value, int):
             _write_row(writer, [key, f"{value} ({_id_label(data, value)})"])
         else:
             _write_row(writer, [key, _safe_text(value)])
@@ -278,15 +278,12 @@ def simulation_comparison_to_csv(
         severities: list[str] = []
         finding_texts: list[str] = []
         for sid in sim_ids:
-            severity = _safe_text(
-                _lookup(row.get("severity_by_sim"), sid)
-            )
+            severity = _safe_text(_lookup(row.get("severity_by_sim"), sid))
             severities.append(
                 f"{_id_label(data, sid)}:{severity}" if severity else f"{_id_label(data, sid)}:"
             )
             finding_texts.append(
-                f"{_id_label(data, sid)}:"
-                f"{_findings_text(_lookup(row.get('findings'), sid))}"
+                f"{_id_label(data, sid)}:{_findings_text(_lookup(row.get('findings'), sid))}"
             )
         _write_row(
             writer,
@@ -379,9 +376,7 @@ def simulation_comparison_to_markdown(
 
     lines.append("## Simulations Compared")
     lines.append("")
-    lines.append(
-        "| Label | Simulation | Conversion | Revenue | Signal | Product type | Status |"
-    )
+    lines.append("| Label | Simulation | Conversion | Revenue | Signal | Product type | Status |")
     lines.append("| --- | ---: | ---: | ---: | ---: | --- | --- |")
     for idx, sim in enumerate(_as_list(data.get("simulations")), start=1):
         if not isinstance(sim, dict):
@@ -419,11 +414,7 @@ def simulation_comparison_to_markdown(
             + " | ".join(f"{label} conv" for label in _sim_labels(sim_ids))
             + " | Winner |"
         )
-        lines.append(
-            "| --- | ---: | "
-            + " | ".join(["---:"] * len(sim_ids))
-            + " | --- |"
-        )
+        lines.append("| --- | ---: | " + " | ".join(["---:"] * len(sim_ids)) + " | --- |")
         for row in clusters:
             if not isinstance(row, dict):
                 continue
@@ -432,9 +423,7 @@ def simulation_comparison_to_markdown(
                 "| {name} | {weight} | {conv_cells} | {winner} |".format(
                     name=_escape_md_cell(row.get("cluster_name")),
                     weight=f"{_safe_float(row.get('population_weight')):.4f}",
-                    conv_cells=" | ".join(
-                        _pct(_lookup(conversions, sid)) for sid in sim_ids
-                    ),
+                    conv_cells=" | ".join(_pct(_lookup(conversions, sid)) for sid in sim_ids),
                     winner=_escape_md_cell(row.get("winner_label")),
                 )
             )

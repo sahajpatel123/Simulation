@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+
 from app.simulation.simulation_export import (
     build_simulation_export,
     simulation_to_csv,

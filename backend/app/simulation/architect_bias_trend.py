@@ -20,7 +20,7 @@ before invoking.
 from __future__ import annotations
 
 import math
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 # Reuse the bin / trend constants from cluster_trend so the
 # dashboard's wording stays consistent.
@@ -328,7 +328,6 @@ def build_architect_bias_trend(
 
 
 def _timedelta(**kwargs):
-    from datetime import timedelta
     return timedelta(**kwargs)
 
 

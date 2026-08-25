@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import (
+    API_TOKEN_HASH_V2_PREFIX,
     API_TOKEN_PREFIX,
+    api_token_hash_candidates,
     api_token_is_expired,
     decode_token,
     hash_api_token,
@@ -43,6 +45,30 @@ def _as_utc(value: datetime | None) -> datetime | None:
     return value.astimezone(UTC)
 
 
+def lookup_api_token_row(db: Session, token: str) -> ApiToken | None:
+    """Resolve a presented API token to its ``ApiToken`` row, upgrading legacy digests.
+
+    Rows written before the v2 HMAC scheme hold a bare SHA-256 hex digest.
+    When such a row still matches, it is rewritten in place to the current
+    ``v2:`` form the first time its token is legitimately used, so the
+    legacy fast-hash digest stops being accepted as soon as a stronger one
+    can replace it. The write is fail-open — a failed upgrade must never
+    block authentication; the next successful request retries it.
+    """
+    row = (
+        db.query(ApiToken)
+        .filter(ApiToken.token_hash.in_(api_token_hash_candidates(token)))
+        .first()
+    )
+    if row is not None and not row.token_hash.startswith(API_TOKEN_HASH_V2_PREFIX):
+        try:
+            row.token_hash = hash_api_token(token)
+            db.commit()
+        except Exception:  # noqa: BLE001 - digest upgrades must never block auth
+            db.rollback()
+    return row
+
+
 def user_from_api_token(
     db: Session,
     token: str,
@@ -57,11 +83,7 @@ def user_from_api_token(
     """
     if not token.startswith(API_TOKEN_PREFIX):
         return None
-    row = (
-        db.query(ApiToken)
-        .filter(ApiToken.token_hash == hash_api_token(token))
-        .first()
-    )
+    row = lookup_api_token_row(db, token)
     if row is None or row.revoked_at is not None:
         return None
     if api_token_is_expired(row.expires_at):

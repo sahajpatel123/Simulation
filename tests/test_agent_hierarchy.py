@@ -12,8 +12,6 @@ SUPERVISOR tiers per cluster. Locks down:
 """
 from __future__ import annotations
 
-
-
 # ---------------------------------------------------------------------------
 # Explicit cluster maps
 # ---------------------------------------------------------------------------
@@ -21,9 +19,9 @@ from __future__ import annotations
 
 def test_supervisor_explicit_clusters_route_to_supervisor() -> None:
     from app.simulation.agent_hierarchy import (
+        SUPERVISOR_CLUSTERS,
         AgentHierarchyRouter,
         AgentTier,
-        SUPERVISOR_CLUSTERS,
     )
 
     router = AgentHierarchyRouter()
@@ -37,9 +35,9 @@ def test_supervisor_explicit_clusters_route_to_supervisor() -> None:
 
 def test_micro_explicit_clusters_route_to_micro() -> None:
     from app.simulation.agent_hierarchy import (
+        MICRO_CLUSTERS,
         AgentHierarchyRouter,
         AgentTier,
-        MICRO_CLUSTERS,
     )
 
     router = AgentHierarchyRouter()
@@ -215,8 +213,8 @@ def test_case_insensitive_keyword_match() -> None:
 def test_needs_browser_true_for_worker_and_supervisor() -> None:
     from app.simulation.agent_hierarchy import (
         AgentHierarchyRouter,
-        AgentTier,
         AgentRoutingDecision,
+        AgentTier,
     )
 
     router = AgentHierarchyRouter()
@@ -228,8 +226,8 @@ def test_needs_browser_true_for_worker_and_supervisor() -> None:
 def test_needs_browser_false_for_micro() -> None:
     from app.simulation.agent_hierarchy import (
         AgentHierarchyRouter,
-        AgentTier,
         AgentRoutingDecision,
+        AgentTier,
     )
 
     router = AgentHierarchyRouter()
@@ -242,8 +240,8 @@ def test_needs_browser_false_for_micro() -> None:
 def test_is_micro_predicate() -> None:
     from app.simulation.agent_hierarchy import (
         AgentHierarchyRouter,
-        AgentTier,
         AgentRoutingDecision,
+        AgentTier,
     )
 
     router = AgentHierarchyRouter()
@@ -322,8 +320,8 @@ def test_route_batch_with_no_profiles_uses_empty_default() -> None:
 def test_tier_summary_counts_each_tier() -> None:
     from app.simulation.agent_hierarchy import (
         AgentHierarchyRouter,
-        AgentTier,
         AgentRoutingDecision,
+        AgentTier,
     )
 
     router = AgentHierarchyRouter()

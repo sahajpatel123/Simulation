@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Pure helpers — ``parse_id_list``
 # ---------------------------------------------------------------------------
@@ -207,8 +206,8 @@ def test_summarise_statuses_drops_non_strings_and_empty() -> None:
 
 def test_batch_sort_defaults_to_id_asc() -> None:
     from app.simulation.sim_batch import (
-        DEFAULT_BATCH_SORT,
         DEFAULT_BATCH_ORDER,
+        DEFAULT_BATCH_SORT,
     )
     assert DEFAULT_BATCH_SORT == "id"
     assert DEFAULT_BATCH_ORDER == "asc"

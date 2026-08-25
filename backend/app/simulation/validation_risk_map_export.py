@@ -23,6 +23,8 @@ import json
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 FORMAT_VERSION: str = "1"
 
 _SUMMARY_KEYS: tuple[str, ...] = (
@@ -133,7 +135,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write one CSV row with the formula guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _json_safe(value: Any) -> Any:
@@ -241,16 +243,19 @@ def validation_risk_map_to_json(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     """Render a validation risk-map payload as a strict JSON envelope."""
-    return json.dumps(
-        {
-            "metadata": _json_safe(metadata or {}),
-            "validation_risk_map": _json_safe(_as_dict(payload)),
-        },
-        default=str,
-        ensure_ascii=False,
-        indent=2,
-        allow_nan=False,
-    ) + "\n"
+    return (
+        json.dumps(
+            {
+                "metadata": _json_safe(metadata or {}),
+                "validation_risk_map": _json_safe(_as_dict(payload)),
+            },
+            default=str,
+            ensure_ascii=False,
+            indent=2,
+            allow_nan=False,
+        )
+        + "\n"
+    )
 
 
 def _escape_md_cell(value: Any) -> str:
@@ -311,8 +316,7 @@ def validation_risk_map_to_markdown(
     lines.append("| --- | --- |")
     for key in _SUMMARY_KEYS:
         lines.append(
-            f"| {_escape_md_cell(_SUMMARY_LABELS.get(key, key))} "
-            f"| {_md_cell(data.get(key))} |"
+            f"| {_escape_md_cell(_SUMMARY_LABELS.get(key, key))} | {_md_cell(data.get(key))} |"
         )
     lines.append("")
 
@@ -323,10 +327,7 @@ def validation_risk_map_to_markdown(
             "| # | Category | Total | Tested | Untested | Killed "
             "| Inconsistent | Mean Quality | Risk |"
         )
-        lines.append(
-            "| ---: | --- | ---: | ---: | ---: | ---: | ---: "
-            "| ---: | ---: |"
-        )
+        lines.append("| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
         for idx, raw_row in enumerate(rows, start=1):
             item = _as_dict(raw_row)
             if not item:
@@ -358,9 +359,7 @@ def validation_risk_map_to_markdown(
     if project_id:
         footer.append(f"Project {project_id}")
     if metadata and metadata.get("generated_at"):
-        footer.append(
-            f"Generated {_escape_md_cell(_text(metadata['generated_at']))}"
-        )
+        footer.append(f"Generated {_escape_md_cell(_text(metadata['generated_at']))}")
     lines.append(f"*{' · '.join(footer)}*")
     lines.append("")
 

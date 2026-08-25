@@ -28,6 +28,8 @@ count (≤ 21).
 """
 from __future__ import annotations
 
+import math
+
 # Health-label allowlist — the route / schema echo this enum
 # verbatim. Stable so the dashboard can hard-code the set.
 LABEL_HEALTHY: str = "HEALTHY"
@@ -277,7 +279,6 @@ def _set_intersection_size(a: list[str], b: list[str]) -> int:
 
 def _safe_float(raw: object) -> float | None:
     """Coerce to a finite float or return ``None``."""
-    import math
     if raw is None or isinstance(raw, bool):
         return None
     if isinstance(raw, (int, float)):

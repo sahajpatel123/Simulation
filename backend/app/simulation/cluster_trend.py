@@ -19,7 +19,7 @@ disambiguate timezones.
 from __future__ import annotations
 
 import math
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 # Bin granularity options. The route validates user input
 # against this allowlist so a typo ("mont") doesn't silently
@@ -360,7 +360,6 @@ def build_cluster_trend(
 def _timedelta(**kwargs):
     """Local helper to avoid importing timedelta at module top
     just for the week-rollback calculation."""
-    from datetime import timedelta
     return timedelta(**kwargs)
 
 

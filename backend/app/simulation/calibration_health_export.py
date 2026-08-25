@@ -18,6 +18,8 @@ import csv
 import io
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
     """Render the optional metadata block as ``(key, value)`` rows."""
@@ -48,13 +50,13 @@ def calibration_health_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     for key, value in _metadata_rows(metadata):
-        writer.writerow([key, value])
+        write_row(writer, [key, value])
     if metadata:
-        writer.writerow([])
+        write_row(writer, [])
 
     # Summary section.
-    writer.writerow(["section", "Calibration Summary"])
-    writer.writerow(["key", "value"])
+    write_row(writer, ["section", "Calibration Summary"])
+    write_row(writer, ["key", "value"])
     summary_rows: list[tuple[str, object]] = [
         ("overall_health", payload.get("overall_health", "")),
         ("mean_abs_variance", payload.get("mean_abs_variance")),
@@ -83,36 +85,35 @@ def calibration_health_to_csv(
             )
     summary_rows.append(("summary", payload.get("summary", "")))
     for key, value in summary_rows:
-        writer.writerow([key, "" if value is None else value])
-    writer.writerow([])
+        write_row(writer, [key, "" if value is None else value])
+    write_row(writer, [])
 
     # Trend buckets.
-    writer.writerow(["section", "Trend Buckets"])
-    writer.writerow(
-        ["window", "days", "observation_count", "mean_abs_variance"]
-    )
+    write_row(writer, ["section", "Trend Buckets"])
+    write_row(writer, ["window", "days", "observation_count", "mean_abs_variance"])
     for bucket in payload.get("trend_buckets") or []:
         if not isinstance(bucket, dict):
             continue
-        writer.writerow(
+        write_row(
+            writer,
             [
                 bucket.get("window", ""),
                 bucket.get("days", ""),
                 bucket.get("observation_count", ""),
                 bucket.get("mean_abs_variance", ""),
-            ]
+            ],
         )
-    writer.writerow([])
+    write_row(writer, [])
 
     # Architect recommendation counts.
-    writer.writerow(["section", "Architect Accuracy Counts"])
-    writer.writerow(["recommendation", "count"])
+    write_row(writer, ["section", "Architect Accuracy Counts"])
+    write_row(writer, ["recommendation", "count"])
     counts = payload.get("architect_accuracy_counts") or {}
     if isinstance(counts, dict) and counts:
         for recommendation in sorted(counts):
-            writer.writerow([recommendation, counts[recommendation]])
+            write_row(writer, [recommendation, counts[recommendation]])
     else:
-        writer.writerow(["", ""])
+        write_row(writer, ["", ""])
 
     return buffer.getvalue()
 

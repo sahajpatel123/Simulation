@@ -506,7 +506,7 @@ export default function ProjectPage() {
               The Readings
             </h2>
             <div className="kicker" style={{ color: "var(--ink-secondary)" }}>
-              {pLoading ? "Being read…" : `${readings.length} SURFACED`}
+              {`${readings.length} SURFACED`}
             </div>
           </div>
           <div

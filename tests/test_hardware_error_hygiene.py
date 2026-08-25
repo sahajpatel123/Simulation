@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-import app.hardware.model_generator as model_generator_module
+from app.hardware import model_generator as model_generator_module
 from app.hardware.model_generator import HardwareModelGenerator
 
 

@@ -11,13 +11,21 @@ The CSV formula guard is the *union* of every historical variant so migrating
 an exporter onto :func:`safe_csv_cell` can only widen protection, never narrow
 it.
 """
+
 from __future__ import annotations
 
 import math
+import re
 from typing import Any
 
 _FORMULA_PREFIXES: tuple[str, ...] = ("=", "+", "-", "@", "\t", "\r")
 _RAW_WHITESPACE_PREFIXES: tuple[str, ...] = ("\t", "\r", "\n")
+
+# A signed pure number ("-20.0", "+3", "2.5e-3") is parsed as a numeric
+# cell by Excel/Sheets/LibreOffice — never as a formula — so prefixing it
+# only mangles founder data. Anything non-numeric after an initial sign
+# (e.g. "-2+3+cmd|' /C calc'!A0") keeps the full guard.
+_PLAIN_NUMBER = re.compile(r"^[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$")
 
 
 def as_dict(payload: Any) -> dict[str, Any]:
@@ -58,10 +66,14 @@ def safe_csv_cell(value: object) -> object:
     Prefixes a quote before any string whose first non-space character could be
     interpreted as a formula by Excel/Sheets/LibreOffice, or which starts with a
     control whitespace character that some spreadsheets strip before evaluating.
+    Signed pure numbers are exempt — spreadsheets parse them as numeric cells,
+    never formulas, so the prefix would only corrupt the value.
     """
     if not isinstance(value, str):
         return value
     stripped = value.lstrip()
+    if _PLAIN_NUMBER.match(stripped):
+        return value
     if stripped[:1] in _FORMULA_PREFIXES or value[:1] in _RAW_WHITESPACE_PREFIXES:
         return f"'{value}"
     return value

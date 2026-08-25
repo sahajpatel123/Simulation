@@ -1,0 +1,16 @@
+# Models-as-Data barriers for TheCee security helpers.
+#
+# Row shape: [namespace, type, isMethod, name, ext1, ext2, access-path, kind,
+#             provenance] — matches the format used by github/codeql's own
+#            model packs (e.g. go/ql/lib/ext/mime.multipart.model.yml).
+#
+#   extensible barrierModel + kind "log-injection" is consumed by the stock
+#   py/log-injection query (LogInjectionCustomizations.SanitizerFromModel).
+extensions:
+  - addsTo:
+      pack: codeql/python-all
+      extensible: barrierModel
+    data:
+      # app.core.security.log_safe(value) returns a CR/LF-stripped string:
+      # a barrier for any taint reaching log sinks through its result.
+      - ["app.core.security", "", False, "log_safe", "", "", "ReturnValue", "log-injection", "manual"]

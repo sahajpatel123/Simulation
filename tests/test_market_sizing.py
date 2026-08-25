@@ -8,7 +8,6 @@ import json
 import math
 from typing import Any
 
-
 from app.simulation.market_sizing import (
     CONVERSION_BENCHMARK,
     DEFAULT_MARKET_SIZE,

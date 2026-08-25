@@ -72,13 +72,22 @@ async def create_subscription(
 
     client = get_razorpay_client()
 
-    user_row = db.execute(
-        text("SELECT razorpay_customer_id, razorpay_subscription_id FROM users WHERE id = :uid"),
-        {"uid": current_user.id},
-    ).mappings().first()
+    user_row = (
+        db.execute(
+            text(
+                "SELECT razorpay_customer_id, razorpay_subscription_id FROM users WHERE id = :uid"
+            ),
+            {"uid": current_user.id},
+        )
+        .mappings()
+        .first()
+    )
     existing_customer_id = (user_row["razorpay_customer_id"] or None) if user_row else None
     if user_row and user_row["razorpay_subscription_id"]:
-        raise HTTPException(409, detail="An active subscription already exists. Cancel it before creating a new one.")
+        raise HTTPException(
+            409,
+            detail="An active subscription already exists. Cancel it before creating a new one.",
+        )
 
     if not existing_customer_id:
         display_name = (current_user.full_name or "TheCee User").strip() or "TheCee User"
@@ -132,6 +141,14 @@ async def create_subscription(
     "/webhook",
     summary="Razorpay subscription webhook handler",
     responses=_JSON_200,
+    # Signature-verified but otherwise unbounded: invalid-signature spam
+    # burns an HMAC comparison + log line per hit, and valid events lacking
+    # a dedupeable event id re-run their state transitions on every hit.
+    # 120/min/IP sits far above real Razorpay burst rates (their retries
+    # are backoff-driven) while making spam pointless. fail_open keeps
+    # payment state flowing if the limiter itself is down — availability
+    # beats the DoS bound there.
+    dependencies=[Depends(rate_limit(limit=120, window_s=60, fail_open=True))],
 )
 async def razorpay_webhook(
     request: Request,
@@ -167,10 +184,14 @@ async def razorpay_webhook(
 
     # Idempotency: skip if this webhook event has already been processed
     if event_id:
-        existing = db.execute(
-            text("SELECT id FROM processed_webhooks WHERE event_id = :eid"),
-            {"eid": event_id},
-        ).mappings().first()
+        existing = (
+            db.execute(
+                text("SELECT id FROM processed_webhooks WHERE event_id = :eid"),
+                {"eid": event_id},
+            )
+            .mappings()
+            .first()
+        )
         if existing:
             return {"status": "already_processed", "event": event, "event_id": event_id}
 
@@ -199,7 +220,11 @@ async def razorpay_webhook(
 
     if event == "subscription.activated":
         current_end = entity.get("current_end")
-        expires_at = datetime.fromtimestamp(int(current_end), tz=UTC) if current_end else now + timedelta(days=30)
+        expires_at = (
+            datetime.fromtimestamp(int(current_end), tz=UTC)
+            if current_end
+            else now + timedelta(days=30)
+        )
         db.execute(
             text("""
             UPDATE users
@@ -213,7 +238,11 @@ async def razorpay_webhook(
 
     elif event == "subscription.charged":
         current_end = entity.get("current_end")
-        expires_at = datetime.fromtimestamp(int(current_end), tz=UTC) if current_end else now + timedelta(days=32)
+        expires_at = (
+            datetime.fromtimestamp(int(current_end), tz=UTC)
+            if current_end
+            else now + timedelta(days=32)
+        )
         db.execute(
             text("""
             UPDATE users
@@ -240,7 +269,9 @@ async def razorpay_webhook(
     elif event == "subscription.halted":
         grace_expires = now + timedelta(days=3)
         db.execute(
-            text("UPDATE users SET subscription_expires_at = :expires WHERE razorpay_subscription_id = :sid"),
+            text(
+                "UPDATE users SET subscription_expires_at = :expires WHERE razorpay_subscription_id = :sid"
+            ),
             {"expires": grace_expires, "sid": subscription_id},
         )
         db.commit()
@@ -271,17 +302,21 @@ async def get_subscription_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    row = db.execute(
-        text(
-            """
+    row = (
+        db.execute(
+            text(
+                """
         SELECT subscription_tier, subscription_expires_at,
                razorpay_subscription_id, simulations_used_this_month,
                usage_reset_at
         FROM users WHERE id = :uid
         """
-        ),
-        {"uid": current_user.id},
-    ).mappings().first()
+            ),
+            {"uid": current_user.id},
+        )
+        .mappings()
+        .first()
+    )
 
     if not row:
         raise HTTPException(404, detail="User not found")
@@ -325,10 +360,14 @@ async def cancel_subscription(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    row = db.execute(
-        text("SELECT razorpay_subscription_id FROM users WHERE id = :uid"),
-        {"uid": current_user.id},
-    ).mappings().first()
+    row = (
+        db.execute(
+            text("SELECT razorpay_subscription_id FROM users WHERE id = :uid"),
+            {"uid": current_user.id},
+        )
+        .mappings()
+        .first()
+    )
     if not row or not row["razorpay_subscription_id"]:
         raise HTTPException(400, detail="No active subscription found")
 

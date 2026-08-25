@@ -521,12 +521,12 @@ def test_conductor_runs_architect_and_accountability_surfaces_finding() -> None:
 
 
 def test_registry_includes_new_architect_in_every_stack() -> None:
+    from app.simulation.architect_registry import build_architect_registry
     from app.simulation.conductor import (
         ARCHITECT_STACKS,
-        _build_architect_registry,
     )
 
-    registry = _build_architect_registry()
+    registry = build_architect_registry()
     assert "PaymentFrictionArchitect" in registry
     for stack in ARCHITECT_STACKS.values():
         assert "PaymentFrictionArchitect" in stack

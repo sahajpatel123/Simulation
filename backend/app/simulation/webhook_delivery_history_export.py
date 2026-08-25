@@ -20,6 +20,8 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 FORMAT_VERSION = "1"
 
 CSV_HEADERS = [
@@ -117,13 +119,14 @@ def webhook_deliveries_to_csv(
     writer = csv.writer(buffer, lineterminator="\n")
 
     for key, value in _metadata_rows(metadata):
-        writer.writerow([_safe_csv_cell(key), _safe_csv_cell(value)])
+        write_row(writer, [_safe_csv_cell(key), _safe_csv_cell(value)])
     if metadata:
-        writer.writerow([])
+        write_row(writer, [])
 
-    writer.writerow(CSV_HEADERS)
+    write_row(writer, CSV_HEADERS)
     for row in sorted(rows or [], key=_sort_key, reverse=True):
-        writer.writerow(
+        write_row(
+            writer,
             [
                 _safe_csv_cell(_text(row.get("id"))),
                 _safe_csv_cell(_text(row.get("webhook_subscription_id"))),
@@ -138,7 +141,7 @@ def webhook_deliveries_to_csv(
                 _safe_csv_cell(_text(row.get("retry_count"))),
                 _safe_csv_cell(_text(row.get("delivered_at"))),
                 _safe_csv_cell(_text(row.get("created_at"))),
-            ]
+            ],
         )
     return buffer.getvalue()
 

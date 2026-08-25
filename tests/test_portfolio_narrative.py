@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Public surface
 # ---------------------------------------------------------------------------
@@ -224,8 +223,8 @@ def test_narrative_includes_outliers_plural() -> None:
 def test_narrative_key_signals_mae_severity_ok() -> None:
     """MAE < 0.02 → ok severity."""
     from app.simulation.portfolio_narrative import (
-        build_portfolio_narrative,
         SIGNAL_OK,
+        build_portfolio_narrative,
     )
 
     out = build_portfolio_narrative(
@@ -269,9 +268,9 @@ def test_narrative_key_signals_mae_severity_critical() -> None:
 def test_narrative_key_signals_overall_health_mapped() -> None:
     """Each overall_health label maps to a severity bucket."""
     from app.simulation.portfolio_narrative import (
+        SIGNAL_CRITICAL,
         SIGNAL_OK,
         SIGNAL_WATCH,
-        SIGNAL_CRITICAL,
         build_portfolio_narrative,
     )
 

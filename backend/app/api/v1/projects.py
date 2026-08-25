@@ -360,17 +360,13 @@ _PREMORTEM_DIGEST_CACHE_NAMESPACE: str = "project-premortem-digest"
 # intervention digests. 5-min TTL (both source digests
 # are cached similarly).
 _RECOMMENDATIONS_DIGEST_CACHE_TTL_S: int = 300
-_RECOMMENDATIONS_DIGEST_CACHE_NAMESPACE: str = (
-    "project-recommendations-digest"
-)
+_RECOMMENDATIONS_DIGEST_CACHE_NAMESPACE: str = "project-recommendations-digest"
 
 # Adoption milestones ("have you done the basics?").
 # Mostly stable, but every project write can flip a
 # milestone - 60s TTL absorbs dashboard polling.
 _ADOPTION_MILESTONES_CACHE_TTL_S: int = 60
-_ADOPTION_MILESTONES_CACHE_NAMESPACE: str = (
-    "project-adoption-milestones"
-)
+_ADOPTION_MILESTONES_CACHE_NAMESPACE: str = "project-adoption-milestones"
 
 # Status banner - one-liner project health string.
 # 60s TTL: 3 cheap queries in the route.
@@ -386,9 +382,7 @@ _CONFIDENCE_EXPLAINER_CACHE_TTL_S: int = 60
 # Read-rare (manual export / handoff), but each query is
 # non-trivial - 60s TTL bounds worst-case latency.
 _PROJECT_EXPORT_CACHE_TTL_S: int = 60
-_PROJECT_EXPORT_CACHE_NAMESPACE: str = (
-    "project-export"
-)
+_PROJECT_EXPORT_CACHE_NAMESPACE: str = "project-export"
 
 # Stale-check (data freshness lens). 60s TTL - the
 # staleness thresholds are in days so most staleness
@@ -401,9 +395,7 @@ _STALE_CHECK_CACHE_NAMESPACE: str = "project-stale-check"
 # header refreshes often but each source's "latest"
 # only mutates on the same write paths as other tiles.
 _LATEST_SNAPSHOT_CACHE_TTL_S: int = 60
-_LATEST_SNAPSHOT_CACHE_NAMESPACE: str = (
-    "project-latest-snapshot"
-)
+_LATEST_SNAPSHOT_CACHE_NAMESPACE: str = "project-latest-snapshot"
 
 _SOFTWARE_PRODUCT_TYPES: frozenset[ProductType] = frozenset(
     {
@@ -498,16 +490,11 @@ def _project_comparison_row(db: Session, project: Project) -> dict[str, Any]:
         product_type_detected = results.get("product_type_detected")
         for finding in results.get("domain_findings", []) or []:
             if isinstance(finding, dict) and (
-                finding.get("severity") == "CRITICAL"
-                or finding.get("level") == "CRITICAL"
+                finding.get("severity") == "CRITICAL" or finding.get("level") == "CRITICAL"
             ):
                 critical_finding_count += 1
 
-    simulation_count = (
-        db.query(Simulation)
-        .filter(Simulation.project_id == project.id)
-        .count()
-    )
+    simulation_count = db.query(Simulation).filter(Simulation.project_id == project.id).count()
     assumption_count = (
         db.query(Assumption)
         .filter(
@@ -516,11 +503,7 @@ def _project_comparison_row(db: Session, project: Project) -> dict[str, Any]:
         )
         .count()
     )
-    outcome_count = (
-        db.query(Outcome)
-        .filter(Outcome.project_id == project.id)
-        .count()
-    )
+    outcome_count = db.query(Outcome).filter(Outcome.project_id == project.id).count()
     has_outcome = outcome_count > 0
     pending_decision_count = (
         db.query(Decision)
@@ -542,16 +525,18 @@ def _project_comparison_row(db: Session, project: Project) -> dict[str, Any]:
         .all()
     )
     if high_assumptions:
-        digest = build_assumption_digest([
-            {
-                "id": a.id,
-                "sensitivity": a.sensitivity,
-                "specificity_score": getattr(a, "specificity_score", None),
-                "impact_score": a.impact_score,
-                "is_hidden": a.is_hidden,
-            }
-            for a in high_assumptions
-        ])
+        digest = build_assumption_digest(
+            [
+                {
+                    "id": a.id,
+                    "sensitivity": a.sensitivity,
+                    "specificity_score": getattr(a, "specificity_score", None),
+                    "impact_score": a.impact_score,
+                    "is_hidden": a.is_hidden,
+                }
+                for a in high_assumptions
+            ]
+        )
         weak_link_count = digest["weak_link_count"]
 
     health_payload = build_project_health(
@@ -647,10 +632,7 @@ def export_project_comparison(
     if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; expected "
-                "'csv', 'json', or 'md'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv', 'json', or 'md'"),
         )
 
     result = compare_projects(
@@ -662,9 +644,7 @@ def export_project_comparison(
         "generated_at": datetime.now(UTC).isoformat(),
         "user_id": current_user.id,
         "format_version": PROJECT_COMPARISON_FORMAT_VERSION,
-        "project_id": (
-            result.projects[0].project_id if result.projects else None
-        ),
+        "project_id": (result.projects[0].project_id if result.projects else None),
         "comparison_id": result.comparison_id,
     }
 
@@ -677,9 +657,7 @@ def export_project_comparison(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    'attachment; filename="project-comparison.json"'
-                ),
+                "Content-Disposition": ('attachment; filename="project-comparison.json"'),
                 "Content-Length": str(len(body)),
                 "Cache-Control": "no-store",
             },
@@ -694,9 +672,7 @@ def export_project_comparison(
             iter([body]),
             media_type="text/markdown; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    'attachment; filename="project-comparison.md"'
-                ),
+                "Content-Disposition": ('attachment; filename="project-comparison.md"'),
                 "Content-Length": str(len(body)),
                 "Cache-Control": "no-store",
             },
@@ -956,8 +932,7 @@ def search_projects(
         default=None,
         max_length=32,
         description=(
-            "Sort column. Allowed: id, created_at, updated_at, "
-            "title. Default: created_at."
+            "Sort column. Allowed: id, created_at, updated_at, title. Default: created_at."
         ),
     ),
     order: str | None = Query(
@@ -1068,7 +1043,6 @@ def search_projects(
         has_more=has_more,
         next_before_id=next_cursor,
     )
-
 
 
 # ---------------------------------------------------------------------------
@@ -1223,11 +1197,7 @@ def list_user_tags(
     """Return the union of all tags across the user's projects as a
     canonical, sorted list. Powers the tag-filter dropdown in the UI
     without having to ship the full project list with every request."""
-    rows = (
-        db.query(Project.tags)
-        .filter(Project.user_id == current_user.id)
-        .all()
-    )
+    rows = db.query(Project.tags).filter(Project.user_id == current_user.id).all()
     seen: set[str] = set()
     for (tags,) in rows:
         if not tags:
@@ -1487,11 +1457,7 @@ def duplicate_project(
     Set ``dry_run=true`` to preview the duplicate without writing.
     """
     source = get_owned_project(db, current_user.id, project_id)
-    env = (
-        db.query(Environment)
-        .filter(Environment.project_id == source.id)
-        .first()
-    )
+    env = db.query(Environment).filter(Environment.project_id == source.id).first()
 
     payload = payload or ProjectDuplicateIn()
     built = duplicate_project_payload(
@@ -1681,9 +1647,7 @@ def get_reweighting_preview(
     no DB writes, no Celery dispatch.
     """
     project = get_owned_project(db, current_user.id, project_id)
-    environment = (
-        db.query(Environment).filter(Environment.project_id == project_id).first()
-    )
+    environment = db.query(Environment).filter(Environment.project_id == project_id).first()
 
     aov = float((environment.average_order_value if environment else 0.0) or 0.0)
     geo = str((environment.geography if environment else "") or "")
@@ -1741,14 +1705,17 @@ def get_domain_findings(
     project_id: int,
     severity: str | None = Query(
         default=None,
+        max_length=16,  # longest valid value is "CRITICAL" (8)
         description="Filter by severity: CRITICAL | WARNING | INFO",
     ),
     architect: str | None = Query(
         default=None,
+        max_length=128,  # longest architect name is ~35 chars
         description="Case-insensitive substring match on architect name",
     ),
     metric: str | None = Query(
         default=None,
+        max_length=80,  # metric_affected identifiers are snake_case names
         description="Exact match on the metric_affected field",
     ),
     limit: int = Query(default=_FINDINGS_DEFAULT_LIMIT, ge=1, le=_FINDINGS_MAX_LIMIT),
@@ -1761,10 +1728,7 @@ def get_domain_findings(
     if severity is not None and severity.strip().upper() not in VALID_SEVERITIES:
         raise HTTPException(
             status_code=422,
-            detail=(
-                f"Invalid severity '{severity}'. "
-                f"Allowed: {sorted(VALID_SEVERITIES)}"
-            ),
+            detail=(f"Invalid severity '{severity}'. Allowed: {sorted(VALID_SEVERITIES)}"),
         )
 
     latest_sim = (
@@ -1939,9 +1903,7 @@ def export_assumptions(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="assumptions-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="assumptions-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -1959,9 +1921,7 @@ def export_assumptions(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="assumptions-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="assumptions-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -2025,9 +1985,7 @@ def export_evidence(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="evidence-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="evidence-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -2045,9 +2003,7 @@ def export_evidence(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="evidence-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="evidence-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -2068,9 +2024,7 @@ def extract_assumptions(
     project = get_owned_project(db, current_user.id, project_id)
 
     raw_description = (
-        payload.description
-        if payload and payload.description
-        else project.description
+        payload.description if payload and payload.description else project.description
     )
     description = sanitise_description(raw_description or "")
 
@@ -2085,9 +2039,7 @@ def extract_assumptions(
             [
                 {
                     "role": "user",
-                    "content": ASSUMPTION_EXTRACTION_PROMPT.format(
-                        description=description
-                    ),
+                    "content": ASSUMPTION_EXTRACTION_PROMPT.format(description=description),
                 }
             ],
             system=(
@@ -2127,9 +2079,7 @@ def extract_assumptions(
                     "claim_confidence": str(item.get("claim_confidence", "DESIGN_INTENT")),
                 }
             )
-        assumptions_data = adjust_assumption_confidence(
-            prepped, project.intake_mode or "IDEA"
-        )
+        assumptions_data = adjust_assumption_confidence(prepped, project.intake_mode or "IDEA")
         for a in assumptions_data:
             t = sanitise_assumption(str(a.get("text", a.get("assumption", ""))))
             a["text"] = t
@@ -2289,9 +2239,7 @@ def extract_assumptions(
         signal_quality_tier=sq_tier,
         claim_confidence_distribution=confidence_dist,
         soft_contradiction_flags=soft_flags,
-        message=(
-            user_reliability_note or "Assumptions extracted successfully"
-        ),
+        message=(user_reliability_note or "Assumptions extracted successfully"),
     )
 
 
@@ -2321,9 +2269,7 @@ def generate_prototype(
             [
                 {
                     "role": "user",
-                    "content": PROTOTYPE_GENERATION_PROMPT.format(
-                        description=project.description
-                    ),
+                    "content": PROTOTYPE_GENERATION_PROMPT.format(description=project.description),
                 }
             ],
             system=(
@@ -2371,9 +2317,7 @@ def generate_prototype(
             detail=f"Prototype generation failed: {str(e)}",
         )
 
-    existing = (
-        db.query(Prototype).filter(Prototype.project_id == project_id).first()
-    )
+    existing = db.query(Prototype).filter(Prototype.project_id == project_id).first()
 
     if existing:
         existing.html_content = html_content
@@ -2422,9 +2366,7 @@ def get_prototype(
 ):
     get_owned_project(db, current_user.id, project_id)
 
-    prototype = (
-        db.query(Prototype).filter(Prototype.project_id == project_id).first()
-    )
+    prototype = db.query(Prototype).filter(Prototype.project_id == project_id).first()
     if not prototype:
         raise HTTPException(
             status_code=404,
@@ -2505,9 +2447,7 @@ def export_prototypes(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="prototypes-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="prototypes-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -2525,9 +2465,7 @@ def export_prototypes(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="prototypes-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="prototypes-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -2549,7 +2487,9 @@ def run_premortem(
     project = get_owned_project(db, current_user.id, project_id)
 
     description = (
-        payload.description_override if payload and payload.description_override else project.description
+        payload.description_override
+        if payload and payload.description_override
+        else project.description
     )
     if not description or len(description.strip()) < 20:
         raise HTTPException(
@@ -2597,9 +2537,7 @@ def run_premortem(
         else "No domain findings available."
     )
 
-    hv_name = (
-        hv_cluster.get("name", "unknown") if isinstance(hv_cluster, dict) else str(hv_cluster)
-    )
+    hv_name = hv_cluster.get("name", "unknown") if isinstance(hv_cluster, dict) else str(hv_cluster)
 
     try:
         claude_out = claude_call_with_fallback(
@@ -2662,9 +2600,7 @@ def run_premortem(
                 trigger_condition=str(item.get("trigger_condition", "")).strip(),
                 linked_assumption_texts=[
                     str(a).strip()
-                    for a in item.get(
-                        "linked_assumption_texts", item.get("linked_assumptions", [])
-                    )
+                    for a in item.get("linked_assumption_texts", item.get("linked_assumptions", []))
                 ],
                 intervention=str(
                     item.get("intervention", item.get("recommended_intervention", ""))
@@ -2829,9 +2765,7 @@ def export_premortem(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="premortem-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="premortem-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -2849,9 +2783,7 @@ def export_premortem(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="premortem-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="premortem-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -2934,9 +2866,7 @@ def get_stress_test(
 
     matrix = [AssumptionStressResult(**row) for row in raw.get("sensitivity_matrix", [])]
     shots = [AssumptionStressResult(**row) for row in raw.get("kill_shots", [])]
-    partial_shots = [
-        AssumptionStressResult(**row) for row in raw.get("partial_kill_shots", [])
-    ]
+    partial_shots = [AssumptionStressResult(**row) for row in raw.get("partial_kill_shots", [])]
 
     result = StressTestOut(
         project_id=project_id,
@@ -3001,7 +2931,9 @@ def generate_interventions(
     project = get_owned_project(db, current_user.id, project_id)
 
     description = (
-        payload.description_override if payload and payload.description_override else project.description
+        payload.description_override
+        if payload and payload.description_override
+        else project.description
     )
     if not description or len(description.strip()) < 20:
         raise HTTPException(
@@ -3063,9 +2995,7 @@ def generate_interventions(
         else "No findings available."
     )
 
-    hv_name = (
-        hv_cluster.get("name", "unknown") if isinstance(hv_cluster, dict) else str(hv_cluster)
-    )
+    hv_name = hv_cluster.get("name", "unknown") if isinstance(hv_cluster, dict) else str(hv_cluster)
 
     try:
         claude_out = claude_call_with_fallback(
@@ -3299,9 +3229,7 @@ def export_interventions(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="interventions-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="interventions-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -3319,9 +3247,7 @@ def export_interventions(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="interventions-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="interventions-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -3344,7 +3270,9 @@ def run_competitive_analysis(
     project = get_owned_project(db, current_user.id, project_id)
 
     description = (
-        payload.description_override if payload and payload.description_override else project.description
+        payload.description_override
+        if payload and payload.description_override
+        else project.description
     )
     if not description or len(description.strip()) < 20:
         raise HTTPException(
@@ -3353,7 +3281,9 @@ def run_competitive_analysis(
         )
 
     target_market = (
-        payload.target_market if payload and payload.target_market else "Indian startup / SaaS / D2C market"
+        payload.target_market
+        if payload and payload.target_market
+        else "Indian startup / SaaS / D2C market"
     )
 
     assumptions = (
@@ -3452,9 +3382,13 @@ def run_competitive_analysis(
     gap_analysis = GapAnalysis(
         our_wins=[str(win) for win in raw_gap.get("our_wins", [])[:6]],
         our_losses=[str(loss) for loss in raw_gap.get("our_losses", [])[:6]],
-        underserved_segments=[str(segment) for segment in raw_gap.get("underserved_segments", [])[:5]],
+        underserved_segments=[
+            str(segment) for segment in raw_gap.get("underserved_segments", [])[:5]
+        ],
         key_differentiators=[str(item) for item in raw_gap.get("key_differentiators", [])[:5]],
-        recommended_counter_moves=[str(move) for move in raw_gap.get("recommended_counter_moves", [])[:5]],
+        recommended_counter_moves=[
+            str(move) for move in raw_gap.get("recommended_counter_moves", [])[:5]
+        ],
     )
 
     raw_map = parsed.get("market_map", {})
@@ -3534,7 +3468,9 @@ def get_competitive_analysis(
         market_map=market_map,
         overall_competitive_position=position,
         position_rationale=data.get("position_rationale", ""),
-        direct_competitor_count=sum(1 for competitor in competitors if competitor.category == "DIRECT"),
+        direct_competitor_count=sum(
+            1 for competitor in competitors if competitor.category == "DIRECT"
+        ),
         high_threat_count=sum(1 for competitor in competitors if competitor.threat_level == "HIGH"),
         generated_at=data.get("generated_at", ""),
     )
@@ -3581,9 +3517,7 @@ def export_competitive_analysis(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="competitive-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="competitive-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -3601,9 +3535,7 @@ def export_competitive_analysis(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="competitive-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="competitive-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -3649,9 +3581,7 @@ def export_mvp_features(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="mvp-features-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="mvp-features-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -3669,9 +3599,7 @@ def export_mvp_features(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="mvp-features-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="mvp-features-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -3722,9 +3650,7 @@ def export_brief(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="brief-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="brief-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -3742,9 +3668,7 @@ def export_brief(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="brief-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="brief-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -3812,9 +3736,7 @@ def export_brief_positioning(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="brief-positioning-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="brief-positioning-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -3850,9 +3772,7 @@ def export_brief_features(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="brief-features-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="brief-features-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -3898,9 +3818,7 @@ def export_tags(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="tags-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="tags-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -3918,9 +3836,7 @@ def export_tags(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="tags-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="tags-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -3971,9 +3887,7 @@ def export_readings(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="readings-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="readings-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -3991,9 +3905,7 @@ def export_readings(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="readings-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="readings-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -4041,9 +3953,7 @@ def export_precis(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="precis-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="precis-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -4061,9 +3971,7 @@ def export_precis(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="precis-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="precis-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -4116,9 +4024,7 @@ def export_project_metadata(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="metadata-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="metadata-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -4136,9 +4042,7 @@ def export_project_metadata(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="metadata-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="metadata-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -4169,9 +4073,7 @@ def export_landing(
     row = {
         "project_id": project.id,
         "landing_page_url": getattr(project, "landing_page_url", None),
-        "existing_product_description": getattr(
-            project, "existing_product_description", None
-        ),
+        "existing_product_description": getattr(project, "existing_product_description", None),
     }
 
     fmt = format.strip().lower() if format else "csv"
@@ -4189,9 +4091,7 @@ def export_landing(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="landing-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="landing-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -4209,9 +4109,7 @@ def export_landing(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="landing-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="landing-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -4239,35 +4137,19 @@ def export_environment(
     """Spreadsheet export of a project's environment parameters."""
     get_owned_project(db, current_user.id, project_id)
 
-    environment = (
-        db.query(Environment)
-        .filter(Environment.project_id == project_id)
-        .first()
-    )
+    environment = db.query(Environment).filter(Environment.project_id == project_id).first()
     row = {
         "environment_id": environment.id if environment else None,
         "project_id": project_id,
         "mode": environment.mode if environment else None,
         "consumer_volume": environment.consumer_volume if environment else None,
-        "growth_rate_per_month": (
-            environment.growth_rate_per_month if environment else None
-        ),
-        "average_order_value": (
-            environment.average_order_value if environment else None
-        ),
-        "price_sensitivity": (
-            environment.price_sensitivity if environment else None
-        ),
-        "market_maturity": (
-            environment.market_maturity if environment else None
-        ),
+        "growth_rate_per_month": (environment.growth_rate_per_month if environment else None),
+        "average_order_value": (environment.average_order_value if environment else None),
+        "price_sensitivity": (environment.price_sensitivity if environment else None),
+        "market_maturity": (environment.market_maturity if environment else None),
         "scenario_type": environment.scenario_type if environment else None,
-        "manual_params_json": (
-            environment.manual_params_json if environment else None
-        ),
-        "trend_data_json": (
-            environment.trend_data_json if environment else None
-        ),
+        "manual_params_json": (environment.manual_params_json if environment else None),
+        "trend_data_json": (environment.trend_data_json if environment else None),
     }
 
     fmt = format.strip().lower() if format else "csv"
@@ -4285,9 +4167,7 @@ def export_environment(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="environment-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="environment-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -4305,9 +4185,7 @@ def export_environment(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="environment-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="environment-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -4355,9 +4233,7 @@ def export_description(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="description-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="description-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -4375,9 +4251,7 @@ def export_description(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="description-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="description-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -4442,9 +4316,7 @@ def export_description_count(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="description-count-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="description-count-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -4492,9 +4364,7 @@ def export_dossier_axis(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="dossier-axis-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="dossier-axis-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -4512,9 +4382,7 @@ def export_dossier_axis(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="dossier-axis-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="dossier-axis-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -4562,9 +4430,7 @@ def export_intake_mode(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="intake-mode-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="intake-mode-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -4582,9 +4448,7 @@ def export_intake_mode(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="intake-mode-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="intake-mode-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -4632,9 +4496,7 @@ def export_title(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="title-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="title-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -4652,9 +4514,7 @@ def export_title(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="title-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="title-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -4702,9 +4562,7 @@ def export_is_archived(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="is-archived-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="is-archived-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -4722,9 +4580,7 @@ def export_is_archived(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="is-archived-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="is-archived-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -4772,9 +4628,7 @@ def export_created_at(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="created-at-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="created-at-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -4792,9 +4646,7 @@ def export_created_at(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="created-at-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="created-at-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -4842,9 +4694,7 @@ def export_status(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="status-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="status-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -4862,9 +4712,7 @@ def export_status(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="status-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="status-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -4889,12 +4737,8 @@ def get_duplicate_title(
         .order_by(Project.created_at.desc())
         .all()
     )
-    candidate_rows = [
-        {"id": candidate.id, "title": candidate.title} for candidate in candidates
-    ]
-    duplicates = find_duplicate_titles(project.title, candidate_rows, project.id)[
-        :limit
-    ]
+    candidate_rows = [{"id": candidate.id, "title": candidate.title} for candidate in candidates]
+    duplicates = find_duplicate_titles(project.title, candidate_rows, project.id)[:limit]
     return {
         "project_id": project.id,
         "duplicates": duplicates,
@@ -4913,15 +4757,9 @@ def get_readiness_score(
 ) -> dict[str, object]:
     """Return a lightweight 0-100 readiness score for the project."""
     project = get_owned_project(db, current_user.id, project_id)
-    simulation_count = (
-        db.query(Simulation).filter(Simulation.project_id == project_id).count()
-    )
-    decision_count = (
-        db.query(Decision).filter(Decision.project_id == project_id).count()
-    )
-    outcome_count = (
-        db.query(Outcome).filter(Outcome.project_id == project_id).count()
-    )
+    simulation_count = db.query(Simulation).filter(Simulation.project_id == project_id).count()
+    decision_count = db.query(Decision).filter(Decision.project_id == project_id).count()
+    outcome_count = db.query(Outcome).filter(Outcome.project_id == project_id).count()
     readiness = compute_readiness(
         {
             "title": project.title,
@@ -5002,9 +4840,7 @@ def export_landing_url(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="landing-page-url-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="landing-page-url-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -5069,9 +4905,7 @@ def export_landing_url_count(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="landing-url-count-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="landing-url-count-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -5101,9 +4935,7 @@ def export_existing_product(
 
     row = {
         "project_id": project.id,
-        "existing_product_description": getattr(
-            project, "existing_product_description", None
-        ),
+        "existing_product_description": getattr(project, "existing_product_description", None),
     }
 
     fmt = format.strip().lower() if format else "csv"
@@ -5141,9 +4973,7 @@ def export_existing_product(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="existing-product-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="existing-product-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -5240,9 +5070,7 @@ def export_precis_fingerprint(
 
     row = {
         "project_id": project.id,
-        "precis_title_fingerprint": getattr(
-            project, "precis_title_fingerprint", None
-        ),
+        "precis_title_fingerprint": getattr(project, "precis_title_fingerprint", None),
     }
 
     fmt = format.strip().lower() if format else "csv"
@@ -5280,9 +5108,7 @@ def export_precis_fingerprint(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="precis-fingerprint-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="precis-fingerprint-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -5330,9 +5156,7 @@ def export_brief_hook(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="brief-hook-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="brief-hook-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -5350,9 +5174,7 @@ def export_brief_hook(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="brief-hook-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="brief-hook-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -5397,9 +5219,7 @@ def create_or_update_environment(
         existing.average_order_value = effective.average_order_value
         existing.price_sensitivity = effective.price_sensitivity
         existing.market_maturity = effective.market_maturity
-        existing.scenario_type = (
-            payload.scenario_type.value if payload.scenario_type else None
-        )
+        existing.scenario_type = payload.scenario_type.value if payload.scenario_type else None
         existing.manual_params_json = effective.model_dump()
         env = existing
     else:
@@ -5411,9 +5231,7 @@ def create_or_update_environment(
             average_order_value=effective.average_order_value,
             price_sensitivity=effective.price_sensitivity,
             market_maturity=effective.market_maturity,
-            scenario_type=(
-                payload.scenario_type.value if payload.scenario_type else None
-            ),
+            scenario_type=(payload.scenario_type.value if payload.scenario_type else None),
             manual_params_json=effective.model_dump(),
         )
         db.add(env)
@@ -5575,19 +5393,13 @@ def re_simulate(
             "older_conversion": round(older_cr, 4),
             "direction": direction,
             "cluster_deltas": cluster_deltas,
-            "most_improved": [
-                {"cluster_id": cid, "delta": d} for cid, d in improved if d > 0
-            ],
-            "most_degraded": [
-                {"cluster_id": cid, "delta": d} for cid, d in degraded if d < 0
-            ],
+            "most_improved": [{"cluster_id": cid, "delta": d} for cid, d in improved if d > 0],
+            "most_degraded": [{"cluster_id": cid, "delta": d} for cid, d in degraded if d < 0],
             "assumptions_changed": changed_count,
             "simulation_count": len(sims),
         }
 
-    environment = (
-        db.query(Environment).filter(Environment.project_id == project_id).first()
-    )
+    environment = db.query(Environment).filter(Environment.project_id == project_id).first()
     if not environment:
         raise HTTPException(
             status_code=400,
@@ -5684,9 +5496,7 @@ def get_simulation_trend(
             "id": row["id"],
             "status": row["status"],
             "signal_quality": row["signal_quality"],
-            "results_json": {
-                "population_weighted_conversion": row["conversion_rate"]
-            },
+            "results_json": {"population_weighted_conversion": row["conversion_rate"]},
             "created_at": row["created_at"],
         }
         for row in projected_rows
@@ -5738,8 +5548,7 @@ def get_latest_simulation_evolution(
         raise HTTPException(
             status_code=409,
             detail=(
-                "At least two completed simulations are required to compute "
-                "run-to-run evolution."
+                "At least two completed simulations are required to compute run-to-run evolution."
             ),
         )
 
@@ -5868,9 +5677,7 @@ def get_competitive_software_analysis(
         .first()
     )
     if not sim:
-        return {
-            "message": "No completed simulation. POST to /competitive-software-analysis first."
-        }
+        return {"message": "No completed simulation. POST to /competitive-software-analysis first."}
 
     results = sim.results_json
     if isinstance(results, str):
@@ -5880,9 +5687,7 @@ def get_competitive_software_analysis(
 
     comp = results.get("competitive_analysis")
     if not comp:
-        return {
-            "message": "No competitive analysis yet. POST to /competitive-software-analysis."
-        }
+        return {"message": "No competitive analysis yet. POST to /competitive-software-analysis."}
     return comp
 
 
@@ -5994,10 +5799,7 @@ def get_next_action(
     if latest_sim is not None and latest_sim.results_json:
         latest_findings = [
             {
-                "findings": (latest_sim.results_json or {}).get(
-                    "domain_findings"
-                )
-                or [],
+                "findings": (latest_sim.results_json or {}).get("domain_findings") or [],
             },
         ]
 
@@ -6016,10 +5818,7 @@ def get_next_action(
             "id": d.id,
             "title": d.title,
             "status": d.status,
-            "created_at": (
-                d.created_at.isoformat()
-                if d.created_at is not None else None
-            ),
+            "created_at": (d.created_at.isoformat() if d.created_at is not None else None),
         }
         for d in pending_rows
     ]
@@ -6037,7 +5836,8 @@ def get_next_action(
                 Simulation.results_json,
             )
             .outerjoin(
-                Outcome, Outcome.simulation_id == Simulation.id,
+                Outcome,
+                Outcome.simulation_id == Simulation.id,
             )
             .filter(
                 Simulation.project_id == project_id,
@@ -6053,10 +5853,7 @@ def get_next_action(
                     r.created_at,
                     r.predicted_conversion_rate,
                     r.actual_conversion_rate,
-                    (r.results_json or {}).get(
-                        "domain_findings"
-                    )
-                    or [],
+                    (r.results_json or {}).get("domain_findings") or [],
                 ),
             )
         if health_rows:
@@ -6070,10 +5867,7 @@ def get_next_action(
         )
 
     has_any_simulation = (
-        db.query(Simulation.id)
-        .filter(Simulation.project_id == project_id)
-        .first()
-        is not None
+        db.query(Simulation.id).filter(Simulation.project_id == project_id).first() is not None
     )
 
     payload = build_next_best_action(
@@ -6141,10 +5935,7 @@ def get_go_no_go(
     )
 
     assumption_rows = (
-        db.query(Assumption)
-        .filter(Assumption.project_id == project_id)
-        .limit(1000)
-        .all()
+        db.query(Assumption).filter(Assumption.project_id == project_id).limit(1000).all()
     )
 
     readiness_payload = None
@@ -6157,9 +5948,7 @@ def get_go_no_go(
             status=latest_sim.status,
             signal_quality=latest_sim.signal_quality,
             visible_assumption_count=sum(
-                1
-                for assumption in assumption_rows
-                if not assumption.is_hidden
+                1 for assumption in assumption_rows if not assumption.is_hidden
             ),
         )
         trust_payload = build_simulation_quality(
@@ -6179,13 +5968,10 @@ def get_go_no_go(
         high_threat_count = sum(
             1
             for c in competitors
-            if isinstance(c, dict)
-            and str(c.get("threat_level", "")).upper() == "HIGH"
+            if isinstance(c, dict) and str(c.get("threat_level", "")).upper() == "HIGH"
         )
         competitive_payload = {
-            "overall_competitive_position": competitive_data.get(
-                "overall_competitive_position"
-            ),
+            "overall_competitive_position": competitive_data.get("overall_competitive_position"),
             "high_threat_count": high_threat_count,
         }
 
@@ -6195,20 +5981,12 @@ def get_go_no_go(
         .order_by(Outcome.created_at.desc())
         .first()
     )
-    latest_outcome_at = (
-        latest_outcome_row[0] if latest_outcome_row else None
-    )
+    latest_outcome_at = latest_outcome_row[0] if latest_outcome_row else None
 
-    assumption_times = [
-        a.created_at for a in assumption_rows if a.created_at is not None
-    ]
+    assumption_times = [a.created_at for a in assumption_rows if a.created_at is not None]
     freshness_payload = {
-        "latest_sim_completed_at": (
-            latest_sim.created_at if latest_sim is not None else None
-        ),
-        "latest_assumption_at": (
-            max(assumption_times) if assumption_times else None
-        ),
+        "latest_sim_completed_at": (latest_sim.created_at if latest_sim is not None else None),
+        "latest_assumption_at": (max(assumption_times) if assumption_times else None),
         "latest_outcome_at": latest_outcome_at,
     }
 
@@ -6231,9 +6009,7 @@ def get_go_no_go(
         freshness=freshness_payload,
         coverage=coverage_payload,
         project_id=project_id,
-        latest_simulation_id=(
-            latest_sim.id if latest_sim is not None else None
-        ),
+        latest_simulation_id=(latest_sim.id if latest_sim is not None else None),
     )
 
 
@@ -6265,10 +6041,7 @@ def export_go_no_go(
     if fmt not in {"csv", "json"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; expected "
-                "'csv' or 'json'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv' or 'json'"),
         )
 
     payload = get_go_no_go(
@@ -6289,9 +6062,7 @@ def export_go_no_go(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="go-no-go-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="go-no-go-{project_id}.json"'),
                 "Content-Length": str(len(body)),
                 "Cache-Control": "no-store",
             },
@@ -6302,9 +6073,7 @@ def export_go_no_go(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="go-no-go-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="go-no-go-{project_id}.csv"'),
             "Content-Length": str(len(body)),
             "Cache-Control": "no-store",
         },
@@ -6545,9 +6314,7 @@ def export_activity_feed(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="activity-feed-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="activity-feed-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -6566,9 +6333,7 @@ def export_activity_feed(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="activity-feed-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="activity-feed-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -6647,9 +6412,7 @@ def export_activity_feed_count(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="activity-feed-count-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="activity-feed-count-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -6812,10 +6575,7 @@ def get_project_coverage_gaps(
 @router.get(
     "/{project_id}/coverage-gaps/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export the coverage-gaps digest as CSV (or JSON with "
-        "?format=json)"
-    ),
+    summary=("Export the coverage-gaps digest as CSV (or JSON with ?format=json)"),
     # Same DB reads as the JSON coverage-gaps endpoint; cap polling so a
     # dashboard loop can't drive repeated coverage aggregation.
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
@@ -6869,9 +6629,7 @@ def export_project_coverage_gaps(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="coverage-gaps-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="coverage-gaps-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -6882,9 +6640,7 @@ def export_project_coverage_gaps(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="coverage-gaps-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="coverage-gaps-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -6962,9 +6718,7 @@ def export_project_coverage_gaps_count(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="coverage-gaps-count-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="coverage-gaps-count-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -7136,10 +6890,7 @@ def get_prediction_range_coverage(
     get_owned_project(db, current_user.id, project_id)
 
     owned_project_ids = [
-        row[0]
-        for row in db.query(Project.id)
-        .filter(Project.user_id == current_user.id)
-        .all()
+        row[0] for row in db.query(Project.id).filter(Project.user_id == current_user.id).all()
     ]
     outcome_rows = (
         db.query(Outcome)
@@ -7173,10 +6924,7 @@ def get_prediction_range_coverage(
 @router.get(
     "/{project_id}/prediction-range-coverage/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export a project's prediction-range coverage digest as CSV, "
-        "JSON, or Markdown"
-    ),
+    summary=("Export a project's prediction-range coverage digest as CSV, JSON, or Markdown"),
     # Same bounded read cost as the JSON digest; cap polling like the
     # other per-project analytics exports.
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
@@ -7208,10 +6956,7 @@ def export_prediction_range_coverage(
     if fmt not in {"csv", "json", "md"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; expected "
-                "'csv', 'json', or 'md'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv', 'json', or 'md'"),
         )
 
     payload = get_prediction_range_coverage(
@@ -7236,8 +6981,7 @@ def export_prediction_range_coverage(
             media_type="application/json; charset=utf-8",
             headers={
                 "Content-Disposition": (
-                    f'attachment; filename="prediction-range-coverage-'
-                    f'{project_id}.json"'
+                    f'attachment; filename="prediction-range-coverage-{project_id}.json"'
                 ),
                 "Content-Length": str(len(body)),
                 "Cache-Control": "no-store",
@@ -7254,8 +6998,7 @@ def export_prediction_range_coverage(
             media_type="text/markdown; charset=utf-8",
             headers={
                 "Content-Disposition": (
-                    f'attachment; filename="prediction-range-coverage-'
-                    f'{project_id}.md"'
+                    f'attachment; filename="prediction-range-coverage-{project_id}.md"'
                 ),
                 "Content-Length": str(len(body)),
                 "Cache-Control": "no-store",
@@ -7272,8 +7015,7 @@ def export_prediction_range_coverage(
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": (
-                f'attachment; filename="prediction-range-coverage-'
-                f'{project_id}.csv"'
+                f'attachment; filename="prediction-range-coverage-{project_id}.csv"'
             ),
             "Content-Length": str(len(body)),
             "Cache-Control": "no-store",
@@ -7320,7 +7062,9 @@ def get_intervention_digest(
 
     payload = build_intervention_digest(
         interventions_data=getattr(
-            project, "interventions_json", None,
+            project,
+            "interventions_json",
+            None,
         ),
     )
     cache_set_json(
@@ -7391,12 +7135,9 @@ def get_project_health(
         if sim_confidence is not None:
             sim_confidence = float(sim_confidence) / 100.0
         # Count CRITICAL findings.
-        for f in (latest_sim.results_json or {}).get(
-            "domain_findings", []
-        ) or []:
+        for f in (latest_sim.results_json or {}).get("domain_findings", []) or []:
             if isinstance(f, dict) and (
-                f.get("severity") == "CRITICAL"
-                or f.get("level") == "CRITICAL"
+                f.get("severity") == "CRITICAL" or f.get("level") == "CRITICAL"
             ):
                 critical_finding_count += 1
 
@@ -7411,12 +7152,7 @@ def get_project_health(
     )
 
     # Any recorded outcome?
-    has_outcome = (
-        db.query(Outcome.id)
-        .filter(Outcome.project_id == project_id)
-        .first()
-        is not None
-    )
+    has_outcome = db.query(Outcome.id).filter(Outcome.project_id == project_id).first() is not None
 
     # Assumption weak-link count.
     weak_link_count = 0
@@ -7430,16 +7166,18 @@ def get_project_health(
         .all()
     )
     if assumption_rows:
-        digest = build_assumption_digest([
-            {
-                "id": a.id,
-                "sensitivity": a.sensitivity,
-                "specificity_score": a.specificity_score,
-                "impact_score": a.impact_score,
-                "is_hidden": a.is_hidden,
-            }
-            for a in assumption_rows
-        ])
+        digest = build_assumption_digest(
+            [
+                {
+                    "id": a.id,
+                    "sensitivity": a.sensitivity,
+                    "specificity_score": a.specificity_score,
+                    "impact_score": a.impact_score,
+                    "is_hidden": a.is_hidden,
+                }
+                for a in assumption_rows
+            ]
+        )
         weak_link_count = digest["weak_link_count"]
 
     payload = build_project_health(
@@ -7462,10 +7200,7 @@ def get_project_health(
 @router.get(
     "/{project_id}/health/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export a project's health scorecard as CSV (or JSON "
-        "with ?format=json)"
-    ),
+    summary=("Export a project's health scorecard as CSV (or JSON with ?format=json)"),
     # Same read cost as the JSON health endpoint; cap polling so a
     # dashboard loop can't drive repeated child-row scans.
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
@@ -7496,10 +7231,7 @@ def export_project_health(
     if fmt not in {"csv", "json"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; expected "
-                "'csv' or 'json'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv' or 'json'"),
         )
 
     payload = get_project_health(
@@ -7521,9 +7253,7 @@ def export_project_health(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="health-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="health-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -7534,9 +7264,7 @@ def export_project_health(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="health-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="health-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -7629,7 +7357,9 @@ def get_recommendations_digest(
     )
     intervention_payload = build_intervention_digest(
         interventions_data=getattr(
-            project, "interventions_json", None,
+            project,
+            "interventions_json",
+            None,
         ),
     )
     payload = build_recommendations_digest(
@@ -7663,11 +7393,7 @@ def _build_risk_register_payload(
         .order_by(Simulation.created_at.desc(), Simulation.id.desc())
         .first()
     )
-    findings = (
-        extract_findings(latest_sim.results_json)
-        if latest_sim is not None
-        else []
-    )
+    findings = extract_findings(latest_sim.results_json) if latest_sim is not None else []
     payload = build_risk_register(
         project_id=project_id,
         premortem_data=getattr(project, "premortem_json", None),
@@ -7752,9 +7478,7 @@ def export_risk_register(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="risk-register-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="risk-register-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -7765,9 +7489,7 @@ def export_risk_register(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="risk-register-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="risk-register-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -7776,10 +7498,7 @@ def export_risk_register(
 @router.get(
     "/{project_id}/recommendations/export",
     response_class=StreamingResponse,
-    summary=(
-        "Export a project's ranked recommendations as CSV (or JSON "
-        "with ?format=json)"
-    ),
+    summary=("Export a project's ranked recommendations as CSV (or JSON with ?format=json)"),
     # Same composition cost as the JSON digest endpoint; cap polling so a
     # dashboard loop can't drive repeated premortem/intervention reads.
     dependencies=[Depends(rate_limit(limit=30, window_s=60))],
@@ -7810,10 +7529,7 @@ def export_project_recommendations(
     if fmt not in {"csv", "json"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"unsupported export format {format!r}; expected "
-                "'csv' or 'json'"
-            ),
+            detail=(f"unsupported export format {format!r}; expected 'csv' or 'json'"),
         )
 
     payload = get_recommendations_digest(
@@ -7848,9 +7564,7 @@ def export_project_recommendations(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="recommendations-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="recommendations-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -7900,21 +7614,9 @@ def get_adoption_milestones(
         )
         .count()
     )
-    simulation_count = (
-        db.query(Simulation)
-        .filter(Simulation.project_id == project_id)
-        .count()
-    )
-    decision_count = (
-        db.query(Decision)
-        .filter(Decision.project_id == project_id)
-        .count()
-    )
-    outcome_count = (
-        db.query(Outcome)
-        .filter(Outcome.project_id == project_id)
-        .count()
-    )
+    simulation_count = db.query(Simulation).filter(Simulation.project_id == project_id).count()
+    decision_count = db.query(Decision).filter(Decision.project_id == project_id).count()
+    outcome_count = db.query(Outcome).filter(Outcome.project_id == project_id).count()
 
     payload = build_adoption_milestones(
         brief_completed=project.brief_completed_at is not None,
@@ -7923,11 +7625,17 @@ def get_adoption_milestones(
         decision_count=decision_count,
         outcome_count=outcome_count,
         premortem_present=getattr(
-            project, "premortem_json", None,
-        ) is not None,
+            project,
+            "premortem_json",
+            None,
+        )
+        is not None,
         interventions_present=getattr(
-            project, "interventions_json", None,
-        ) is not None,
+            project,
+            "interventions_json",
+            None,
+        )
+        is not None,
     )
     cache_set_json(
         namespace=_ADOPTION_MILESTONES_CACHE_NAMESPACE,
@@ -7989,7 +7697,9 @@ def get_project_export(
         "features": getattr(project, "brief_features_json", None),
         "hook": getattr(project, "brief_hook", None),
         "completed_at": getattr(
-            project, "brief_completed_at", None,
+            project,
+            "brief_completed_at",
+            None,
         ),
     }
     if isinstance(brief_dict.get("features"), str):
@@ -8001,11 +7711,7 @@ def get_project_export(
             brief_dict["features"] = []
 
     # Pull child rows.
-    assumption_rows = (
-        db.query(Assumption)
-        .filter(Assumption.project_id == project_id)
-        .all()
-    )
+    assumption_rows = db.query(Assumption).filter(Assumption.project_id == project_id).all()
     assumption_dicts = [
         {
             "id": a.id,
@@ -8028,12 +7734,8 @@ def get_project_export(
         {
             "id": s.id,
             "status": s.status,
-            "predicted_conversion_rate": (
-                s.predicted_conversion_rate
-            ),
-            "actual_conversion_rate": (
-                s.actual_conversion_rate
-            ),
+            "predicted_conversion_rate": (s.predicted_conversion_rate),
+            "actual_conversion_rate": (s.actual_conversion_rate),
             "results_json": s.results_json,
             "confidence_score": s.confidence_score,
             "created_at": s.created_at,
@@ -8080,10 +7782,14 @@ def get_project_export(
         decision_dicts=decision_dicts,
         outcome_dicts=outcome_dicts,
         premortem_data=getattr(
-            project, "premortem_json", None,
+            project,
+            "premortem_json",
+            None,
         ),
         interventions_data=getattr(
-            project, "interventions_json", None,
+            project,
+            "interventions_json",
+            None,
         ),
     )
     cache_set_json(
@@ -8178,7 +7884,9 @@ def get_stale_check(
     # from JSONB payloads (generation time, not create_at).
     premortem_payload = getattr(project, "premortem_json", None)
     interventions_payload = getattr(
-        project, "interventions_json", None,
+        project,
+        "interventions_json",
+        None,
     )
 
     def _parse_iso_dt(raw: object) -> object | None:
@@ -8187,9 +7895,8 @@ def get_stale_check(
         ts = raw.get("generated_at")
         if not isinstance(ts, str):
             return None
-        from datetime import datetime as _dt
         try:
-            return _dt.fromisoformat(ts)
+            return datetime.fromisoformat(ts)
         except Exception:
             return None
 
@@ -8197,19 +7904,11 @@ def get_stale_check(
     latest_intervention_at = _parse_iso_dt(interventions_payload)
 
     payload = build_stale_check(
-        latest_assumption_at=(
-            latest_assumption[0] if latest_assumption else None
-        ),
-        latest_sim_completed_at=(
-            latest_completed_sim[0]
-            if latest_completed_sim else None
-        ),
-        latest_outcome_at=(
-            latest_outcome[0] if latest_outcome else None
-        ),
+        latest_assumption_at=(latest_assumption[0] if latest_assumption else None),
+        latest_sim_completed_at=(latest_completed_sim[0] if latest_completed_sim else None),
+        latest_outcome_at=(latest_outcome[0] if latest_outcome else None),
         latest_decision_completed_at=(
-            latest_completed_decision[0]
-            if latest_completed_decision else None
+            latest_completed_decision[0] if latest_completed_decision else None
         ),
         latest_premortem_at=latest_premortem_at,
         latest_intervention_at=latest_intervention_at,
@@ -8291,18 +7990,18 @@ def get_latest_snapshot(
     def _row_dict(row: object | None) -> dict | None:
         if row is None:
             return None
-        return {
-            c.key: getattr(row, c.key, None)
-            for c in row.__table__.columns
-        }
+        return {c.key: getattr(row, c.key, None) for c in row.__table__.columns}
 
     payload = build_latest_snapshot(
         project_id=project.id,
         project_title=getattr(project, "title", None),
         project_status=getattr(project, "status", None),
         brief_completed=getattr(
-            project, "brief_completed_at", None,
-        ) is not None,
+            project,
+            "brief_completed_at",
+            None,
+        )
+        is not None,
         latest_simulation_row=_row_dict(latest_sim),
         latest_decision_row=_row_dict(latest_dec),
         latest_outcome_row=_row_dict(latest_out),
@@ -8401,29 +8100,28 @@ def get_status_banner(
             .order_by(Assumption.created_at.desc())
             .first()
         )
-        if (
-            latest_assumption is not None
-            and latest_assumption.created_at is not None
-        ):
+        if latest_assumption is not None and latest_assumption.created_at is not None:
             ts = latest_assumption.created_at
             if ts.tzinfo is None:
                 ts = ts.replace(tzinfo=UTC)
             delta = datetime.now(UTC) - ts
             days_since_latest_assumption_extraction = max(
-                0, delta.days,
+                0,
+                delta.days,
             )
 
     payload = build_status_banner(
         brief_completed=getattr(
-            project, "brief_completed_at", None,
-        ) is not None,
+            project,
+            "brief_completed_at",
+            None,
+        )
+        is not None,
         assumption_count=assumption_count,
         has_completed_sim=has_completed_sim,
         days_since_latest_sim=days_since_latest_sim,
         pending_decision_count=pending_decision_count,
-        days_since_latest_assumption_extraction=(
-            days_since_latest_assumption_extraction
-        ),
+        days_since_latest_assumption_extraction=(days_since_latest_assumption_extraction),
     )
     cache_set_json(
         namespace=_STATUS_BANNER_CACHE_NAMESPACE,
@@ -8484,18 +8182,18 @@ def get_confidence_explainer(
     )
     if latest_sim is None:
         return ConfidenceExplainerOut(
-            narrative=(
-                "No completed simulation yet. Run one to see "
-                "the confidence breakdown."
-            ),
+            narrative=("No completed simulation yet. Run one to see the confidence breakdown."),
         )
 
     confidence_score = getattr(
-        latest_sim, "confidence_score", None,
+        latest_sim,
+        "confidence_score",
+        None,
     )
     if confidence_score is None:
         agg = (latest_sim.results_json or {}).get(
-            "aggregated", {},
+            "aggregated",
+            {},
         )
         confidence_score = agg.get("confidence_score")
     if confidence_score is not None:
@@ -8503,15 +8201,23 @@ def get_confidence_explainer(
 
     # Sample volume = sim's consumer_volume (the number
     # of simulated agents).
-    sample_volume = _safe_int(getattr(
-        latest_sim, "consumer_volume", 0,
-    ))
+    sample_volume = _safe_int(
+        getattr(
+            latest_sim,
+            "consumer_volume",
+            0,
+        )
+    )
 
     # Conversion agreement = predicted_conversion_rate
     # (the higher the rate, the more agents agreed).
-    agreement_rate = _safe_float(getattr(
-        latest_sim, "predicted_conversion_rate", None,
-    ))
+    agreement_rate = _safe_float(
+        getattr(
+            latest_sim,
+            "predicted_conversion_rate",
+            None,
+        )
+    )
 
     # Assumption coverage = count of assumptions / 5
     # (5 sensitivity bands: LOW/MEDIUM/HIGH/CRITICAL
@@ -8538,10 +8244,7 @@ def get_confidence_explainer(
             .order_by(Assumption.created_at.desc())
             .first()
         )
-        if (
-            latest_assumption is not None
-            and latest_assumption.created_at is not None
-        ):
+        if latest_assumption is not None and latest_assumption.created_at is not None:
             ts = latest_assumption.created_at
             if ts.tzinfo is None:
                 ts = ts.replace(tzinfo=UTC)
@@ -8550,20 +8253,14 @@ def get_confidence_explainer(
 
     # Outcome history depth = count of past outcomes for
     # the project (calibration target).
-    outcome_history_depth = (
-        db.query(Outcome)
-        .filter(Outcome.project_id == project_id)
-        .count()
-    )
+    outcome_history_depth = db.query(Outcome).filter(Outcome.project_id == project_id).count()
 
     payload = build_confidence_explainer(
         confidence_score=confidence_score,
         sample_volume=sample_volume,
         agreement_rate=agreement_rate,
         assumption_coverage=assumption_coverage,
-        days_since_latest_assumption=(
-            days_since_latest_assumption
-        ),
+        days_since_latest_assumption=(days_since_latest_assumption),
         outcome_history_depth=outcome_history_depth,
     )
     cache_set_json(
@@ -8604,12 +8301,8 @@ _COHORT_DRIFT_CACHE_TTL_S = 60
 )
 def get_cluster_cohort_drift(
     project_id: int,
-    baseline_sim_id: int | None = Query(
-        None, description="Optional baseline simulation ID"
-    ),
-    latest_sim_id: int | None = Query(
-        None, description="Optional comparison simulation ID"
-    ),
+    baseline_sim_id: int | None = Query(None, description="Optional baseline simulation ID"),
+    latest_sim_id: int | None = Query(None, description="Optional comparison simulation ID"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ClusterCohortDriftOut:
@@ -8649,16 +8342,8 @@ def get_cluster_cohort_drift(
     if completed_sims:
         sim_map = {s.id: s for s in completed_sims}
 
-        base_sim = (
-            sim_map.get(baseline_sim_id)
-            if baseline_sim_id
-            else completed_sims[0]
-        )
-        latest_sim = (
-            sim_map.get(latest_sim_id)
-            if latest_sim_id
-            else completed_sims[-1]
-        )
+        base_sim = sim_map.get(baseline_sim_id) if baseline_sim_id else completed_sims[0]
+        latest_sim = sim_map.get(latest_sim_id) if latest_sim_id else completed_sims[-1]
 
         if base_sim:
             baseline_json = base_sim.results_json or {}
@@ -8721,9 +8406,7 @@ def export_project_simulations(
                 else ""
             ),
             "population_weighted_conversion": (
-                (simulation.results_json or {}).get(
-                    "population_weighted_conversion"
-                )
+                (simulation.results_json or {}).get("population_weighted_conversion")
                 if simulation.results_json
                 else None
             ),
@@ -8747,9 +8430,7 @@ def export_project_simulations(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="simulations-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="simulations-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -8760,9 +8441,7 @@ def export_project_simulations(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="simulations-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="simulations-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -8826,9 +8505,7 @@ def export_simulation_count(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="simulation-count-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="simulation-count-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -8872,9 +8549,7 @@ def export_decision_count(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="decision-count-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="decision-count-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -8892,9 +8567,7 @@ def export_decision_count(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="decision-count-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="decision-count-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -8938,9 +8611,7 @@ def export_outcome_count(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="outcome-count-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="outcome-count-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -8958,9 +8629,7 @@ def export_outcome_count(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="outcome-count-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="outcome-count-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -9024,9 +8693,7 @@ def export_assumption_count(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="assumption-count-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="assumption-count-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -9070,9 +8737,7 @@ def export_tag_count(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="tag-count-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="tag-count-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -9090,9 +8755,7 @@ def export_tag_count(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="tag-count-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="tag-count-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -9156,9 +8819,7 @@ def export_prototype_count(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="prototype-count-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="prototype-count-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -9184,11 +8845,7 @@ def export_evidence_count(
 ) -> StreamingResponse:
     """Export a project's evidence count as CSV (default) or JSON."""
     get_owned_project(db, current_user.id, project_id)
-    count = (
-        db.query(AssumptionEvidence)
-        .filter(AssumptionEvidence.project_id == project_id)
-        .count()
-    )
+    count = db.query(AssumptionEvidence).filter(AssumptionEvidence.project_id == project_id).count()
     row = {"project_id": project_id, "evidence_count": count}
 
     if format == "json":
@@ -9206,9 +8863,7 @@ def export_evidence_count(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="evidence-count-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="evidence-count-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -9226,9 +8881,7 @@ def export_evidence_count(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="evidence-count-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="evidence-count-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -9254,11 +8907,7 @@ def export_outcome_tracker_count(
 ) -> StreamingResponse:
     """Export a project's outcome tracker count as CSV (default) or JSON."""
     get_owned_project(db, current_user.id, project_id)
-    count = (
-        db.query(OutcomeTracker)
-        .filter(OutcomeTracker.project_id == project_id)
-        .count()
-    )
+    count = db.query(OutcomeTracker).filter(OutcomeTracker.project_id == project_id).count()
     row = {"project_id": project_id, "outcome_tracker_count": count}
 
     if format == "json":
@@ -9362,9 +9011,7 @@ def export_premortem_count(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="premortem-count-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="premortem-count-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -9391,9 +9038,7 @@ def export_intervention_count(
     """Export a project's intervention count as CSV (default) or JSON."""
     project = get_owned_project(db, current_user.id, project_id)
     data = getattr(project, "interventions_json", None) or {}
-    count = len(data.get("interventions", []) or []) + len(
-        data.get("quick_wins", []) or []
-    )
+    count = len(data.get("interventions", []) or []) + len(data.get("quick_wins", []) or [])
     row = {"project_id": project_id, "intervention_count": count}
 
     if format == "json":
@@ -9431,9 +9076,7 @@ def export_intervention_count(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="intervention-count-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="intervention-count-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -9498,9 +9141,7 @@ def export_competitive_count(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="competitive-count-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="competitive-count-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -9564,9 +9205,7 @@ def export_mvp_feature_count(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="mvp-feature-count-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="mvp-feature-count-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )
@@ -9611,9 +9250,7 @@ def export_readings_count(
             iter([body]),
             media_type="application/json; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="readings-count-{project_id}.json"'
-                ),
+                "Content-Disposition": (f'attachment; filename="readings-count-{project_id}.json"'),
                 "Content-Length": str(len(body)),
             },
         )
@@ -9631,9 +9268,7 @@ def export_readings_count(
         iter([body]),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="readings-count-{project_id}.csv"'
-            ),
+            "Content-Disposition": (f'attachment; filename="readings-count-{project_id}.csv"'),
             "Content-Length": str(len(body)),
         },
     )

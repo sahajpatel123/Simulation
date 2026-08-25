@@ -13,6 +13,7 @@ Keeping this layer pure (no DB, no HTTP) makes the math verifiable in tests.
 """
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -49,9 +50,8 @@ def _coerce_results_dict(value: Any) -> dict[str, Any]:
         return value
     if isinstance(value, str):
         try:
-            import json as _json
 
-            parsed = _json.loads(value)
+            parsed = json.loads(value)
             return parsed if isinstance(parsed, dict) else {}
         except (ValueError, TypeError):
             return {}

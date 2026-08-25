@@ -24,6 +24,8 @@ import json
 import math
 from typing import Any
 
+from app.simulation.export_utils import write_row
+
 
 def _as_dict(payload: Any) -> dict[str, Any]:
     """Coerce a Pydantic model or plain dict into a plain dict."""
@@ -74,7 +76,7 @@ def _safe_csv_cell(value: object) -> object:
 
 def _write_row(writer: Any, row: list[object]) -> None:
     """Write a CSV row with formula-injection guard applied to every cell."""
-    writer.writerow([_safe_csv_cell(value) for value in row])
+    write_row(writer, [_safe_csv_cell(value) for value in row])
 
 
 def _metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
@@ -324,14 +326,8 @@ def feature_prioritization_to_markdown(
     if metadata:
         generated_at = metadata.get("generated_at", "")
         lines.append(f"- Generated: {_escape_md_cell(generated_at)}")
-    lines.append(
-        f"- Simulation: "
-        f"{simulation_id if simulation_id is not None else '—'}"
-    )
-    lines.append(
-        f"- Project: "
-        f"{project_id if project_id is not None else '—'}"
-    )
+    lines.append(f"- Simulation: {simulation_id if simulation_id is not None else '—'}")
+    lines.append(f"- Project: {project_id if project_id is not None else '—'}")
     lines.append("")
 
     lines.append("## Summary")
@@ -347,16 +343,13 @@ def feature_prioritization_to_markdown(
     lines.append("")
     dimensions = _as_list(data.get("dimensions"))
     if dimensions:
-        lines.append(
-            "| Dimension | Adoption | Reach | Upside | Score | Tier | Recommendation |"
-        )
+        lines.append("| Dimension | Adoption | Reach | Upside | Score | Tier | Recommendation |")
         lines.append("| --- | --- | --- | --- | --- | --- | --- |")
         for item in dimensions:
             if not isinstance(item, dict):
                 continue
             lines.append(
-                "| {label} | {adoption} | {reach} | {upside} | {score} | "
-                "{tier} | {rec} |".format(
+                "| {label} | {adoption} | {reach} | {upside} | {score} | {tier} | {rec} |".format(
                     label=_escape_md_cell(item.get("label")),
                     adoption=_fmt_pct(item.get("adoption_rate")),
                     reach=_fmt_pct(item.get("reach_weight")),
@@ -375,16 +368,14 @@ def feature_prioritization_to_markdown(
     profiles = _as_list(data.get("cluster_profiles"))
     if profiles:
         lines.append(
-            "| Cluster | Weight | Depth | Core DAU | Power Discovery | "
-            "Abandonment | Segment |"
+            "| Cluster | Weight | Depth | Core DAU | Power Discovery | Abandonment | Segment |"
         )
         lines.append("| --- | --- | --- | --- | --- | --- | --- |")
         for item in profiles:
             if not isinstance(item, dict):
                 continue
             lines.append(
-                "| {name} | {weight} | {depth} | {core} | {power} | "
-                "{abandon} | {segment} |".format(
+                "| {name} | {weight} | {depth} | {core} | {power} | {abandon} | {segment} |".format(
                     name=_escape_md_cell(item.get("cluster_name")),
                     weight=f"{_safe_float(item.get('population_weight')):.4f}",
                     depth=_fmt_pct(item.get("feature_depth")),
@@ -402,9 +393,7 @@ def feature_prioritization_to_markdown(
     lines.append("")
     brief = _as_list(data.get("brief_features"))
     if brief:
-        lines.append(
-            "| Feature | Dimension | Adoption | Tier | Note |"
-        )
+        lines.append("| Feature | Dimension | Adoption | Tier | Note |")
         lines.append("| --- | --- | --- | --- | --- |")
         for item in brief:
             if not isinstance(item, dict):

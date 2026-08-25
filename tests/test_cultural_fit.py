@@ -13,7 +13,6 @@ from app.schemas.cultural_fit import (
     BARRIER_LANGUAGE,
     BARRIER_RELIGIOUS,
     BARRIER_SEASONAL,
-    CulturalFitOut,
     LEVER_FAMILY,
     LEVER_GEO,
     TIER_MISALIGNED,
@@ -28,6 +27,7 @@ from app.schemas.cultural_fit import (
     VERDICT_MODERATE_FIT,
     VERDICT_STRONG_FIT,
     VERDICT_WEAK_FIT,
+    CulturalFitOut,
 )
 from app.simulation.cultural_fit import (
     BARRIER_ORDER,

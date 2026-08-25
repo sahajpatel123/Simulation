@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # Cluster fixture
 # ---------------------------------------------------------------------------
@@ -70,8 +69,8 @@ def test_trust_architect_name_constant() -> None:
 
 
 def test_trust_architect_product_types_is_all() -> None:
-    from app.simulation.architects.trust import TrustArchitect
     from app.simulation.architects.base import BaseArchitect
+    from app.simulation.architects.trust import TrustArchitect
 
     pt = TrustArchitect().product_types
     assert set(pt) == set(BaseArchitect.ALL_PRODUCT_TYPES)
@@ -476,8 +475,8 @@ def test_generate_report_no_critical_handles_empty() -> None:
 
 
 def test_generate_report_collects_critical_clusters() -> None:
-    from app.simulation.architects.trust import TrustArchitect
     from app.simulation.architects.base import ArchitectOutput
+    from app.simulation.architects.trust import TrustArchitect
 
     a = TrustArchitect()
     crit = ArchitectOutput(

@@ -9,6 +9,7 @@ No DB / I/O — verifiable without FastAPI or PostgreSQL.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -127,9 +128,8 @@ def _coerce_results(value: Any) -> dict[str, Any]:
         return value
     if isinstance(value, str):
         try:
-            import json as _json
 
-            parsed = _json.loads(value)
+            parsed = json.loads(value)
             return parsed if isinstance(parsed, dict) else {}
         except (ValueError, TypeError):
             return {}
@@ -709,7 +709,6 @@ def scenarios_to_json(scenarios: list[WhatIfOut]) -> str:
     Uses ``WhatIfOut.summary()`` for a compact shape — pairs naturally with
     ``scenarios_to_csv`` for spreadsheet-vs-API export paths.
     """
-    import json
 
     return json.dumps([scenario.summary() for scenario in scenarios], indent=2)
 
@@ -808,14 +807,10 @@ def diff_what_if_scenarios_summary(diff: WhatIfDiff) -> str:
     )
 
 
-def format_delta_pct(value: float, *, decimals: int = 2) -> str:
-    """Format a percentage delta with a leading sign and fixed decimals.
-
-    Example: ``format_delta_pct(12.34) == "+12.34%"``.
-    Zero renders as ``"+0.00%"`` by design (matches the project convention
-    used elsewhere in the what-if surface).
-    """
-    return f"{value:+.{decimals}f}%"
+# Re-exported from the neutral formatting module so existing consumers
+# (tests, schemas) keep importing these names from this module unchanged.
+from app.simulation.scenario_formatting import direction_label as direction_label  # noqa: F401
+from app.simulation.scenario_formatting import format_delta_pct as format_delta_pct  # noqa: F401
 
 
 def format_categories(categories: list[str] | None, *, empty: str = "none") -> str:
@@ -1256,19 +1251,6 @@ def count_by_category(scenarios: list[WhatIfOut], category: str) -> int:
     avoids the intermediate list allocation.
     """
     return sum(1 for scenario in scenarios if scenario.has_category(category))
-
-
-def direction_label(delta: float) -> str:
-    """Return a human-readable direction label for ``delta``.
-
-    Positive → "improvement", negative → "regression", otherwise "neutral".
-    Uses the same 1e-9 tolerance as ``WhatIfOut.direction_arrow``.
-    """
-    if delta > 1e-9:
-        return "improvement"
-    if delta < -1e-9:
-        return "regression"
-    return "neutral"
 
 
 def summarise_what_if_scenarios(

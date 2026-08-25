@@ -65,7 +65,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install PyYAML
-        run: pip install --quiet "pyyaml==6.0.3"
+        run: pip install --no-cache-dir --require-hashes -r requirements-tools-lock.txt
 
       - name: Run CI hygiene checks
         run: |
@@ -87,7 +87,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install zizmor
-        run: pip install --quiet zizmor==1.28.0
+        run: pip install --no-cache-dir --require-hashes -r requirements-tools-lock.txt
 
       - name: Run zizmor
         run: zizmor --config .github/zizmor.yml .github/workflows

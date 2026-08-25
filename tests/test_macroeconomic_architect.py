@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # Cluster fixture
 # ---------------------------------------------------------------------------
@@ -72,8 +71,8 @@ def test_macroeconomic_name_constant() -> None:
 
 
 def test_macroeconomic_product_types_is_all() -> None:
-    from app.simulation.architects.macroeconomic import MacroeconomicArchitect
     from app.simulation.architects.base import BaseArchitect
+    from app.simulation.architects.macroeconomic import MacroeconomicArchitect
 
     pt = MacroeconomicArchitect().product_types
     assert set(pt) == set(BaseArchitect.ALL_PRODUCT_TYPES)
@@ -510,8 +509,8 @@ def test_generate_report_empty_list_returns_info() -> None:
 
 
 def test_generate_report_collects_recession_pressure_clusters() -> None:
-    from app.simulation.architects.macroeconomic import MacroeconomicArchitect
     from app.simulation.architects.base import ArchitectOutput
+    from app.simulation.architects.macroeconomic import MacroeconomicArchitect
 
     a = MacroeconomicArchitect()
     hit = ArchitectOutput(

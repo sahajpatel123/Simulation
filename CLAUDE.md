@@ -10,7 +10,7 @@
 
 It is **NOT** a web frontend. The Next.js frontend in `src/` is deployed separately and should be ignored unless explicitly working on UI generation.
 
-**Core Purpose**: Simulate consumer decision-making through a Markov funnel, calibrated by 52 consumer clusters × 23 domain architects, to predict conversion rates, identify failure modes, and generate actionable business recommendations.
+**Core Purpose**: Simulate consumer decision-making through a Markov funnel, calibrated by 52 consumer clusters × 35 domain architects, to predict conversion rates, identify failure modes, and generate actionable business recommendations.
 
 ### Architecture Overview
 
@@ -89,11 +89,11 @@ all_clusters = registry.all_clusters()  # Returns list of 52 ClusterDefinition
 cluster = registry.get_cluster("metro_power_professional")
 ```
 
-### 3.2 Architect System — 20 Domain Specialists
+### 3.2 Architect System — Domain Specialists (35 registered)
 
-**Location**: `app/simulation/architects/`
+**Location**: `app/simulation/architects/` (registry: `app/simulation/architect_registry.py` → `build_architect_registry()`)
 
-Each architect evaluates one business domain for all 52 clusters:
+The table below shows the core and hardware-specific subset; the full registry holds **35 architects**. Each architect evaluates one business domain for all 52 clusters:
 
 | Architect | Domain | Product Type Restrictions |
 |-----------|--------|---------------------------|
@@ -119,7 +119,7 @@ Each architect evaluates one business domain for all 52 clusters:
 | `AftersalesLifecycleArchitect` | Post-purchase experience | Hardware |
 | `HealthSafetyHardwareArchitect` | Health/safety concerns | Health hardware |
 
-**Important**: All architects subclass `BaseArchitect` in `base.py`. **Never modify `base.py`** unless changing the architect interface — all 23 subclasses depend on it.
+**Important**: All architects subclass `BaseArchitect` in `base.py`. **Never modify `base.py`** unless changing the architect interface — all 35 subclasses depend on it.
 
 **Key architect methods**:
 ```python
@@ -360,9 +360,9 @@ In production, the API and Celery worker run as separate processes. A `sync_broa
 
 1. Create `app/simulation/architects/my_domain.py`
 2. Subclass `BaseArchitect`, implement `name`, `product_types`, `compute()`, `generate_report()`
-3. Register in `app/simulation/conductor.py` → `_build_architect_registry()`
-4. Add to `ARCHITECT_STACKS[product_type]` if product-type specific
-5. Register in `DEPENDENCY_MAP` if consuming other architects' outputs
+3. Register in `app/simulation/architect_registry.py` → `build_architect_registry()` (the eager module-level `ARCHITECTS` dict that the conductor imports as `_ARCHITECTS`; it lives apart from the conductor so markov can import instances without creating a cycle)
+4. Add to `ARCHITECT_STACKS[product_type]` if product-type specific (the dict lives in `conductor.py`)
+5. Register in `DEPENDENCY_MAP` (also `conductor.py`) if consuming other architects' outputs
 6. Add DB column to `migrate_and_start.py` if storing architect corrections
 
 ### Adding a New Cluster
@@ -447,10 +447,11 @@ thecee/
 │   │   ├── websocket.py     # sync_broadcast() helper
 │   │   ├── auth.py          # JWT helpers
 │   │   ├── security.py      # CORS, headers, sanitization
+│   │   ├── safe_errors.py   # Exception → safe label for API error details
 │   │   └── ...
 │   │
 │   ├── simulation/          # Core simulation engine
-│   │   ├── architects/      # 23 domain architects
+│   │   ├── architects/      # 35 domain architects
 │   │   │   ├── base.py      # BaseArchitect (DO NOT MODIFY)
 │   │   │   ├── market_timing.py
 │   │   │   ├── pricing.py
@@ -464,6 +465,8 @@ thecee/
 │   │   ├── sampling.py      # AgentProfileGenerator
 │   │   ├── profiles.py      # AgentProfile dataclass
 │   │   ├── conductor.py     # Orchestrator (main entry)
+│   │   ├── architect_registry.py  # Neutral ARCHITECTS dict (keeps conductor ↔ markov acyclic)
+│   │   ├── architect_stack.py     # Pure helpers for the architect-stack registry endpoint
 │   │   ├── aggregation.py   # Results aggregation
 │   │   ├── accountability.py # Failure identification
 │   │   ├── calibration.py   # Learning system
@@ -536,6 +539,7 @@ SECRET_KEY=<32+ random chars>
 
 **Optional**:
 ```
+ENVIRONMENT=production  # auto-promoted to production when omitted on Railway (via RAILWAY_ENVIRONMENT)
 RAZORPAY_KEY_ID=...
 RAZORPAY_KEY_SECRET=...
 RAZORPAY_WEBHOOK_SECRET=...

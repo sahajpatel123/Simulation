@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # Cluster fixture
 # ---------------------------------------------------------------------------
@@ -71,8 +70,10 @@ def test_support_friction_name_constant() -> None:
 
 
 def test_support_friction_product_types_is_all() -> None:
-    from app.simulation.architects.support_friction import SupportFrictionArchitect
-    from app.simulation.architects.support_friction import SUPPORTED_PRODUCT_TYPES
+    from app.simulation.architects.support_friction import (
+        SUPPORTED_PRODUCT_TYPES,
+        SupportFrictionArchitect,
+    )
 
     pt = SupportFrictionArchitect().product_types
     assert set(pt) == set(SUPPORTED_PRODUCT_TYPES)
@@ -535,8 +536,8 @@ def test_generate_report_empty_list_returns_info() -> None:
 
 
 def test_generate_report_collects_high_friction_clusters() -> None:
-    from app.simulation.architects.support_friction import SupportFrictionArchitect
     from app.simulation.architects.base import ArchitectOutput
+    from app.simulation.architects.support_friction import SupportFrictionArchitect
 
     a = SupportFrictionArchitect()
     high = ArchitectOutput(
