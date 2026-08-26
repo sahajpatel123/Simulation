@@ -14,7 +14,7 @@ anthropic==1.0.0
 openai==1.54.4
 main
 celery[redis]==5.6.3
-redis==5.2.1
+redis==8.1.0
 flower==2.1.0
 numpy==2.4.6
 scipy==1.17.1
