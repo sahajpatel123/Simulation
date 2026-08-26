@@ -100,8 +100,8 @@ from app.schemas.founder_action_plan import FounderActionPlanOut
 from app.schemas.founder_brief import FounderBriefOut
 from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
 from app.schemas.investor_readiness import InvestorReadinessOut
-from app.schemas.journey_analytics import JourneyAnalyticsOut
 from app.schemas.funnel_elasticity import FunnelElasticityOut
+from app.schemas.journey_analytics import JourneyAnalyticsOut
 from app.schemas.journey_benchmark import (
     JourneyBenchmarkOut,
     JourneyCategoryBenchmarkOut,
@@ -278,7 +278,10 @@ from app.simulation.founder_action_plan_export import (
 from app.simulation.founder_brief import build_founder_brief
 from app.simulation.go_no_go import build_go_no_go
 from app.simulation.investor_readiness import build_investor_readiness
-from app.simulation.funnel_elasticity import build_population_funnel_elasticity
+from app.simulation.funnel_elasticity import (
+    build_population_funnel_elasticity,
+    has_usable_cluster_weights,
+)
 from app.simulation.journey_analytics import (
     build_journey_analytics,
     deserialise_per_cluster_matrices,
@@ -10288,7 +10291,10 @@ def get_simulation_funnel_elasticity(
         meta={
             "model": payload["model"],
             "cluster_count": len(payload["per_cluster_top_edges"]),
-            "weighted": bool(results.get("cluster_weights")),
+            "weighted": has_usable_cluster_weights(
+                raw_matrices,
+                results.get("cluster_weights"),
+            ),
         },
     )
 

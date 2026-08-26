@@ -116,6 +116,7 @@ def test_completed_simulation_returns_elasticity_payload() -> None:
     assert len(out.edges) == 4
     assert len(out.ranking) == 4
     assert out.recommendation.startswith("Across")
+    assert out.meta["weighted"] is True
     top_edge = out.ranking[0]
     assert any(
         f"{e.from_state}->{e.to_state}" == top_edge for e in out.edges
@@ -196,3 +197,4 @@ def test_malformed_weights_still_yield_valid_response_model() -> None:
     assert isinstance(out, FunnelElasticityOut)
     assert all(0.0 <= e.lift_per_gain_pp for e in out.edges)
     assert all(c.population_weight > 0.0 for c in out.per_cluster_top_edges)
+    assert out.meta["weighted"] is False

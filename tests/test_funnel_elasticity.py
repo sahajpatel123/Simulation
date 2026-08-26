@@ -446,3 +446,43 @@ def test_population_is_deterministic_and_bad_weights_sanitised() -> None:
     # equal weight, so y still appears with its own top edge.
     tops = {c["cluster_id"]: c["top_edge"] for c in first["per_cluster_top_edges"]}
     assert set(tops) == {"x", "y"}
+
+
+def test_population_does_not_invent_weights_for_missing_clusters() -> None:
+    matrices = {
+        "kept": {"DECIDE->PURCHASE": 1.5},
+        "missing": {"ARRIVE->BROWSE": 1.8},
+    }
+    payload = build_population_funnel_elasticity(matrices, {"kept": 3.0})
+
+    assert payload is not None
+    assert [
+        cluster["cluster_id"] for cluster in payload["per_cluster_top_edges"]
+    ] == ["kept"]
+    expected = build_funnel_elasticity(
+        build_cluster_matrix(matrices["kept"])
+    )["conversion"]["loop_adjusted"]
+    assert payload["conversion"]["loop_adjusted"] == pytest.approx(
+        expected, abs=1e-6
+    )
+    assert payload["cluster_consensus"]
+    assert payload["cluster_consensus"][0]["weighted_vote_share"] == 1.0
+
+
+def test_population_uses_uniform_weights_when_matches_are_unusable() -> None:
+    matrices = {"a": {}, "b": {"DECIDE->PURCHASE": 0.4}}
+    payload = build_population_funnel_elasticity(matrices, {"unknown": 5.0})
+
+    assert payload is not None
+    assert {
+        cluster["cluster_id"] for cluster in payload["per_cluster_top_edges"]
+    } == {"a", "b"}
+    conv_a = build_funnel_elasticity(build_cluster_matrix(matrices["a"]))[
+        "conversion"
+    ]["loop_adjusted"]
+    conv_b = build_funnel_elasticity(build_cluster_matrix(matrices["b"]))[
+        "conversion"
+    ]["loop_adjusted"]
+    assert payload["conversion"]["loop_adjusted"] == pytest.approx(
+        (conv_a + conv_b) / 2.0, abs=1e-6
+    )

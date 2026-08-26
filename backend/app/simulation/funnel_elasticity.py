@@ -364,6 +364,44 @@ def build_funnel_elasticity(
 # ---------------------------------------------------------------------------
 
 
+def _sanitise_population_weights(
+    cluster_ids: set[str],
+    cluster_weights: Any,
+) -> dict[str, float]:
+    """Return usable weights for the clusters present in a result payload.
+
+    Persisted results can contain an incomplete or edited ``cluster_weights``
+    map. Missing clusters are not assigned an invented default when at least
+    one matching weight is usable; they are excluded from that weighted mix.
+    If no usable weight matches the persisted clusters, an empty map signals
+    the caller to use uniform aggregation instead.
+    """
+    if not isinstance(cluster_weights, dict):
+        return {}
+
+    sanitised: dict[str, float] = {}
+    for cid, raw in cluster_weights.items():
+        cluster_id = str(cid)
+        if cluster_id not in cluster_ids:
+            continue
+        try:
+            parsed = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(parsed) and parsed > 0.0:
+            sanitised[cluster_id] = parsed
+    return sanitised
+
+
+def has_usable_cluster_weights(
+    per_cluster_matrices: Any,
+    cluster_weights: Any,
+) -> bool:
+    """Whether a persisted weight map applies to at least one matrix cluster."""
+    matrices = deserialise_per_cluster_matrices(per_cluster_matrices)
+    return bool(_sanitise_population_weights(set(matrices), cluster_weights))
+
+
 def build_population_funnel_elasticity(
     per_cluster_matrices: Any,
     cluster_weights: dict[str, float] | None = None,
@@ -397,15 +435,24 @@ def build_population_funnel_elasticity(
     if not matrices:
         return None
 
-    sanitised_weights: dict[str, float] = {}
-    if isinstance(cluster_weights, dict):
-        for cid, raw in cluster_weights.items():
-            try:
-                parsed = float(raw)
-            except (TypeError, ValueError):
-                continue
-            if math.isfinite(parsed) and parsed > 0.0:
-                sanitised_weights[str(cid)] = parsed
+    sanitised_weights = _sanitise_population_weights(
+        set(matrices), cluster_weights
+    )
+    if sanitised_weights:
+        # A partially persisted weight map must not silently give every
+        # unweighted cluster an arbitrary weight of 1.0. Keep only the
+        # clusters with an explicit usable weight; if none match, the helper
+        # returns an empty map and the audience falls back to uniform weights.
+        cluster_entries = [
+            (cid, overrides, sanitised_weights[cid])
+            for cid, overrides in sorted(matrices.items())
+            if cid in sanitised_weights
+        ]
+    else:
+        cluster_entries = [
+            (cid, overrides, 1.0)
+            for cid, overrides in sorted(matrices.items())
+        ]
 
     per_cluster: list[dict[str, Any]] = []
     total_weight = 0.0
@@ -413,10 +460,7 @@ def build_population_funnel_elasticity(
     adjusted_total = 0.0
     top_edge_votes: dict[tuple[str, str], float] = defaultdict(float)
 
-    for cid, overrides in sorted(matrices.items()):
-        weight = sanitised_weights.get(cid)
-        if weight is None:
-            weight = 1.0
+    for cid, overrides, weight in cluster_entries:
         matrix = build_cluster_matrix(overrides)
         analysis = build_funnel_elasticity(
             matrix,
@@ -455,8 +499,7 @@ def build_population_funnel_elasticity(
     edge_rows: list[dict[str, Any]] = []
     for order, (from_state, to_state) in enumerate(FUNNEL_EDGES):
         lift_sum = headroom_sum = elast_sum = w_sum = 0.0
-        for cid, overrides in sorted(matrices.items()):
-            weight = sanitised_weights.get(cid, 1.0)
+        for cid, overrides, weight in cluster_entries:
             m = _validate_and_normalise(build_cluster_matrix(overrides))
             fi = STATE_INDEX[State(from_state)]
             ti = STATE_INDEX[State(to_state)]
