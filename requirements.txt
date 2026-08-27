@@ -19,7 +19,7 @@ flower==2.1.0
 numpy==2.4.6
 scipy==1.17.1
 reportlab==5.0.1
-websockets==13.1
+websockets==17.0.1
 httpx==0.28.1
 razorpay==2.0.1
 python-dotenv==1.2.3
