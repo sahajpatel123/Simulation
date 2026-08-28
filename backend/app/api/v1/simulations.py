@@ -84,6 +84,7 @@ from app.schemas.agent_routing import (
 from app.schemas.architect_stack import ArchitectStackRegistryOut
 from app.schemas.assumption_cascade import AssumptionCascadeOut
 from app.schemas.assumption_postmortem import AssumptionPostmortemOut
+from app.schemas.break_even import BreakEvenOut
 from app.schemas.buyer_personas import BuyerPersonasOut
 from app.schemas.calibration_transparency import CalibrationTransparencyOut
 from app.schemas.channel_attribution import ChannelAttributionOut
@@ -99,8 +100,8 @@ from app.schemas.fix_leverage import FixLeverageOut
 from app.schemas.founder_action_plan import FounderActionPlanOut
 from app.schemas.founder_brief import FounderBriefOut
 from app.schemas.funnel_diagnosis import FunnelDiagnosisOut
-from app.schemas.investor_readiness import InvestorReadinessOut
 from app.schemas.funnel_elasticity import FunnelElasticityOut
+from app.schemas.investor_readiness import InvestorReadinessOut
 from app.schemas.journey_analytics import JourneyAnalyticsOut
 from app.schemas.journey_benchmark import (
     JourneyBenchmarkOut,
@@ -187,6 +188,43 @@ from app.simulation.architect_leaderboard import (
 from app.simulation.architect_stack import build_architect_stack_registry
 from app.simulation.assumption_cascade_read import build_assumption_cascade
 from app.simulation.assumption_postmortem import build_assumption_postmortem
+from app.simulation.break_even import (
+    DEFAULT_AVERAGE_ORDER_VALUE as BREAK_EVEN_DEFAULT_AVERAGE_ORDER_VALUE,
+)
+from app.simulation.break_even import (
+    DEFAULT_COST_PER_VISITOR as BREAK_EVEN_DEFAULT_COST_PER_VISITOR,
+)
+from app.simulation.break_even import (
+    DEFAULT_GROSS_MARGIN as BREAK_EVEN_DEFAULT_GROSS_MARGIN,
+)
+from app.simulation.break_even import (
+    DEFAULT_MONTHLY_FIXED_COSTS as BREAK_EVEN_DEFAULT_MONTHLY_FIXED_COSTS,
+)
+from app.simulation.break_even import (
+    DEFAULT_MONTHLY_VISITORS as BREAK_EVEN_DEFAULT_MONTHLY_VISITORS,
+)
+from app.simulation.break_even import (
+    DEFAULT_PURCHASES_PER_CUSTOMER_PER_MONTH as BREAK_EVEN_DEFAULT_PURCHASES,
+)
+from app.simulation.break_even import (
+    MAX_AVERAGE_ORDER_VALUE as BREAK_EVEN_MAX_AVERAGE_ORDER_VALUE,
+)
+from app.simulation.break_even import (
+    MAX_COST_PER_VISITOR as BREAK_EVEN_MAX_COST_PER_VISITOR,
+)
+from app.simulation.break_even import (
+    MAX_MONTHLY_FIXED_COSTS as BREAK_EVEN_MAX_MONTHLY_FIXED_COSTS,
+)
+from app.simulation.break_even import (
+    MAX_MONTHLY_VISITORS as BREAK_EVEN_MAX_MONTHLY_VISITORS,
+)
+from app.simulation.break_even import (
+    MAX_PURCHASES_PER_CUSTOMER_PER_MONTH as BREAK_EVEN_MAX_PURCHASES,
+)
+from app.simulation.break_even import (
+    MIN_MONTHLY_VISITORS as BREAK_EVEN_MIN_MONTHLY_VISITORS,
+)
+from app.simulation.break_even import build_break_even
 from app.simulation.buyer_personas import build_buyer_personas
 from app.simulation.calibration_health import (
     build_calibration_health,
@@ -276,12 +314,12 @@ from app.simulation.founder_action_plan_export import (
     founder_action_plan_to_json,
 )
 from app.simulation.founder_brief import build_founder_brief
-from app.simulation.go_no_go import build_go_no_go
-from app.simulation.investor_readiness import build_investor_readiness
 from app.simulation.funnel_elasticity import (
     build_population_funnel_elasticity,
     has_usable_cluster_weights,
 )
+from app.simulation.go_no_go import build_go_no_go
+from app.simulation.investor_readiness import build_investor_readiness
 from app.simulation.journey_analytics import (
     build_journey_analytics,
     deserialise_per_cluster_matrices,
@@ -9104,6 +9142,101 @@ def get_first_customers(
         signal_quality=(float(sim.signal_quality) if sim.signal_quality is not None else None),
     )
     return FirstCustomersOut(**payload)
+
+
+@router.get(
+    "/{simulation_id}/break-even",
+    response_model=BreakEvenOut,
+    summary=(
+        "Monthly operating break-even from simulated conversion, traffic, "
+        "margin, and founder costs"
+    ),
+    responses=_JSON_200,
+)
+def get_break_even(
+    simulation_id: int,
+    monthly_visitors: int = Query(
+        BREAK_EVEN_DEFAULT_MONTHLY_VISITORS,
+        ge=BREAK_EVEN_MIN_MONTHLY_VISITORS,
+        le=BREAK_EVEN_MAX_MONTHLY_VISITORS,
+        description="Expected website or app visitors per month",
+    ),
+    monthly_fixed_costs: float = Query(
+        BREAK_EVEN_DEFAULT_MONTHLY_FIXED_COSTS,
+        ge=0.0,
+        le=BREAK_EVEN_MAX_MONTHLY_FIXED_COSTS,
+        description="Monthly operating costs that contribution must cover",
+    ),
+    average_order_value: float = Query(
+        BREAK_EVEN_DEFAULT_AVERAGE_ORDER_VALUE,
+        ge=0.0,
+        le=BREAK_EVEN_MAX_AVERAGE_ORDER_VALUE,
+        description="Average revenue per purchase",
+    ),
+    gross_margin: float = Query(
+        BREAK_EVEN_DEFAULT_GROSS_MARGIN,
+        ge=0.0,
+        le=1.0,
+        description="Share of revenue remaining after cost of goods or service",
+    ),
+    purchases_per_customer_per_month: float = Query(
+        BREAK_EVEN_DEFAULT_PURCHASES,
+        ge=0.0,
+        le=BREAK_EVEN_MAX_PURCHASES,
+        description="Expected monthly purchase frequency per converted customer",
+    ),
+    cost_per_visitor: float = Query(
+        BREAK_EVEN_DEFAULT_COST_PER_VISITOR,
+        ge=0.0,
+        le=BREAK_EVEN_MAX_COST_PER_VISITOR,
+        description="Blended acquisition spend per visitor, including organic traffic as zero",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BreakEvenOut:
+    """Turn a completed run into a monthly operating break-even target.
+
+    The calculation uses the run's population-weighted conversion and a
+    founder-supplied operating model. It reports present monthly economics,
+    break-even customers and traffic, remaining shortfall, margin of safety,
+    and the maximum affordable acquisition cost per visit. Pure post-hoc
+    analytics: no Celery, LLM, or database writes.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — break-even analysis requires completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    return build_break_even(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        monthly_visitors=monthly_visitors,
+        monthly_fixed_costs=monthly_fixed_costs,
+        average_order_value=average_order_value,
+        gross_margin=gross_margin,
+        purchases_per_customer_per_month=purchases_per_customer_per_month,
+        cost_per_visitor=cost_per_visitor,
+        signal_quality=(
+            float(sim.signal_quality) if sim.signal_quality is not None else None
+        ),
+    )
 
 
 @router.get(
