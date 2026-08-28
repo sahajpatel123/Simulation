@@ -42,7 +42,6 @@ from app.simulation.funnel_elasticity import (
 from app.simulation.journey_analytics import build_cluster_matrix
 from app.simulation.markov import BASE_TRANSITIONS, STATE_INDEX, STATES, State
 
-
 # ---------------------------------------------------------------------------
 # Matrix builders
 # ---------------------------------------------------------------------------
@@ -434,6 +433,46 @@ def test_population_conversion_is_weighted_mean_of_cluster_conversions() -> None
     assert payload["conversion"]["loop_adjusted"] == pytest.approx(
         expected, abs=1e-4
     )
+
+
+def test_population_loop_uplift_is_normalised_by_total_weight() -> None:
+    matrices = {
+        "a": {"DECIDE->PURCHASE": 1.5},
+        "b": {"CONSIDER->BROWSE": 1.8},
+    }
+    payload = build_population_funnel_elasticity(
+        matrices,
+        {"a": 3.0, "b": 1.0},
+    )
+
+    assert payload is not None
+    conversion = payload["conversion"]
+    expected_uplift_pp = (
+        conversion["loop_adjusted"] - conversion["naive_product"]
+    ) * 100.0
+    assert conversion["loop_uplift_pp"] == pytest.approx(
+        expected_uplift_pp,
+        abs=0.0001,
+    )
+
+
+def test_population_loop_uplift_is_invariant_to_weight_scale() -> None:
+    matrices = {
+        "a": {"DECIDE->PURCHASE": 1.5},
+        "b": {"CONSIDER->BROWSE": 1.8},
+    }
+    fractional = build_population_funnel_elasticity(
+        matrices,
+        {"a": 0.75, "b": 0.25},
+    )
+    whole = build_population_funnel_elasticity(
+        matrices,
+        {"a": 3.0, "b": 1.0},
+    )
+
+    assert fractional is not None
+    assert whole is not None
+    assert fractional["conversion"] == whole["conversion"]
 
 
 def test_population_is_deterministic_and_bad_weights_sanitised() -> None:

@@ -552,7 +552,14 @@ def build_population_funnel_elasticity(
         ),
         0.0,
     )
-    loop_uplift_pp = max(0.0, (adjusted_total - naive_total)) * 100.0
+    # Both totals still carry the caller's arbitrary weight scale here.
+    # Normalize the delta just like the two conversion fields below so
+    # equivalent ratios (for example 0.75:0.25 and 3:1) report the same
+    # population uplift.
+    loop_uplift_pp = max(
+        0.0,
+        (adjusted_total - naive_total) / total_weight,
+    ) * 100.0
     recommendation = (
         f"Across {len(per_cluster)} clusters, improving "
         f"{top['from_state']}->{top['to_state']} buys the most: "
