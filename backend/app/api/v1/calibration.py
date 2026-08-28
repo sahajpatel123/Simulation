@@ -21,10 +21,12 @@ from app.schemas.funnel_stage_calibration import (
     FunnelStageCorrectionListOut,
     FunnelStageCorrectionOut,
 )
+from app.schemas.signal_quality_accuracy import SignalQualityAccuracyOut
 from app.simulation.calibration import CalibrationEngine as PlatformCalibrationEngine
 from app.simulation.calibration_engine import CalibrationEngine as LayerCalibrationEngine
 from app.simulation.cluster_calibration_evidence import build_cluster_calibration_digest
 from app.simulation.clusters.registry import ClusterRegistry
+from app.simulation.signal_quality_accuracy import build_signal_quality_accuracy
 
 logger = logging.getLogger(__name__)
 from app.schemas.outcome import FounderOutcomeSubmit
@@ -520,6 +522,36 @@ def get_my_accuracy(
         "biases": biases,
         "message": "The model gets more accurate every time you return with real data.",
     }
+
+
+@router.get(
+    "/my-signal-quality-accuracy",
+    response_model=SignalQualityAccuracyOut,
+    summary="Compare real-world prediction accuracy by signal-quality tier",
+    dependencies=[Depends(rate_limit(limit=30, window_s=60))],
+)
+def get_my_signal_quality_accuracy(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SignalQualityAccuracyOut:
+    """Show whether stronger assumption evidence reduced forecast error."""
+    rows = db.execute(
+        text(
+            """
+        SELECT simulation_id, predicted_conversion, actual_conversion,
+               signal_quality_at_run, created_at
+        FROM user_simulation_accuracy_history
+        WHERE user_id = :uid
+        ORDER BY created_at ASC
+        """
+        ),
+        {"uid": current_user.id},
+    ).mappings().all()
+    payload = build_signal_quality_accuracy(
+        [dict(row) for row in rows],
+        user_id=current_user.id,
+    )
+    return SignalQualityAccuracyOut.model_validate(payload)
 
 
 @router.get(
