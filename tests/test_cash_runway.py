@@ -69,6 +69,39 @@ def test_self_sustaining_forecast_tracks_cash_and_totals() -> None:
     assert all(point.is_break_even for point in out.trajectory)
 
 
+def test_fractional_cent_months_reconcile_visible_trajectory_and_totals() -> None:
+    out = build_cash_runway(
+        _results(0.01),
+        starting_cash=0,
+        horizon_months=3,
+        initial_monthly_visitors=1,
+        monthly_visitor_growth_rate=0.0,
+        monthly_fixed_costs=0,
+        average_order_value=33.30,
+        gross_margin=1.0,
+        cost_per_visitor=0.0,
+    )
+
+    assert [point.monthly_revenue for point in out.trajectory] == [0.33] * 3
+    assert [point.monthly_operating_result for point in out.trajectory] == [
+        0.33
+    ] * 3
+    assert [point.ending_cash_balance for point in out.trajectory] == [
+        0.33,
+        0.66,
+        0.99,
+    ]
+    assert out.total_revenue == pytest.approx(
+        sum(point.monthly_revenue for point in out.trajectory)
+    )
+    assert out.total_operating_result == pytest.approx(
+        sum(point.monthly_operating_result for point in out.trajectory)
+    )
+    assert out.ending_cash_balance == pytest.approx(
+        out.starting_cash + out.total_operating_result
+    )
+
+
 def test_cash_survives_until_growth_reaches_break_even() -> None:
     out = _growth_case(starting_cash=5_000)
 
@@ -180,7 +213,7 @@ def test_json_results_signal_quality_and_schema_contract() -> None:
     assert out.weighted_conversion_rate == pytest.approx(0.06)
     assert out.meta["conversion_source"] == "population_weighted_conversion"
     assert out.meta["signal_quality"] == pytest.approx(0.42)
-    assert out.meta["model"] == "cash_runway_growth_v1"
+    assert out.meta["model"] == "cash_runway_growth_v2"
     assert "low signal quality" in out.recommendations[-1]
 
 

@@ -67,6 +67,12 @@ def _clamp(value: Any, minimum: float, maximum: float, default: float) -> float:
     return max(minimum, min(maximum, _safe_float(value, default)))
 
 
+def _currency(value: float) -> float:
+    """Round a ledger amount to cents without exposing negative zero."""
+    rounded = round(value, 2)
+    return 0.0 if rounded == 0.0 else rounded
+
+
 def _recommendations(
     *,
     verdict: CashRunwayVerdict,
@@ -135,7 +141,9 @@ def build_cash_runway(
     signal_quality: float | None = None,
 ) -> CashRunwayOut:
     """Build a deterministic cash forecast and break-even survival verdict."""
-    cash = _clamp(starting_cash, 0.0, MAX_STARTING_CASH, DEFAULT_STARTING_CASH)
+    cash = _currency(
+        _clamp(starting_cash, 0.0, MAX_STARTING_CASH, DEFAULT_STARTING_CASH)
+    )
     months = max(
         MIN_HORIZON_MONTHS,
         min(
@@ -184,12 +192,15 @@ def build_cash_runway(
         )
         gross_profit = revenue * economics.gross_margin
         acquisition_cost = visitors * economics.cost_per_visitor
-        operating_result = (
+        revenue = _currency(revenue)
+        operating_result = _currency(
             gross_profit - acquisition_cost - economics.monthly_fixed_costs
         )
-        cash += operating_result
-        total_revenue += revenue
-        total_operating_result += operating_result
+        cash = _currency(cash + operating_result)
+        total_revenue = _currency(total_revenue + revenue)
+        total_operating_result = _currency(
+            total_operating_result + operating_result
+        )
         lowest_cash = min(lowest_cash, cash)
 
         is_break_even = operating_result >= 0.0
@@ -205,9 +216,9 @@ def build_cash_runway(
                 month=month,
                 monthly_visitors=visitors,
                 monthly_customers=round(customers, 2),
-                monthly_revenue=round(revenue, 2),
-                monthly_operating_result=round(operating_result, 2),
-                ending_cash_balance=round(cash, 2),
+                monthly_revenue=revenue,
+                monthly_operating_result=operating_result,
+                ending_cash_balance=cash,
                 is_break_even=is_break_even,
                 requires_additional_cash=requires_cash,
             )
@@ -254,7 +265,7 @@ def build_cash_runway(
         status=status,
         verdict=verdict,
         weighted_conversion_rate=economics.weighted_conversion_rate,
-        starting_cash=round(initial_cash, 2),
+        starting_cash=initial_cash,
         horizon_months=months,
         initial_monthly_visitors=economics.monthly_visitors,
         monthly_visitor_growth_rate=round(growth_rate, 6),
@@ -265,7 +276,7 @@ def build_cash_runway(
         ),
         gross_margin=economics.gross_margin,
         cost_per_visitor=economics.cost_per_visitor,
-        initial_monthly_burn=round(initial_monthly_burn, 2),
+        initial_monthly_burn=initial_monthly_burn,
         static_runway_months=(
             round(static_runway_months, 2)
             if static_runway_months is not None
@@ -278,18 +289,21 @@ def build_cash_runway(
             if cash_at_break_even is not None
             else None
         ),
-        lowest_cash_balance=round(lowest_cash, 2),
-        minimum_additional_cash=round(minimum_additional_cash, 2),
-        ending_cash_balance=round(cash, 2),
-        total_revenue=round(total_revenue, 2),
-        total_operating_result=round(total_operating_result, 2),
+        lowest_cash_balance=lowest_cash,
+        minimum_additional_cash=minimum_additional_cash,
+        ending_cash_balance=cash,
+        total_revenue=total_revenue,
+        total_operating_result=total_operating_result,
         trajectory=trajectory,
         recommendations=recommendations,
         meta={
             "conversion_source": economics.meta.get("conversion_source", "none"),
             "signal_quality": safe_signal_quality,
-            "model": "cash_runway_growth_v1",
-            "assumptions": "constant conversion, margin, costs, and monthly visitor growth",
+            "model": "cash_runway_growth_v2",
+            "assumptions": (
+                "constant conversion, margin, costs, monthly visitor growth, "
+                "and cent-rounded monthly ledger amounts"
+            ),
         },
     )
 
