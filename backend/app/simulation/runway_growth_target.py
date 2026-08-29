@@ -8,7 +8,6 @@ No database or network I/O is performed here.
 
 from __future__ import annotations
 
-import math
 from typing import Any
 
 from app.schemas.cash_runway import CashRunwayOut
@@ -36,7 +35,6 @@ from app.simulation.cash_runway import (
 )
 
 GROWTH_RATE_PRECISION: int = 6
-_SEARCH_ITERATIONS: int = 48
 
 VERDICT_NO_GROWTH_REQUIRED: RunwayGrowthTargetVerdict = "NO_GROWTH_REQUIRED"
 VERDICT_PLAN_SUFFICIENT: RunwayGrowthTargetVerdict = "PLAN_SUFFICIENT"
@@ -151,19 +149,16 @@ def build_runway_growth_target(
         required_growth = 0.0
         target_forecast = zero_growth_forecast
     elif _succeeds(maximum_forecast):
-        low = 0.0
-        high = MAX_MONTHLY_VISITOR_GROWTH_RATE
-        for _ in range(_SEARCH_ITERATIONS):
-            midpoint = (low + high) / 2.0
-            if _succeeds(forecast(midpoint)):
-                high = midpoint
-            else:
-                low = midpoint
         scale = 10**GROWTH_RATE_PRECISION
-        required_growth = min(
-            MAX_MONTHLY_VISITOR_GROWTH_RATE,
-            math.ceil(high * scale) / scale,
-        )
+        low_units = 0
+        high_units = int(round(MAX_MONTHLY_VISITOR_GROWTH_RATE * scale))
+        while high_units - low_units > 1:
+            midpoint_units = (low_units + high_units) // 2
+            if _succeeds(forecast(midpoint_units / scale)):
+                high_units = midpoint_units
+            else:
+                low_units = midpoint_units
+        required_growth = high_units / scale
         target_forecast = forecast(required_growth)
 
     planned_growth = planned_forecast.monthly_visitor_growth_rate
@@ -227,8 +222,9 @@ def build_runway_growth_target(
         meta={
             "conversion_source": planned_forecast.meta.get("conversion_source", "none"),
             "signal_quality": safe_signal_quality,
-            "model": "runway_growth_target_v1",
+            "model": "runway_growth_target_v2",
             "search_precision": GROWTH_RATE_PRECISION,
+            "search_method": "integer_binary_search",
             "maximum_tested_monthly_growth_rate": (MAX_MONTHLY_VISITOR_GROWTH_RATE),
             "success_definition": (
                 "monthly operating break-even inside the horizon without a "

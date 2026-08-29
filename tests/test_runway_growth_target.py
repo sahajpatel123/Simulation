@@ -10,6 +10,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.simulation.runway_growth_target import (
+    GROWTH_RATE_PRECISION,
     VERDICT_GROWTH_GAP,
     VERDICT_INFEASIBLE,
     VERDICT_NO_GROWTH_REQUIRED,
@@ -47,7 +48,7 @@ def test_growth_gap_finds_smallest_cash_safe_rate() -> None:
 
     assert out.verdict == VERDICT_GROWTH_GAP
     assert out.constraint == "GROWTH_PLAN"
-    assert out.required_monthly_visitor_growth_rate == pytest.approx(0.4995, abs=0.000001)
+    assert out.required_monthly_visitor_growth_rate == 0.4995
     assert out.growth_gap_percentage_points == pytest.approx(
         (out.required_monthly_visitor_growth_rate - 0.20) * 100.0,
         abs=0.0001,
@@ -58,6 +59,28 @@ def test_growth_gap_finds_smallest_cash_safe_rate() -> None:
     assert out.target.break_even_month == 2
     assert out.target.cash_out_month is None
     assert "29.95-point gap" in out.recommendations[0]
+
+
+def test_target_is_exact_minimum_at_advertised_search_precision() -> None:
+    out = _target(horizon_months=2)
+
+    required = out.required_monthly_visitor_growth_rate
+    assert required is not None
+    previous_rate = required - (10**-GROWTH_RATE_PRECISION)
+
+    at_target = _target(
+        horizon_months=2,
+        planned_monthly_visitor_growth_rate=required,
+    )
+    before_target = _target(
+        horizon_months=2,
+        planned_monthly_visitor_growth_rate=previous_rate,
+    )
+
+    assert at_target.planned.succeeds is True
+    assert at_target.verdict == VERDICT_PLAN_SUFFICIENT
+    assert before_target.planned.succeeds is False
+    assert before_target.verdict == VERDICT_GROWTH_GAP
 
 
 def test_plan_sufficient_reports_lower_required_rate() -> None:
@@ -130,8 +153,9 @@ def test_schema_metadata_and_low_signal_warning() -> None:
     assert out.simulation_id == 7
     assert out.project_id == 3
     assert out.weighted_conversion_rate == pytest.approx(0.05)
-    assert out.meta["model"] == "runway_growth_target_v1"
+    assert out.meta["model"] == "runway_growth_target_v2"
     assert out.meta["search_precision"] == 6
+    assert out.meta["search_method"] == "integer_binary_search"
     assert out.meta["conversion_source"] == "population_weighted_conversion"
     assert "low signal quality" in out.recommendations[-1]
 
