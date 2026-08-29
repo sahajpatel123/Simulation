@@ -116,8 +116,17 @@ def test_target_is_exact_to_one_cent() -> None:
     assert at_target.lowest_cash_balance == 0.0
     assert below_target.cash_out_month == 1
     assert below_target.lowest_cash_balance == pytest.approx(-0.01)
+    assert out.target is not None
+    assert out.target.starting_cash == at_target.starting_cash
+    assert out.target.break_even_month == at_target.break_even_month
+    assert out.target.cash_out_month == at_target.cash_out_month
+    assert out.target.lowest_cash_balance == at_target.lowest_cash_balance
+    assert out.target.ending_cash_balance == at_target.ending_cash_balance
+    assert out.target.succeeds is True
     assert out.meta["currency_precision"] == pytest.approx(0.01)
-    assert out.meta["calculation_method"] == "zero_cash_ledger_trough"
+    assert out.meta["calculation_method"] == (
+        "zero_cash_ledger_trough_verified_forecast"
+    )
 
 
 def test_non_positive_contribution_is_infeasible() -> None:
@@ -153,7 +162,7 @@ def test_metadata_and_low_signal_warning() -> None:
     assert out.simulation_id == 7
     assert out.project_id == 3
     assert out.weighted_conversion_rate == pytest.approx(0.05)
-    assert out.meta["model"] == "runway_funding_target_v1"
+    assert out.meta["model"] == "runway_funding_target_v2"
     assert out.meta["conversion_source"] == "population_weighted_conversion"
     assert out.meta["signal_quality"] == pytest.approx(0.42)
     assert "low signal quality" in out.recommendations[-1]

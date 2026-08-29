@@ -58,27 +58,6 @@ def _scenario(forecast: CashRunwayOut) -> RunwayFundingScenarioOut:
     )
 
 
-def _target_scenario(
-    zero_cash_forecast: CashRunwayOut,
-    minimum_starting_cash: float,
-) -> RunwayFundingScenarioOut:
-    """Shift the zero-cash ledger by the exact required opening balance."""
-    return RunwayFundingScenarioOut(
-        starting_cash=minimum_starting_cash,
-        break_even_month=zero_cash_forecast.break_even_month,
-        cash_out_month=None,
-        lowest_cash_balance=round(
-            zero_cash_forecast.lowest_cash_balance + minimum_starting_cash,
-            2,
-        ),
-        ending_cash_balance=round(
-            zero_cash_forecast.ending_cash_balance + minimum_starting_cash,
-            2,
-        ),
-        succeeds=True,
-    )
-
-
 def _recommendations(
     *,
     verdict: RunwayFundingTargetVerdict,
@@ -160,7 +139,7 @@ def build_runway_funding_target(
     minimum_cash: float | None = None
     additional_cash: float | None = None
     surplus: float | None = None
-    target: RunwayFundingScenarioOut | None = None
+    target_forecast: CashRunwayOut | None = None
     if zero_cash_forecast.verdict == VERDICT_INVIABLE:
         verdict: RunwayFundingTargetVerdict = VERDICT_INFEASIBLE
         constraint: RunwayFundingConstraint = "UNIT_ECONOMICS"
@@ -172,7 +151,11 @@ def build_runway_funding_target(
         planned_cash = planned_forecast.starting_cash
         additional_cash = round(max(0.0, minimum_cash - planned_cash), 2)
         surplus = round(max(0.0, planned_cash - minimum_cash), 2)
-        target = _target_scenario(zero_cash_forecast, minimum_cash)
+        # Replay the derived amount through the authoritative ledger instead
+        # of manufacturing a successful scenario by shifting summary fields.
+        # This keeps the response truthful if cash-runway rounding or ledger
+        # behavior changes independently in the future.
+        target_forecast = forecast(minimum_cash)
         if _succeeds(planned_forecast):
             verdict = VERDICT_PLAN_FUNDED
             constraint = "NONE"
@@ -212,13 +195,13 @@ def build_runway_funding_target(
         additional_cash_required=additional_cash,
         funding_surplus=surplus,
         planned=_scenario(planned_forecast),
-        target=target,
+        target=_scenario(target_forecast) if target_forecast is not None else None,
         recommendations=recommendations,
         meta={
             "conversion_source": planned_forecast.meta.get("conversion_source", "none"),
             "signal_quality": safe_signal_quality,
-            "model": "runway_funding_target_v1",
-            "calculation_method": "zero_cash_ledger_trough",
+            "model": "runway_funding_target_v2",
+            "calculation_method": "zero_cash_ledger_trough_verified_forecast",
             "currency_precision": 0.01,
             "success_definition": (
                 "monthly operating break-even inside the horizon without a "
