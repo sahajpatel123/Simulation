@@ -236,3 +236,22 @@ def test_route_rejects_unusable_simulations(
     with pytest.raises(HTTPException) as exc:
         _call_route(session=_FakeSession(sim))
     assert exc.value.status_code == status_code
+
+
+def test_route_does_not_expose_persisted_failure_details() -> None:
+    private_error = (
+        "Provider request failed at postgres://founder:secret@internal-db/thecee"
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        _call_route(
+            session=_FakeSession(
+                _FakeSimulation(status="FAILED", error_message=private_error)
+            )
+        )
+
+    assert exc.value.status_code == 422
+    assert exc.value.detail == (
+        "Simulation failed; runway spending analysis is unavailable."
+    )
+    assert private_error not in exc.value.detail

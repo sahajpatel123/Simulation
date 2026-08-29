@@ -9577,7 +9577,9 @@ def get_runway_spend_ceiling(
     if sim.status == "FAILED":
         raise HTTPException(
             status_code=422,
-            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+            detail=(
+                "Simulation failed; runway spending analysis is unavailable."
+            ),
         )
     if sim.status != "COMPLETED":
         raise HTTPException(
