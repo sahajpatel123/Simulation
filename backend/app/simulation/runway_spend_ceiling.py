@@ -31,6 +31,7 @@ from app.simulation.cash_runway import (
     DEFAULT_HORIZON_MONTHS,
     DEFAULT_MONTHLY_VISITOR_GROWTH_RATE,
     DEFAULT_STARTING_CASH,
+    VERDICT_INVIABLE,
     build_cash_runway,
 )
 
@@ -41,19 +42,9 @@ VERDICT_PLAN_EXCEEDS_CEILING: RunwaySpendCeilingVerdict = "PLAN_EXCEEDS_CEILING"
 VERDICT_INFEASIBLE: RunwaySpendCeilingVerdict = "INFEASIBLE"
 
 
-def _has_positive_contribution(forecast: CashRunwayOut) -> bool:
-    gross_value_per_visitor = (
-        forecast.weighted_conversion_rate
-        * forecast.average_order_value
-        * forecast.purchases_per_customer_per_month
-        * forecast.gross_margin
-    )
-    return gross_value_per_visitor > forecast.cost_per_visitor
-
-
 def _succeeds(forecast: CashRunwayOut) -> bool:
     return (
-        _has_positive_contribution(forecast)
+        forecast.verdict != VERDICT_INVIABLE
         and forecast.break_even_month is not None
         and forecast.cash_out_month is None
     )
@@ -229,7 +220,7 @@ def build_runway_spend_ceiling(
                 "conversion_source", "none"
             ),
             "signal_quality": safe_signal_quality,
-            "model": "runway_spend_ceiling_v1",
+            "model": "runway_spend_ceiling_v2",
             "search_increment": 1 / MONEY_SCALE,
             "search_method": "integer_binary_search",
             "maximum_tested_monthly_fixed_costs": MAX_MONTHLY_FIXED_COSTS,

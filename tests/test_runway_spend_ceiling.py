@@ -107,6 +107,25 @@ def test_non_positive_contribution_has_no_safe_fixed_cost_budget() -> None:
     assert "no positive contribution" in out.recommendations[0]
 
 
+def test_rounded_display_economics_cannot_hide_negative_contribution() -> None:
+    out = _ceiling(
+        planned_monthly_fixed_costs=0.0,
+        average_order_value=100.009,
+        gross_margin=0.50,
+        purchases_per_customer_per_month=1.0,
+        cost_per_visitor=2.50023,
+    )
+
+    # Raw contribution is -0.000005 per visit, but recomputing from the
+    # display-rounded AOV and acquisition cost would incorrectly make it
+    # +0.00005 and manufacture a small fixed-cost ceiling.
+    assert out.verdict == VERDICT_INFEASIBLE
+    assert out.constraint == "UNIT_ECONOMICS"
+    assert out.cash_safe_monthly_fixed_cost_ceiling is None
+    assert out.planned.succeeds is False
+    assert out.ceiling is None
+
+
 def test_search_limit_is_reported_as_a_lower_bound() -> None:
     out = _ceiling(
         starting_cash=0,
@@ -138,7 +157,7 @@ def test_metadata_and_low_signal_warning() -> None:
     assert out.simulation_id == 7
     assert out.project_id == 3
     assert out.weighted_conversion_rate == pytest.approx(0.05)
-    assert out.meta["model"] == "runway_spend_ceiling_v1"
+    assert out.meta["model"] == "runway_spend_ceiling_v2"
     assert out.meta["conversion_source"] == "population_weighted_conversion"
     assert out.meta["signal_quality"] == pytest.approx(0.42)
     assert "low signal quality" in out.recommendations[-1]
