@@ -212,11 +212,17 @@ def build_break_even(
     safety_margin_ratio: float | None = None
     if contribution_per_visitor > 0.0:
         break_even_visitors = int(math.ceil(fixed_costs / contribution_per_visitor))
-        break_even_customers = int(math.ceil(break_even_visitors * conversion))
+        # Derive customer targets from the unrounded economic threshold. Using
+        # the already-ceiled visitor target here can round the same shortfall
+        # twice and materially overstate customer needs at low conversion.
+        break_even_customer_threshold = (
+            fixed_costs * conversion / contribution_per_visitor
+        )
+        break_even_customers = int(math.ceil(break_even_customer_threshold))
         additional_visitors_needed = max(0, break_even_visitors - visitors)
         additional_customers_needed = max(
             0,
-            int(math.ceil(break_even_customers - monthly_customers)),
+            int(math.ceil(break_even_customer_threshold - monthly_customers)),
         )
         safety_margin_ratio = (visitors - break_even_visitors) / visitors
 
@@ -288,7 +294,7 @@ def build_break_even(
                 if signal_quality is not None
                 else None
             ),
-            "model": "linear_monthly_break_even_v1",
+            "model": "linear_monthly_break_even_v2",
         },
     )
 

@@ -77,6 +77,22 @@ def test_shortfall_reports_incremental_volume_needed() -> None:
     assert "4,000 visits" in out.recommendations[0]
 
 
+def test_customer_targets_do_not_double_round_the_visitor_target() -> None:
+    out = build_break_even(
+        _results(0.03),
+        monthly_visitors=10,
+        monthly_fixed_costs=100,
+        average_order_value=100,
+        gross_margin=1.0,
+    )
+
+    assert out.verdict == VERDICT_SHORTFALL
+    assert out.break_even_visitors == 34
+    assert out.break_even_customers == 1
+    assert out.additional_visitors_needed == 24
+    assert out.additional_customers_needed == 1
+
+
 def test_near_break_even_verdict_uses_fixed_cost_coverage() -> None:
     out = build_break_even(
         _results(0.10),
@@ -197,7 +213,7 @@ def test_signal_quality_and_schema_contract() -> None:
     assert out.simulation_id == 7
     assert out.project_id == 3
     assert out.meta["signal_quality"] == pytest.approx(0.812346)
-    assert out.meta["model"] == "linear_monthly_break_even_v1"
+    assert out.meta["model"] == "linear_monthly_break_even_v2"
 
 
 class _FakeSimulation:
