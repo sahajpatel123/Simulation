@@ -87,6 +87,7 @@ from app.schemas.assumption_postmortem import AssumptionPostmortemOut
 from app.schemas.break_even import BreakEvenOut
 from app.schemas.buyer_personas import BuyerPersonasOut
 from app.schemas.calibration_transparency import CalibrationTransparencyOut
+from app.schemas.cash_runway import CashRunwayOut
 from app.schemas.channel_attribution import ChannelAttributionOut
 from app.schemas.cluster_opportunity import ClusterOpportunityMatrixOut
 from app.schemas.cohort_retention import CohortRetentionOut
@@ -236,6 +237,28 @@ from app.simulation.calibration_transparency import (
     build_calibration_transparency,
     coerce_recorded_applied_corrections,
 )
+from app.simulation.cash_runway import (
+    DEFAULT_HORIZON_MONTHS as CASH_RUNWAY_DEFAULT_HORIZON_MONTHS,
+)
+from app.simulation.cash_runway import (
+    DEFAULT_MONTHLY_VISITOR_GROWTH_RATE as CASH_RUNWAY_DEFAULT_VISITOR_GROWTH,
+)
+from app.simulation.cash_runway import (
+    DEFAULT_STARTING_CASH as CASH_RUNWAY_DEFAULT_STARTING_CASH,
+)
+from app.simulation.cash_runway import (
+    MAX_HORIZON_MONTHS as CASH_RUNWAY_MAX_HORIZON_MONTHS,
+)
+from app.simulation.cash_runway import (
+    MAX_MONTHLY_VISITOR_GROWTH_RATE as CASH_RUNWAY_MAX_VISITOR_GROWTH,
+)
+from app.simulation.cash_runway import (
+    MAX_STARTING_CASH as CASH_RUNWAY_MAX_STARTING_CASH,
+)
+from app.simulation.cash_runway import (
+    MIN_HORIZON_MONTHS as CASH_RUNWAY_MIN_HORIZON_MONTHS,
+)
+from app.simulation.cash_runway import build_cash_runway
 from app.simulation.channel_attribution_read import build_channel_attribution
 from app.simulation.cluster_diff import build_cluster_diff
 from app.simulation.cluster_drill_down import (
@@ -9228,6 +9251,123 @@ def get_break_even(
         project_id=sim.project_id,
         status=sim.status,
         monthly_visitors=monthly_visitors,
+        monthly_fixed_costs=monthly_fixed_costs,
+        average_order_value=average_order_value,
+        gross_margin=gross_margin,
+        purchases_per_customer_per_month=purchases_per_customer_per_month,
+        cost_per_visitor=cost_per_visitor,
+        signal_quality=(
+            float(sim.signal_quality) if sim.signal_quality is not None else None
+        ),
+    )
+
+
+@router.get(
+    "/{simulation_id}/cash-runway",
+    response_model=CashRunwayOut,
+    summary=(
+        "Forecast whether available cash survives until simulated monthly "
+        "operating break-even"
+    ),
+    responses=_JSON_200,
+)
+def get_cash_runway(
+    simulation_id: int,
+    starting_cash: float = Query(
+        CASH_RUNWAY_DEFAULT_STARTING_CASH,
+        ge=0.0,
+        le=CASH_RUNWAY_MAX_STARTING_CASH,
+        description="Cash available at the start of month 1",
+    ),
+    horizon_months: int = Query(
+        CASH_RUNWAY_DEFAULT_HORIZON_MONTHS,
+        ge=CASH_RUNWAY_MIN_HORIZON_MONTHS,
+        le=CASH_RUNWAY_MAX_HORIZON_MONTHS,
+        description="Number of months to project",
+    ),
+    initial_monthly_visitors: int = Query(
+        BREAK_EVEN_DEFAULT_MONTHLY_VISITORS,
+        ge=BREAK_EVEN_MIN_MONTHLY_VISITORS,
+        le=BREAK_EVEN_MAX_MONTHLY_VISITORS,
+        description="Expected visitors in month 1",
+    ),
+    monthly_visitor_growth_rate: float = Query(
+        CASH_RUNWAY_DEFAULT_VISITOR_GROWTH,
+        ge=0.0,
+        le=CASH_RUNWAY_MAX_VISITOR_GROWTH,
+        description="Compounded monthly visitor growth as a decimal",
+    ),
+    monthly_fixed_costs: float = Query(
+        BREAK_EVEN_DEFAULT_MONTHLY_FIXED_COSTS,
+        ge=0.0,
+        le=BREAK_EVEN_MAX_MONTHLY_FIXED_COSTS,
+        description="Monthly operating costs before acquisition spend",
+    ),
+    average_order_value: float = Query(
+        BREAK_EVEN_DEFAULT_AVERAGE_ORDER_VALUE,
+        ge=0.0,
+        le=BREAK_EVEN_MAX_AVERAGE_ORDER_VALUE,
+        description="Average revenue per purchase",
+    ),
+    gross_margin: float = Query(
+        BREAK_EVEN_DEFAULT_GROSS_MARGIN,
+        ge=0.0,
+        le=1.0,
+        description="Share of revenue remaining after cost of goods or service",
+    ),
+    purchases_per_customer_per_month: float = Query(
+        BREAK_EVEN_DEFAULT_PURCHASES,
+        ge=0.0,
+        le=BREAK_EVEN_MAX_PURCHASES,
+        description="Expected monthly purchase frequency per converted customer",
+    ),
+    cost_per_visitor: float = Query(
+        BREAK_EVEN_DEFAULT_COST_PER_VISITOR,
+        ge=0.0,
+        le=BREAK_EVEN_MAX_COST_PER_VISITOR,
+        description="Blended acquisition spend per visitor",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CashRunwayOut:
+    """Project cash, burn, and break-even timing from a completed run.
+
+    The forecast compounds founder-supplied visitor growth while holding the
+    run's population-weighted conversion and the supplied unit economics
+    constant. It reports the first cash-negative month, first operating
+    break-even month, minimum cash bridge, and the complete monthly trajectory.
+    Pure post-hoc analytics: no Celery, LLM, or database writes.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Simulation failed: {sim.error_message or 'unknown error'}",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — cash-runway forecasting "
+                "requires completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    return build_cash_runway(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        starting_cash=starting_cash,
+        horizon_months=horizon_months,
+        initial_monthly_visitors=initial_monthly_visitors,
+        monthly_visitor_growth_rate=monthly_visitor_growth_rate,
         monthly_fixed_costs=monthly_fixed_costs,
         average_order_value=average_order_value,
         gross_margin=gross_margin,
