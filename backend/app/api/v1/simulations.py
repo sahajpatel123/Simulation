@@ -117,6 +117,7 @@ from app.schemas.portfolio_launch_priority import PortfolioLaunchPriorityOut
 from app.schemas.prediction_range import PredictionRangeOut
 from app.schemas.pricing_optimization import PricingOptimizationOut
 from app.schemas.retention_churn import RetentionChurnOut
+from app.schemas.runway_funding_target import RunwayFundingTargetOut
 from app.schemas.runway_growth_target import RunwayGrowthTargetOut
 from app.schemas.runway_spend_ceiling import RunwaySpendCeilingOut
 from app.schemas.sensitivity import SensitivityOut
@@ -429,6 +430,7 @@ from app.simulation.project_rollup import (
     build_project_portfolio_rollup,
 )
 from app.simulation.retention_churn_read import build_retention_churn
+from app.simulation.runway_funding_target import build_runway_funding_target
 from app.simulation.runway_growth_target import build_runway_growth_target
 from app.simulation.runway_spend_ceiling import build_runway_spend_ceiling
 from app.simulation.sensitivity_export import (
@@ -9369,6 +9371,120 @@ def get_cash_runway(
         project_id=sim.project_id,
         status=sim.status,
         starting_cash=starting_cash,
+        horizon_months=horizon_months,
+        initial_monthly_visitors=initial_monthly_visitors,
+        monthly_visitor_growth_rate=monthly_visitor_growth_rate,
+        monthly_fixed_costs=monthly_fixed_costs,
+        average_order_value=average_order_value,
+        gross_margin=gross_margin,
+        purchases_per_customer_per_month=purchases_per_customer_per_month,
+        cost_per_visitor=cost_per_visitor,
+        signal_quality=(
+            float(sim.signal_quality) if sim.signal_quality is not None else None
+        ),
+    )
+
+
+@router.get(
+    "/{simulation_id}/runway-funding-target",
+    response_model=RunwayFundingTargetOut,
+    summary="Find the minimum opening cash needed to preserve runway to break-even",
+    responses=_JSON_200,
+)
+def get_runway_funding_target(
+    simulation_id: int,
+    planned_starting_cash: float = Query(
+        CASH_RUNWAY_DEFAULT_STARTING_CASH,
+        ge=0.0,
+        le=CASH_RUNWAY_MAX_STARTING_CASH,
+        description="Planned cash available at the start of month 1",
+    ),
+    horizon_months: int = Query(
+        CASH_RUNWAY_DEFAULT_HORIZON_MONTHS,
+        ge=CASH_RUNWAY_MIN_HORIZON_MONTHS,
+        le=CASH_RUNWAY_MAX_HORIZON_MONTHS,
+        description="Number of months in which break-even must be reached",
+    ),
+    initial_monthly_visitors: int = Query(
+        BREAK_EVEN_DEFAULT_MONTHLY_VISITORS,
+        ge=BREAK_EVEN_MIN_MONTHLY_VISITORS,
+        le=BREAK_EVEN_MAX_MONTHLY_VISITORS,
+        description="Expected visitors in month 1",
+    ),
+    monthly_visitor_growth_rate: float = Query(
+        CASH_RUNWAY_DEFAULT_VISITOR_GROWTH,
+        ge=0.0,
+        le=CASH_RUNWAY_MAX_VISITOR_GROWTH,
+        description="Planned compounded monthly visitor growth",
+    ),
+    monthly_fixed_costs: float = Query(
+        BREAK_EVEN_DEFAULT_MONTHLY_FIXED_COSTS,
+        ge=0.0,
+        le=BREAK_EVEN_MAX_MONTHLY_FIXED_COSTS,
+        description="Recurring monthly costs before acquisition spend",
+    ),
+    average_order_value: float = Query(
+        BREAK_EVEN_DEFAULT_AVERAGE_ORDER_VALUE,
+        ge=0.0,
+        le=BREAK_EVEN_MAX_AVERAGE_ORDER_VALUE,
+        description="Average revenue per purchase",
+    ),
+    gross_margin: float = Query(
+        BREAK_EVEN_DEFAULT_GROSS_MARGIN,
+        ge=0.0,
+        le=1.0,
+        description="Share of revenue remaining after cost of goods or service",
+    ),
+    purchases_per_customer_per_month: float = Query(
+        BREAK_EVEN_DEFAULT_PURCHASES,
+        ge=0.0,
+        le=BREAK_EVEN_MAX_PURCHASES,
+        description="Expected monthly purchase frequency per converted customer",
+    ),
+    cost_per_visitor: float = Query(
+        BREAK_EVEN_DEFAULT_COST_PER_VISITOR,
+        ge=0.0,
+        le=BREAK_EVEN_MAX_COST_PER_VISITOR,
+        description="Blended acquisition spend per visitor",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RunwayFundingTargetOut:
+    """Turn a completed simulation into an opening-cash funding target.
+
+    The calculation finds the cash trough of the planned operating ledger and
+    reports the exact opening balance needed to reach monthly break-even inside
+    the chosen horizon without ending any month cash-negative. It compares the
+    target with the founder's planned cash and quantifies the funding gap or
+    surplus. Pure post-hoc analytics: no Celery, LLM, or database writes.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation failed; runway funding analysis is unavailable.",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — runway funding analysis "
+                "requires completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    return build_runway_funding_target(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        planned_starting_cash=planned_starting_cash,
         horizon_months=horizon_months,
         initial_monthly_visitors=initial_monthly_visitors,
         monthly_visitor_growth_rate=monthly_visitor_growth_rate,
