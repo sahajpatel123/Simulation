@@ -148,29 +148,44 @@ def build_runway_acquisition_ceiling(
         )
 
     planned_forecast = forecast(planned_cost_per_visitor)
-    zero_cost_forecast = forecast(0.0)
-    maximum_forecast = forecast(MAX_COST_PER_VISITOR)
+    maximum_units = int(round(MAX_COST_PER_VISITOR * COST_SCALE))
+    forecast_cache: dict[int, CashRunwayOut] = {
+        int(round(planned_forecast.cost_per_visitor * COST_SCALE)): (
+            planned_forecast
+        )
+    }
+
+    def forecast_units(cost_units: int) -> CashRunwayOut:
+        cached = forecast_cache.get(cost_units)
+        if cached is not None:
+            return cached
+        result = forecast(cost_units / COST_SCALE)
+        forecast_cache[cost_units] = result
+        return result
+
+    zero_cost_forecast = forecast_units(0)
 
     ceiling_forecast: CashRunwayOut | None = None
     ceiling: float | None = None
     search_limit_reached = False
     if _succeeds(zero_cost_forecast):
+        maximum_forecast = forecast_units(maximum_units)
         if _succeeds(maximum_forecast):
             ceiling = MAX_COST_PER_VISITOR
             ceiling_forecast = maximum_forecast
             search_limit_reached = True
         else:
             low_units = 0
-            high_units = int(round(MAX_COST_PER_VISITOR * COST_SCALE))
+            high_units = maximum_units
             while high_units - low_units > 1:
                 midpoint_units = (low_units + high_units) // 2
-                if _succeeds(forecast(midpoint_units / COST_SCALE)):
+                if _succeeds(forecast_units(midpoint_units)):
                     low_units = midpoint_units
                 else:
                     high_units = midpoint_units
             ceiling = low_units / COST_SCALE
-            ceiling_forecast = forecast(ceiling)
-            next_forecast = forecast(high_units / COST_SCALE)
+            ceiling_forecast = forecast_units(low_units)
+            next_forecast = forecast_units(high_units)
             if not _succeeds(ceiling_forecast) or _succeeds(next_forecast):
                 raise RuntimeError(
                     "Derived runway acquisition ceiling failed forecast verification."

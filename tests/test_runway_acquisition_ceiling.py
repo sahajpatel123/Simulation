@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from fastapi import HTTPException
 
+from app.simulation import runway_acquisition_ceiling as acquisition_ceiling_mod
 from app.simulation.cash_runway import build_cash_runway
 from app.simulation.runway_acquisition_ceiling import (
     VERDICT_INFEASIBLE,
@@ -125,6 +126,34 @@ def test_no_conversion_value_is_infeasible_unit_economics() -> None:
     assert out.required_cost_per_visitor_reduction is None
     assert out.ceiling is None
     assert "no positive conversion value" in out.recommendations[0]
+
+
+def test_infeasible_zero_cost_plan_runs_only_one_forecast(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_build_cash_runway = acquisition_ceiling_mod.build_cash_runway
+    forecast_costs: list[float] = []
+
+    def tracked_build_cash_runway(
+        results: Any,
+        **kwargs: Any,
+    ) -> Any:
+        forecast_costs.append(kwargs["cost_per_visitor"])
+        return real_build_cash_runway(results, **kwargs)
+
+    monkeypatch.setattr(
+        acquisition_ceiling_mod,
+        "build_cash_runway",
+        tracked_build_cash_runway,
+    )
+
+    out = build_runway_acquisition_ceiling(
+        _results(0.0),
+        planned_cost_per_visitor=0.0,
+    )
+
+    assert out.verdict == VERDICT_INFEASIBLE
+    assert forecast_costs == [0.0]
 
 
 def test_zero_cost_acquisition_cannot_rescue_unsafe_operating_plan() -> None:
