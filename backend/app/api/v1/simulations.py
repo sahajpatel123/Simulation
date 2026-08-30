@@ -121,6 +121,7 @@ from app.schemas.runway_acquisition_ceiling import RunwayAcquisitionCeilingOut
 from app.schemas.runway_conversion_target import RunwayConversionTargetOut
 from app.schemas.runway_funding_target import RunwayFundingTargetOut
 from app.schemas.runway_growth_target import RunwayGrowthTargetOut
+from app.schemas.runway_price_target import RunwayPriceTargetOut
 from app.schemas.runway_spend_ceiling import RunwaySpendCeilingOut
 from app.schemas.sensitivity import SensitivityOut
 from app.schemas.setup_friction import SetupFrictionOut
@@ -438,6 +439,7 @@ from app.simulation.runway_acquisition_ceiling import (
 from app.simulation.runway_conversion_target import build_runway_conversion_target
 from app.simulation.runway_funding_target import build_runway_funding_target
 from app.simulation.runway_growth_target import build_runway_growth_target
+from app.simulation.runway_price_target import build_runway_price_target
 from app.simulation.runway_spend_ceiling import build_runway_spend_ceiling
 from app.simulation.sensitivity_export import (
     sensitivity_to_csv,
@@ -9505,6 +9507,123 @@ def get_runway_acquisition_ceiling(
         gross_margin=gross_margin,
         purchases_per_customer_per_month=purchases_per_customer_per_month,
         planned_cost_per_visitor=planned_cost_per_visitor,
+        signal_quality=(
+            float(sim.signal_quality) if sim.signal_quality is not None else None
+        ),
+    )
+
+
+@router.get(
+    "/{simulation_id}/runway-price-target",
+    response_model=RunwayPriceTargetOut,
+    summary=(
+        "Find the minimum average order value that preserves cash until break-even"
+    ),
+    responses=_JSON_200,
+)
+def get_runway_price_target(
+    simulation_id: int,
+    starting_cash: float = Query(
+        CASH_RUNWAY_DEFAULT_STARTING_CASH,
+        ge=0.0,
+        le=CASH_RUNWAY_MAX_STARTING_CASH,
+        description="Cash available at the start of month 1",
+    ),
+    horizon_months: int = Query(
+        CASH_RUNWAY_DEFAULT_HORIZON_MONTHS,
+        ge=CASH_RUNWAY_MIN_HORIZON_MONTHS,
+        le=CASH_RUNWAY_MAX_HORIZON_MONTHS,
+        description="Number of months in which break-even must be reached",
+    ),
+    initial_monthly_visitors: int = Query(
+        BREAK_EVEN_DEFAULT_MONTHLY_VISITORS,
+        ge=BREAK_EVEN_MIN_MONTHLY_VISITORS,
+        le=BREAK_EVEN_MAX_MONTHLY_VISITORS,
+        description="Expected visitors in month 1",
+    ),
+    monthly_visitor_growth_rate: float = Query(
+        CASH_RUNWAY_DEFAULT_VISITOR_GROWTH,
+        ge=0.0,
+        le=CASH_RUNWAY_MAX_VISITOR_GROWTH,
+        description="Planned compounded monthly visitor growth",
+    ),
+    monthly_fixed_costs: float = Query(
+        BREAK_EVEN_DEFAULT_MONTHLY_FIXED_COSTS,
+        ge=0.0,
+        le=BREAK_EVEN_MAX_MONTHLY_FIXED_COSTS,
+        description="Recurring monthly costs before acquisition spend",
+    ),
+    planned_average_order_value: float = Query(
+        BREAK_EVEN_DEFAULT_AVERAGE_ORDER_VALUE,
+        ge=0.0,
+        le=BREAK_EVEN_MAX_AVERAGE_ORDER_VALUE,
+        description="Planned average revenue per purchase",
+    ),
+    gross_margin: float = Query(
+        BREAK_EVEN_DEFAULT_GROSS_MARGIN,
+        ge=0.0,
+        le=1.0,
+        description="Share of revenue remaining after cost of goods or service",
+    ),
+    purchases_per_customer_per_month: float = Query(
+        BREAK_EVEN_DEFAULT_PURCHASES,
+        ge=0.0,
+        le=BREAK_EVEN_MAX_PURCHASES,
+        description="Expected monthly purchase frequency per converted customer",
+    ),
+    cost_per_visitor: float = Query(
+        BREAK_EVEN_DEFAULT_COST_PER_VISITOR,
+        ge=0.0,
+        le=BREAK_EVEN_MAX_COST_PER_VISITOR,
+        description="Blended acquisition spend per visitor",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RunwayPriceTargetOut:
+    """Turn a completed simulation into a cash-safe average order value target.
+
+    The solver searches average order value in exact cent increments and
+    reports the smallest price that reaches operating break-even within the
+    chosen horizon without any month ending cash-negative. It compares that
+    target with the founder's planned price and quantifies either price
+    headroom or the required increase. Pure post-hoc analytics: no Celery,
+    LLM, or database writes.
+    """
+    sim = _get_owned_simulation(simulation_id, current_user.id, db)
+
+    if sim.status == "FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation failed; runway price analysis is unavailable.",
+        )
+    if sim.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Simulation is {sim.status} — runway price analysis "
+                "requires completed results."
+            ),
+        )
+    if not sim.results_json:
+        raise HTTPException(
+            status_code=422,
+            detail="Simulation completed but results_json is empty.",
+        )
+
+    return build_runway_price_target(
+        sim.results_json,
+        simulation_id=sim.id,
+        project_id=sim.project_id,
+        status=sim.status,
+        starting_cash=starting_cash,
+        horizon_months=horizon_months,
+        initial_monthly_visitors=initial_monthly_visitors,
+        monthly_visitor_growth_rate=monthly_visitor_growth_rate,
+        monthly_fixed_costs=monthly_fixed_costs,
+        planned_average_order_value=planned_average_order_value,
+        gross_margin=gross_margin,
+        purchases_per_customer_per_month=purchases_per_customer_per_month,
+        cost_per_visitor=cost_per_visitor,
         signal_quality=(
             float(sim.signal_quality) if sim.signal_quality is not None else None
         ),
