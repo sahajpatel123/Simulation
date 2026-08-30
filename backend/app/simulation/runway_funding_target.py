@@ -156,6 +156,10 @@ def build_runway_funding_target(
         # This keeps the response truthful if cash-runway rounding or ledger
         # behavior changes independently in the future.
         target_forecast = forecast(minimum_cash)
+        if not _succeeds(target_forecast):
+            raise RuntimeError(
+                "Derived runway funding target failed forecast verification."
+            )
         if _succeeds(planned_forecast):
             verdict = VERDICT_PLAN_FUNDED
             constraint = "NONE"

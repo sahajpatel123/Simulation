@@ -9,6 +9,8 @@ from typing import Any
 import pytest
 from fastapi import HTTPException
 
+from app.schemas.cash_runway import CashRunwayOut
+from app.simulation import runway_funding_target as funding_target_module
 from app.simulation.cash_runway import build_cash_runway
 from app.simulation.runway_funding_target import (
     VERDICT_FUNDING_GAP,
@@ -127,6 +129,30 @@ def test_target_is_exact_to_one_cent() -> None:
     assert out.meta["calculation_method"] == (
         "zero_cash_ledger_trough_verified_forecast"
     )
+
+
+def test_invalid_derived_target_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    real_build_cash_runway = funding_target_module.build_cash_runway
+
+    def inconsistent_forecast(*args: Any, **kwargs: Any) -> CashRunwayOut:
+        forecast = real_build_cash_runway(*args, **kwargs)
+        if forecast.starting_cash == 1_000.0:
+            return forecast.model_copy(
+                update={"cash_out_month": 1, "verdict": "CASH_GAP"}
+            )
+        return forecast
+
+    monkeypatch.setattr(
+        funding_target_module,
+        "build_cash_runway",
+        inconsistent_forecast,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Derived runway funding target failed forecast verification",
+    ):
+        _target()
 
 
 def test_non_positive_contribution_is_infeasible() -> None:
