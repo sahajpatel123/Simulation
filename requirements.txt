@@ -19,13 +19,13 @@ flower==2.1.0
 numpy==2.4.6
 scipy==1.17.1
 reportlab==5.0.1
-websockets==17.0.1
+websockets==17.1
 httpx==0.28.1
 razorpay==2.0.1
 python-dotenv==1.2.3
 email-validator==2.3.0
 playwright==1.62.0
-sentry-sdk[fastapi]==2.68.0
+sentry-sdk[fastapi]==2.68.1
 pytest==9.1.1
 tiktoken==0.14.0
 # Direct pins are resolved into hash-locked files by
