@@ -1,8 +1,8 @@
 fastapi==0.141.1
 uvicorn[standard]==0.52.4
 sqlalchemy==2.0.52
-psycopg2-binary==2.9.12
-alembic==1.19.1
+psycopg2-binary==2.9.13
+alembic==1.19.2
 pydantic==2.13.5
 pydantic-settings==2.15.0
 PyJWT==2.13.0
@@ -11,7 +11,7 @@ python-multipart==0.0.32
 anthropic==0.125.0
 openai==3.3.1
 anthropic==1.0.0
-openai==3.5.0
+openai==3.13.0
 main
 celery[redis]==5.6.3
 redis==5.2.1
@@ -25,7 +25,7 @@ razorpay==2.0.1
 python-dotenv==1.2.3
 email-validator==2.3.0
 playwright==1.62.0
-sentry-sdk[fastapi]==2.68.1
+sentry-sdk[fastapi]==2.69.1
 pytest==9.1.1
 tiktoken==0.14.0
 # Direct pins are resolved into hash-locked files by
