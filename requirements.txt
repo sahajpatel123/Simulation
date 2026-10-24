@@ -2,17 +2,18 @@ fastapi==0.141.1
 uvicorn[standard]==0.53.0
 sqlalchemy==2.1.0
 psycopg2-binary==2.9.13
+# SQLAlchemy 2.1 defaults plain ``postgresql://`` URLs to the psycopg (v3)
+# DBAPI, which is what DATABASE_URL uses in .env.example and backend-ci.
+# Without this, importing app.core.database raises ModuleNotFoundError.
+psycopg[binary]==3.3.6
 alembic==1.20.0
 pydantic==2.13.5
 pydantic-settings==2.15.0
 PyJWT==2.15.0
 bcrypt==5.0.0
 python-multipart==0.0.32
-anthropic==0.125.0
-openai==3.3.1
 anthropic==1.5.0
-openai==3.19.2
-main
+openai==3.31.0
 celery[redis]==5.6.3
 redis==5.2.1
 flower==2.2.0
