@@ -1,32 +1,32 @@
-fastapi==0.141.1
-uvicorn[standard]==0.53.0
-sqlalchemy==2.1.0
+fastapi==0.161.1
+uvicorn[standard]==0.54.0
+sqlalchemy==2.1.6
 psycopg2-binary==2.9.13
 # SQLAlchemy 2.1 defaults plain ``postgresql://`` URLs to the psycopg (v3)
 # DBAPI, which is what DATABASE_URL uses in .env.example and backend-ci.
 # Without this, importing app.core.database raises ModuleNotFoundError.
 psycopg[binary]==3.3.6
-alembic==1.20.0
-pydantic==2.13.5
-pydantic-settings==2.15.0
-PyJWT==2.15.0
+alembic==1.20.1
+pydantic==2.14.1
+pydantic-settings==2.16.1
+PyJWT==2.15.1
 bcrypt==5.0.0
 python-multipart==0.0.32
 anthropic==1.5.0
-openai==3.31.0
+openai==3.37.0
 celery[redis]==5.6.3
 redis==5.2.1
 flower==2.2.0
 numpy==2.4.6
 scipy==1.17.1
-reportlab==5.0.1
-websockets==17.1
+reportlab==5.1.0
+websockets==17.3
 httpx==0.28.1
 razorpay==2.0.1
-python-dotenv==1.2.3
+python-dotenv==1.2.4
 email-validator==2.3.0
-playwright==1.63.0
-sentry-sdk[fastapi]==2.70.0
+playwright==1.64.1
+sentry-sdk[fastapi]==2.73.0
 pytest==9.1.1
 tiktoken==0.14.0
 # Direct pins are resolved into hash-locked files by
