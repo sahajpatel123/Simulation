@@ -1,7 +1,7 @@
 # Digest-pinned (multi-arch index, 2026-08-16): a mutable tag repoints when
 # the maintainer pushes — same supply-chain hole SHA-pinning closed for
 # Actions. tools/validate_ci.py enforces digest pinning on every FROM.
-FROM python:3.11-slim@sha256:9c900dea9e8fb7e16277c179b555cc72d29a352dbc33cff48ad5a0412fd5bfc7
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
 
 # Install system dependencies needed by some Python packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
